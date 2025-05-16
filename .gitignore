@@ -1,0 +1,42 @@
+# Windows specific files
+desktop.ini
+Thumbs.db
+ehthumbs.db
+*.lnk
+
+# Python specific files
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg
+*.egg-info/
+dist/
+build/
+*.so
+
+# Virtual environment
+.env
+.venv
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# IDE specific files
+.vscode/
+.idea/
+*.suo
+*.user
+
+# macOS specific (often cross-platform)
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*.swp 
