@@ -65,19 +65,21 @@ def populate_tree_view(model, parent_item, data):
                 parent_item.appendRow([index_item, value_item])
 
 class MainWindow(QMainWindow):
+    """Fenêtre principale de l'application DialogueGenerator.
+
+    Cette classe gère l'interface utilisateur pour la sélection du contexte,
+    la configuration des paramètres de génération, l'affichage des prompts
+    et des variantes de dialogues générées par un LLM.
+    """
     def __init__(self, context_builder: ContextBuilder):
+        """Initialise la MainWindow.
+
+        Args:
+            context_builder: Instance de ContextBuilder pour accéder aux données du GDD.
+        """
         super().__init__()
         self.context_builder = context_builder
         self.prompt_engine = PromptEngine()
-        self.MAX_WORDS_PER_FIELD_TEST_MODE = 30 # Nouvelle constante pour le mode test par champ
-        self.TEST_MODE_PRIORITY_KEYS = [ # Clés à conserver (et tronquer) en mode test
-            "Nom", "Titre", "ID", "Alias", "Archétype littéraire", "Type", 
-            "Résumé de la fiche", "Description", "Ambiance", "Objectifs",
-            "Apparence", "Traits de caractère", "Motivations", 
-            "Background", "Contexte", "Relations", 
-            "Arcs Narratifs", "Envie vs Besoin", "Quêtes annexes", "Enjeux",
-            "Fonction dans le Lore", "Secrets", "Notes de design", "Tags"
-        ]
         
         # --- Choix du Client LLM ---
         # Pour l'instant, on utilise OpenAIClient par défaut.
@@ -124,7 +126,7 @@ class MainWindow(QMainWindow):
         self.exit_action.triggered.connect(self.close)
 
     def _create_menu_bar(self):
-        """Crée la barre de menus principale."""
+        """Crée la barre de menus principale avec les options de l'application."""
         menu_bar = self.menuBar()
 
         # Menu Fichier (ou Options)
@@ -136,7 +138,9 @@ class MainWindow(QMainWindow):
         options_menu.addAction(self.exit_action)
 
     def _open_context_config_file(self):
-        """Ouvre le fichier context_config.json dans l'éditeur par défaut."""
+        """Ouvre le fichier de configuration du contexte (context_config.json)
+        dans l'éditeur par défaut du système.
+        """
         if CONTEXT_CONFIG_FILE_PATH.exists():
             try:
                 webbrowser.open(os.path.realpath(CONTEXT_CONFIG_FILE_PATH))
@@ -148,13 +152,15 @@ class MainWindow(QMainWindow):
             logger.warning(f"Le fichier de configuration {CONTEXT_CONFIG_FILE_PATH} n'existe pas.")
             self.statusBar().showMessage("Erreur: Fichier de configuration du contexte non trouvé.")
 
-    def setup_ui(self):
-        """Configure l'interface utilisateur de la fenêtre principale."""
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
+    def _create_left_selection_panel(self) -> QWidget:
+        """Crée et configure le panneau de sélection de gauche.
 
-        # --- Panneau de sélection à gauche (multiple listes) ---
+        Ce panneau contient des listes filtrables pour les personnages, lieux, objets,
+        espèces, communautés et exemples de dialogues.
+
+        Returns:
+            QWidget: Le widget contenant le panneau de sélection de gauche.
+        """
         left_scroll_area_content = QWidget()
         left_panel_layout = QVBoxLayout(left_scroll_area_content)
         left_panel_layout.setSpacing(10)
@@ -195,8 +201,17 @@ class MainWindow(QMainWindow):
         left_container_widget.setLayout(left_panel_layout)
         left_container_widget.setMinimumWidth(300)
         left_container_widget.setMaximumWidth(400)
+        return left_container_widget
 
-        # --- Panneau central pour les détails (TreeView) ---
+    def _create_center_details_panel(self) -> QWidget:
+        """Crée et configure le panneau central pour afficher les détails.
+
+        Ce panneau utilise un QTreeView pour présenter les informations
+        détaillées de l'élément sélectionné dans les listes de gauche.
+
+        Returns:
+            QWidget: Le widget contenant le panneau des détails.
+        """
         details_panel = QWidget()
         details_layout = QVBoxLayout(details_panel)
         self.details_label = QLabel("Détails de l'élément sélectionné:")
@@ -209,8 +224,19 @@ class MainWindow(QMainWindow):
         
         details_layout.addWidget(self.details_label)
         details_layout.addWidget(self.details_tree_view)
+        return details_panel
 
-        # --- Panneau de droite pour les paramètres de génération et l'affichage des variantes ---
+    def _create_right_generation_panel(self) -> QWidget:
+        """Crée et configure le panneau de droite pour la génération de dialogues.
+
+        Ce panneau inclut les sélections pour la scène (personnages, lieu),
+        les paramètres de génération (nombre de variantes, tokens max, mode test),
+        le champ pour les instructions utilisateur, le bouton de génération,
+        et les onglets pour afficher le prompt et les variantes générées.
+
+        Returns:
+            QWidget: Le widget contenant le panneau de génération.
+        """
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         
@@ -276,11 +302,6 @@ class MainWindow(QMainWindow):
         tokens_layout.addStretch()
         generation_params_layout.addLayout(tokens_layout)
 
-        # Case à cocher pour le mode Test
-        self.test_mode_checkbox = QCheckBox("Mode Test (contexte limité)")
-        self.test_mode_checkbox.stateChanged.connect(self._update_token_estimation_and_prompt_display)
-        generation_params_layout.addWidget(self.test_mode_checkbox)
-
         self.include_dialogue_type_checkbox = QCheckBox("Inclure 'Dialogue Type' du personnage")
         self.include_dialogue_type_checkbox.setChecked(True) # Coché par défaut
         self.include_dialogue_type_checkbox.stateChanged.connect(self._update_token_estimation_and_prompt_display)
@@ -310,157 +331,117 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(self.generation_params_group)
         right_layout.addWidget(self.variant_tabs)
         right_panel.setMinimumWidth(500) # Augmenter un peu la largeur minimale
+        return right_panel
 
-        # Utilisation d'un QSplitter principal pour séparer listes, détails et paramètres
-        main_splitter = QSplitter(Qt.Horizontal)
-        main_splitter.addWidget(left_container_widget) 
-        main_splitter.addWidget(details_panel)
-        main_splitter.addWidget(right_panel) # Nouveau panneau de droite
+    def setup_ui(self):
+        """Configure l'interface utilisateur principale de la fenêtre.
+
+        Initialise les panneaux gauche, central et droit, les assemble dans un
+        splitter et les ajoute au widget central de la fenêtre.
+        """
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QHBoxLayout(central_widget)
+
+        left_panel = self._create_left_selection_panel()
+        center_panel = self._create_center_details_panel()
+        right_panel = self._create_right_generation_panel()
         
-        main_splitter.setStretchFactor(0, 1) # Panel listes
-        main_splitter.setStretchFactor(1, 2) # Panel détails TreeView
-        main_splitter.setStretchFactor(2, 2) # Panel génération + variantes
+        # Utilisation d'un QSplitter principal pour séparer listes, détails et paramètres
+        # Il est important que self.splitter soit assigné ici si _save_ui_settings et _load_ui_settings
+        # y font référence.
+        self.splitter = QSplitter(Qt.Horizontal)
+        self.splitter.addWidget(left_panel) 
+        self.splitter.addWidget(center_panel)
+        self.splitter.addWidget(right_panel)
+        
+        self.splitter.setStretchFactor(0, 1) # Panel listes
+        self.splitter.setStretchFactor(1, 2) # Panel détails TreeView
+        self.splitter.setStretchFactor(2, 2) # Panel génération + variantes
 
-        main_layout.addWidget(main_splitter)
+        main_layout.addWidget(self.splitter)
         
         self.statusBar().showMessage("Prêt.")
         self.active_list_widget_for_details = None
 
-    def _get_simplified_details_for_test_mode(self, details_dict: dict) -> dict:
-        """ Simplifie et tronque les détails d'un item pour le mode test. """
-        if not isinstance(details_dict, dict):
-            return details_dict # Retourne tel quel si ce n'est pas un dictionnaire
-        
-        simplified = {}
-        for key, value in details_dict.items():
-            if key in self.TEST_MODE_PRIORITY_KEYS:
-                if isinstance(value, str):
-                    words = value.split()
-                    if len(words) > self.MAX_WORDS_PER_FIELD_TEST_MODE:
-                        simplified[key] = " ".join(words[:self.MAX_WORDS_PER_FIELD_TEST_MODE]) + " [...]"
-                    else:
-                        simplified[key] = value
-                elif isinstance(value, list):
-                    # Pour les listes, on pourrait prendre les N premiers éléments ou simplifier chaque élément
-                    # Pour l'instant, on les garde telles quelles mais on pourrait les tronquer aussi.
-                    simplified[key] = value # Garder les listes (ex: de tags) telles quelles pour l'instant
-                else:
-                    simplified[key] = value # Garder les autres types tels quels (nombres, booléens)
-            # Les clés non prioritaires sont ignorées en mode test
-        
-        if not simplified and "Nom" in details_dict: # Au cas où aucune clé prioritaire n'est trouvée mais qu'il y a un Nom
-            simplified["Nom"] = details_dict["Nom"]
-            simplified["_test_mode_info"] = "Aucune clé prioritaire trouvée, seul le Nom est inclus."
-        elif not simplified:
-            simplified["_test_mode_info"] = "Dictionnaire original vide ou sans clés prioritaires."
+    def _get_current_selections_for_context(self) -> dict:
+        """Récupère toutes les sélections utilisateur pertinentes pour la construction du contexte.
 
-        return simplified
-
-    def _get_selected_context_summary(self) -> str:
-        """ Récupère un résumé du contexte sélectionné pour l'affichage ou le prompt. """
-        summary_parts = []
-        selected_data_for_context = {
-            "characters": [],
-            "locations": [],
-            "items": [],
-            "species": [],
-            "communities": [],
-            "dialogues_examples": [] # Ajouté pour les exemples de dialogues
-        }
-
-        def add_checked_details_from_list(list_widget: QListWidget, category_name: str, detail_fetch_func, name_keys=None):
-            items_text = []
-            for i in range(list_widget.count()):
-                item_widget = list_widget.item(i)
-                if item_widget.checkState() == Qt.Checked:
-                    item_name = item_widget.text()
-                    selected_data_for_context[category_name].append(item_name)
-                    details = None
-                    if callable(detail_fetch_func):
-                        if name_keys:
-                            details = detail_fetch_func(item_name, name_keys=name_keys)
-                        else:
-                            details = detail_fetch_func(item_name)
-                    
-                    if details:
-                        if self.test_mode_checkbox.isChecked():
-                            details = self._get_simplified_details_for_test_mode(details)
-                        
-                        # Formatage pour le résumé textuel (peut être optionnel si on ne l'affiche plus directement)
-                        item_summary = f"{category_name.capitalize()}: {item_name}\n"
-                        for key, value in details.items():
-                            if key != "Nom": # Éviter de répéter le nom
-                                item_summary += f"  {key}: {str(value)[:100] + '...' if len(str(value)) > 100 else value}\n"
-                        items_text.append(item_summary)
-            
-            if items_text:
-                summary_parts.append("\n".join(items_text))
-
-        add_checked_details_from_list(self.character_list, "characters", self.context_builder.get_character_details_by_name if self.context_builder else None)
-        add_checked_details_from_list(self.location_list, "locations", self.context_builder.get_location_details_by_name if self.context_builder else None)
-        add_checked_details_from_list(self.item_list, "items", self.context_builder.get_item_details_by_name if self.context_builder else None)
-        add_checked_details_from_list(self.species_list, "species", self.context_builder.get_species_details_by_name if self.context_builder else None)
-        add_checked_details_from_list(self.communities_list, "communities", self.context_builder.get_community_details_by_name if self.context_builder else None)
-        add_checked_details_from_list(self.dialogues_list, "dialogues_examples", self.context_builder.get_dialogue_example_details_by_title if self.context_builder else None, name_keys=["Nom", "Titre", "ID"])
-
-        return "\n\n".join(summary_parts)
-
-    def _update_token_estimation_and_prompt_display(self):
-        if not self.context_builder: return
-
-        # Valeurs à ignorer lors de la collecte des noms
+        Retourne:
+            dict: Un dictionnaire avec les catégories d'éléments (characters, locations, etc.)
+                  et une liste de noms d'éléments sélectionnés pour chaque catégorie.
+        """
         ignore_values = {"-- Aucun --", "<Aucun>", "-- Toutes --", ""}
-
-        # Récupérer les sélections pour build_context
-        selected_elements_for_build = {
+        selections = {
             "characters": [],
             "locations": [],
             "items": [],
             "species": [],
             "communities": [],
             "dialogues_examples": [],
-            "quests": [] # Au cas où on ajoute une sélection de quêtes plus tard
+            "quests": [] # Gardé pour une éventuelle utilisation future
         }
 
         # Personnages principaux depuis les ComboBox
         char_a = self.char_a_combo.currentText()
         char_b = self.char_b_combo.currentText()
-        if char_a not in ignore_values: selected_elements_for_build["characters"].append(char_a)
-        if char_b not in ignore_values: selected_elements_for_build["characters"].append(char_b)
+        if char_a not in ignore_values: selections["characters"].append(char_a)
+        if char_b not in ignore_values: selections["characters"].append(char_b)
 
-        # Ajout des lieux sélectionnés (région et/ou sous-lieu)
+        # Lieux sélectionnés (région et/ou sous-lieu) depuis les ComboBox
         current_region = self.region_combo_gen.currentText()
         current_sub_location = self.sub_location_combo_gen.currentText()
         
         # Priorité au sous-lieu s'il est spécifié et valide
         if current_sub_location not in ignore_values:
-            selected_elements_for_build["locations"].append(current_sub_location)
+            selections["locations"].append(current_sub_location)
         elif current_region not in ignore_values:
-            selected_elements_for_build["locations"].append(current_region)
+            selections["locations"].append(current_region)
 
-        # Ajouter les éléments cochés des listes de gauche
+        # Éléments cochés des listes de gauche
         for list_w, cat_name in [
-            (self.character_list, "characters"), (self.location_list, "locations"),
-            (self.item_list, "items"), (self.species_list, "species"),
-            (self.communities_list, "communities"), (self.dialogues_list, "dialogues_examples")
+            (self.character_list, "characters"), 
+            (self.location_list, "locations"),
+            (self.item_list, "items"), 
+            (self.species_list, "species"),
+            (self.communities_list, "communities"), 
+            (self.dialogues_list, "dialogues_examples")
             # Ajouter (self.quest_list, "quests") si une liste de quêtes est implémentée
         ]:
             for i in range(list_w.count()):
                 item_w = list_w.item(i)
                 if item_w.checkState() == Qt.Checked:
                     item_text = item_w.text()
-                    if item_text not in ignore_values: # Vérifier aussi ici
-                        selected_elements_for_build[cat_name].append(item_text)
+                    if item_text not in ignore_values:
+                        selections[cat_name].append(item_text)
         
         # Dédoublonner les listes et s'assurer que les valeurs ignorées sont parties
-        for cat_key in selected_elements_for_build:
+        for cat_key in selections:
             valid_items = []
-            seen = set() # Pour le dédoublonnage en gardant l'ordre si nécessaire (set ne garantit pas l'ordre)
-            for item_name in selected_elements_for_build[cat_key]:
+            seen = set() 
+            for item_name in selections[cat_key]:
                 if item_name not in ignore_values and item_name not in seen:
                     valid_items.append(item_name)
                     seen.add(item_name)
-            selected_elements_for_build[cat_key] = valid_items
+            selections[cat_key] = valid_items
+        
+        return selections
+
+    def _update_token_estimation_and_prompt_display(self):
+        """Met à jour l'estimation du nombre de tokens et affiche le prompt estimé.
+
+        Cette méthode est appelée lorsque les sélections de contexte ou les
+        instructions utilisateur changent. Elle construit le contexte, puis
+        le prompt complet avec PromptEngine, et met à jour le label de comptage
+        des tokens ainsi que l'onglet de prévisualisation du prompt.
+        """
+        if not self.context_builder: return
+
+        # Valeurs à ignorer lors de la collecte des noms
+        ignore_values = {"-- Aucun --", "<Aucun>", "-- Toutes --", ""} # Conservé localement si besoin plus tard, mais la logique principale est dans _get_current_selections
+
+        # Récupérer les sélections pour build_context via la nouvelle méthode centralisée
+        selected_elements_for_build = self._get_current_selections_for_context()
 
         user_instruction = self.user_instruction_input.toPlainText()
         include_dialogue_type = self.include_dialogue_type_checkbox.isChecked()
@@ -504,6 +485,12 @@ class MainWindow(QMainWindow):
             preview_widget.setPlainText(estimated_full_prompt)
 
     def on_generate_button_clicked(self):
+        """Gère l'événement de clic sur le bouton 'Générer le Dialogue'.
+
+        Récupère les sélections utilisateur, construit le contexte et le prompt final,
+        appelle le client LLM pour générer les variantes de dialogue, et affiche
+        le prompt et les variantes (ou erreurs) dans des onglets.
+        """
         self.statusBar().showMessage("Génération en cours...")
         # Nettoyer les anciens onglets de variantes, mais garder le premier (prévisualisation du prompt)
         # s'il existe déjà. Sinon, il sera créé par _update_token_estimation_and_prompt_display si nécessaire.
@@ -522,45 +509,8 @@ class MainWindow(QMainWindow):
             self._update_token_estimation_and_prompt_display() # Pour réafficher le prompt estimé
             return
         
-        # Récupérer les sélections actuelles (logique similaire à _update_token_estimation_and_prompt_display)
-        ignore_values = {"-- Aucun --", "<Aucun>", "-- Toutes --", ""}
-        selected_elements_for_build = {
-            "characters": [], "locations": [], "items": [],
-            "species": [], "communities": [], "dialogues_examples": [], "quests": []
-        }
-
-        char_a = self.char_a_combo.currentText()
-        char_b = self.char_b_combo.currentText()
-        if char_a not in ignore_values: selected_elements_for_build["characters"].append(char_a)
-        if char_b not in ignore_values: selected_elements_for_build["characters"].append(char_b)
-
-        current_region = self.region_combo_gen.currentText()
-        current_sub_location = self.sub_location_combo_gen.currentText()
-        if current_sub_location not in ignore_values:
-            selected_elements_for_build["locations"].append(current_sub_location)
-        elif current_region not in ignore_values:
-            selected_elements_for_build["locations"].append(current_region)
-
-        for list_w, cat_name in [
-            (self.character_list, "characters"), (self.location_list, "locations"),
-            (self.item_list, "items"), (self.species_list, "species"),
-            (self.communities_list, "communities"), (self.dialogues_list, "dialogues_examples")
-        ]:
-            for i in range(list_w.count()):
-                item_w = list_w.item(i)
-                if item_w.checkState() == Qt.Checked:
-                    item_text = item_w.text()
-                    if item_text not in ignore_values:
-                        selected_elements_for_build[cat_name].append(item_text)
-        
-        for cat_key in selected_elements_for_build:
-            valid_items = []
-            seen = set()
-            for item_name in selected_elements_for_build[cat_key]:
-                if item_name not in ignore_values and item_name not in seen:
-                    valid_items.append(item_name)
-                    seen.add(item_name)
-            selected_elements_for_build[cat_key] = valid_items
+        # Récupérer les sélections actuelles via la nouvelle méthode centralisée
+        selected_elements_for_build = self._get_current_selections_for_context()
 
         include_dialogue_type = self.include_dialogue_type_checkbox.isChecked()
         
@@ -637,6 +587,17 @@ class MainWindow(QMainWindow):
             logger.error(f"Erreur lors de la génération : {e}", exc_info=True)
 
     def filter_list_widget(self, text, list_widget, label_widget, original_label_text):
+        """Filtre les éléments d'un QListWidget en fonction du texte saisi.
+
+        Cache les éléments qui ne correspondent pas au texte et met à jour
+        le label associé pour afficher le nombre d'éléments visibles/total.
+
+        Args:
+            text (str): Le texte utilisé pour filtrer.
+            list_widget (QListWidget): Le widget QListWidget à filtrer.
+            label_widget (QLabel): Le QLabel à mettre à jour avec le comptage.
+            original_label_text (str): Le texte original du label (sans le comptage).
+        """
         visible_items = 0
         for i in range(list_widget.count()):
             item = list_widget.item(i)
@@ -650,6 +611,15 @@ class MainWindow(QMainWindow):
         label_widget.setText(f"{original_label_text} ({visible_items}/{total_items})")
 
     def _populate_list_widget(self, list_widget: QListWidget, data_list, name_extractor_func, label_widget, original_label_text):
+        """Peuple un QListWidget avec des données et configure les éléments pour être cochables.
+        
+        Args:
+            list_widget: Le QListWidget à peupler.
+            data_list: La liste de données source (actuellement non utilisée directement).
+            name_extractor_func: Une fonction callable qui retourne une liste de noms à afficher.
+            label_widget: Le QLabel associé à la liste, pour afficher le comptage.
+            original_label_text: Le texte de base du label.
+        """
         list_widget.clear()
         names = []
         valid_names = [] # Initialiser valid_names ici
@@ -680,6 +650,11 @@ class MainWindow(QMainWindow):
         self._update_token_estimation_and_prompt_display() # Appel initial pour mettre à jour le compteur
 
     def load_initial_data(self):
+        """Charge les données initiales dans les listes et combobox de l'interface.
+        
+        Peuple les listes de personnages, lieux, etc., ainsi que les combobox
+        pour la sélection de la scène. Met également à jour l'estimation des tokens.
+        """
         if not self.context_builder: return
 
         # Peupler les listes de gauche
@@ -707,6 +682,11 @@ class MainWindow(QMainWindow):
         self._update_token_estimation_and_prompt_display() # Mettre à jour l'estimation initiale
 
     def on_region_changed_for_sub_locations(self):
+        """Met à jour la liste des sous-lieux lorsque la région sélectionnée change.
+        
+        Appelé lorsque l'utilisateur modifie la sélection dans le combobox des régions.
+        Peuple le combobox des sous-lieux avec les localités correspondantes à la région.
+        """
         if not self.context_builder: return
         
         selected_region = self.region_combo_gen.currentText()
@@ -721,6 +701,12 @@ class MainWindow(QMainWindow):
         # ou pourrait être désactivé/caché.
 
     def on_suggest_linked_elements(self):
+        """Gère le clic sur le bouton 'Sélectionner Éléments Liés'.
+        
+        Récupère les éléments liés au personnage A et/ou au lieu sélectionnés
+        via ContextBuilder, puis coche automatiquement ces éléments dans les
+        listes de gauche correspondantes.
+        """
         if not self.context_builder: return
 
         char_a_name = self.char_a_combo.currentText()
@@ -772,6 +758,11 @@ class MainWindow(QMainWindow):
         self._update_token_estimation_and_prompt_display() # Mettre à jour l'estimation après avoir coché
 
     def _display_details_in_tree(self, data_item):
+        """Affiche les détails d'un item dans le QTreeView.
+
+        Args:
+            data_item (dict or list): Les données à afficher.
+        """
         self.details_tree_model.clear()
         # Pas besoin de remettre les header labels, ils sont sur le modèle.
         root_item = self.details_tree_model.invisibleRootItem()
@@ -790,6 +781,19 @@ class MainWindow(QMainWindow):
             self.details_tree_model.invisibleRootItem().appendRow(no_details_item)
 
     def on_explorer_list_item_clicked(self, list_widget_clicked: QListWidget, category_data_list, category_name_singular, item_widget: QListWidgetItem, name_key_priority=None):
+        """Gère le clic sur un élément dans l'une des listes de gauche (explorateur).
+
+        Affiche les détails de l'élément cliqué dans le QTreeView central.
+
+        Args:
+            list_widget_clicked: La QListWidget d'où provient le clic.
+            category_data_list: La liste complète des données pour cette catégorie.
+            category_name_singular: Le nom singulier de la catégorie (ex: "Personnage").
+            item_widget: L'item QListWidgetItem qui a été cliqué.
+            name_key_priority (list, optional): Liste des clés à utiliser pour trouver
+                                            le nom de l'item dans les données. 
+                                            Défaut à ["Nom"].
+        """
         if name_key_priority is None:
             name_key_priority = ["Nom"]
         
@@ -830,21 +834,31 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"Détails non trouvés pour {category_name_singular}: {selected_display_name}") 
 
     def _on_list_item_check_changed(self, item: QListWidgetItem):
-        """Appelé lorsque l'état coché d'un élément de liste change."""
+        """Appelé lorsque l'état coché d'un élément de liste change.
+
+        Déclenche une mise à jour de l'estimation des tokens et du prompt.
+
+        Args:
+            item: L'item QListWidgetItem dont l'état a changé.
+        """
         self._update_token_estimation_and_prompt_display()
 
     def _save_ui_settings(self):
-        """Sauvegarde l'état actuel de l'interface utilisateur dans un fichier JSON."""
+        """Sauvegarde l'état actuel de l'interface utilisateur dans un fichier JSON.
+        
+        Ceci inclut la géométrie de la fenêtre, la taille des panneaux du splitter,
+        les sélections dans les combobox, les états des cases à cocher, le texte
+        des instructions utilisateur et les éléments cochés dans les listes.
+        """
         settings = {
             "window_geometry": self.saveGeometry().data().hex(), # PySide6 utilise .data().hex()
-            "splitter_sizes": self.splitter.sizes(),
+            "splitter_sizes": self.splitter.sizes() if hasattr(self, 'splitter') else [], # Vérifier si splitter existe
             "char_a_combo_text": self.char_a_combo.currentText(),
             "char_b_combo_text": self.char_b_combo.currentText(),
             "region_combo_gen_text": self.region_combo_gen.currentText(),
             "sub_location_combo_gen_text": self.sub_location_combo_gen.currentText(),
             "k_variants_input_text": self.k_variants_input.text(),
             "max_tokens_input_text": self.max_tokens_input.text(),
-            "test_mode_checkbox_checked": self.test_mode_checkbox.isChecked(),
             "include_dialogue_type_checkbox_checked": self.include_dialogue_type_checkbox.isChecked(),
             "restore_selections_action_checked": self.restore_selections_action.isChecked(), # Utiliser l'action du menu
             "user_instruction_input_text": self.user_instruction_input.toPlainText(),
@@ -863,7 +877,11 @@ class MainWindow(QMainWindow):
             logger.error(f"Erreur lors de la sauvegarde des paramètres UI: {e}")
 
     def _load_ui_settings(self):
-        """Charge et applique l'état de l'interface utilisateur depuis un fichier JSON."""
+        """Charge et applique l'état de l'interface utilisateur depuis un fichier JSON.
+        
+        Restaure la géométrie de la fenêtre, les sélections et les états des contrôles
+        si l'option "Restaurer les sélections au démarrage" est activée.
+        """
         if not UI_SETTINGS_FILE.exists():
             logger.info("Aucun fichier de paramètres UI trouvé. Utilisation des valeurs par défaut.")
             # S'assurer que l'action de menu a un état par défaut si le fichier n'existe pas
@@ -884,26 +902,52 @@ class MainWindow(QMainWindow):
         if not self.restore_selections_action.isChecked():
             logger.info("Restauration des sélections désactivée via le menu.")
             if "window_geometry" in settings: self.restoreGeometry(bytes.fromhex(settings["window_geometry"])) 
-            if "splitter_sizes" in settings: self.splitter.setSizes(settings["splitter_sizes"])
+            if "splitter_sizes" in settings and hasattr(self, 'splitter') and settings["splitter_sizes"]: self.splitter.setSizes(settings["splitter_sizes"]) # Vérifier si splitter existe et sizes non vide
             return
 
         if "window_geometry" in settings: self.restoreGeometry(bytes.fromhex(settings["window_geometry"])) 
-        if "splitter_sizes" in settings: self.splitter.setSizes(settings["splitter_sizes"])
+        if "splitter_sizes" in settings and hasattr(self, 'splitter') and settings["splitter_sizes"]: self.splitter.setSizes(settings["splitter_sizes"]) # Idem
         
         def set_combo_text(combo: QComboBox, text: str):
+            """Sélectionne l'item `text` dans le QComboBox `combo`.
+
+            La recherche se fait d'abord en correspondance exacte. Si aucun item
+            n'est trouvé, une recherche insensible à la casse et aux espaces
+            superflus est tentée.
+            """
+            if not text:
+                return
             index = combo.findText(text)
-            if index != -1: combo.setCurrentIndex(index)
-            else: logger.warning(f"Item '{text}' non trouvé dans {combo.objectName()} lors du chargement.")
+            if index == -1:
+                # Tentative de correspondance moins stricte (insensible à la casse et aux espaces)
+                normalized_target = "".join(text.split()).lower()
+                for i in range(combo.count()):
+                    candidate = combo.itemText(i)
+                    if "".join(candidate.split()).lower() == normalized_target:
+                        index = i
+                        break
+            if index != -1:
+                combo.setCurrentIndex(index)
+            else:
+                logger.warning(f"Item '{text}' non trouvé dans {combo.objectName()} lors du chargement.")
 
         set_combo_text(self.char_a_combo, settings.get("char_a_combo_text", "-- Aucun --"))
         set_combo_text(self.char_b_combo, settings.get("char_b_combo_text", "-- Aucun --"))
-        set_combo_text(self.region_combo_gen, settings.get("region_combo_gen_text", "-- Toutes --"))
-        # Pour sub_location, il faut d'abord s'assurer que la région est sélectionnée pour peupler la liste
-        QTimer.singleShot(100, lambda: set_combo_text(self.sub_location_combo_gen, settings.get("sub_location_combo_gen_text", "-- Aucun --")))
+        
+        # Restaurer la région d'abord
+        saved_region = settings.get("region_combo_gen_text", "-- Toutes --")
+        set_combo_text(self.region_combo_gen, saved_region)
+        
+        # Forcer le traitement des événements pour que on_region_changed_for_sub_locations s'exécute
+        # et peuple sub_location_combo_gen en fonction de la région restaurée.
+        QApplication.processEvents()
+        
+        # Maintenant, tenter de restaurer le sous-lieu directement.
+        saved_sub_location = settings.get("sub_location_combo_gen_text", "-- Aucun --")
+        set_combo_text(self.sub_location_combo_gen, saved_sub_location)
 
         self.k_variants_input.setText(settings.get("k_variants_input_text", "1"))
         self.max_tokens_input.setText(settings.get("max_tokens_input_text", "4"))
-        self.test_mode_checkbox.setChecked(settings.get("test_mode_checkbox_checked", False))
         self.include_dialogue_type_checkbox.setChecked(settings.get("include_dialogue_type_checkbox_checked", True))
         self.user_instruction_input.setPlainText(settings.get("user_instruction_input_text", ""))
 
@@ -931,7 +975,11 @@ class MainWindow(QMainWindow):
         self._update_token_estimation_and_prompt_display() # Mettre à jour le contexte après chargement
 
     def closeEvent(self, event):
-        """Surcharge closeEvent pour sauvegarder les paramètres avant de quitter."""
+        """Surcharge closeEvent pour sauvegarder les paramètres avant de quitter.
+
+        Args:
+            event: L'événement de fermeture.
+        """
         self._save_ui_settings()
         super().closeEvent(event)
 
