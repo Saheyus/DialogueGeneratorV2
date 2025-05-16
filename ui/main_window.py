@@ -5,12 +5,33 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                                QLabel, QComboBox, QTextEdit, QSplitter, 
                                QListWidget, QListWidgetItem, QTreeView, QAbstractItemView, QLineEdit,
                                QGroupBox, QHeaderView, QPushButton, QTabWidget, QApplication, QGridLayout, QCheckBox)
-from PySide6.QtGui import QStandardItemModel, QStandardItem
-from PySide6.QtCore import Qt
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QPalette, QColor, QAction
+from PySide6.QtCore import Qt, QSize, QTimer, QItemSelectionModel, QSortFilterProxyModel, QRegularExpression
+import sys
+import os
+from pathlib import Path # Ajout pour la gestion des chemins
+import webbrowser # Ajout pour ouvrir le fichier de configuration
 
 # Importer les nouveaux modules
 from prompt_engine import PromptEngine
 from llm_client import OpenAIClient, DummyLLMClient
+
+# Chemin vers le répertoire du DialogueGenerator
+DIALOGUE_GENERATOR_DIR = Path(__file__).parent.parent
+UI_SETTINGS_FILE = DIALOGUE_GENERATOR_DIR / "ui_settings.json" # Fichier pour sauvegarder les paramètres UI
+CONTEXT_CONFIG_FILE_PATH = DIALOGUE_GENERATOR_DIR / "context_config.json" # Chemin vers context_config.json
+
+# S'assurer que le répertoire parent de DialogueGenerator (racine du projet) est dans le PYTHONPATH
+PROJECT_ROOT = DIALOGUE_GENERATOR_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(PROJECT_ROOT))
+
+# Importer ContextBuilder après avoir ajusté le path
+from DialogueGenerator.context_builder import ContextBuilder
+
+# Pour le logging
+import logging
+logger = logging.getLogger(__name__)
 
 def populate_tree_view(model, parent_item, data):
     """Popule récursivement le QTreeView avec les données d'un dictionnaire ou d'une liste."""
@@ -44,7 +65,7 @@ def populate_tree_view(model, parent_item, data):
                 parent_item.appendRow([index_item, value_item])
 
 class MainWindow(QMainWindow):
-    def __init__(self, context_builder=None):
+    def __init__(self, context_builder: ContextBuilder):
         super().__init__()
         self.context_builder = context_builder
         self.prompt_engine = PromptEngine()
@@ -73,9 +94,59 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Générateur de Dialogues IA - Context Builder")
         self.setGeometry(100, 100, 1800, 900) # Encore un peu plus large pour les onglets
 
+        self._create_actions() # Créer les actions avant de créer les menus
+        self._create_menu_bar() # Créer la barre de menus
+
         self.setup_ui()
         if self.context_builder:
             self.load_initial_data()
+
+        # Charger les paramètres UI après avoir peuplé les widgets
+        self._load_ui_settings() 
+
+        # Initialiser le timer pour la mise à jour du contexte/tokens (si nécessaire)
+        self.token_update_timer = QTimer(self)
+        self.token_update_timer.setSingleShot(True)
+        self.token_update_timer.timeout.connect(self._update_token_estimation_and_prompt_display)
+        self.token_update_timer.start(500) # Lancer une première fois après le chargement
+
+    def _create_actions(self):
+        """Crée les actions pour les menus."""
+        self.restore_selections_action = QAction("Restaurer les sélections au démarrage", self)
+        self.restore_selections_action.setCheckable(True)
+        self.restore_selections_action.setChecked(True) # Par défaut
+        # La logique de sauvegarde/chargement de cet état sera dans _save/_load_ui_settings
+
+        self.edit_context_config_action = QAction("&Modifier la configuration du contexte...", self)
+        self.edit_context_config_action.triggered.connect(self._open_context_config_file)
+
+        self.exit_action = QAction("&Quitter", self)
+        self.exit_action.triggered.connect(self.close)
+
+    def _create_menu_bar(self):
+        """Crée la barre de menus principale."""
+        menu_bar = self.menuBar()
+
+        # Menu Fichier (ou Options)
+        options_menu = menu_bar.addMenu("&Options")
+        options_menu.addAction(self.restore_selections_action)
+        options_menu.addSeparator()
+        options_menu.addAction(self.edit_context_config_action) 
+        options_menu.addSeparator()
+        options_menu.addAction(self.exit_action)
+
+    def _open_context_config_file(self):
+        """Ouvre le fichier context_config.json dans l'éditeur par défaut."""
+        if CONTEXT_CONFIG_FILE_PATH.exists():
+            try:
+                webbrowser.open(os.path.realpath(CONTEXT_CONFIG_FILE_PATH))
+                logger.info(f"Tentative d'ouverture de {CONTEXT_CONFIG_FILE_PATH}")
+            except Exception as e:
+                logger.error(f"Impossible d'ouvrir {CONTEXT_CONFIG_FILE_PATH}: {e}")
+                self.statusBar().showMessage(f"Erreur: Impossible d'ouvrir le fichier de configuration: {e}")
+        else:
+            logger.warning(f"Le fichier de configuration {CONTEXT_CONFIG_FILE_PATH} n'existe pas.")
+            self.statusBar().showMessage("Erreur: Fichier de configuration du contexte non trouvé.")
 
     def setup_ui(self):
         """Configure l'interface utilisateur de la fenêtre principale."""
@@ -156,17 +227,32 @@ class MainWindow(QMainWindow):
         self.char_b_combo = QComboBox()
         self.char_b_combo.setMaxVisibleItems(15) # Augmentation du nombre d'items visibles
         self.char_b_combo.currentIndexChanged.connect(self._update_token_estimation_and_prompt_display)
-        self.location_label_gen = QLabel("Lieu de la Scène:")
-        self.location_combo_gen = QComboBox()
-        self.location_combo_gen.setMaxVisibleItems(15) # Augmentation du nombre d'items visibles
-        self.location_combo_gen.currentIndexChanged.connect(self._update_token_estimation_and_prompt_display)
+        
+        # Remplacement de location_combo_gen par region et sub_location
+        self.region_label_gen = QLabel("Région de la Scène:")
+        self.region_combo_gen = QComboBox()
+        self.region_combo_gen.setMaxVisibleItems(15)
+        self.region_combo_gen.currentIndexChanged.connect(self.on_region_changed_for_sub_locations)
+        self.region_combo_gen.currentIndexChanged.connect(self._update_token_estimation_and_prompt_display)
+
+        self.sub_location_label_gen = QLabel("Sous-Lieu (optionnel):")
+        self.sub_location_combo_gen = QComboBox()
+        self.sub_location_combo_gen.setMaxVisibleItems(15)
+        self.sub_location_combo_gen.currentIndexChanged.connect(self._update_token_estimation_and_prompt_display)
+
+        # Bouton pour suggérer les éléments liés
+        self.suggest_linked_button = QPushButton("Sélectionner Éléments Liés")
+        self.suggest_linked_button.clicked.connect(self.on_suggest_linked_elements)
 
         context_select_layout.addWidget(self.char_a_label, 0, 0)
         context_select_layout.addWidget(self.char_a_combo, 0, 1)
         context_select_layout.addWidget(self.char_b_label, 1, 0)
         context_select_layout.addWidget(self.char_b_combo, 1, 1)
-        context_select_layout.addWidget(self.location_label_gen, 2, 0)
-        context_select_layout.addWidget(self.location_combo_gen, 2, 1)
+        context_select_layout.addWidget(self.region_label_gen, 2, 0) # Nouveau label pour région
+        context_select_layout.addWidget(self.region_combo_gen, 2, 1) # Nouveau combo pour région
+        context_select_layout.addWidget(self.sub_location_label_gen, 3, 0) # Nouveau label pour sous-lieu
+        context_select_layout.addWidget(self.sub_location_combo_gen, 3, 1) # Nouveau combo pour sous-lieu
+        context_select_layout.addWidget(self.suggest_linked_button, 4, 0, 1, 2) # Bouton sur toute la largeur
         
         generation_params_layout.addLayout(context_select_layout)
         generation_params_layout.addSpacing(10)
@@ -180,10 +266,25 @@ class MainWindow(QMainWindow):
         k_layout.addStretch() # Pousse le QLineEdit vers la gauche
         generation_params_layout.addLayout(k_layout)
 
+        # Max Tokens pour la génération
+        tokens_layout = QHBoxLayout()
+        tokens_layout.addWidget(QLabel("Max K Tokens:"))
+        self.max_tokens_input = QLineEdit("4")
+        self.max_tokens_input.setPlaceholderText("ex: 4 (pour 4000)")
+        self.max_tokens_input.setFixedWidth(60)
+        tokens_layout.addWidget(self.max_tokens_input)
+        tokens_layout.addStretch()
+        generation_params_layout.addLayout(tokens_layout)
+
         # Case à cocher pour le mode Test
         self.test_mode_checkbox = QCheckBox("Mode Test (contexte limité)")
         self.test_mode_checkbox.stateChanged.connect(self._update_token_estimation_and_prompt_display)
         generation_params_layout.addWidget(self.test_mode_checkbox)
+
+        self.include_dialogue_type_checkbox = QCheckBox("Inclure 'Dialogue Type' du personnage")
+        self.include_dialogue_type_checkbox.setChecked(True) # Coché par défaut
+        self.include_dialogue_type_checkbox.stateChanged.connect(self._update_token_estimation_and_prompt_display)
+        generation_params_layout.addWidget(self.include_dialogue_type_checkbox)
         generation_params_layout.addSpacing(5)
 
         generation_params_layout.addWidget(QLabel("Instructions spécifiques pour la scène / Prompt utilisateur:"))
@@ -256,139 +357,266 @@ class MainWindow(QMainWindow):
         return simplified
 
     def _get_selected_context_summary(self) -> str:
-        """Construit un résumé simple du contexte actuellement sélectionné."""
-        summary_parts = ["--- CONTEXTE PRINCIPAL ---"]
-        
-        char_a_name = self.char_a_combo.currentText()
-        char_b_name = self.char_b_combo.currentText()
-        location_name = self.location_combo_gen.currentText()
-
-        if self.context_builder:
-            if char_a_name and char_a_name != "<Aucun>" and char_a_name != "<Aucun personnage chargé>":
-                details_a = self.context_builder.get_character_details_by_name(char_a_name)
-                summary_parts.append(f"Personnage A (Acteur Principal): {char_a_name}")
-                if details_a:
-                    processed_details_a = self._get_simplified_details_for_test_mode(details_a) if self.test_mode_checkbox.isChecked() else details_a
-                    summary_parts.append(f"  Détails Personnage A: {json.dumps(processed_details_a, ensure_ascii=False, indent=2)}")
-            else:
-                summary_parts.append("Personnage A: <Non sélectionné>")
-
-            if char_b_name and char_b_name != "<Aucun>" and char_b_name != "<Aucun personnage chargé>":
-                details_b = self.context_builder.get_character_details_by_name(char_b_name)
-                summary_parts.append(f"Personnage B (Interlocuteur): {char_b_name}")
-                if details_b:
-                    processed_details_b = self._get_simplified_details_for_test_mode(details_b) if self.test_mode_checkbox.isChecked() else details_b
-                    summary_parts.append(f"  Détails Personnage B: {json.dumps(processed_details_b, ensure_ascii=False, indent=2)}")
-            else:
-                summary_parts.append("Personnage B: <Non sélectionné>")
-            
-            if location_name and location_name != "<Aucun>" and location_name != "<Aucun lieu chargé>":
-                details_loc = self.context_builder.get_location_details_by_name(location_name)
-                summary_parts.append(f"Lieu de la scène: {location_name}")
-                if details_loc:
-                    processed_details_loc = self._get_simplified_details_for_test_mode(details_loc) if self.test_mode_checkbox.isChecked() else details_loc
-                    summary_parts.append(f"  Détails Lieu: {json.dumps(processed_details_loc, ensure_ascii=False, indent=2)}")
-            else:
-                summary_parts.append("Lieu de la scène: <Non sélectionné>")
-
-            if char_a_name == char_b_name and char_a_name != "<Aucun>" and char_a_name != "<Aucun personnage chargé>":
-                summary_parts.append("NOTE: Personnage A et Personnage B sont identiques.")
-        
-        additional_context_section_parts = ["\n--- CONTEXTE ADDITIONNEL (Éléments cochés) ---"]
-        found_additional = False
+        """ Récupère un résumé du contexte sélectionné pour l'affichage ou le prompt. """
+        summary_parts = []
+        selected_data_for_context = {
+            "characters": [],
+            "locations": [],
+            "items": [],
+            "species": [],
+            "communities": [],
+            "dialogues_examples": [] # Ajouté pour les exemples de dialogues
+        }
 
         def add_checked_details_from_list(list_widget: QListWidget, category_name: str, detail_fetch_func, name_keys=None):
-            nonlocal found_additional
-            checked_items_details_json = []
+            items_text = []
             for i in range(list_widget.count()):
-                item = list_widget.item(i)
-                if item.checkState() == Qt.Checked:
-                    item_name = item.text()
+                item_widget = list_widget.item(i)
+                if item_widget.checkState() == Qt.Checked:
+                    item_name = item_widget.text()
+                    selected_data_for_context[category_name].append(item_name)
                     details = None
-                    if self.context_builder:
-                        if name_keys: # Pour les cas comme les dialogues qui peuvent avoir plusieurs clés pour le titre
-                            details = detail_fetch_func(item_name, name_keys=name_keys) 
+                    if callable(detail_fetch_func):
+                        if name_keys:
+                            details = detail_fetch_func(item_name, name_keys=name_keys)
                         else:
                             details = detail_fetch_func(item_name)
                     
                     if details:
-                        # Pour éviter de surcharger, on peut ajouter une version simplifiée ou juste une confirmation
-                        # Pour l'instant, ajoutons le JSON complet
-                        processed_details = self._get_simplified_details_for_test_mode(details) if self.test_mode_checkbox.isChecked() else details
-                        checked_items_details_json.append(json.dumps(processed_details, ensure_ascii=False, indent=2))
-                    else:
-                        checked_items_details_json.append(f'"{item_name}" (détails non trouvés ou erreur)')
+                        if self.test_mode_checkbox.isChecked():
+                            details = self._get_simplified_details_for_test_mode(details)
+                        
+                        # Formatage pour le résumé textuel (peut être optionnel si on ne l'affiche plus directement)
+                        item_summary = f"{category_name.capitalize()}: {item_name}\n"
+                        for key, value in details.items():
+                            if key != "Nom": # Éviter de répéter le nom
+                                item_summary += f"  {key}: {str(value)[:100] + '...' if len(str(value)) > 100 else value}\n"
+                        items_text.append(item_summary)
             
-            if checked_items_details_json:
-                additional_context_section_parts.append(f"{category_name} notables:")
-                additional_context_section_parts.extend(checked_items_details_json)
-                found_additional = True
+            if items_text:
+                summary_parts.append("\n".join(items_text))
 
-        if self.context_builder:
-            add_checked_details_from_list(self.character_list, "Autres Personnages", self.context_builder.get_character_details_by_name)
-            add_checked_details_from_list(self.location_list, "Autres Lieux", self.context_builder.get_location_details_by_name)
-            add_checked_details_from_list(self.item_list, "Objets", self.context_builder.get_item_details_by_name)
-            add_checked_details_from_list(self.species_list, "Espèces", self.context_builder.get_species_details_by_name)
-            add_checked_details_from_list(self.communities_list, "Communautés", self.context_builder.get_community_details_by_name)
-            # Pour les dialogues, la fonction de récupération est get_dialogue_example_details_by_title
-            # et elle gère déjà les multiples clés possibles via _get_element_details_by_name
-            add_checked_details_from_list(self.dialogues_list, "Exemples Dialogues", self.context_builder.get_dialogue_example_details_by_title)
+        add_checked_details_from_list(self.character_list, "characters", self.context_builder.get_character_details_by_name if self.context_builder else None)
+        add_checked_details_from_list(self.location_list, "locations", self.context_builder.get_location_details_by_name if self.context_builder else None)
+        add_checked_details_from_list(self.item_list, "items", self.context_builder.get_item_details_by_name if self.context_builder else None)
+        add_checked_details_from_list(self.species_list, "species", self.context_builder.get_species_details_by_name if self.context_builder else None)
+        add_checked_details_from_list(self.communities_list, "communities", self.context_builder.get_community_details_by_name if self.context_builder else None)
+        add_checked_details_from_list(self.dialogues_list, "dialogues_examples", self.context_builder.get_dialogue_example_details_by_title if self.context_builder else None, name_keys=["Nom", "Titre", "ID"])
 
-        if found_additional:
-            summary_parts.extend(additional_context_section_parts)
-        
-        full_context_text = "\n".join(summary_parts)
-
-        return full_context_text
+        return "\n\n".join(summary_parts)
 
     def _update_token_estimation_and_prompt_display(self):
-        """Met à jour l'estimation du nombre de tokens et affiche le prompt formaté."""
-        context_summary = self._get_selected_context_summary()
-        user_instruction = self.user_instruction_input.toPlainText()
-        
-        # Générer le prompt complet pour l'estimation
-        # Le PromptEngine s'occupe du formatage final incluant le system prompt.
-        current_prompt, word_count = self.prompt_engine.build_prompt(
-            context_summary=context_summary,
-            user_specific_goal=user_instruction
-        )
-        self.token_count_label.setText(f"Estim. mots: {word_count}")
+        if not self.context_builder: return
 
-        # Optionnel: afficher le prompt complet quelque part si utile pour le debug
-        # Par exemple, dans un onglet "Prompt Complet" ou une infobulle.
-        # Pour l'instant, on se contente de mettre à jour le compteur.
+        # Valeurs à ignorer lors de la collecte des noms
+        ignore_values = {"-- Aucun --", "<Aucun>", "-- Toutes --", ""}
+
+        # Récupérer les sélections pour build_context
+        selected_elements_for_build = {
+            "characters": [],
+            "locations": [],
+            "items": [],
+            "species": [],
+            "communities": [],
+            "dialogues_examples": [],
+            "quests": [] # Au cas où on ajoute une sélection de quêtes plus tard
+        }
+
+        # Personnages principaux depuis les ComboBox
+        char_a = self.char_a_combo.currentText()
+        char_b = self.char_b_combo.currentText()
+        if char_a not in ignore_values: selected_elements_for_build["characters"].append(char_a)
+        if char_b not in ignore_values: selected_elements_for_build["characters"].append(char_b)
+
+        # Ajout des lieux sélectionnés (région et/ou sous-lieu)
+        current_region = self.region_combo_gen.currentText()
+        current_sub_location = self.sub_location_combo_gen.currentText()
+        
+        # Priorité au sous-lieu s'il est spécifié et valide
+        if current_sub_location not in ignore_values:
+            selected_elements_for_build["locations"].append(current_sub_location)
+        elif current_region not in ignore_values:
+            selected_elements_for_build["locations"].append(current_region)
+
+        # Ajouter les éléments cochés des listes de gauche
+        for list_w, cat_name in [
+            (self.character_list, "characters"), (self.location_list, "locations"),
+            (self.item_list, "items"), (self.species_list, "species"),
+            (self.communities_list, "communities"), (self.dialogues_list, "dialogues_examples")
+            # Ajouter (self.quest_list, "quests") si une liste de quêtes est implémentée
+        ]:
+            for i in range(list_w.count()):
+                item_w = list_w.item(i)
+                if item_w.checkState() == Qt.Checked:
+                    item_text = item_w.text()
+                    if item_text not in ignore_values: # Vérifier aussi ici
+                        selected_elements_for_build[cat_name].append(item_text)
+        
+        # Dédoublonner les listes et s'assurer que les valeurs ignorées sont parties
+        for cat_key in selected_elements_for_build:
+            valid_items = []
+            seen = set() # Pour le dédoublonnage en gardant l'ordre si nécessaire (set ne garantit pas l'ordre)
+            for item_name in selected_elements_for_build[cat_key]:
+                if item_name not in ignore_values and item_name not in seen:
+                    valid_items.append(item_name)
+                    seen.add(item_name)
+            selected_elements_for_build[cat_key] = valid_items
+
+        user_instruction = self.user_instruction_input.toPlainText()
+        include_dialogue_type = self.include_dialogue_type_checkbox.isChecked()
+        
+        # Appel à build_context pour le contexte brut
+        MAX_TOKENS_FOR_CONTEXT_BUILDING = 32000 # Assez grand pour ne pas tronquer lors de la construction initiale du contexte
+        
+        context_str = self.context_builder.build_context(
+            selected_elements_for_build,
+            user_instruction, # L'instruction est passée ici pour que ContextBuilder puisse potentiellement l'utiliser
+            max_tokens=MAX_TOKENS_FOR_CONTEXT_BUILDING, 
+            include_dialogue_type=include_dialogue_type
+        )
+        
+        context_tokens = self.context_builder._count_tokens(context_str) 
+
+        # Maintenant, construire le prompt complet avec PromptEngine pour l'estimation totale
+        generation_params_preview = {} # Pour l'instant, pas de paramètres UI spécifiques pour le PromptEngine
+        # L'instruction utilisateur est déjà dans user_instruction
+        
+        estimated_full_prompt, estimated_total_tokens = self.prompt_engine.build_prompt(
+            context_summary=context_str, # Le contexte déjà construit (et potentiellement tronqué)
+            user_specific_goal=user_instruction,
+            generation_params=generation_params_preview
+        )
+        
+        self.token_count_label.setText(f"Contexte: {context_tokens} / Prompt Total (estim.): {estimated_total_tokens} tokens")
+
+        # Afficher le prompt complet estimé dans le premier onglet
+        preview_tab_title = "Prompt Complet (Estim.)"
+        if self.variant_tabs.count() == 0:
+            prompt_preview_tab = QTextEdit()
+            prompt_preview_tab.setReadOnly(True)
+            self.variant_tabs.addTab(prompt_preview_tab, preview_tab_title)
+        else:
+            # S'assurer que le premier onglet est bien celui de la prévisualisation
+            self.variant_tabs.setTabText(0, preview_tab_title) 
+        
+        preview_widget = self.variant_tabs.widget(0)
+        if isinstance(preview_widget, QTextEdit):
+            preview_widget.setPlainText(estimated_full_prompt)
 
     def on_generate_button_clicked(self):
         self.statusBar().showMessage("Génération en cours...")
-        self.variant_tabs.clear()
+        # Nettoyer les anciens onglets de variantes, mais garder le premier (prévisualisation du prompt)
+        # s'il existe déjà. Sinon, il sera créé par _update_token_estimation_and_prompt_display si nécessaire.
+        # Ou, pour être plus simple, on le recrée ici s'il n'est pas là ou s'il y a d'autres onglets.
+        while self.variant_tabs.count() > 0: # Enlever tous les onglets (y compris celui de preview pour le recréer avec le prompt final)
+            self.variant_tabs.removeTab(0)
+
+        if not self.context_builder:
+            self.statusBar().showMessage("ContextBuilder non initialisé.")
+            return
 
         user_instruction = self.user_instruction_input.toPlainText()
         if not user_instruction.strip():
             self.statusBar().showMessage("Veuillez entrer une instruction pour le LLM.")
+            # Remettre un onglet de base pour le prompt si on s'arrête ici
+            self._update_token_estimation_and_prompt_display() # Pour réafficher le prompt estimé
             return
-
-        context_summary = self._get_selected_context_summary()
         
+        # Récupérer les sélections actuelles (logique similaire à _update_token_estimation_and_prompt_display)
+        ignore_values = {"-- Aucun --", "<Aucun>", "-- Toutes --", ""}
+        selected_elements_for_build = {
+            "characters": [], "locations": [], "items": [],
+            "species": [], "communities": [], "dialogues_examples": [], "quests": []
+        }
+
+        char_a = self.char_a_combo.currentText()
+        char_b = self.char_b_combo.currentText()
+        if char_a not in ignore_values: selected_elements_for_build["characters"].append(char_a)
+        if char_b not in ignore_values: selected_elements_for_build["characters"].append(char_b)
+
+        current_region = self.region_combo_gen.currentText()
+        current_sub_location = self.sub_location_combo_gen.currentText()
+        if current_sub_location not in ignore_values:
+            selected_elements_for_build["locations"].append(current_sub_location)
+        elif current_region not in ignore_values:
+            selected_elements_for_build["locations"].append(current_region)
+
+        for list_w, cat_name in [
+            (self.character_list, "characters"), (self.location_list, "locations"),
+            (self.item_list, "items"), (self.species_list, "species"),
+            (self.communities_list, "communities"), (self.dialogues_list, "dialogues_examples")
+        ]:
+            for i in range(list_w.count()):
+                item_w = list_w.item(i)
+                if item_w.checkState() == Qt.Checked:
+                    item_text = item_w.text()
+                    if item_text not in ignore_values:
+                        selected_elements_for_build[cat_name].append(item_text)
+        
+        for cat_key in selected_elements_for_build:
+            valid_items = []
+            seen = set()
+            for item_name in selected_elements_for_build[cat_key]:
+                if item_name not in ignore_values and item_name not in seen:
+                    valid_items.append(item_name)
+                    seen.add(item_name)
+            selected_elements_for_build[cat_key] = valid_items
+
+        include_dialogue_type = self.include_dialogue_type_checkbox.isChecked()
+        
+        try:
+            max_k_tokens_str = self.max_tokens_input.text().replace("k", "").replace("K", "").strip()
+            max_context_tokens_for_builder = int(float(max_k_tokens_str) * 1000) if max_k_tokens_str else 4000 # Ceci est pour ContextBuilder
+            if max_context_tokens_for_builder <= 0: max_context_tokens_for_builder = 4000 
+        except ValueError:
+            max_context_tokens_for_builder = 4000 
+        
+        # 1. Construire le contexte avec ContextBuilder
+        # L'instruction utilisateur est passée ici car ContextBuilder la prend en compte pour le résumé "Vision"
+        context_summary_str = self.context_builder.build_context(
+            selected_elements_for_build,
+            user_instruction, # L'instruction utilisateur
+            max_tokens=max_context_tokens_for_builder, # Max tokens pour la chaîne de contexte seule
+            include_dialogue_type=include_dialogue_type
+        )
+
+        # 2. Construire le prompt final avec PromptEngine
+        generation_params_for_engine = {} # Peut être rempli par des contrôles UI pour le ton, style, etc.
+        # if self.tone_combo.currentText() != "-- Aucun --": # Exemple
+        #     generation_params_for_engine["tone"] = self.tone_combo.currentText()
+
+        current_prompt_for_llm, num_tokens_total_prompt = self.prompt_engine.build_prompt(
+            context_summary=context_summary_str,
+            user_specific_goal=user_instruction,
+            generation_params=generation_params_for_engine
+        )
+        
+        # Mettre à jour le label avec le compte de tokens du prompt qui sera envoyé au LLM
+        context_tokens_final = self.context_builder._count_tokens(context_summary_str) # Recalculer pour le contexte réellement utilisé
+        self.token_count_label.setText(f"Contexte: {context_tokens_final} / Prompt LLM: {num_tokens_total_prompt} tokens")
+
+        # Afficher le prompt final (celui envoyé au LLM) dans le premier onglet
+        prompt_display_tab = QTextEdit()
+        prompt_display_tab.setReadOnly(True)
+        prompt_display_tab.setPlainText(current_prompt_for_llm)
+        self.variant_tabs.insertTab(0, prompt_display_tab, "Prompt Final (pour LLM)") # Insérer en premier
+        self.variant_tabs.setCurrentIndex(0) # S'assurer qu'il est visible
+
         try:
             k_value = int(self.k_variants_input.text())
             if k_value <= 0:
                 self.statusBar().showMessage("Le nombre de variantes (k) doit être positif.")
+                # Pas besoin de recréer l'onglet prompt ici, il est déjà là
                 return
         except ValueError:
             self.statusBar().showMessage("Le nombre de variantes (k) doit être un entier.")
             return
 
-        current_prompt, word_count = self.prompt_engine.build_prompt(
-            context_summary=context_summary, 
-            user_specific_goal=user_instruction
-        )
-        self.token_count_label.setText(f"Estim. mots: {word_count}") # Mise à jour du label
-
-        self.statusBar().showMessage(f"Génération de {k_value} variantes avec {type(self.llm_client).__name__}... (Prompt: ~{word_count} mots)")
-        QApplication.processEvents()
+        self.statusBar().showMessage(f"Génération de {k_value} variantes avec {type(self.llm_client).__name__}... (Prompt: {num_tokens_total_prompt} tokens)")
+        QApplication.processEvents() 
 
         try:
-            variants = asyncio.run(self.llm_client.generate_variants(current_prompt, k_value))
+            variants = asyncio.run(self.llm_client.generate_variants(current_prompt_for_llm, k_value))
             
             if variants:
                 for i, variant_text in enumerate(variants):
@@ -396,16 +624,17 @@ class MainWindow(QMainWindow):
                     tab_content.setPlainText(variant_text)
                     tab_content.setReadOnly(True) 
                     self.variant_tabs.addTab(tab_content, f"Variante {i+1}")
-                self.statusBar().showMessage(f"{len(variants)} variantes générées avec succès. Prompt: ~{word_count} mots.")
+                self.statusBar().showMessage(f"{len(variants)} variantes générées. Prompt LLM: {num_tokens_total_prompt} tokens.")
             else:
                 self.statusBar().showMessage("Aucune variante n'a été générée.")
 
         except Exception as e:
             self.statusBar().showMessage(f"Erreur lors de la génération: {e}")
             error_tab = QTextEdit()
-            error_tab.setPlainText(f"Une erreur est survenue:\n{type(e).__name__}: {e}\n\nPrompt utilisé (~{word_count} mots):\n{current_prompt}")
-            self.variant_tabs.addTab(error_tab, "Erreur")
-            print(f"Erreur lors de la génération : {e}")
+            # Afficher l'erreur et le prompt qui a causé l'erreur
+            error_tab.setPlainText(f"Une erreur est survenue:\\n{type(e).__name__}: {e}\\n\\nPrompt utilisé ({num_tokens_total_prompt} tokens):\\n{current_prompt_for_llm}")
+            self.variant_tabs.addTab(error_tab, "Erreur") # Ajouter l'onglet d'erreur après celui du prompt
+            logger.error(f"Erreur lors de la génération : {e}", exc_info=True)
 
     def filter_list_widget(self, text, list_widget, label_widget, original_label_text):
         visible_items = 0
@@ -423,7 +652,8 @@ class MainWindow(QMainWindow):
     def _populate_list_widget(self, list_widget: QListWidget, data_list, name_extractor_func, label_widget, original_label_text):
         list_widget.clear()
         names = []
-        if self.context_builder:
+        valid_names = [] # Initialiser valid_names ici
+        if self.context_builder and callable(name_extractor_func): # Vérifier que name_extractor_func est appelable
             names = name_extractor_func()
         
         # Déconnecter les anciens signaux pour éviter les connexions multiples si cette fonction est appelée plusieurs fois
@@ -450,40 +680,96 @@ class MainWindow(QMainWindow):
         self._update_token_estimation_and_prompt_display() # Appel initial pour mettre à jour le compteur
 
     def load_initial_data(self):
-        if not self.context_builder: 
-            self.statusBar().showMessage("Erreur: ContextBuilder non initialisé.")
+        if not self.context_builder: return
+
+        # Peupler les listes de gauche
+        self._populate_list_widget(self.character_list, [], self.context_builder.get_characters_names, self.character_label, "Personnages:")
+        self._populate_list_widget(self.location_list, [], self.context_builder.get_locations_names, self.location_label, "Lieux:")
+        self._populate_list_widget(self.item_list, [], self.context_builder.get_items_names, self.item_label, "Objets:")
+        self._populate_list_widget(self.species_list, [], self.context_builder.get_species_names, self.species_label, "Espèces:")
+        self._populate_list_widget(self.communities_list, [], self.context_builder.get_communities_names, self.communities_label, "Communautés:")
+        self._populate_list_widget(self.dialogues_list, [], self.context_builder.get_dialogue_examples_titles, self.dialogues_label, "Exemples Dialogues:")
+
+        # Peupler les ComboBox pour Personnage A et B
+        char_names = ["-- Aucun --"] + (self.context_builder.get_characters_names() if self.context_builder else [])
+        self.char_a_combo.clear()
+        self.char_a_combo.addItems(char_names)
+        self.char_b_combo.clear()
+        self.char_b_combo.addItems(char_names)
+
+        # Peupler le ComboBox des Régions
+        region_names = ["-- Toutes --"] + self.context_builder.get_regions()
+        self.region_combo_gen.clear()
+        self.region_combo_gen.addItems(region_names)
+        self.on_region_changed_for_sub_locations() # Pour peupler les sous-lieux initialement
+        
+        self.statusBar().showMessage("Données initiales chargées.")
+        self._update_token_estimation_and_prompt_display() # Mettre à jour l'estimation initiale
+
+    def on_region_changed_for_sub_locations(self):
+        if not self.context_builder: return
+        
+        selected_region = self.region_combo_gen.currentText()
+        self.sub_location_combo_gen.clear()
+        self.sub_location_combo_gen.addItem("-- Aucun --") # Option par défaut
+
+        if selected_region and selected_region != "-- Toutes --":
+            sub_locations = self.context_builder.get_sub_locations(selected_region)
+            if sub_locations:
+                self.sub_location_combo_gen.addItems(sub_locations)
+        # Si "-- Toutes --" est sélectionné pour la région, sub_location_combo_gen reste avec "-- Aucun --" 
+        # ou pourrait être désactivé/caché.
+
+    def on_suggest_linked_elements(self):
+        if not self.context_builder: return
+
+        char_a_name = self.char_a_combo.currentText()
+        if char_a_name == "-- Aucun --" or char_a_name == "<Aucun>": char_a_name = None # Correction pour gérer <Aucun>
+        
+        selected_locations = []
+        region_name = self.region_combo_gen.currentText()
+        sub_loc_name = self.sub_location_combo_gen.currentText()
+
+        if sub_loc_name and sub_loc_name != "-- Aucun --":
+            selected_locations.append(sub_loc_name)
+        elif region_name and region_name != "-- Toutes --" and region_name != "<Aucun>": # Correction pour gérer <Aucun>
+            selected_locations.append(region_name)
+
+        if not char_a_name and not selected_locations:
+            self.statusBar().showMessage("Veuillez sélectionner un Personnage A et/ou un Lieu/Région pour suggérer des liens.")
             return
 
-        # Populate character selectors in the generation panel
-        character_names = self.context_builder.get_characters_names()
-        if character_names:
-            valid_character_names = [str(name) for name in character_names if name is not None]
-            self.char_a_combo.clear()
-            self.char_a_combo.addItems(["<Aucun>"] + valid_character_names)
-            self.char_b_combo.clear()
-            self.char_b_combo.addItems(["<Aucun>"] + valid_character_names)
-        else:
-            self.char_a_combo.addItem("<Aucun personnage chargé>")
-            self.char_b_combo.addItem("<Aucun personnage chargé>")
-
-        # Populate location selector in the generation panel
-        location_names = self.context_builder.get_locations_names()
-        if location_names:
-            valid_location_names = [str(name) for name in location_names if name is not None]
-            self.location_combo_gen.clear()
-            self.location_combo_gen.addItems(["<Aucun>"] + valid_location_names)
-        else:
-            self.location_combo_gen.addItem("<Aucun lieu chargé>")
-
-        self._populate_list_widget(self.character_list, self.context_builder.characters, self.context_builder.get_characters_names, self.character_label, "Personnages:")
-        self._populate_list_widget(self.location_list, self.context_builder.locations, self.context_builder.get_locations_names, self.location_label, "Lieux:")
-        self._populate_list_widget(self.item_list, self.context_builder.items, self.context_builder.get_items_names, self.item_label, "Objets:")
-        self._populate_list_widget(self.species_list, self.context_builder.species, self.context_builder.get_species_names, self.species_label, "Espèces:")
-        self._populate_list_widget(self.communities_list, self.context_builder.communities, self.context_builder.get_communities_names, self.communities_label, "Communautés:")
-        self._populate_list_widget(self.dialogues_list, self.context_builder.dialogues_examples, self.context_builder.get_dialogue_examples_titles, self.dialogues_label, "Exemples Dialogues:")
+        linked_data = self.context_builder.get_linked_elements(char_a_name, selected_locations)
         
-        loaded_counts = f"{self.character_list.count()}P, {self.location_list.count()}L, {self.item_list.count()}O, {self.species_list.count()}E, {self.communities_list.count()}C, {self.dialogues_list.count()}D."
-        self.statusBar().showMessage(f"Données chargées: {loaded_counts} Prêt.")
+        # Parcourir les listes de gauche et cocher les éléments trouvés
+        list_map = {
+            "characters": self.character_list,
+            "locations": self.location_list,
+            "items": self.item_list,
+            "species": self.species_list,
+            "communities": self.communities_list
+            # "quests" et "dialogues_examples" ne sont pas typiquement liés de cette manière dans get_linked_elements pour l'instant
+        }
+
+        for category, names_set in linked_data.items():
+            if category in list_map and names_set:
+                list_widget = list_map[category]
+                for i in range(list_widget.count()):
+                    item = list_widget.item(i)
+                    if item.text() in names_set:
+                        item.setCheckState(Qt.Checked)
+        
+        # Les lignes suivantes qui repeuplent les QComboBox des personnages sont commentées
+        # car elles réinitialisent la sélection existante.
+        # character_names = self.context_builder.get_characters_names() if self.context_builder else []
+        # valid_character_names = ["<Aucun>"] + [str(name) for name in character_names if name is not None]
+        # self.char_a_combo.clear()
+        # self.char_a_combo.addItems(valid_character_names)
+        # self.char_b_combo.clear()
+        # self.char_b_combo.addItems(valid_character_names)
+
+        self.statusBar().showMessage("Suggestions de liens appliquées. Vérifiez les éléments cochés.") # Message mis à jour
+        self._update_token_estimation_and_prompt_display() # Mettre à jour l'estimation après avoir coché
 
     def _display_details_in_tree(self, data_item):
         self.details_tree_model.clear()
@@ -547,33 +833,133 @@ class MainWindow(QMainWindow):
         """Appelé lorsque l'état coché d'un élément de liste change."""
         self._update_token_estimation_and_prompt_display()
 
+    def _save_ui_settings(self):
+        """Sauvegarde l'état actuel de l'interface utilisateur dans un fichier JSON."""
+        settings = {
+            "window_geometry": self.saveGeometry().data().hex(), # PySide6 utilise .data().hex()
+            "splitter_sizes": self.splitter.sizes(),
+            "char_a_combo_text": self.char_a_combo.currentText(),
+            "char_b_combo_text": self.char_b_combo.currentText(),
+            "region_combo_gen_text": self.region_combo_gen.currentText(),
+            "sub_location_combo_gen_text": self.sub_location_combo_gen.currentText(),
+            "k_variants_input_text": self.k_variants_input.text(),
+            "max_tokens_input_text": self.max_tokens_input.text(),
+            "test_mode_checkbox_checked": self.test_mode_checkbox.isChecked(),
+            "include_dialogue_type_checkbox_checked": self.include_dialogue_type_checkbox.isChecked(),
+            "restore_selections_action_checked": self.restore_selections_action.isChecked(), # Utiliser l'action du menu
+            "user_instruction_input_text": self.user_instruction_input.toPlainText(),
+            "checked_characters": self._get_checked_items(self.character_list),
+            "checked_locations": self._get_checked_items(self.location_list),
+            "checked_items": self._get_checked_items(self.item_list),
+            "checked_species": self._get_checked_items(self.species_list),
+            "checked_communities": self._get_checked_items(self.communities_list),
+            "checked_dialogue_examples": self._get_checked_items(self.dialogues_list),
+        }
+        try:
+            with open(UI_SETTINGS_FILE, "w", encoding="utf-8") as f:
+                json.dump(settings, f, indent=4)
+            logger.info(f"Paramètres UI sauvegardés dans {UI_SETTINGS_FILE}")
+        except Exception as e:
+            logger.error(f"Erreur lors de la sauvegarde des paramètres UI: {e}")
+
+    def _load_ui_settings(self):
+        """Charge et applique l'état de l'interface utilisateur depuis un fichier JSON."""
+        if not UI_SETTINGS_FILE.exists():
+            logger.info("Aucun fichier de paramètres UI trouvé. Utilisation des valeurs par défaut.")
+            # S'assurer que l'action de menu a un état par défaut si le fichier n'existe pas
+            if hasattr(self, 'restore_selections_action'): # Vérifier si l'action existe déjà
+                 self.restore_selections_action.setChecked(True)
+            return
+
+        try:
+            with open(UI_SETTINGS_FILE, "r", encoding="utf-8") as f:
+                settings = json.load(f)
+        except Exception as e:
+            logger.error(f"Erreur lors du chargement des paramètres UI: {e}")
+            return
+
+        # Mettre à jour l'état de l'action du menu
+        self.restore_selections_action.setChecked(settings.get("restore_selections_action_checked", True))
+
+        if not self.restore_selections_action.isChecked():
+            logger.info("Restauration des sélections désactivée via le menu.")
+            if "window_geometry" in settings: self.restoreGeometry(bytes.fromhex(settings["window_geometry"])) 
+            if "splitter_sizes" in settings: self.splitter.setSizes(settings["splitter_sizes"])
+            return
+
+        if "window_geometry" in settings: self.restoreGeometry(bytes.fromhex(settings["window_geometry"])) 
+        if "splitter_sizes" in settings: self.splitter.setSizes(settings["splitter_sizes"])
+        
+        def set_combo_text(combo: QComboBox, text: str):
+            index = combo.findText(text)
+            if index != -1: combo.setCurrentIndex(index)
+            else: logger.warning(f"Item '{text}' non trouvé dans {combo.objectName()} lors du chargement.")
+
+        set_combo_text(self.char_a_combo, settings.get("char_a_combo_text", "-- Aucun --"))
+        set_combo_text(self.char_b_combo, settings.get("char_b_combo_text", "-- Aucun --"))
+        set_combo_text(self.region_combo_gen, settings.get("region_combo_gen_text", "-- Toutes --"))
+        # Pour sub_location, il faut d'abord s'assurer que la région est sélectionnée pour peupler la liste
+        QTimer.singleShot(100, lambda: set_combo_text(self.sub_location_combo_gen, settings.get("sub_location_combo_gen_text", "-- Aucun --")))
+
+        self.k_variants_input.setText(settings.get("k_variants_input_text", "1"))
+        self.max_tokens_input.setText(settings.get("max_tokens_input_text", "4"))
+        self.test_mode_checkbox.setChecked(settings.get("test_mode_checkbox_checked", False))
+        self.include_dialogue_type_checkbox.setChecked(settings.get("include_dialogue_type_checkbox_checked", True))
+        self.user_instruction_input.setPlainText(settings.get("user_instruction_input_text", ""))
+
+        def set_checked_items(list_widget: QListWidget, checked_texts: list[str]):
+            # Déconnecter temporairement
+            try: list_widget.itemChanged.disconnect() 
+            except RuntimeError: pass
+            for i in range(list_widget.count()):
+                item = list_widget.item(i)
+                if item.text() in checked_texts:
+                    item.setCheckState(Qt.Checked)
+                else:
+                    item.setCheckState(Qt.Unchecked)
+            # Reconnecter
+            list_widget.itemChanged.connect(self._on_list_item_check_changed)
+
+        set_checked_items(self.character_list, settings.get("checked_characters", []))
+        set_checked_items(self.location_list, settings.get("checked_locations", []))
+        set_checked_items(self.item_list, settings.get("checked_items", []))
+        set_checked_items(self.species_list, settings.get("checked_species", []))
+        set_checked_items(self.communities_list, settings.get("checked_communities", []))
+        set_checked_items(self.dialogues_list, settings.get("checked_dialogue_examples", []))
+
+        logger.info(f"Paramètres UI chargés depuis {UI_SETTINGS_FILE}")
+        self._update_token_estimation_and_prompt_display() # Mettre à jour le contexte après chargement
+
+    def closeEvent(self, event):
+        """Surcharge closeEvent pour sauvegarder les paramètres avant de quitter."""
+        self._save_ui_settings()
+        super().closeEvent(event)
+
 # Pour les tests, si vous exécutez main_window.py directement (nécessite quelques ajustements)
 if __name__ == '__main__':
-    import sys
-    from PySide6.QtWidgets import QApplication
-    # Simuler un context_builder pour le test
-    class MockContextBuilder:
-        def __init__(self):
-            self.characters = [{"Nom": "Perso A"}, {"Nom": "Perso B"}]
-            self.locations = [{"Nom": "Lieu X"}, {"Nom": "Lieu Y"}]
-            self.items = [{"Nom": "Objet 1"}]
-            self.species = [{"Nom": "Espece Alpha"}]
-            self.communities = [{"Nom": "Communaute Z"}]
-            self.dialogues_examples = [{"Titre": "Exemple Dialogue 1"}]
+    # Configuration du logging de base
+    logging.basicConfig(level=logging.INFO, 
+                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                        handlers=[logging.StreamHandler()]) # Afficher les logs dans la console
 
-        def get_characters_names(self): return [c["Nom"] for c in self.characters]
-        def get_locations_names(self): return [l["Nom"] for l in self.locations]
-        def get_items_names(self): return [i["Nom"] for i in self.items]
-        def get_species_names(self): return [s["Nom"] for s in self.species]
-        def get_communities_names(self): return [c["Nom"] for c in self.communities]
-        def get_dialogue_examples_titles(self): return [d["Titre"] for d in self.dialogues_examples]
-        def load_data(self, data_path): pass
-
-
+    logger.info("Démarrage de l'application DialogueGenerator...")
     app = QApplication(sys.argv)
-    # Créer une instance de MockContextBuilder pour les tests
-    mock_builder = MockContextBuilder()
-    
-    window = MainWindow(context_builder=mock_builder)
+
+    # Styles pour un look un peu plus moderne (optionnel)
+    # app.setStyle("Fusion")
+    # dark_palette = QPalette()
+    # dark_palette.setColor(QPalette.Window, QColor(53, 53, 53))
+    # ... (configuration complète du thème sombre si désiré)
+    # app.setPalette(dark_palette)
+
+    logger.info("Initialisation du ContextBuilder...")
+    context_builder = ContextBuilder() # Le ContextBuilder charge sa propre config maintenant
+    context_builder.load_gdd_files()
+    logger.info("ContextBuilder initialisé.")
+
+    logger.info("Initialisation de la MainWindow...")
+    window = MainWindow(context_builder)
     window.show()
+    logger.info("MainWindow affichée.")
+
     sys.exit(app.exec()) 

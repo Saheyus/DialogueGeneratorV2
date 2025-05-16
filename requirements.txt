@@ -1,3 +1,5 @@
 PySide6>=6.0
 openai>=1.15
 PyYAML>=6.0 # Utilisé par yarn_renderer, et potentiellement utile ailleurs 
+jinja2>=3.0
+tiktoken>=0.4 
