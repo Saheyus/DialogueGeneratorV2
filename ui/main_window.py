@@ -101,34 +101,55 @@ class MainWindow(QMainWindow):
         self._create_menu_bar() # Create the main menu bar
 
         # Instantiate GenerationPanel before setup_ui so its widgets are available
-        self.generation_panel = GenerationPanel(self)
+        # Pass necessary dependencies to GenerationPanel
+        self.generation_panel = GenerationPanel(
+            context_builder=self.context_builder, 
+            prompt_engine=self.prompt_engine, 
+            llm_client=self.llm_client, 
+            main_window_ref=self, # Pass reference to self (MainWindow)
+            parent=self
+        )
 
-        self.setup_ui() # This now also sets initial objectNames for comboboxes
+        self.setup_ui() 
+        self.generation_panel.finalize_ui_setup() # Call after generation_panel is created and setup_ui is called
         
         # Connect signals AFTER setup_ui and BEFORE load_initial_data / _load_ui_settings
-        # This ensures they are connected for normal operation but can be managed during loading.
-        # Signals for widgets now in GenerationPanel:
-        self.generation_panel.character_a_combo.currentIndexChanged.connect(self._update_token_estimation_and_prompt_display)
-        self.generation_panel.character_b_combo.currentIndexChanged.connect(self._update_token_estimation_and_prompt_display)
-        self.generation_panel.scene_region_combo.currentIndexChanged.connect(self._on_scene_region_changed)
-        self.generation_panel.scene_region_combo.currentIndexChanged.connect(self._update_token_estimation_and_prompt_display)
-        self.generation_panel.scene_sub_location_combo.currentIndexChanged.connect(self._update_token_estimation_and_prompt_display)
-        self.generation_panel.include_dialogue_type_checkbox.stateChanged.connect(self._update_token_estimation_and_prompt_display)
-        self.generation_panel.user_instruction_input.textChanged.connect(self._update_token_estimation_and_prompt_display)
-        self.generation_panel.generate_dialogue_button.clicked.connect(self._on_generate_dialogue_button_clicked)
-        self.generation_panel.suggest_linked_elements_button.clicked.connect(self._on_suggest_linked_elements_clicked)
+        # Signals for widgets in GenerationPanel are now connected internally in GenerationPanel
+        # We only need to connect signals from MainWindow widgets or signals from GenerationPanel to MainWindow slots if any.
+
+        # Example: If GenerationPanel emitted a custom signal, connect it here:
+        # self.generation_panel.customSignal.connect(self.handle_custom_signal_from_generation_panel)
+
+        # Ensure _update_token_estimation_and_prompt_display is called when lists in MainWindow change
+        self.character_list.itemChanged.connect(self._update_token_estimation_and_prompt_display)
+        self.location_list.itemChanged.connect(self._update_token_estimation_and_prompt_display)
+        self.item_list.itemChanged.connect(self._update_token_estimation_and_prompt_display)
+        self.species_list.itemChanged.connect(self._update_token_estimation_and_prompt_display)
+        self.communities_list.itemChanged.connect(self._update_token_estimation_and_prompt_display)
+        self.dialogue_examples_list.itemChanged.connect(self._update_token_estimation_and_prompt_display)
 
         if self.context_builder:
-            self.load_initial_data()
+            self.load_initial_data() # This will now only populate MainWindow's lists
 
         # Load UI settings after populating widgets
         self._load_ui_settings() 
+
+        self._connect_signals_for_auto_save() # CORRECT PLACEMENT: Connect signals for auto-save AFTER loading settings
+
+        # Initial token update after everything is loaded and signals connected
+        QTimer.singleShot(50, self._update_token_estimation_and_prompt_display) # Use QTimer.singleShot for a one-time delayed call
 
         # Initialize timer for context/token update (if necessary)
         self.token_update_timer = QTimer(self)
         self.token_update_timer.setSingleShot(True)
         self.token_update_timer.timeout.connect(self._update_token_estimation_and_prompt_display)
-        self.token_update_timer.start(500) # Start once after loading
+        # self.token_update_timer.start(500) # Control this more explicitly
+
+        # Timer for debouncing UI settings save
+        self.save_settings_timer = QTimer(self)
+        self.save_settings_timer.setSingleShot(True)
+        self.save_settings_timer.timeout.connect(self._perform_actual_save_ui_settings)
+        self.save_settings_delay_ms = 1500 # Save 1.5 seconds after the last change
 
     def _create_actions(self):
         """Creates actions for the menus."""
@@ -234,7 +255,7 @@ class MainWindow(QMainWindow):
         left_panel_layout.addWidget(self.dialogue_examples_section_label)
         left_panel_layout.addWidget(self.dialogue_examples_filter_edit)
         left_panel_layout.addWidget(self.dialogue_examples_list)
-        self.dialogue_examples_list.itemClicked.connect(lambda item_widget: self._on_explorer_list_item_clicked(self.dialogue_examples_list, self.context_builder.dialogue_examples if self.context_builder else [], "Dialogue Example", item_widget, name_key_priority=["Nom", "Titre", "ID"])) # Updated to use new name
+        self.dialogue_examples_list.itemClicked.connect(lambda item_widget: self._on_explorer_list_item_clicked(self.dialogue_examples_list, self.context_builder.dialogues_examples if self.context_builder else [], "Dialogue Example", item_widget, name_key_priority=["Nom", "Titre", "ID"])) # Corrected attribute to dialogues_examples
         
         # left_container_widget is now left_panel_content_widget itself
         left_panel_content_widget.setMinimumWidth(300)
@@ -561,101 +582,21 @@ class MainWindow(QMainWindow):
         self._populate_list_widget(self.communities_list, [], self.context_builder.get_communities_names, self.communities_section_label, "Communities:")
         self._populate_list_widget(self.dialogue_examples_list, [], self.context_builder.get_dialogue_examples_titles, self.dialogue_examples_section_label, "Dialogue Examples:") # Used renamed list
 
-        char_names_list = ["-- None --"] + (self.context_builder.get_characters_names() if self.context_builder else []) # Renamed
-        self.generation_panel.character_a_combo.clear() # Updated
-        self.generation_panel.character_a_combo.addItems(char_names_list) # Updated
-        self.generation_panel.character_b_combo.clear() # Updated
-        self.generation_panel.character_b_combo.addItems(char_names_list) # Updated
+        # Population of scene comboboxes is now handled by GenerationPanel.populate_scene_combos()
+        # called in its __init__.
+        # char_names_list = ["-- None --"] + (self.context_builder.get_characters_names() if self.context_builder else []) 
+        # self.generation_panel.character_a_combo.clear() 
+        # self.generation_panel.character_a_combo.addItems(char_names_list) 
+        # self.generation_panel.character_b_combo.clear() 
+        # self.generation_panel.character_b_combo.addItems(char_names_list) 
 
-        region_names_list = ["-- All --"] + self.context_builder.get_regions() # Renamed, translated
-        self.generation_panel.scene_region_combo.clear() # Updated
-        self.generation_panel.scene_region_combo.addItems(region_names_list) # Updated
-        self._on_scene_region_changed() # Call renamed slot to populate sub-locations initially
+        # region_names_list = ["-- All --"] + self.context_builder.get_regions() 
+        # self.generation_panel.scene_region_combo.clear() 
+        # self.generation_panel.scene_region_combo.addItems(region_names_list) 
+        # self._on_scene_region_changed() # This was problematic, now handled internally by GenerationPanel if needed after its combo population
         
-        self.statusBar().showMessage("Initial data loaded.") # Translated
-        self._update_token_estimation_and_prompt_display() 
-
-    def _on_scene_region_changed(self): # Renamed
-        """Updates the sub-location list when the selected region changes.
-        
-        Called when the user modifies the selection in the regions combobox.
-        Populates the sub-locations combobox with localities corresponding to the region.
-        """
-        if not self.context_builder: return
-        
-        selected_region_name = self.generation_panel.scene_region_combo.currentText() # Updated
-        self.generation_panel.scene_sub_location_combo.clear() # Updated
-        self.generation_panel.scene_sub_location_combo.addItem("-- None --") # Updated, Translated
-
-        if selected_region_name and selected_region_name != "-- All --": # Translated
-            sub_location_names = self.context_builder.get_sub_locations(selected_region_name) # Renamed
-            if sub_location_names:
-                self.generation_panel.scene_sub_location_combo.addItems(sub_location_names) # Updated
-
-    def _on_suggest_linked_elements_clicked(self): # Renamed
-        """Handles the click on the 'Select Linked Elements' button.
-        
-        Retrieves elements linked to Character A and/or the selected location
-        via ContextBuilder, then automatically checks these elements in the
-        corresponding left-hand lists.
-        """
-        if not self.context_builder: return
-
-        char_a_name = self.generation_panel.character_a_combo.currentText() # Updated
-        if char_a_name == "-- None --" or char_a_name == "<None>": char_a_name = None 
-        
-        selected_location_names = [] # Renamed
-        region_name = self.generation_panel.scene_region_combo.currentText() # Updated
-        sub_loc_name = self.generation_panel.scene_sub_location_combo.currentText() # Updated
-
-        if sub_loc_name and sub_loc_name != "-- None --":
-            selected_location_names.append(sub_loc_name)
-        elif region_name and region_name != "-- All --" and region_name != "<None>": 
-            selected_location_names.append(region_name)
-
-        if not char_a_name and not selected_location_names:
-            self.statusBar().showMessage("Please select Character A and/or a Location/Region to suggest links.") # Translated
-            return
-
-        linked_data_map = self.context_builder.get_linked_elements(char_a_name, selected_location_names) # Renamed
-        
-        list_widget_map = { # Renamed
-            "characters": self.character_list,
-            "locations": self.location_list,
-            "items": self.item_list,
-            "species": self.species_list,
-            "communities": self.communities_list
-        }
-
-        for category_key, names_set in linked_data_map.items(): # Renamed vars
-            if category_key in list_widget_map and names_set:
-                list_widget = list_widget_map[category_key]
-                for i in range(list_widget.count()):
-                    item = list_widget.item(i)
-                    if item.text() in names_set:
-                        item.setCheckState(Qt.Checked)
-        
-        self.statusBar().showMessage("Link suggestions applied. Check the selected items.") # Translated
-        self._update_token_estimation_and_prompt_display() 
-
-    def _display_details_in_tree(self, data_to_display: dict | list): # Renamed arg
-        """Displays item details in the QTreeView.
-
-        Args:
-            data_to_display: The data to display (dict or list).
-        """
-        self.details_tree_model.clear()
-        root_item = self.details_tree_model.invisibleRootItem()
-        if data_to_display:
-            populate_tree_view(self.details_tree_model, root_item, data_to_display)
-            self.details_tree_view.expandToDepth(0)
-            self.details_tree_view.header().resizeSections(QHeaderView.ResizeToContents) 
-            self.details_tree_view.header().setSectionResizeMode(0, QHeaderView.ResizeToContents) 
-            self.details_tree_view.header().setSectionResizeMode(1, QHeaderView.Stretch)
-        else:
-            no_details_item = QStandardItem("No details to display for selection.") # Translated
-            no_details_item.setEditable(False)
-            self.details_tree_model.invisibleRootItem().appendRow(no_details_item)
+        self.statusBar().showMessage("Initial data loaded.") 
+        self._update_token_estimation_and_prompt_display() # Initial call to set token count
 
     def _on_explorer_list_item_clicked(self, clicked_list_widget: QListWidget, category_data: list, category_singular_name: str, list_item_widget: QListWidgetItem, name_key_priority_list=None): # Renamed args
         """Handles a click on an item in one of the left explorer lists.
@@ -677,7 +618,13 @@ class MainWindow(QMainWindow):
         self.active_list_widget_for_details = clicked_list_widget
         
         if not list_item_widget: 
-            self.details_tree_model.clear() 
+            self.details_tree_model.clear()
+            # Re-apply header labels as clear() might remove them
+            self.details_tree_model.setHorizontalHeaderLabels(["Property", "Value"])
+            root_item = self.details_tree_model.invisibleRootItem()
+            placeholder_item = QStandardItem("No item selected.")
+            placeholder_item.setEditable(False)
+            root_item.appendRow(placeholder_item)
             self.statusBar().showMessage("No item clicked.") # Translated
             return
             
@@ -700,25 +647,51 @@ class MainWindow(QMainWindow):
         
         self.statusBar().showMessage(f"Details for {category_singular_name}: {selected_display_text}") # Translated
         if selected_item_data:
-            self._display_details_in_tree(selected_item_data)
+            self._display_details_in_tree(selected_item_data) # Corrected call
         else:
-            self.details_tree_model.clear()
-            error_message_key_item = QStandardItem(f"Details not found for: {selected_display_text}") # Renamed
-            error_message_key_item.setEditable(False)
-            error_message_value_item = QStandardItem("") # Renamed
-            error_message_value_item.setEditable(False)
-            self.details_tree_model.invisibleRootItem().appendRow([error_message_key_item, error_message_value_item])
+            # This part will be handled by _display_details_in_tree(None) or similar
+            self._display_details_in_tree(None) 
             self.statusBar().showMessage(f"Details not found for {category_singular_name}: {selected_display_text}") # Translated
 
-    def _on_list_item_check_changed(self, list_item: QListWidgetItem): # Renamed arg
+    def _display_details_in_tree(self, item_data: dict | None):
+        """Displays the details of the given item data in the QTreeView.
+
+        Args:
+            item_data: A dictionary containing the data of the item to display.
+                       If None, the tree view is cleared and a message is shown.
+        """
+        self.details_tree_model.clear()
+        self.details_tree_model.setHorizontalHeaderLabels(["Property", "Value"]) # Ensure headers are always present
+
+        if item_data and isinstance(item_data, dict):
+            populate_tree_view(self.details_tree_model, self.details_tree_model.invisibleRootItem(), item_data)
+            # self.details_tree_view.expandAll() # Expanding all might be too much for large data
+            # Resize columns to content after populating
+            self.details_tree_view.header().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+            self.details_tree_view.header().setSectionResizeMode(1, QHeaderView.Stretch) # Stretch last column
+            self.details_tree_view.header().setStretchLastSection(False) # Important with ResizeToContents + Stretch
+        elif item_data is None:
+            root_item = self.details_tree_model.invisibleRootItem()
+            placeholder_item = QStandardItem("No details to display or item not found.")
+            placeholder_item.setEditable(False)
+            root_item.appendRow(placeholder_item)
+        else:
+            # Handle cases where item_data is not a dict
+            root_item = self.details_tree_model.invisibleRootItem()
+            error_item = QStandardItem(f"Invalid data format for details view: {type(item_data)}")
+            error_item.setEditable(False)
+            root_item.appendRow(error_item)
+
+    def _on_list_item_check_changed(self, list_item: QListWidgetItem):
         """Called when the check state of a list item changes.
 
-        Triggers an update of the token estimation and prompt.
+        Triggers an update of the token estimation and prompt, and schedules a UI save.
 
         Args:
             list_item: The QListWidgetItem whose state changed.
         """
         self._update_token_estimation_and_prompt_display()
+        self._schedule_save_ui_settings() # Schedule save
 
     def _get_checked_items(self, list_widget_to_check: QListWidget) -> list[str]: # Renamed arg
         """Returns a list of texts of checked items in a QListWidget.
@@ -747,15 +720,12 @@ class MainWindow(QMainWindow):
         ui_settings_map = { # Renamed
             "window_geometry": self.saveGeometry().data().hex(), 
             "splitter_sizes": self.main_splitter.sizes() if hasattr(self, 'main_splitter') else [], 
-            "character_a_combo_text": self.generation_panel.character_a_combo.currentText(), # Updated
-            "character_b_combo_text": self.generation_panel.character_b_combo.currentText(), # Updated
-            "scene_region_combo_text": self.generation_panel.scene_region_combo.currentText(), # Updated
-            "scene_sub_location_combo_text": self.generation_panel.scene_sub_location_combo.currentText(), # Updated
-            "variant_count_input_text": self.generation_panel.variant_count_input.text(), # Updated
-            "max_tokens_input_text": self.generation_panel.max_tokens_input.text(), # Updated
-            "include_dialogue_type_checkbox_checked": self.generation_panel.include_dialogue_type_checkbox.isChecked(), # Updated
             "restore_selections_action_checked": self.restore_selections_action.isChecked(), 
-            "user_instruction_input_text": self.generation_panel.user_instruction_input.toPlainText(), # Updated
+            
+            # Get settings from GenerationPanel
+            "generation_panel_settings": self.generation_panel.get_settings(),
+            
+            # Settings for lists in MainWindow itself
             "checked_characters": self._get_checked_items(self.character_list),
             "checked_locations": self._get_checked_items(self.location_list),
             "checked_items": self._get_checked_items(self.item_list),
@@ -795,101 +765,40 @@ class MainWindow(QMainWindow):
         logger.info(f"Restore selections on startup: {self.restore_selections_action.isChecked()}") # Added log
 
         if not self.restore_selections_action.isChecked():
-            logger.info("Restoration of selections disabled via menu.") # Translated
+            logger.info("Restoration of selections disabled via menu.") 
             if "window_geometry" in loaded_settings: self.restoreGeometry(bytes.fromhex(loaded_settings["window_geometry"])) 
             if "splitter_sizes" in loaded_settings and hasattr(self, 'main_splitter') and loaded_settings["splitter_sizes"]: self.main_splitter.setSizes(loaded_settings["splitter_sizes"]) 
+            # Even if not restoring fully, load the generation panel specific settings
+            # as they might not depend on the "restore all" checkbox (e.g. last entered text)
+            if "generation_panel_settings" in loaded_settings:
+                self.generation_panel.load_settings(loaded_settings["generation_panel_settings"])
             return
 
         if "window_geometry" in loaded_settings: self.restoreGeometry(bytes.fromhex(loaded_settings["window_geometry"])) 
         if "splitter_sizes" in loaded_settings and hasattr(self, 'main_splitter') and loaded_settings["splitter_sizes"]: self.main_splitter.setSizes(loaded_settings["splitter_sizes"]) 
         
-        def set_combo_text_from_settings(combo_box: QComboBox, setting_text: str): # Renamed args
-            """Selects the `setting_text` item in the `combo_box`.
+        # Load settings into GenerationPanel
+        if "generation_panel_settings" in loaded_settings:
+            self.generation_panel.load_settings(loaded_settings["generation_panel_settings"])
+        else:
+            logger.warning("No 'generation_panel_settings' found in UI settings file.")
 
-            The search is first case-sensitive. If no item is found,
-            a case-insensitive and space-insensitive search is attempted.
-            """
-            combo_name = combo_box.objectName() if combo_box.objectName() else "Unnamed ComboBox" # Get object name
-            logger.debug(f"Attempting to set {combo_name} to '{setting_text}'") 
-            if not setting_text:
-                logger.debug(f"Empty setting_text for {combo_name}, skipping.") 
-                return
-            
-            # Temporarily block signals to prevent unwanted updates during loading
-            # signals_blocked = combo_box.blockSignals(True) # Commented out, explicit disconnect/connect is preferred
-            
-            idx = combo_box.findText(setting_text) 
-            if idx == -1:
-                logger.debug(f"'{setting_text}' not found with case-sensitive search in {combo_name}. Trying normalized search.") 
-                normalized_target_text = "".join(setting_text.split()).lower() 
-                for i in range(combo_box.count()):
-                    candidate_text = combo_box.itemText(i) 
-                    if "".join(candidate_text.split()).lower() == normalized_target_text:
-                        idx = i
-                        logger.debug(f"Normalized search found '{setting_text}' at index {i} in {combo_name}.") 
-                        break
-            if idx != -1:
-                combo_box.setCurrentIndex(idx)
-                logger.info(f"Successfully set {combo_name} to '{setting_text}' (index {idx}).") 
-            else:
-                logger.warning(f"Item '{setting_text}' not found in {combo_name} during loading.") 
-            
-            # Restore signals
-            # if not signals_blocked: # Only unblock if we blocked them
-            #     combo_box.blockSignals(False) # Commented out
+        # Helper function no longer needed here as GenerationPanel.load_settings handles its own combos
+        # def set_combo_text_from_settings(combo_box: QComboBox, setting_text: str): 
+        # ...
 
-        # --- Store original connections ---
-        # No need to store, we will reconnect to the known methods directly.
+        # Disconnection/reconnection of signals for GenerationPanel combos is handled within GenerationPanel.load_settings()
 
-        # --- Disconnect signals temporarily for generation comboboxes ---
-        try: self.generation_panel.character_a_combo.currentIndexChanged.disconnect(self._update_token_estimation_and_prompt_display) # Updated
-        except RuntimeError: pass 
-        try: self.generation_panel.character_b_combo.currentIndexChanged.disconnect(self._update_token_estimation_and_prompt_display) # Updated
-        except RuntimeError: pass
-        try: self.generation_panel.scene_region_combo.currentIndexChanged.disconnect(self._on_scene_region_changed) # Updated
-        except RuntimeError: pass
-        try: self.generation_panel.scene_region_combo.currentIndexChanged.disconnect(self._update_token_estimation_and_prompt_display) # Updated
-        except RuntimeError: pass
-        try: self.generation_panel.scene_sub_location_combo.currentIndexChanged.disconnect(self._update_token_estimation_and_prompt_display) # Updated
-        except RuntimeError: pass
+        # Loading of settings for GenerationPanel widgets is now delegated
+        # char_a_setting = loaded_settings.get("character_a_combo_text", "-- None --")
+        # ... and so on for other generation panel widgets ...
 
-        char_a_setting = loaded_settings.get("character_a_combo_text", "-- None --")
-        logger.info(f"Loading Character A: '{char_a_setting}'")
-        set_combo_text_from_settings(self.generation_panel.character_a_combo, char_a_setting) # Updated
+        # self.generation_panel.variant_count_input.setText(loaded_settings.get("variant_count_input_text", "1")) 
+        # self.generation_panel.max_tokens_input.setText(loaded_settings.get("max_tokens_input_text", "4"))
+        # self.generation_panel.include_dialogue_type_checkbox.setChecked(loaded_settings.get("include_dialogue_type_checkbox_checked", True)) 
+        # self.generation_panel.user_instruction_input.setPlainText(loaded_settings.get("user_instruction_input_text", ""))
 
-        char_b_setting = loaded_settings.get("character_b_combo_text", "-- None --")
-        logger.info(f"Loading Character B: '{char_b_setting}'")
-        set_combo_text_from_settings(self.generation_panel.character_b_combo, char_b_setting) # Updated
-        
-        saved_region_text = loaded_settings.get("scene_region_combo_text", "-- All --") 
-        logger.info(f"Loading Scene Region: '{saved_region_text}'")
-        set_combo_text_from_settings(self.generation_panel.scene_region_combo, saved_region_text) # Updated
-        
-        # Manually call _on_scene_region_changed if a region was actually loaded
-        # to populate sub-locations before trying to set the sub-location combo.
-        current_region_idx = self.generation_panel.scene_region_combo.currentIndex() # Updated
-        if current_region_idx != -1: # Ensure an item is actually selected
-            region_text = self.generation_panel.scene_region_combo.itemText(current_region_idx) # Updated
-            if region_text and region_text != "-- All --" and region_text != "-- None --":
-                 self._on_scene_region_changed() # Call to populate sub-locations
-
-        saved_sub_location_text = loaded_settings.get("scene_sub_location_combo_text", "-- None --") 
-        logger.info(f"Loading Sub-Location: '{saved_sub_location_text}'")
-        set_combo_text_from_settings(self.generation_panel.scene_sub_location_combo, saved_sub_location_text) # Updated
-
-        # --- Reconnect signals ---
-        self.generation_panel.character_a_combo.currentIndexChanged.connect(self._update_token_estimation_and_prompt_display) # Updated
-        self.generation_panel.character_b_combo.currentIndexChanged.connect(self._update_token_estimation_and_prompt_display) # Updated
-        self.generation_panel.scene_region_combo.currentIndexChanged.connect(self._on_scene_region_changed) # Updated
-        self.generation_panel.scene_region_combo.currentIndexChanged.connect(self._update_token_estimation_and_prompt_display) # Updated
-        self.generation_panel.scene_sub_location_combo.currentIndexChanged.connect(self._update_token_estimation_and_prompt_display) # Updated
-
-        self.generation_panel.variant_count_input.setText(loaded_settings.get("variant_count_input_text", "1")) # Updated
-        self.generation_panel.max_tokens_input.setText(loaded_settings.get("max_tokens_input_text", "4")) # Updated
-        self.generation_panel.include_dialogue_type_checkbox.setChecked(loaded_settings.get("include_dialogue_type_checkbox_checked", True)) # Updated
-        self.generation_panel.user_instruction_input.setPlainText(loaded_settings.get("user_instruction_input_text", "")) # Updated
-
-        def set_checked_list_items(list_widget_to_update: QListWidget, checked_item_texts_list: list[str]): # Renamed args
+        def set_checked_list_items(list_widget_to_update: QListWidget, checked_item_texts_list: list[str]): 
             try: list_widget_to_update.itemChanged.disconnect() 
             except RuntimeError: pass
             for i in range(list_widget_to_update.count()):
@@ -909,6 +818,52 @@ class MainWindow(QMainWindow):
 
         logger.info(f"UI settings loaded from {UI_SETTINGS_FILE}") # Translated
         self._update_token_estimation_and_prompt_display() 
+
+        self._connect_signals_for_auto_save() # Connect signals for auto-save AFTER loading settings
+
+        # Initial token update after everything is loaded and signals connected
+        QTimer.singleShot(50, self._update_token_estimation_and_prompt_display) # Use QTimer.singleShot for a one-time delayed call
+
+    def _perform_actual_save_ui_settings(self):
+        """Performs the actual saving of UI settings.
+        
+        This method is called by the save_settings_timer.
+        """
+        logger.info(f"Auto-saving UI settings after {self.save_settings_delay_ms}ms delay.")
+        self._save_ui_settings()
+
+    def _schedule_save_ui_settings(self):
+        """Schedules a save of the UI settings.
+        
+        Restarts the save_settings_timer. If the timer expires,
+        _perform_actual_save_ui_settings is called.
+        """
+        self.save_settings_timer.start(self.save_settings_delay_ms)
+
+    def _connect_signals_for_auto_save(self):
+        """Connects signals from various UI elements to schedule automatic saving."""
+        if not hasattr(self, 'generation_panel') or not self.generation_panel:
+            logger.warning("GenerationPanel not initialized, cannot connect auto-save signals for it.")
+            return
+            
+        logger.info("Connecting signals for automatic UI settings saving...")
+        # Menu action
+        self.restore_selections_action.toggled.connect(self._schedule_save_ui_settings)
+
+        # MainWindow's lists: _on_list_item_check_changed already calls _schedule_save_ui_settings
+
+        # GenerationPanel widgets
+        self.generation_panel.character_a_combo.currentIndexChanged.connect(self._schedule_save_ui_settings)
+        self.generation_panel.character_b_combo.currentIndexChanged.connect(self._schedule_save_ui_settings)
+        self.generation_panel.scene_region_combo.currentIndexChanged.connect(self._schedule_save_ui_settings)
+        self.generation_panel.scene_sub_location_combo.currentIndexChanged.connect(self._schedule_save_ui_settings)
+        
+        self.generation_panel.variant_count_input.editingFinished.connect(self._schedule_save_ui_settings)
+        self.generation_panel.max_tokens_input.editingFinished.connect(self._schedule_save_ui_settings)
+        
+        self.generation_panel.include_dialogue_type_checkbox.stateChanged.connect(self._schedule_save_ui_settings)
+        self.generation_panel.user_instruction_input.textChanged.connect(self._schedule_save_ui_settings)
+        logger.info("Signals for automatic UI settings saving connected.")
 
     def closeEvent(self, close_event: QCloseEvent): # Renamed arg, QCloseEvent for type hint
         """Overrides closeEvent to save settings before exiting.
