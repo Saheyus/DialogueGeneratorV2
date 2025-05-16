@@ -1,0 +1,3 @@
+PySide6>=6.0
+openai>=1.15
+PyYAML>=6.0 # Utilisé par yarn_renderer, et potentiellement utile ailleurs 

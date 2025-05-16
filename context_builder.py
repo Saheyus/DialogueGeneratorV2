@@ -148,6 +148,52 @@ class ContextBuilder:
         # Supposons que les dialogues ont un champ "Titre" ou "ID" ou "Nom"
         return [d.get("Nom") or d.get("Titre") or d.get("ID") for d in self.dialogues_examples if isinstance(d, dict)]
 
+    # --- Méthodes pour récupérer les détails complets d'un élément par son nom ---
+    def _get_element_details_by_name(self, element_name: str, element_list: list, name_keys=None) -> dict | None:
+        """Méthode générique pour trouver les détails d'un élément par son nom dans une liste.
+
+        Args:
+            element_name (str): Le nom de l'élément à rechercher.
+            element_list (list): La liste de dictionnaires où chercher.
+            name_keys (list[str], optional): Liste ordonnée des clés à vérifier pour le nom.
+                                             Par défaut ["Nom"].
+
+        Returns:
+            dict | None: Le dictionnaire de l'élément si trouvé, sinon None.
+        """
+        if name_keys is None:
+            name_keys = ["Nom"]
+        
+        if not element_list or not element_name:
+            return None
+        
+        for element_data in element_list:
+            if isinstance(element_data, dict):
+                for key in name_keys:
+                    if element_data.get(key) == element_name:
+                        return element_data
+        logger.warning(f"Élément '{element_name}' non trouvé dans la liste fournie avec les clés {name_keys}.")
+        return None
+
+    def get_character_details_by_name(self, name: str) -> dict | None:
+        return self._get_element_details_by_name(name, self.characters)
+
+    def get_location_details_by_name(self, name: str) -> dict | None:
+        return self._get_element_details_by_name(name, self.locations)
+
+    def get_item_details_by_name(self, name: str) -> dict | None:
+        return self._get_element_details_by_name(name, self.items)
+
+    def get_species_details_by_name(self, name: str) -> dict | None:
+        return self._get_element_details_by_name(name, self.species)
+
+    def get_community_details_by_name(self, name: str) -> dict | None:
+        return self._get_element_details_by_name(name, self.communities)
+
+    def get_dialogue_example_details_by_title(self, title: str) -> dict | None:
+        # Les dialogues peuvent avoir "Nom", "Titre", ou "ID" comme identifiant principal
+        return self._get_element_details_by_name(title, self.dialogues_examples, name_keys=["Nom", "Titre", "ID"])
+
 # Pour des tests rapides
 if __name__ == '__main__':
     cb = ContextBuilder()

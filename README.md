@@ -22,28 +22,35 @@ L'application est en cours de développement actif. Les fonctionnalités suivant
     *   Fenêtre principale avec plusieurs panneaux redimensionnables (`QSplitter`).
     *   **Panneau de Sélection du Contexte (Gauche)** :
         *   Listes distinctes pour les personnages, lieux, objets, espèces, communautés et exemples de dialogues.
+        *   Chaque élément des listes peut être coché pour inclusion dans le contexte additionnel.
         *   Champs de filtre textuel pour chaque liste.
         *   Affichage du nombre d'éléments (filtrés/total) pour chaque liste.
     *   **Panneau de Détails (Centre)** :
         *   Affichage des détails complets de l'élément sélectionné dans une liste (format arborescent `QTreeView` avec "Propriété" et "Valeur").
     *   **Panneau de Génération (Droite)** :
-        *   Champ pour spécifier le nombre de variantes `k` à générer.
-        *   Champ de texte multiligne pour l'"Instruction utilisateur" (objectif de la scène).
+        *   Sélection du **Personnage A**, du **Personnage B (Interlocuteur)** et du **Lieu de la Scène** via des listes déroulantes (`QComboBox`) affichant plus d'éléments pour faciliter la sélection.
+        *   Champ pour spécifier le nombre de variantes `k` à générer (valeur par défaut : 1).
+        *   Case à cocher **"Mode Test (contexte limité)"** :
+            *   Si activée, les détails de chaque élément inclus dans le contexte (personnages principaux, lieu, éléments cochés) sont simplifiés : seules certaines clés prioritaires sont conservées et leurs valeurs textuelles sont tronquées (ex: à 30 mots par champ).
+        *   Champ de texte multiligne avec l'étiquette **"Instructions spécifiques pour la scène / Prompt utilisateur:"** pour l'objectif et les détails de la scène.
+        *   Affichage dynamique de l'**estimation du nombre de mots** du prompt final.
         *   Bouton "Générer le Dialogue".
         *   Un `QTabWidget` pour afficher les variantes de dialogue générées, chaque variante dans un `QTextEdit` en lecture seule.
 *   **Moteur de Prompt (`PromptEngine`)** :
-    *   Classe `PromptEngine` capable de combiner un *system prompt*, un résumé de contexte, et l'instruction utilisateur pour former un prompt complet.
+    *   Classe `PromptEngine` capable de combiner un *system prompt*, un résumé de contexte (incluant les détails JSON des éléments sélectionnés/cochés), et l'instruction utilisateur pour former un prompt complet.
     *   *System prompt* par défaut basique inclus, avec une brève introduction au format Yarn Spinner.
 *   **Client LLM (`LLMClient`)** :
     *   Interface `IGenerator` définissant la méthode `async generate_variants(prompt, k)`.
-    *   `DummyLLMClient` : une implémentation factice qui simule la génération de `k` variantes au format Yarn Spinner avec un délai configurable, sans appel réseau réel.
+    *   `OpenAIClient` : Implémentation utilisant l'API OpenAI (modèle par défaut actuel : `gpt-4o-mini`). Nécessite la variable d'environnement `OPENAI_API_KEY`.
+    *   `DummyLLMClient` : Implémentation factice utilisée en fallback si `OpenAIClient` ne peut s'initialiser (ex: clé API manquante) ou pour des tests rapides. Simule la génération de `k` variantes au format Yarn Spinner.
 *   **Flux de Génération Initial** :
-    *   La sélection d'éléments dans les listes met à jour le panneau de détails.
+    *   La sélection d'éléments dans les listes et les `QComboBox` du panneau de génération, ainsi que la modification de l'instruction utilisateur ou de l'état du "Mode Test", mettent à jour l'estimation du nombre de mots du prompt.
     *   Le bouton "Générer le Dialogue" déclenche :
-        *   La récupération du contexte sélectionné (actuellement, premier personnage et premier lieu sélectionnés) et de l'instruction utilisateur.
-        *   La construction du prompt via `PromptEngine`.
-        *   L'appel à `DummyLLMClient` (de manière synchrone/bloquante via `asyncio.run()` pour l'instant).
-        *   L'affichage des variantes dans les onglets.
+        *   La récupération du contexte : détails complets (ou simplifiés/tronqués en "Mode Test") des Personnages A & B, du Lieu, et de tous les éléments cochés dans les listes de gauche.
+        *   La récupération de l'instruction utilisateur.
+        *   La construction du prompt complet via `PromptEngine`.
+        *   L'appel asynchrone au client LLM configuré (OpenAI ou Dummy) via `asyncio.run()`.
+        *   L'affichage des variantes (ou des messages d'erreur) dans les onglets.
 
 ## Structure du Projet
 

@@ -39,7 +39,7 @@ PersonnageB: Et ceci est une réponse.
 ===
 """
 
-    def build_prompt(self, context_summary: str, user_specific_goal: str, generation_params: dict = None) -> str:
+    def build_prompt(self, context_summary: str, user_specific_goal: str, generation_params: dict = None) -> tuple[str, int]:
         """
         Construit le prompt final à envoyer au LLM.
 
@@ -50,7 +50,7 @@ PersonnageB: Et ceci est une réponse.
                                                 Actuellement non utilisé en détail.
 
         Returns:
-            str: Le prompt complet.
+            tuple[str, int]: Le prompt complet et une estimation du nombre de mots.
         """
         if generation_params is None:
             generation_params = {}
@@ -73,9 +73,10 @@ PersonnageB: Et ceci est une réponse.
         #     prompt_parts.append(generation_params["tone"])
 
         full_prompt = "\n".join(prompt_parts)
-        logger.info(f"Prompt construit. Longueur approximative: {len(full_prompt.split())} mots.")
+        word_count = len(full_prompt.split())
+        logger.info(f"Prompt construit. Longueur approximative: {word_count} mots.")
         # logger.debug(f"Prompt complet:\n{full_prompt}") # Peut être très verbeux
-        return full_prompt
+        return full_prompt, word_count
 
 # Pour des tests rapides
 if __name__ == '__main__':
@@ -95,7 +96,7 @@ Quête actuelle: Trouver le Grimoire des Ombres.
     dummy_user_goal = "Elara doit convaincre Gorok de la laisser explorer une section particulièrement dangereuse de la bibliothèque. Gorok est réticent."
     dummy_params = {"tone": "Tendu, avec une pointe d'humour"}
 
-    final_prompt = engine.build_prompt(dummy_context, dummy_user_goal, dummy_params)
+    final_prompt, words = engine.build_prompt(dummy_context, dummy_user_goal, dummy_params)
     
     print("\n--- SYSTEM PROMPT UTILISÉ ---")
     print(engine.system_prompt_template)
@@ -105,6 +106,7 @@ Quête actuelle: Trouver le Grimoire des Ombres.
     # Test avec un system prompt personnalisé
     custom_system_prompt = "Tu es un barde facétieux. Raconte une histoire drôle."
     custom_engine = PromptEngine(system_prompt_template=custom_system_prompt)
-    custom_prompt = custom_engine.build_prompt("Contexte: une taverne animée", "Le personnage principal glisse sur une peau de banane.")
+    custom_prompt, custom_words = custom_engine.build_prompt("Contexte: une taverne animée", "Le personnage principal glisse sur une peau de banane.")
     print("\n--- TEST AVEC SYSTEM PROMPT PERSONNALISÉ ---")
-    print(custom_prompt) 
+    print(custom_prompt)
+    print(f"(Estim. mots: {custom_words})") 
