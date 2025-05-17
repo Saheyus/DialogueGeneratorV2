@@ -23,6 +23,11 @@ class ILLMClient(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_max_tokens(self) -> int:
+        """Retourne le nombre maximum de tokens que le modèle peut gérer pour un prompt."""
+        pass
+
 class DummyLLMClient(ILLMClient):
     def __init__(self, delay_seconds=0.5):
         self.delay_seconds = delay_seconds
@@ -52,6 +57,9 @@ PersonnageFacticeB: C'est une réponse simulée pour tester le flux.
             logger.info(f"DummyLLMClient: Variante {i+1} générée.")
         logger.info(f"DummyLLMClient: Génération de {k} variante(s) terminée.")
         return variants
+
+    def get_max_tokens(self) -> int:
+        return 16000 # Valeur arbitraire pour le client factice
 
 class OpenAIClient(ILLMClient):
     def __init__(self, model="gpt-3.5-turbo"):
@@ -110,6 +118,22 @@ class OpenAIClient(ILLMClient):
             variants = [f"// Erreur lors de la génération OpenAI: {e}"] * k
         
         return variants
+
+    def get_max_tokens(self) -> int:
+        # Ces valeurs peuvent dépendre du modèle spécifique.
+        # Pour gpt-4o-mini, la fenêtre de contexte est de 128K tokens.
+        # Pour gpt-3.5-turbo, c'est souvent 4k ou 16k selon la version.
+        # Retournons une valeur "générale" pour l'instant, ou adaptons selon self.model.
+        if "gpt-4o-mini" in self.model:
+            return 128000 # Fenêtre de contexte totale
+        elif "gpt-4" in self.model: # inclut gpt-4, gpt-4-turbo, etc.
+            return 128000
+        elif "gpt-3.5-turbo-16k" in self.model:
+            return 16384
+        elif "gpt-3.5-turbo" in self.model:
+            return 4096
+        else:
+            return 4096 # Par défaut pour les autres modèles gpt-3.5 ou inconnus
 
 # Pour des tests rapides (nécessite que OPENAI_API_KEY soit définie dans l'environnement)
 async def main_test():
