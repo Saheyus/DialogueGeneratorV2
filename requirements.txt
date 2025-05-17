@@ -3,3 +3,5 @@ openai>=1.15
 PyYAML>=6.0 # Utilisé par yarn_renderer, et potentiellement utile ailleurs 
 jinja2>=3.0
 tiktoken>=0.4 
+pytest>=7.0
+pytest-qt>=4.0 

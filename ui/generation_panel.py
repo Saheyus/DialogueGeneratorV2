@@ -6,6 +6,24 @@ import logging # Added for logging
 import asyncio # Added for asynchronous tasks
 from typing import Optional, Callable, Any # Added Any
 
+# --- Ajouts pour YarnRenderer ---
+from pathlib import Path
+import uuid
+# --- Fin Ajouts ---
+
+# New service import
+try:
+    from ..services.linked_selector import LinkedSelectorService
+    from ..services.yarn_renderer import YarnRenderer # Ajout YarnRenderer
+except ImportError:
+    # Support exécution directe
+    import sys, os, pathlib
+    current_dir = pathlib.Path(__file__).resolve().parent.parent
+    if str(current_dir) not in sys.path:
+        sys.path.insert(0, str(current_dir))
+    from DialogueGenerator.services.linked_selector import LinkedSelectorService
+    from DialogueGenerator.services.yarn_renderer import YarnRenderer # Ajout YarnRenderer
+
 logger = logging.getLogger(__name__) # Added logger
 
 class GenerationPanel(QWidget):
@@ -47,7 +65,12 @@ class GenerationPanel(QWidget):
         self.context_builder = context_builder
         self.prompt_engine = prompt_engine
         self.llm_client = llm_client
-        self.main_window_ref = main_window_ref # To access statusBar or call methods on MainWindow if needed
+        self.main_window_ref = main_window_ref
+
+        # Service pour la logique de liens
+        self.linked_selector = LinkedSelectorService(self.context_builder)
+        # Service pour le rendu Yarn
+        self.yarn_renderer = YarnRenderer()
 
         # Main layout for this panel widget itself
         panel_layout = QVBoxLayout(self) # self is the QWidget
@@ -352,165 +375,224 @@ class GenerationPanel(QWidget):
         # until a sub-location is *selected*. The primary trigger for token update after region change
         # is already connected to scene_region_combo.currentIndexChanged.
 
-    # Placeholder methods for logic to be moved from MainWindow
-    def _on_generate_dialogue_button_clicked_local(self):
-        """Handles the click event of the 'Generate Dialogue' button.
-        
-        This is the core dialogue generation logic for this panel. It:
-        1. Gets current context selections from MainWindow.
-        2. Gets user instructions and generation parameters (k, max_tokens) from its own UI elements.
-        3. Builds the context string using ContextBuilder.
-        4. Builds the final LLM prompt using PromptEngine.
-        5. Updates its UI to show the final prompt and token counts.
-        6. Calls the LLMClient to generate the specified number of dialogue variants.
-        7. Displays the generated variants in new tabs or an error message if generation fails.
-        Uses MainWindow's status bar to provide feedback to the user during the process.
-        """
-        self.main_window_ref.statusBar().showMessage("Generation in progress...")
-        
-        while self.variant_display_tabs.count() > 0:
-            self.variant_display_tabs.removeTab(0)
-
-        if not self.context_builder:
-            self.main_window_ref.statusBar().showMessage("ContextBuilder not initialized.")
+    # Nouvelle méthode pour gérer la validation d'une variante
+    @Slot(int)
+    def _on_validate_variant_clicked(self, variant_index: int):
+        logger.info(f"Validation demandée pour la variante {variant_index}")
+        if not (0 <= variant_index < self.variant_display_tabs.count() -1 ): # -1 car le premier onglet est le prompt
+            logger.error(f"Index de variante invalide : {variant_index}. Nombre d'onglets de variante : {self.variant_display_tabs.count() -1}")
+            self.main_window_ref.statusBar().showMessage(f"Erreur : Index de variante invalide {variant_index}", 5000)
             return
 
-        user_instruction_text = self.user_instruction_input.toPlainText()
-        if not user_instruction_text.strip():
-            self.main_window_ref.statusBar().showMessage("Please enter an instruction for the LLM.")
-            # self.main_window_ref._update_token_estimation_and_prompt_display() # MainWindow should handle this
-            self._trigger_token_update() # Ask MainWindow to update token estimation
+        # L'onglet de variante réel est à variant_index + 1 (car le premier onglet est le prompt)
+        actual_tab_index = variant_index + 1
+        variant_tab_widget = self.variant_display_tabs.widget(actual_tab_index)
+        if not variant_tab_widget:
+            logger.error(f"Impossible de récupérer le widget de l'onglet pour l'index de variante {variant_index} (onglet actuel {actual_tab_index})")
+            self.main_window_ref.statusBar().showMessage("Erreur : Onglet de variante non trouvé.", 5000)
             return
+
+        # Le QTextEdit est le premier enfant du layout du widget de l'onglet
+        try:
+            dialogue_text_edit = variant_tab_widget.layout().itemAt(0).widget()
+            if not isinstance(dialogue_text_edit, QTextEdit):
+                raise AttributeError("Le premier widget n'est pas un QTextEdit")
+            dialogue_text = dialogue_text_edit.toPlainText()
+        except Exception as e:
+            logger.error(f"Erreur lors de la récupération du texte de la variante {variant_index}: {e}")
+            self.main_window_ref.statusBar().showMessage("Erreur : Impossible de lire le texte de la variante.", 5000)
+            return
+
+        char_a_name = self.character_a_combo.currentText()
+        char_b_name = self.character_b_combo.currentText()
+        scene_region_name = self.scene_region_combo.currentText()
+        scene_sub_location_name = self.scene_sub_location_combo.currentText()
+
+        # Création d'un titre pour le noeud Yarn. S'assurer qu'il est compatible avec les noms de fichiers.
+        base_title = f"{char_a_name.replace(' ', '_')}__{char_b_name.replace(' ', '_')}__{scene_region_name.replace(' ', '_')}__{variant_index + 1}"
+        # Nettoyage pour nom de fichier (simpliste, pourrait être amélioré)
+        safe_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+        node_title = "".join(c if c in safe_chars else '_' for c in base_title)
+        node_title = node_title[:100] + f"_{uuid.uuid4().hex[:6]}" # Limiter la longueur et assurer l'unicité
         
-        # selected_elements = self.main_window_ref._get_current_context_selections() # Get from MainWindow
-        # MainWindow needs to provide this, or GenerationPanel needs LeftPanel ref too
-        # For now, let's assume main_window_ref has a method to provide it
-        if not hasattr(self.main_window_ref, '_get_current_context_selections'):
-            logger.error("MainWindow reference does not have _get_current_context_selections method.")
-            self.main_window_ref.statusBar().showMessage("Error: Cannot get context selections.")
-            return
-        selected_elements = self.main_window_ref._get_current_context_selections()
-
-
-        include_dialogue_type_flag = self.include_dialogue_type_checkbox.isChecked()
+        metadata = {
+            "title": node_title,
+            "character_a": char_a_name,
+            "character_b": char_b_name,
+            "scene_region": scene_region_name,
+        }
+        if scene_sub_location_name and scene_sub_location_name.lower() != "any":
+            metadata["scene_sub_location"] = scene_sub_location_name
         
         try:
-            max_k_tokens_string = self.max_tokens_input.text().replace("k", "").replace("K", "").strip()
-            max_context_tokens = int(float(max_k_tokens_string) * 1000) if max_k_tokens_string else 4000
-            if max_context_tokens <= 0: max_context_tokens = 4000 
-        except ValueError:
-            max_context_tokens = 4000 
-        
-        context_summary_string = self.context_builder.build_context(
-            selected_elements,
-            user_instruction_text, 
-            max_tokens=max_context_tokens, 
-            include_dialogue_type=include_dialogue_type_flag
-        )
-
-        generation_parameters = {} 
-        current_llm_prompt, total_prompt_tokens = self.prompt_engine.build_prompt(
-            context_summary=context_summary_string,
-            user_specific_goal=user_instruction_text,
-            generation_params=generation_parameters
-        )
-        
-        final_context_tokens = self.context_builder._count_tokens(context_summary_string)
-        self.estimated_token_count_label.setText(f"Context: {final_context_tokens} / LLM Prompt: {total_prompt_tokens} tokens")
-
-        prompt_display_text_edit = QTextEdit()
-        prompt_display_text_edit.setReadOnly(True)
-        prompt_display_text_edit.setPlainText(current_llm_prompt)
-        self.variant_display_tabs.insertTab(0, prompt_display_text_edit, "Final Prompt (for LLM)")
-        self.variant_display_tabs.setCurrentIndex(0)
-
-        try:
-            variant_count = int(self.variant_count_input.text())
-            if variant_count <= 0:
-                self.main_window_ref.statusBar().showMessage("Number of variants (k) must be positive.")
-                return
-        except ValueError:
-            self.main_window_ref.statusBar().showMessage("Number of variants (k) must be an integer.")
-            return
-
-        self.main_window_ref.statusBar().showMessage(f"Generating {variant_count} variants with {type(self.llm_client).__name__}... (Prompt: {total_prompt_tokens} tokens)")
-        QApplication.processEvents() 
-
-        try:
-            generated_variants = asyncio.run(self.llm_client.generate_variants(current_llm_prompt, variant_count))
+            yarn_content = self.yarn_renderer.render(dialogue_text, metadata)
+            output_dir = Path("Assets/Dialogues/generated")
+            output_dir.mkdir(parents=True, exist_ok=True)
             
-            if generated_variants:
-                for i, variant_text_content in enumerate(generated_variants):
-                    variant_tab_content_widget = QTextEdit()
-                    variant_tab_content_widget.setPlainText(variant_text_content)
-                    variant_tab_content_widget.setReadOnly(True) 
-                    self.variant_display_tabs.addTab(variant_tab_content_widget, f"Variant {i+1}")
-                self.main_window_ref.statusBar().showMessage(f"{len(generated_variants)} variants generated. LLM Prompt: {total_prompt_tokens} tokens.")
-            else:
-                self.main_window_ref.statusBar().showMessage("No variants were generated.")
+            # Nom de fichier basé sur le titre nettoyé
+            file_name = f"{node_title}.yarn"
+            output_file_path = output_dir / file_name
+            
+            output_file_path.write_text(yarn_content, encoding="utf-8")
+            logger.info(f"Fichier Yarn généré : {output_file_path}")
+            self.main_window_ref.statusBar().showMessage(f"Fichier {file_name} enregistré avec succès !", 5000)
 
         except Exception as e:
-            self.main_window_ref.statusBar().showMessage(f"Error during generation: {e}")
-            error_report_tab = QTextEdit()
-            error_report_tab.setPlainText(f"An error occurred:\\n{type(e).__name__}: {e}\\n\\nPrompt used ({total_prompt_tokens} tokens):\\n{current_llm_prompt}")
-            self.variant_display_tabs.addTab(error_report_tab, "Error")
-            logger.error(f"Error during generation: {e}", exc_info=True)
+            logger.error(f"Erreur lors du rendu ou de l'écriture du fichier Yarn : {e}")
+            self.main_window_ref.statusBar().showMessage(f"Erreur lors de la génération du fichier .yarn : {e}", 7000)
+
+    async def _on_generate_dialogue_button_clicked_local(self):
+        """Handles the 'Generate Dialogue' button click locally.
+
+        This local version directly calls the LLM client and updates the UI.
+        It prepares the prompt, sends it to the LLM, and displays the results
+        in the tab widget. This replaces the old signal emission to MainWindow.
+        """
+        logger.info("'Generate Dialogue' button clicked. Processing locally.")
+        self.main_window_ref.statusBar().showMessage("Génération en cours...", 3000)
+
+        # 1. Récupérer les sélections de contexte de GenerationPanel lui-même
+        # (Personnages, Scène, etc.)
+        char_a_name = self.character_a_combo.currentText()
+        char_b_name = self.character_b_combo.currentText()
+        scene_name = self.scene_region_combo.currentText()
+        # sub_location_name = self.scene_sub_location_combo.currentText() # Peut-être utile plus tard
+
+        # 2. Récupérer les éléments cochés dans LeftSelectionPanel via MainWindow
+        # Assurez-vous que cette méthode existe et retourne ce qui est attendu par build_context_string
+        # Doit retourner une liste de tuples (category_key, item_name)
+        selected_items_for_context = []
+        if hasattr(self.main_window_ref, 'get_all_checked_items_for_context'):
+            selected_items_for_context = self.main_window_ref.get_all_checked_items_for_context()
+            logger.debug(f"Éléments sélectionnés pour le contexte (depuis MainWindow): {selected_items_for_context}")
+        else:
+            logger.warning("Méthode 'get_all_checked_items_for_context' non trouvée sur MainWindow.")
+
+        user_instructions = self.user_instruction_input.toPlainText()
+        include_dialogue_type = self.include_dialogue_type_checkbox.isChecked()
+        k_variants = int(self.variant_count_input.text())
+        max_context_k_tokens_str = self.max_tokens_input.text().replace("k", "").replace("K", "").strip()
+        try:
+            max_context_tokens = int(float(max_context_k_tokens_str) * 1000)
+        except ValueError:
+            max_context_tokens = 4000  # Default to 4000 if input is invalid
+            logger.warning(f"Valeur max_tokens invalide: '{max_context_k_tokens_str}'. Utilisation de 4000 par défaut.")
+            self.main_window_ref.statusBar().showMessage(f"Max tokens invalide, utilisation de {max_context_tokens} par défaut.", 3000)
+
+        # Construire le contexte avec ContextBuilder
+        context_data = self.context_builder.build_context_for_llm(
+            character_a_name=char_a_name,
+            character_b_name=char_b_name,
+            scene_name=scene_name,
+            include_dialogue_type=include_dialogue_type,
+            selected_gdd_items=selected_items_for_context, # Transmettre les éléments sélectionnés
+            max_tokens=max_context_tokens
+        )
+        context_string = context_data["context_string"]
+        # context_token_count = context_data["token_count"]
+
+        # Préparer le prompt avec PromptEngine
+        full_prompt = self.prompt_engine.create_prompt(
+            context_string,
+            user_instructions,
+            char_a_name,
+            char_b_name,
+            scene_name
+        )
+
+        # Mettre à jour l'estimation des tokens (si la méthode existe dans MainWindow)
+        self._request_and_update_prompt_estimation()
+
+        self.variant_display_tabs.clear()  # Clear previous results
+
+        # Add a tab for the full prompt
+        prompt_display_tab = QTextEdit()
+        prompt_display_tab.setPlainText(full_prompt)
+        prompt_display_tab.setReadOnly(True)
+        self.variant_display_tabs.addTab(prompt_display_tab, "LLM Prompt")
+
+        # Désactiver le bouton de génération pendant le traitement
+        self.generate_dialogue_button.setEnabled(False)
+        QApplication.processEvents() # Force UI update
+
+        try:
+            loop = asyncio.get_event_loop()
+            variants = await self.llm_client.generate_variants(full_prompt, k_variants)
+            
+            if variants:
+                for i, variant_text in enumerate(variants):
+                    # Crée un widget conteneur pour chaque onglet de variante
+                    variant_tab_content_widget = QWidget()
+                    tab_layout = QVBoxLayout(variant_tab_content_widget)
+                    tab_layout.setContentsMargins(5, 5, 5, 5) # Marges réduites
+                    tab_layout.setSpacing(5) # Espacement réduit
+
+                    text_edit = QTextEdit()
+                    text_edit.setPlainText(variant_text.strip())
+                    # text_edit.setReadOnly(True) # Peut-être permettre l'édition avant validation
+                    tab_layout.addWidget(text_edit)
+
+                    validate_button = QPushButton(f"Valider et Enregistrer Variante {i+1} en .yarn")
+                    # Utilisation de lambda pour passer l'index de la variante (i) au slot.
+                    # L'index i ici correspond à l'index dans la liste `variants`,
+                    # qui sera utilisé comme `variant_index` dans le slot.
+                    validate_button.clicked.connect(lambda checked=False, idx=i: self._on_validate_variant_clicked(idx))
+                    tab_layout.addWidget(validate_button)
+                    
+                    self.variant_display_tabs.addTab(variant_tab_content_widget, f"Variant {i + 1}")
+                self.main_window_ref.statusBar().showMessage(f"{len(variants)} variantes générées.", 5000)
+            else:
+                self.main_window_ref.statusBar().showMessage("Aucune variante n'a été générée.", 5000)
+                # Add a tab indicating no variants
+                no_variant_tab = QTextEdit("Aucune variante n'a été générée par le LLM.")
+                no_variant_tab.setReadOnly(True)
+                self.variant_display_tabs.addTab(no_variant_tab, "No Variants")
+
+        except Exception as e:
+            logger.error(f"Erreur pendant la génération des dialogues : {e}", exc_info=True)
+            self.main_window_ref.statusBar().showMessage(f"Erreur de génération: {e}", 7000)
+            error_tab = QTextEdit(f"Erreur lors de la génération des dialogues :\n\n{str(e)}\n\nConsultez les logs pour plus de détails.")
+            error_tab.setReadOnly(True)
+            self.variant_display_tabs.addTab(error_tab, "Error")
+        finally:
+            # Réactiver le bouton de génération
+            self.generate_dialogue_button.setEnabled(True)
 
     def _on_select_linked_elements_clicked(self) -> None:
+        """Auto-selects elements in LeftSelectionPanel based on Character A, B, and Scene.
+        Uses the main_window_ref to access LeftSelectionPanel.
         """
-        Handles the click of the 'Select Linked Elements' button.
-        Identifies linked elements from Character A, B, and Scene,
-        then signals the LeftSelectionPanel to check them.
-        """
-        char_a_name: str = self.character_a_combo.currentText()
-        char_b_name: str = self.character_b_combo.currentText()
-        scene_name: str = self.scene_region_combo.currentText()
-        # sub_location_name = self.scene_sub_location_combo.currentText() # Optional, handle if needed
+        char_a_name = self.character_a_combo.currentText()
+        char_b_name = self.character_b_combo.currentText()
+        scene_region = self.scene_region_combo.currentText()
+        sub_location = self.scene_sub_location_combo.currentText()
+        
+        # Utilisation du nouveau service
+        try:
+            elements_to_select = self.linked_selector.get_elements_to_select(
+                character_a=char_a_name,
+                character_b=char_b_name,
+                scene_region=scene_region,
+                sub_location=sub_location,
+            )
 
-        elements_to_select: set[str] = set()
-
-        if char_a_name and char_a_name != "-- None --":
-            elements_to_select.add(char_a_name)
-            # Add elements linked to char_a_name
-            char_a_details = self.context_builder.get_character_details_by_name(char_a_name)
-            if char_a_details:
-                elements_to_select.update(self._extract_linked_names(char_a_details))
-
-        if char_b_name and char_b_name != "-- None --":
-            elements_to_select.add(char_b_name)
-            # Add elements linked to char_b_name
-            char_b_details = self.context_builder.get_character_details_by_name(char_b_name)
-            if char_b_details:
-                elements_to_select.update(self._extract_linked_names(char_b_details))
-
-        if scene_name and scene_name != "-- None --" and scene_name != "-- All --":
-            elements_to_select.add(scene_name)
-            # Add elements linked to scene_name
-            scene_details = self.context_builder.get_location_details_by_name(scene_name)
-            if scene_details:
-                elements_to_select.update(self._extract_linked_names(scene_details))
-            
-            # Consider Sub-location as well
-            sub_location_name = self.scene_sub_location_combo.currentText()
-            if sub_location_name and sub_location_name != "-- None --":
-                elements_to_select.add(sub_location_name)
-                sub_loc_details = self.context_builder.get_location_details_by_name(sub_location_name)
-                if sub_loc_details:
-                    elements_to_select.update(self._extract_linked_names(sub_loc_details))
-
-
-        if elements_to_select:
-            self.main_window_ref.left_panel.set_checked_items_by_name(list(elements_to_select))
-            self.main_window_ref.left_panel.clear_and_set_selected_items(list(elements_to_select), True)
+            logger.info("Suggesting to select in LeftPanel: %s", list(elements_to_select))
+            if hasattr(self.main_window_ref, 'left_panel') and hasattr(self.main_window_ref.left_panel, 'set_checked_items_by_name'):
+                self.main_window_ref.left_panel.set_checked_items_by_name(list(elements_to_select))
+        except Exception as e:
+            logger.exception("Error during selecting linked elements", exc_info=True)
+            if hasattr(self.main_window_ref, 'statusBar'):
+                self.main_window_ref.statusBar().showMessage(f"Error selecting linked elements: {e}", 5000)
 
     def _on_unlink_everything_clicked(self):
-        """
-        Handles the click of the 'Unlink Everything' button.
-        Signals the LeftSelectionPanel to uncheck all items.
-        """
-        if self.main_window_ref and self.main_window_ref.left_panel:
-            self.main_window_ref.left_panel.uncheck_all_items()
-            self.main_window_ref.left_panel.clear_and_set_selected_items([], True) # Clear selections too
+        """Unchecks all items in the LeftSelectionPanel."""
+        logger.info("GenerationPanel: Unlink Everything button clicked.")
+        if hasattr(self.main_window_ref, 'left_panel') and hasattr(self.main_window_ref.left_panel, 'uncheck_all_items'):
+            # self.main_window_ref.left_panel.clear_and_set_selected_items([], True) # Clear selections too
+            self.main_window_ref.left_panel.uncheck_all_items() # Correction ici
+            # self.main_window_ref.left_panel.context_selection_changed.emit() # Assurer la mise à jour du contexte
+        else:
+            logger.error("LeftPanel or uncheck_all_items method not found on main_window_ref for unlinking everything.")
 
     def _on_unlink_unrelated_clicked(self) -> None:
         """
@@ -536,40 +618,14 @@ class GenerationPanel(QWidget):
         scene_name: str = self.scene_region_combo.currentText()
         sub_location_name: str = self.scene_sub_location_combo.currentText()
 
-        directly_related_elements: set[str] = set()
-
-        # Add selected characters and scene, and elements linked within their details
-        if char_a_name and char_a_name != "-- None --":
-            directly_related_elements.add(char_a_name)
-            char_a_details = self.context_builder.get_character_details_by_name(char_a_name)
-            if char_a_details:
-                directly_related_elements.update(self._extract_linked_names(char_a_details))
-
-        if char_b_name and char_b_name != "-- None --":
-            directly_related_elements.add(char_b_name)
-            char_b_details = self.context_builder.get_character_details_by_name(char_b_name)
-            if char_b_details:
-                directly_related_elements.update(self._extract_linked_names(char_b_details))
-
-        if scene_name and scene_name != "-- None --" and scene_name != "-- All --":
-            directly_related_elements.add(scene_name)
-            scene_details = self.context_builder.get_location_details_by_name(scene_name)
-            if scene_details:
-                directly_related_elements.update(self._extract_linked_names(scene_details))
-        
-        if sub_location_name and sub_location_name != "-- None --":
-            directly_related_elements.add(sub_location_name)
-            sub_loc_details = self.context_builder.get_location_details_by_name(sub_location_name)
-            if sub_loc_details:
-                directly_related_elements.update(self._extract_linked_names(sub_loc_details))
-
         # 3. Determine items to keep checked: intersection of currently checked and directly related
-        items_to_keep_checked: list[str] = list(currently_checked_items.intersection(directly_related_elements))
-        
-        # Log pour débogage
-        # logger.debug(f"Currently checked: {currently_checked_items}")
-        # logger.debug(f"Directly related: {directly_related_elements}")
-        # logger.debug(f"Items to keep checked: {items_to_keep_checked}")
+        items_to_keep_checked = self.linked_selector.compute_items_to_keep_checked(
+            currently_checked=currently_checked_items,
+            character_a=char_a_name,
+            character_b=char_b_name,
+            scene_region=scene_name,
+            sub_location=sub_location_name,
+        )
 
         # 4. Signal LeftSelectionPanel to update its state
         # set_checked_items_by_name will uncheck anything not in items_to_keep_checked
@@ -580,40 +636,6 @@ class GenerationPanel(QWidget):
             # self.main_window_ref.statusBar().showMessage(f"{len(currently_checked_items) - len(items_to_keep_checked)} unrelated item(s) unlinked.", 3000)
         # else:
             # self.main_window_ref.statusBar().showMessage("No unrelated items to unlink among currently selected.", 3000)
-
-    def _extract_linked_names(self, item_details: dict[str, Any]) -> set[str]:
-        """
-        Extracts names of linked items from an item's details dictionary.
-        Recursively searches through the dictionary values.
-        If a value is a string, it's added if it's non-empty.
-        If a value is a list or set, its string elements are added.
-        If a value is a dictionary, it's processed recursively.
-        """
-        linked_names: set[str] = set()
-        if not isinstance(item_details, dict):
-            return linked_names
-
-        for _key, value in item_details.items():
-            if isinstance(value, str):
-                # Nous pourrions ajouter une logique pour vérifier si cette chaîne
-                # correspond à un nom d'entité connue avant de l'ajouter.
-                # Pour l'instant, nous ajoutons toutes les chaînes non vides trouvées
-                # dans les valeurs du dictionnaire de premier niveau.
-                # Cela pourrait être trop permissif. À évaluer.
-                # Si les noms liés sont TOUJOURS dans des listes/sets, cette partie n'est pas nécessaire.
-                # Prenons un exemple: si item_details["LieuAssocié"] = "NomLieu", on veut le récupérer.
-                if value.strip(): # Ajoute les chaînes non vides
-                    linked_names.add(value.strip())
-            elif isinstance(value, (list, set)):
-                for item_in_collection in value:
-                    if isinstance(item_in_collection, str):
-                        if item_in_collection.strip(): # Ajoute les chaînes non vides
-                            linked_names.add(item_in_collection.strip())
-                    elif isinstance(item_in_collection, dict):
-                        linked_names.update(self._extract_linked_names(item_in_collection))
-            elif isinstance(value, dict):
-                linked_names.update(self._extract_linked_names(value))
-        return linked_names
 
     # Methods for MainWindow to get/set UI states of this panel (for _save/_load_ui_settings)
     def get_settings(self) -> dict:

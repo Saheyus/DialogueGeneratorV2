@@ -4,7 +4,7 @@ from PySide6.QtGui import QPalette, QColor
 import logging
 from functools import partial
 from pathlib import Path
-import config_manager
+from .. import config_manager
 
 logger = logging.getLogger(__name__)
 
@@ -179,10 +179,10 @@ class LeftSelectionPanel(QWidget):
 
     def populate_all_lists(self):
         logger.info("Populating all GDD lists in LeftSelectionPanel...")
-        
+        self.gdd_data_loaded = False # Reset flag at the beginning
+
         if not self.context_builder:
             logger.warning("LeftSelectionPanel: self.context_builder is None. Cannot populate GDD lists.")
-            self.gdd_data_loaded = False
             # Populate with placeholder messages
             for cat_key in self.lists:
                 if cat_key != self.yarn_files_category_key:
@@ -190,28 +190,10 @@ class LeftSelectionPanel(QWidget):
                     if list_widget:
                         list_widget.clear()
                         list_widget.addItem(QListWidgetItem("(ContextBuilder not available)"))
-            self.populate_yarn_files_list()
+            self.populate_yarn_files_list() # Attempt to populate yarn files even if GDD fails
             return
 
-        # gdd_data est attendu comme un dict. S'il est None, c'est un problème plus profond.
-        if self.context_builder.gdd_data is None:
-            logger.error("LeftSelectionPanel: self.context_builder.gdd_data is None. Critical error. Cannot populate GDD lists.")
-            self.gdd_data_loaded = False
-            for cat_key in self.lists:
-                if cat_key != self.yarn_files_category_key:
-                    list_widget = self.lists.get(cat_key)
-                    if list_widget:
-                        list_widget.clear()
-                        list_widget.addItem(QListWidgetItem("(GDD data is None! Error!)"))
-            self.populate_yarn_files_list()
-            return
-
-        # A ce stade, self.context_builder existe et self.context_builder.gdd_data est un dictionnaire (possiblement vide)
-        logger.info(f"  LeftSelectionPanel: self.context_builder exists. Using gdd_data (keys: {list(self.context_builder.gdd_data.keys()) if self.context_builder.gdd_data else 'empty dict'}).")
-
-        # La condition originale `if not self.context_builder or not self.context_builder.gdd_data:` a été retirée ici,
-        # car un dict gdd_data vide est un état valide (signifiant pas de données pour les catégories).
-        # Les logs précédents ont été intégrés ou ajustés ci-dessus.
+        logger.info(f"  LeftSelectionPanel: self.context_builder exists. Checking direct attributes for GDD data.")
 
         for category_config in self.categories_config:
             cat_key = category_config["key"]
@@ -239,22 +221,26 @@ class LeftSelectionPanel(QWidget):
                         display_items.append(item_dict)
                     else:
                         logger.warning(f"    Item {idx} in '{cat_key}' is not a dict or str: {type(item_dict)}. Value: {item_dict}")
-            # Gérer le cas où items_data est None (ne devrait pas arriver avec .get(data_key, []))
             elif items_data is None:
                  logger.warning(f"  Category '{cat_key}': items_data is None for attr '{attr_name}'. This shouldn't happen with .get default.")
             else:
                 logger.warning(f"  Data for category '{cat_key}' attribute '{attr_name}' is not a list (it's {type(items_data)}). Value: {items_data}")
 
             logger.info(f"  Category '{cat_key}': Generated {len(display_items)} display items.")
-            if not display_items and items_data: # Si items_data n'était pas vide mais display_items l'est
+            if not display_items and items_data: 
                  logger.warning(f"  Category '{cat_key}': No display items generated despite having {len(items_data)} raw items. Check name_keys ({name_keys}) and data structure of items.")
 
+            # Call _populate_list_widget. The restore_checked_states parameter is removed from _populate_list_widget.
             if cat_key in self.lists:
-                self._populate_list_widget(self.lists[cat_key], display_items, cat_key)
+                 self._populate_list_widget(self.lists[cat_key], display_items, cat_key)
             else:
-                logger.error(f"  List widget for category '{cat_key}' not found in self.lists.")
+                 logger.error(f"List widget for category key '{cat_key}' not found in self.lists.")
 
-        self.gdd_data_loaded = True # Mettre à True après la tentative de peuplement
+        # If context_builder is available, we consider data potentially loaded and ready for settings restoration attempt.
+        if self.context_builder:
+            self.gdd_data_loaded = True
+            logger.info("LeftSelectionPanel: Finished processing GDD categories. gdd_data_loaded set to True as ContextBuilder is present.")
+        
         logger.info("All GDD lists processing finished.")
         self.populate_yarn_files_list()
 
@@ -297,39 +283,35 @@ class LeftSelectionPanel(QWidget):
                 list_widget.addItem(q_list_item)
         logger.info(f"Populated Yarn files list with {len(display_items)} items.")
 
-    def _populate_list_widget(self, list_widget: QListWidget, items: list[str], category_key: str, restore_checked_states: bool = True):
-        current_filter_text = self.filter_edits[category_key].text()
+    def _populate_list_widget(self, list_widget: QListWidget, items: list[str], category_key: str): # restore_checked_states param removed
+        current_filter_text = ""
+        # Ensure filter_edit for the category_key exists before accessing its text
+        if category_key in self.filter_edits:
+            current_filter_text = self.filter_edits[category_key].text()
+        
         list_widget.clear()
 
         if not items:
-            if self.gdd_data_loaded: # Only show no items if data was expected
-                list_widget.addItem(QListWidgetItem("(No items for this category)"))
-            else:
-                list_widget.addItem(QListWidgetItem("(Loading GDD data...)"))
+            list_widget.addItem(QListWidgetItem("(No items for this category or filter)"))
             return
 
-        # Retrieve stored checked states if restoring
-        checked_states_to_restore = set()
-        if restore_checked_states and hasattr(self, 'settings_to_restore') and self.settings_to_restore:
-            panel_settings = self.settings_to_restore.get('left_panel', {})
-            checked_items_map = panel_settings.get('checked_items', {})
-            checked_states_to_restore = set(checked_items_map.get(category_key, []))
+        # No restoration logic here. This is handled by load_settings -> _set_checked_list_items
 
         for item_text in items:
-            if current_filter_text.lower() not in item_text.lower():
+            if current_filter_text and current_filter_text.lower() not in item_text.lower():
                 continue
             
-            # For GDD items, use CheckableListItemWidget
             item_widget = CheckableListItemWidget(item_text, parent=list_widget)
-            if restore_checked_states and item_text in checked_states_to_restore:
-                item_widget.checkbox.setChecked(True)
+            # Checkbox state is not set here. It will be set by _set_checked_list_items via load_settings.
             
-            item_widget.checkbox.stateChanged.connect(self.context_selection_changed.emit)
+            # Connect the checkbox's stateChanged signal
+            # item_widget is newly created, so no need to disconnect first.
+            item_widget.checkbox.stateChanged.connect(lambda: self.context_selection_changed.emit())
 
-            q_list_item = QListWidgetItem(list_widget) # Parent it to the list_widget
+            q_list_item = QListWidgetItem(list_widget) 
             q_list_item.setSizeHint(item_widget.sizeHint())
-            list_widget.addItem(q_list_item) # Add the QListWidgetItem
-            list_widget.setItemWidget(q_list_item, item_widget) # Set the custom widget for the QListWidgetItem
+            list_widget.addItem(q_list_item) 
+            list_widget.setItemWidget(q_list_item, item_widget)
 
     def _connect_signals(self):
         for cat_key, filter_edit in self.filter_edits.items():
@@ -371,22 +353,19 @@ class LeftSelectionPanel(QWidget):
             widget = list_widget_to_filter.itemWidget(item)
             if widget and hasattr(widget, 'checkbox'):
                 try:
+                    # Tenter de déconnecter un slot spécifique si possible, sinon ignorer.
+                    # Ceci est plus sûr que disconnect() seul.
                     widget.checkbox.stateChanged.disconnect(self.context_selection_changed.emit)
-                except RuntimeError: # Already disconnected or never connected
+                except (TypeError, RuntimeError): 
                     pass 
         
         list_widget_to_filter.clear()
         if not display_items:
             list_widget_to_filter.addItem(QListWidgetItem("(No matching items)"))
         else:
-            # Re-populate with checkboxes, maintaining their state is complex here without full settings access
-            # For simplicity, filter re-populates without restoring exact previous checked state within the filter operation.
-            # The overall checked state is managed by get_settings/load_settings and direct interaction.
             for item_text in display_items:
                 item_widget = CheckableListItemWidget(item_text, parent=list_widget_to_filter)
-                # Checkbox state is NOT restored here based on filter; it relies on initial load 
-                # and user interaction. This simplifies filter logic.
-                item_widget.checkbox.stateChanged.connect(self.context_selection_changed.emit)
+                item_widget.checkbox.stateChanged.connect(lambda: self.context_selection_changed.emit())
                 q_list_item = QListWidgetItem(list_widget_to_filter)
                 q_list_item.setSizeHint(item_widget.sizeHint())
                 list_widget_to_filter.addItem(q_list_item)
@@ -433,34 +412,30 @@ class LeftSelectionPanel(QWidget):
         }
 
     def load_settings(self, settings: dict):
-        """Loads settings into the LeftSelectionPanel."""
-        if not settings: 
-            logger.info("LeftSelectionPanel: No settings provided to load, using defaults or current state.")
-            # Ensure lists are populated if context_builder is ready, even if no settings to restore specifically
-            if self.context_builder and self.context_builder.gdd_data:
-                 QTimer.singleShot(0, self.populate_all_lists) # Ensure this is after UI setup
-            return
+        logger.info(f"LeftSelectionPanel: Loading settings. Current gdd_data_loaded: {self.gdd_data_loaded}")
+        filters = settings.get("filters", {})
+        for cat_key, filter_edit in self.filter_edits.items():
+            if cat_key in filters:
+                current_filter_text = filters[cat_key]
+                is_blocked = filter_edit.signalsBlocked()
+                filter_edit.blockSignals(True)
+                filter_edit.setText(current_filter_text)
+                filter_edit.blockSignals(is_blocked)
 
-        self.settings_to_restore = settings # Store for _populate_list_widget
-
-        filters_text = settings.get("filters", {})
-        for cat_key, text in filters_text.items():
-            if cat_key in self.filter_edits:
-                self.filter_edits[cat_key].setText(text)
-        
-        # GDD lists will be repopulated, and _populate_list_widget will use 
-        # self.settings_to_restore to check the correct items.
-        if self.context_builder and self.context_builder.gdd_data: # Check if data is ready
-            self.populate_all_lists()
+        if self.gdd_data_loaded:
+            checked_items_by_category = settings.get("checked_items", {})
+            logger.info(f"LeftSelectionPanel: gdd_data_loaded is True. Attempting to restore checked items: {checked_items_by_category}")
+            for cat_key, items_to_check in checked_items_by_category.items():
+                if cat_key in self.lists:
+                    list_widget = self.lists[cat_key]
+                    logger.debug(f"Restoring {len(items_to_check)} checked items for category '{cat_key}'.")
+                    self._set_checked_list_items(list_widget, items_to_check)
+                else:
+                    logger.warning(f"Category '{cat_key}' not found in lists during load_settings for checked items.")
+            if any(checked_items_by_category.values()):
+                 self.context_selection_changed.emit()
         else:
-            # If context_builder is not ready, this will be called again when data is loaded
-            logger.info("LeftSelectionPanel: ContextBuilder not ready during load_settings, lists will populate later.")
-
-        # Yarn files list is populated separately and doesn't have checkboxes to restore from 'checked_items'
-        # but its filter text is restored above.
-        self.populate_yarn_files_list() 
-
-        delattr(self, 'settings_to_restore') # Clean up
+            logger.warning("LeftSelectionPanel: gdd_data_loaded is False. Skipping restoration of checked items.")
         logger.info("LeftSelectionPanel settings loaded.")
 
     def _get_singular_name_for_category_key(self, category_key: str) -> str:
@@ -543,6 +518,27 @@ class LeftSelectionPanel(QWidget):
                     selected.append(item_widget.text_label.text())
         return selected
 
+    # Utility method to be part of the class
+    def _set_checked_list_items(self, list_widget: QListWidget, items_to_check: list[str]):
+        """Helper to set checked items for a specific QListWidget, blocking itemChanged signal."""
+        # This is the definition from the global scope, now indented to be part of the class
+        list_widget.blockSignals(True)
+        for i in range(list_widget.count()):
+            item = list_widget.item(i)
+            # GDD lists use custom widgets, Yarn list does not (or might in future)
+            widget_item = list_widget.itemWidget(item)
+            if widget_item and hasattr(widget_item, 'checkbox') and hasattr(widget_item, 'text_label'): # CheckableListItemWidget
+                if widget_item.text_label.text() in items_to_check:
+                    widget_item.checkbox.setChecked(True)
+                else:
+                    widget_item.checkbox.setChecked(False)
+            elif item: # For simple QListWidgetItems (like Yarn files if they were checkable)
+                 # This branch might not be used if Yarn files are not checkable or use a different mechanism
+                if item.text() in items_to_check:
+                    item.setCheckState(Qt.Checked)
+                else:
+                    item.setCheckState(Qt.Unchecked)
+        list_widget.blockSignals(False)
 
 class CheckableListItemWidget(QWidget):
     """Custom widget for items in QListWidget, with a checkbox and a label."""
@@ -550,20 +546,18 @@ class CheckableListItemWidget(QWidget):
         super().__init__(parent)
         self.layout = QHBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
-        self.layout.setSpacing(2)  # Espacement réduit entre checkbox et label
+        self.layout.setSpacing(2)
 
         self.checkbox = QCheckBox()
         self.text_label = QLabel(text)
-        self.text_label.setWordWrap(False)  # Pas de retour à la ligne automatique
-        self.text_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred) # Allow label to expand
+        self.text_label.setWordWrap(False)
+        self.text_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         self.layout.addWidget(self.checkbox)
         self.layout.addWidget(self.text_label)
-        # self.layout.addStretch() # Removing this to see if label expands better
-        self.layout.setStretchFactor(self.text_label, 1) # Ensure the label takes available horizontal space
-        self.layout.setStretchFactor(self.checkbox, 0) # Ensure checkbox only takes necessary space
+        self.layout.setStretchFactor(self.text_label, 1)
+        self.layout.setStretchFactor(self.checkbox, 0)
 
-        # So QListWidgetItem can get a good sizeHint
         self.setLayout(self.layout)
 
     def _filter_list_widget_internal(self, category_key: str, filter_text: str):
@@ -703,14 +697,32 @@ class CheckableListItemWidget(QWidget):
                 if filter_text: # Apply filter if text was loaded
                     self._filter_list_widget_internal(category_key, filter_text)
             
-        checked_items_settings = settings.get("checked_items", {})
-        for category_key, items_to_check in checked_items_settings.items():
-            if category_key in self.list_widgets:
-                self._set_checked_list_items(self.list_widgets[category_key], items_to_check)
-        
-        logger.info("LeftSelectionPanel: Settings loaded.")
-        self.context_selection_changed.emit() # Emit to update context based on loaded checked items
-        
+        # Restore checked items only if gdd_data_loaded is true,
+        # and if MainWindow's option to restore selections is enabled (implicitly handled by MainWindow calling this)
+        if self.gdd_data_loaded:
+            checked_items_by_category = settings.get("checked_items", {})
+            logger.info(f"LeftSelectionPanel: gdd_data_loaded is True. Attempting to restore checked items: {checked_items_by_category}")
+            for cat_key, items_to_check in checked_items_by_category.items():
+                if cat_key in self.lists:
+                    list_widget = self.lists[cat_key]
+                    logger.debug(f"Restoring {len(items_to_check)} checked items for category '{cat_key}'.")
+                    self._set_checked_list_items(list_widget, items_to_check)
+                else:
+                    logger.warning(f"Category '{cat_key}' not found in lists during load_settings for checked items.")
+            # After restoring, emit context_selection_changed if any items were actually checked
+            # This can be done more robustly by checking if any QListWidgetItem isChecked()
+            # or if _set_checked_list_items made any changes.
+            # For now, let's assume if checked_items_by_category is not empty, a change might have occurred.
+            if any(checked_items_by_category.values()):
+                 self.context_selection_changed.emit() # Emit to update dependent UI like token count
+        else:
+            logger.warning("LeftSelectionPanel: gdd_data_loaded is False. Skipping restoration of checked items.")
+            # If data isn't loaded, we should not attempt to check items that don't exist.
+            # We also need to ensure lists are cleared of any "(Loading...)" messages if populate_all_lists
+            # didn't run or failed before this. However, populate_all_lists should handle clearing.
+
+        logger.info("LeftSelectionPanel settings loaded.")
+
     def _get_checked_items_from_list(self, list_widget: QListWidget) -> list[str]:
         """Helper to get checked items from a specific QListWidget."""
         checked = []
@@ -719,15 +731,6 @@ class CheckableListItemWidget(QWidget):
             if item and item.checkState() == Qt.Checked:
                 checked.append(item.text())
         return checked
-
-    def _set_checked_list_items(self, list_widget: QListWidget, items_to_check: list[str]):
-        """Helper to set checked items for a specific QListWidget, blocking itemChanged signal."""
-        list_widget.blockSignals(True)
-        for i in range(list_widget.count()):
-            item = list_widget.item(i)
-            if item:
-                item.setCheckState(Qt.Checked if item.text() in items_to_check else Qt.Unchecked)
-        list_widget.blockSignals(False)
 
     def _on_list_item_check_changed_internal(self, item: QListWidgetItem):
         """Called when a list item's check state changes. Emits context_selection_changed signal."""
@@ -842,7 +845,7 @@ class CheckableListItemWidget(QWidget):
             self.context_selection_changed.emit()
             # logger.debug(f"LeftSelectionPanel: set_checked_items_by_name finished, emitted context_selection_changed.")
 
-    # --- Old Slot Handlers (to be removed or refactored if not used) ---
+    # --- Old Slot Handlers (commentés et potentiellement à supprimer s'ils ne sont plus utilisés nulle part) ---
     # def _on_filter_list_item_changed(self, item: QListWidgetItem) -> None:
     #     logger.debug(f"LeftSelectionPanel: Item '{item.text()}' check state changed in list {item.listWidget().objectName()}.")
     #     self.context_selection_changed.emit() 

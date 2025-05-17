@@ -1,37 +1,61 @@
 # DialogueGenerator/main_app.py
 import sys
+import logging
+from pathlib import Path
 from PySide6.QtWidgets import QApplication
-import logging # Added for logging configuration
 
-from context_builder import ContextBuilder
-from ui.main_window import MainWindow
+# -------------------------------------------------------------
+# Gestion des imports selon le mode d'exécution
+# -------------------------------------------------------------
+# 1. Exécution recommandée :
+#       python -m DialogueGenerator.main_app
+#    -> Les imports relatifs fonctionnent.
+# 2. Exécution directe :
+#       python DialogueGenerator/main_app.py
+#    -> self-package inconnu, les imports relatifs échouent.
+#
+# Le bloc try/except ci-dessous assure la compatibilité :
+#   • tente d'abord l'import relatif (cas 1)
+#   • en cas d'échec, ajoute le dossier parent du package au PYTHONPATH
+#     puis fait un import absolu (cas 2)
+# -------------------------------------------------------------
+
+try:
+    # Mode package (python -m DialogueGenerator.main_app)
+    from .context_builder import ContextBuilder
+    from .ui.main_window import MainWindow
+except ImportError:  # Lancement direct du script
+    SCRIPT_DIR = Path(__file__).resolve().parent
+    PROJECT_ROOT = SCRIPT_DIR.parent
+    if str(PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(PROJECT_ROOT))  # Prioritaire
+
+    # Import absolu une fois le path préparé
+    from DialogueGenerator.context_builder import ContextBuilder
+    from DialogueGenerator.ui.main_window import MainWindow
 
 def main():
-    """Point d'entrée principal de l'application Dialogue Generator."""
-    
-    # Configure logging
     logging.basicConfig(level=logging.INFO, 
                         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                        handlers=[logging.StreamHandler(sys.stdout)]) # Ensure logs go to stdout
-    
-    logger = logging.getLogger(__name__) # Get a logger for this module
+                        handlers=[logging.StreamHandler()])
 
+    logger = logging.getLogger(__name__) # Obtenir un logger spécifique au module
+
+    logger.info("Démarrage de l'application DialogueGenerator...")
     app = QApplication(sys.argv)
-    
-    logger.info("Initialisation du ContextBuilder...") # Changed from print
-    context_builder = ContextBuilder()
-    # Utiliser les chemins par défaut qui sont relatifs à l'emplacement de context_builder.py
-    # Étant donné que main_app.py est dans le même dossier que context_builder.py,
-    # les chemins relatifs ../GDD et ../import devraient fonctionner correctement.
-    context_builder.load_gdd_files() 
-    logger.info("ContextBuilder initialisé.") # Changed from print
 
-    logger.info("Initialisation de la MainWindow...") # Changed from print
-    window = MainWindow(context_builder=context_builder)
-    window.show() # La méthode show() est héritée de QMainWindow
-    logger.info("MainWindow affichée.") # Changed from print
+    logger.info("Initialisation du ContextBuilder...")
+    context_builder_instance = ContextBuilder()
+    logger.info("Chargement des fichiers GDD par ContextBuilder...")
+    context_builder_instance.load_gdd_files()
+    logger.info("ContextBuilder initialisé et fichiers GDD chargés.")
 
-    sys.exit(app.exec())
+    logger.info("Initialisation de la MainWindow...")
+    main_application_window = MainWindow(context_builder_instance)
+    main_application_window.show()
+    logger.info("MainWindow affichée.")
 
-if __name__ == '__main__':
+    sys.exit(app.exec()) 
+
+if __name__ == "__main__":
     main() 

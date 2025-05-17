@@ -26,8 +26,8 @@ class ContextBuilder:
         self.species = []
         self.communities = []
         self.narrative_structures = []
-        self.macro_structure = {}
-        self.micro_structure = {}
+        self.macro_structure = []
+        self.micro_structure = []
         self.dialogues_examples = []
         self.vision_data = None
         self.quests = []
@@ -94,8 +94,8 @@ class ContextBuilder:
             "communautes": {"attr": "communities", "key": "communautes", "type": list},
             "dialogues": {"attr": "dialogues_examples", "key": "dialogues", "type": list},
             "structure_narrative": {"attr": "narrative_structures", "key": "structure_narrative", "type": list}, 
-            "structure_macro": {"attr": "macro_structure", "key": "structure_macro", "type": dict},
-            "structure_micro": {"attr": "micro_structure", "key": "structure_micro", "type": dict},
+            "structure_macro": {"attr": "macro_structure", "key": "structure_macro", "type": list},
+            "structure_micro": {"attr": "micro_structure", "key": "structure_micro", "type": list},
             "quetes": {"attr": "quests", "key": "quetes", "type": list}
         }
 

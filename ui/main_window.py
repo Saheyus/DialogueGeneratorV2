@@ -18,15 +18,14 @@ from .left_selection_panel import LeftSelectionPanel # Added import
 from .details_panel import DetailsPanel # Added import
 from .generation_panel import GenerationPanel # Added import
 
-# Imports from the parent 'DialogueGenerator' package (now direct imports)
-# Assuming DialogueGenerator directory (containing these modules) is in sys.path
-from context_builder import ContextBuilder # Was: from DialogueGenerator.context_builder import ContextBuilder
-from llm_client import OpenAIClient, DummyLLMClient, ILLMClient # Changé LLMClient en ILLMClient
-from prompt_engine import PromptEngine # Was: from DialogueGenerator.prompt_engine import PromptEngine
-import config_manager # Was: from DialogueGenerator import config_manager
+# Imports from the parent 'DialogueGenerator' package
+from ..context_builder import ContextBuilder 
+from ..llm_client import OpenAIClient, DummyLLMClient, ILLMClient 
+from ..prompt_engine import PromptEngine 
+from .. import config_manager 
 
 # Path to the DialogueGenerator directory
-DIALOGUE_GENERATOR_DIR = Path(__file__).parent.parent
+DIALOGUE_GENERATOR_DIR = Path(__file__).resolve().parent.parent
 UI_SETTINGS_FILE = DIALOGUE_GENERATOR_DIR / "ui_settings.json" # File to save UI settings
 CONTEXT_CONFIG_FILE_PATH = DIALOGUE_GENERATOR_DIR / "context_config.json" # Path to context_config.json
 
