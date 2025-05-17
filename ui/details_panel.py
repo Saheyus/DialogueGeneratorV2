@@ -1,7 +1,10 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QTreeView, QAbstractItemView, QHeaderView)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QTreeView, QAbstractItemView, QHeaderView, QTextEdit, QScrollArea, QSizePolicy)
 from PySide6.QtGui import QStandardItemModel, QStandardItem
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Slot
 import logging
+from pathlib import Path
+
+import config_manager
 
 logger = logging.getLogger(__name__)
 
@@ -15,88 +18,124 @@ class DetailsPanel(QWidget):
             parent: The parent widget.
         """
         super().__init__(parent)
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(10, 10, 10, 10)
+        self.main_layout.setSpacing(8)
 
-        layout = QVBoxLayout(self)
-        self.setLayout(layout)
+        self.title_label = QLabel("Details")
+        font = self.title_label.font()
+        font.setPointSize(14)
+        font.setBold(True)
+        self.title_label.setFont(font)
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.main_layout.addWidget(self.title_label)
 
-        self.details_view_label = QLabel("Item Details")
-        self.details_view_label.setStyleSheet("font-weight: bold; padding-bottom: 5px;")
-        layout.addWidget(self.details_view_label)
+        # Use a QScrollArea to make the content scrollable if it's too long
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.main_layout.addWidget(self.scroll_area)
 
-        self.details_tree_model = QStandardItemModel()
-        self.details_tree_model.setHorizontalHeaderLabels(["Property", "Value"])
+        self.scroll_content_widget = QWidget() # Widget to hold the actual content
+        self.scroll_area.setWidget(self.scroll_content_widget)
+        
+        self.content_layout = QVBoxLayout(self.scroll_content_widget) # Layout for the scrollable content
+        self.content_layout.setContentsMargins(0,0,0,0)
+        self.content_layout.setSpacing(6)
+        
+        # Default message / placeholder
+        self.default_label = QLabel("Select an item from the left panel to see its details here, or a Yarn file to see its content.")
+        self.default_label.setWordWrap(True)
+        self.default_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.content_layout.addWidget(self.default_label)
 
-        self.details_view = QTreeView()
-        self.details_view.setModel(self.details_tree_model)
-        self.details_view.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.details_view.setAlternatingRowColors(True)
-        self.details_view.header().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.details_view.header().setStretchLastSection(True)
-        layout.addWidget(self.details_view)
+        self.details_text_edit = QTextEdit()
+        self.details_text_edit.setReadOnly(True)
+        self.details_text_edit.setVisible(False) # Initially hidden
+        self.details_text_edit.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth) # Optional: improve readability
+        self.content_layout.addWidget(self.details_text_edit)
+        
+        self.content_layout.addStretch(1) # Pushes content to the top if it's short
+        
+        self.current_category_key = None
+        self.current_item_text = None
+        
+        logger.info("DetailsPanel initialized.")
 
-    def display_details(self, item_data: dict | None, category_singular_name: str, item_name: str):
-        """Populates the QTreeView with the details of the selected item.
+    @Slot(str, str, list, str)
+    def update_details(self, category_key: str, item_text: str, category_data: list, category_singular_name: str):
+        logger.info(f"DetailsPanel received item: '{item_text}' from category '{category_key}'. Singular: '{category_singular_name}'. Data items: {len(category_data) if category_data else 'None'}")
+        self.current_category_key = category_key
+        self.current_item_text = item_text
 
-        Args:
-            item_data: A dictionary containing the data of the item to display.
-                       If None, the tree view is cleared and a message is shown.
-            category_singular_name: The singular name of the category (e.g., 'Character').
-            item_name: The name of the item being displayed.
-        """
-        self.details_tree_model.clear()
-        self.details_tree_model.setHorizontalHeaderLabels(["Property", "Value"]) # Ensure headers are always present
-        self.details_view_label.setText(f"{category_singular_name} Details: {item_name}")
+        self.title_label.setText(f"Details: {category_singular_name} - {item_text}")
+        self.details_text_edit.clear()
+        self.details_text_edit.setVisible(True)
+        self.default_label.setVisible(False)
 
-        if item_data is None:
-            logger.warning(f"No data provided to display for {category_singular_name}: {item_name}")
-            root_item = self.details_tree_model.invisibleRootItem()
-            placeholder_item = QStandardItem(f"Details not found or no data for {item_name}.")
-            placeholder_item.setEditable(False)
-            root_item.appendRow([placeholder_item, QStandardItem("")]) # Add empty item for second column
-            return
+        if category_key == "existing_yarn_files": # Handle Yarn files
+            # For yarn files, item_text is the full path (as sent by LeftSelectionPanel)
+            # category_data[0] also contains this full path.
+            yarn_file_path_str = item_text 
+            if not yarn_file_path_str:
+                logger.warning("Yarn file path is empty.")
+                self.details_text_edit.setPlainText("Error: Yarn file path is missing.")
+                return
 
-        if not isinstance(item_data, dict):
-            logger.error(f"Invalid item_data type for {item_name}: {type(item_data)}. Expected dict.")
-            root_item = self.details_tree_model.invisibleRootItem()
-            error_item = QStandardItem(f"Invalid data format for {item_name}.")
-            error_item.setEditable(False)
-            root_item.appendRow([error_item, QStandardItem("")])
-            return
+            yarn_file_path = Path(yarn_file_path_str)
+            self.title_label.setText(f"Content: {yarn_file_path.name}") # Show file name in title
+            logger.info(f"Displaying content for Yarn file: {yarn_file_path}")
+            content = config_manager.read_yarn_file_content(yarn_file_path)
+            if content is not None:
+                self.details_text_edit.setPlainText(content)
+            else:
+                self.details_text_edit.setPlainText(f"Error: Could not read content from {yarn_file_path.name}.")
+            
+        elif category_data: # Handle GDD items
+            found_item_details = None
+            primary_name_key_used = "Unknown"
 
-        self._populate_tree_recursively(self.details_tree_model.invisibleRootItem(), item_data)
-        self.details_view.expandAll() 
-        if self.details_tree_model.rowCount() > 0 and self.details_tree_model.columnCount() > 0:
-            first_item_index = self.details_tree_model.index(0, 0)
-            if first_item_index.isValid():
-                self.details_view.scrollTo(first_item_index, QAbstractItemView.ScrollHint.PositionAtTop)
-
-    def _populate_tree_recursively(self, parent_item: QStandardItem, data_node):
-        """Recursively populates the QTreeView model with dictionary data."""
-        if isinstance(data_node, dict):
-            for key, value in data_node.items():
-                key_item = QStandardItem(str(key))
-                key_item.setEditable(False)
-                if isinstance(value, (dict, list)):
-                    parent_item.appendRow([key_item, QStandardItem("")]) # No value in second column for parent
-                    self._populate_tree_recursively(key_item, value)
-                else:
-                    value_item = QStandardItem(str(value))
-                    value_item.setEditable(False)
-                    parent_item.appendRow([key_item, value_item])
-        elif isinstance(data_node, list):
-            for index, item in enumerate(data_node):
-                index_item = QStandardItem(f"[{index}]")
-                index_item.setEditable(False)
-                if isinstance(item, (dict, list)):
-                    parent_item.appendRow([index_item, QStandardItem("")])
-                    self._populate_tree_recursively(index_item, item)
-                else:
-                    value_item = QStandardItem(str(item))
-                    value_item.setEditable(False)
-                    parent_item.appendRow([index_item, value_item])
+            # Iterate through known name keys for the category to find the item
+            # This assumes item_text corresponds to one of the name_keys values.
+            # The category_config in LeftSelectionPanel should define these.
+            # We might need a more robust way to get these keys if not passed directly.
+            # For now, we search by matching item_text, common for display names.
+            
+            # Simplified search: find the dict in category_data that matches item_text in a common key
+            # A more robust approach would be to pass the exact item_dict or its index.
+            for item_dict in category_data:
+                if isinstance(item_dict, dict):
+                    # Check common keys or the display name (item_text)
+                    if item_dict.get("Nom") == item_text or \
+                       item_dict.get("Titre") == item_text or \
+                       item_dict.get("ID") == item_text or \
+                       item_dict.get(category_singular_name) == item_text: # Fallback to singular name as key
+                        found_item_details = item_dict
+                        break
+                    # Check if any value in the dict matches item_text (broader search)
+                    for val in item_dict.values():
+                        if str(val) == item_text:
+                            found_item_details = item_dict
+                            break
+                    if found_item_details: break
+            
+            if found_item_details:
+                details_str = f"Category: {category_singular_name}\nItem: {item_text}\n--- Details ---\n"
+                for key, value in found_item_details.items():
+                    details_str += f"{key}: {value}\n"
+                self.details_text_edit.setPlainText(details_str)
+            else:
+                self.details_text_edit.setPlainText(f"Details for '{item_text}' in '{category_key}' not found or data structure mismatch.")
+                logger.warning(f"Could not find item details for '{item_text}' in '{category_key}' using common keys.")
         else:
-            # This case should ideally not be reached if called from display_details 
-            # with a dict, but as a fallback for direct calls or complex structures:
-            value_item = QStandardItem(str(data_node))
-            value_item.setEditable(False)
-            parent_item.appendRow([value_item, QStandardItem("")]) 
+            self.details_text_edit.setPlainText(f"No detailed data available for '{item_text}' in '{category_key}'.")
+            logger.warning(f"No category_data provided for '{item_text}' in '{category_key}'.")
+
+    def clear_details(self):
+        logger.info("Clearing DetailsPanel.")
+        self.title_label.setText("Details")
+        self.details_text_edit.clear()
+        self.details_text_edit.setVisible(False)
+        self.default_label.setVisible(True)
+        self.current_category_key = None
+        self.current_item_text = None 

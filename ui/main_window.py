@@ -4,20 +4,26 @@ import asyncio # Added for asynchronous tasks
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                                QLabel, QComboBox, QTextEdit, QSplitter, 
                                QListWidget, QListWidgetItem, QTreeView, QAbstractItemView, QLineEdit,
-                               QGroupBox, QHeaderView, QPushButton, QTabWidget, QApplication, QGridLayout, QCheckBox)
-from PySide6.QtGui import QStandardItemModel, QStandardItem, QPalette, QColor, QAction, QCloseEvent
-from PySide6.QtCore import Qt, QSize, QTimer, QItemSelectionModel, QSortFilterProxyModel, QRegularExpression
+                               QGroupBox, QHeaderView, QPushButton, QTabWidget, QApplication, QGridLayout, QCheckBox, QSizePolicy, QMessageBox)
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QPalette, QColor, QAction, QCloseEvent, QGuiApplication
+from PySide6.QtCore import Qt, QSize, QTimer, QItemSelectionModel, QSortFilterProxyModel, QRegularExpression, QSettings
 import sys
 import os
 from pathlib import Path # Added for path management
 import webbrowser # Added to open the configuration file
+from typing import Optional
 
-# Import new modules
-from prompt_engine import PromptEngine
-from llm_client import OpenAIClient, DummyLLMClient
-from .generation_panel import GenerationPanel
+# Local imports from the same 'ui' package
 from .left_selection_panel import LeftSelectionPanel # Added import
 from .details_panel import DetailsPanel # Added import
+from .generation_panel import GenerationPanel # Added import
+
+# Imports from the parent 'DialogueGenerator' package (now direct imports)
+# Assuming DialogueGenerator directory (containing these modules) is in sys.path
+from context_builder import ContextBuilder # Was: from DialogueGenerator.context_builder import ContextBuilder
+from llm_client import OpenAIClient, DummyLLMClient, ILLMClient # Changé LLMClient en ILLMClient
+from prompt_engine import PromptEngine # Was: from DialogueGenerator.prompt_engine import PromptEngine
+import config_manager # Was: from DialogueGenerator import config_manager
 
 # Path to the DialogueGenerator directory
 DIALOGUE_GENERATOR_DIR = Path(__file__).parent.parent
@@ -28,9 +34,6 @@ CONTEXT_CONFIG_FILE_PATH = DIALOGUE_GENERATOR_DIR / "context_config.json" # Path
 PROJECT_ROOT = DIALOGUE_GENERATOR_DIR.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
-
-# Import ContextBuilder after adjusting the path
-from DialogueGenerator.context_builder import ContextBuilder
 
 # For logging
 import logging
@@ -58,16 +61,22 @@ class MainWindow(QMainWindow):
         """
         super().__init__()
         self.context_builder = context_builder
-        self.prompt_engine = PromptEngine()
+        self.llm_client: Optional[ILLMClient] = None
+        self.prompt_engine: Optional[PromptEngine] = None
         
+        self._setup_dialogue_paths() # Added call
+
+        # Initialize PromptEngine first, as it might be needed by GenerationPanel's init or early methods
+        self.prompt_engine = PromptEngine()
+
         try:
             self.llm_client = OpenAIClient(model="gpt-4o-mini")
-            if not self.llm_client.api_key:
-                print("WARNING: OpenAI API key not found. Switching to DummyLLMClient.")
-                self.llm_client = DummyLLMClient()
+            logger.info(f"LLM Client initialized with {type(self.llm_client).__name__}")
         except Exception as e:
-            print(f"Error initializing OpenAIClient: {e}. Switching to DummyLLMClient.")
+            logger.error(f"Failed to initialize LLM client: {e}")
+            QMessageBox.critical(self, "LLM Error", f"Could not initialize LLM client: {e}")
             self.llm_client = DummyLLMClient()
+            logger.info(f"Fell back to DummyLLMClient due to error.")
 
         self.setWindowTitle("DialogueGenerator IA - Context Builder")
         self.setGeometry(100, 100, 1800, 900)
@@ -107,6 +116,36 @@ class MainWindow(QMainWindow):
         self.save_settings_timer.setSingleShot(True)
         self.save_settings_timer.timeout.connect(self._perform_actual_save_ui_settings)
         self.save_settings_delay_ms = 1500
+
+    def _setup_dialogue_paths(self) -> None:
+        """
+        Initializes and validates the Unity dialogue path using config_manager.
+        Ensures the base path and the 'generated' subdirectory exist.
+        """
+        logger.info("Setting up dialogue paths...")
+        dialogues_path = config_manager.get_unity_dialogues_path()
+
+        if dialogues_path:
+            logger.info(f"Successfully retrieved Unity dialogues path: {dialogues_path}")
+            # Ensure the base path itself is usable (get_unity_dialogues_path already validates it)
+            # Then ensure the 'generated' subdirectory exists
+            generated_dir = dialogues_path / "generated"
+            try:
+                generated_dir.mkdir(parents=True, exist_ok=True)
+                logger.info(f"Ensured 'generated' subdirectory exists at: {generated_dir}")
+            except OSError as e:
+                logger.error(f"Could not create 'generated' subdirectory at {generated_dir}: {e}")
+                # Optionally, inform the user via status bar or dialog
+                self.statusBar().showMessage(f"Error: Could not create 'generated' dialogue directory: {e}", 5000)
+        else:
+            logger.warning(
+                f"Unity dialogues path is not configured or is invalid. "
+                f"Please check 'unity_dialogues_path' in {config_manager.UI_SETTINGS_FILE.name}."
+            )
+            # Optionally, inform the user via status bar or dialog
+            self.statusBar().showMessage(
+                "Warning: Unity dialogues path not configured or invalid. Check settings.", 5000
+            )
 
     def _create_actions(self):
         """Creates actions for the menus."""
@@ -183,10 +222,17 @@ class MainWindow(QMainWindow):
                   and a list of selected item names for each category.
         """
         ignore_values = {"-- None --", "<None>", "-- All --", ""}
+        # Initialize avec toutes les clés attendues par ContextBuilder pour éviter des KeyError plus tard
         selections = {
-            "characters": [], "locations": [], "items": [], "species": [],
-            "communities": [], "dialogues_examples": [], "quests": [] 
+            category_config['key']: [] for category_config in self.left_panel.categories_config
         }
+        # Assurer que les clés spécifiques utilisées par GenerationPanel sont aussi présentes si pas dans categories_config
+        # (normalement characters et locations y sont déjà)
+        if "characters" not in selections: selections["characters"] = []
+        if "locations" not in selections: selections["locations"] = []
+        # Ajouter d'autres clés si ContextBuilder les attend et qu'elles ne viennent pas de LeftPanel
+        # Par exemple, si 'quests' est une catégorie non affichée mais attendue par ContextBuilder:
+        # if "quests" not in selections: selections["quests"] = [] 
 
         char_a_name = self.generation_panel.character_a_combo.currentText()
         char_b_name = self.generation_panel.character_b_combo.currentText()
@@ -201,15 +247,19 @@ class MainWindow(QMainWindow):
             selections["locations"].append(current_region_name)
 
         # Get selections from LeftSelectionPanel
-        left_panel_checked_items = self.left_panel.get_all_checked_items()
+        left_panel_settings = self.left_panel.get_settings()
+        left_panel_checked_items = left_panel_settings.get("checked_items", {})
+        
         for category_key, item_names_list in left_panel_checked_items.items():
             if category_key in selections:
                 for item_name in item_names_list:
                     if item_name not in ignore_values:
                         selections[category_key].append(item_name)
             else:
-                logger.warning(f"Category key '{category_key}' from LeftSelectionPanel not in main selections dict.")
+                logger.warning(f"Category key '{category_key}' from LeftSelectionPanel not initially in main selections dict. Adding it.")
+                selections[category_key] = [name for name in item_names_list if name not in ignore_values]
         
+        # Deduplicate and clean final selections
         for category_key in selections:
             valid_items = []
             seen_items = set()
@@ -298,39 +348,37 @@ class MainWindow(QMainWindow):
         logger.debug(f"Item clicked in category '{category_key}': '{item_text}'")
         self.statusBar().showMessage(f"Selected: {category_singular_name} - {item_text}")
         
-        selected_item_data = None
-        if not hasattr(self, 'left_panel') or not hasattr(self.left_panel, 'category_name_key_priorities'):
-            logger.error("LeftPanel or its category_name_key_priorities attribute is not initialized.")
-            self.details_panel.display_details(None, category_singular_name, item_text)
-            return
+        # Pass all necessary info directly to DetailsPanel, including category_key
+        # DetailsPanel will now handle finding the item if it's a GDD item, or reading the file if it's a yarn file.
+        self.details_panel.update_details(category_key, item_text, category_data, category_singular_name)
 
-        name_key_priority_list = self.left_panel.category_name_key_priorities.get(
-            category_key, 
-            ["Nom", "Name", "Titre", "ID"] 
-        )
-
-        if not category_data:
-            logger.warning(f"No category data provided for '{category_key}' to find '{item_text}'.")
-            self.details_panel.display_details(None, category_singular_name, item_text)
-            return
-
-        for i, item_dict in enumerate(category_data):
-            if isinstance(item_dict, dict):
-                for key_to_check in name_key_priority_list:
-                    value_in_dict = item_dict.get(key_to_check)
-                    if value_in_dict is not None and str(value_in_dict) == item_text:
-                        selected_item_data = item_dict
-                        break  
-            if selected_item_data: 
-                break 
-        
-        if selected_item_data:
-            self.details_panel.display_details(selected_item_data, category_singular_name, item_text)
-        else:
-            logger.warning(f"Could not find details for '{item_text}' in {category_singular_name} data after checking {len(category_data)} items.")
-            if category_data and isinstance(category_data[0], dict):
-                 pass
-            self.details_panel.display_details(None, category_singular_name, item_text)
+        # The old logic for finding item_data here is now mostly in DetailsPanel or simplified.
+        # If we still needed to find item_data here for some reason (e.g. for a different consumer):
+        # if category_key != self.left_panel.yarn_files_category_key:
+        #     selected_item_data = None
+        #     if not hasattr(self, 'left_panel') or not hasattr(self.left_panel, 'category_item_name_keys'): # Corrected attribute name
+        #         logger.error("LeftPanel or its category_item_name_keys attribute is not initialized.")
+        #     else:
+        #         name_key_priority_list = self.left_panel.category_item_name_keys.get(
+        #             category_key,
+        #             ["Nom", "Name", "Titre", "ID"] # Default fallback
+        #         )
+        #         if category_data:
+        #             for i, item_dict in enumerate(category_data):
+        #                 if isinstance(item_dict, dict):
+        #                     for key_to_check in name_key_priority_list:
+        #                         value_in_dict = item_dict.get(key_to_check)
+        #                         if value_in_dict is not None and str(value_in_dict) == item_text:
+        #                             selected_item_data = item_dict
+        #                             break
+        #                 if selected_item_data: 
+        #                     break
+        #     # Now selected_item_data would be the dict for the GDD item, or None
+        #     # self.details_panel.display_gdd_item_details(selected_item_data, category_singular_name, item_text)
+        # else:
+        #     # Yarn file clicked, item_text is already the full path string from LeftSelectionPanel
+        #     # self.details_panel.display_yarn_file_content(item_text)
+        #     pass # Handled by update_details in DetailsPanel
 
     def load_initial_data(self):
         """Loads initial GDD data into the UI.
@@ -350,26 +398,23 @@ class MainWindow(QMainWindow):
         # self._update_token_estimation_and_prompt_display() # This is called via QTimer.singleShot in __init__ after load
 
     def _save_ui_settings(self):
-        """Saves the current UI settings.
-        
-        This includes window geometry, splitter sizes, the state of the 
-        'restore selections on startup' option, and delegates to LeftSelectionPanel 
-        and GenerationPanel to retrieve their specific settings.
-        The combined settings are saved to a JSON file.
-        """
+        """Saves the current UI settings in the same nested structure used for loading."""
         if not self.isVisible():
             return
-            
+        
         logger.info("Saving UI settings...")
-        settings = {
-            "window_geometry": self.saveGeometry().data().hex(),
-            "splitter_sizes": self.main_splitter.sizes(),
-            "restore_on_startup": self.restore_selections_action.isChecked(),
-            "left_panel": self.left_panel.get_settings(), # MODIFIED
-            "generation_panel": self.generation_panel.get_settings()
-        }
         try:
-            with open(UI_SETTINGS_FILE, 'w') as f:
+            settings = {
+                "main_window": {
+                    "geometry": self.saveGeometry().data().hex(),
+                    "splitter_state": self.main_splitter.saveState().data().hex(),
+                    "restore_selections_on_startup": self.restore_selections_action.isChecked(),
+                },
+                "left_panel": self.left_panel.get_settings(),
+                "generation_panel": self.generation_panel.get_settings(),
+            }
+
+            with open(UI_SETTINGS_FILE, "w") as f:
                 json.dump(settings, f, indent=4)
             logger.info(f"UI settings saved to {UI_SETTINGS_FILE}")
             self.statusBar().showMessage("UI settings saved.", 2000)
@@ -378,56 +423,51 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"Error saving settings: {e}", 3000)
 
     def _load_ui_settings(self):
-        """Loads UI settings from the JSON file.
-        
-        Restores window geometry, splitter state, and the 'restore selections on startup'
-        option. If 'restore selections' is enabled, it delegates to LeftSelectionPanel
-        and GenerationPanel to load their specific settings from the loaded data.
-        Triggers an update of the token estimation after loading.
-        """
-        logger.info(f"Attempting to load UI settings from {UI_SETTINGS_FILE}...")
+        """Loads UI settings from the JSON file for MainWindow, LeftSelectionPanel, and GenerationPanel."""
+        logger.info(f"Loading UI settings from {UI_SETTINGS_FILE}")
         try:
             if UI_SETTINGS_FILE.exists():
-                with open(UI_SETTINGS_FILE, 'r') as f:
-                    settings = json.load(f) # Correctly indented
-                    logger.info(f"Successfully loaded settings: {list(settings.keys())}")
-                    
-                    if settings.get("window_geometry"):
-                        self.restoreGeometry(bytes.fromhex(settings["window_geometry"]))
-                    if settings.get("splitter_sizes"):
-                        self.main_splitter.setSizes(settings["splitter_sizes"])
-                    
-                    self.restore_selections_action.setChecked(settings.get("restore_on_startup", True))
+                with open(UI_SETTINGS_FILE, "r") as f:
+                    settings = json.load(f)
+                
+                # Load MainWindow specific settings
+                main_window_settings = settings.get("main_window", {})
+                self.restoreGeometry(bytes.fromhex(main_window_settings.get("geometry", "")))
+                self.main_splitter.restoreState(bytes.fromhex(main_window_settings.get("splitter_state", "")))
+                self.restore_selections_action.setChecked(main_window_settings.get("restore_selections_on_startup", True))
+                logger.info("MainWindow settings loaded.")
 
+                # Load LeftSelectionPanel settings
+                if self.left_panel:
+                    left_panel_settings = settings.get("left_panel", {})
+                    # Only load if "restore_selections_on_startup" is checked
                     if self.restore_selections_action.isChecked():
-                        logger.info("Restore selections on startup is TRUE. Loading panel settings.")
-                        left_panel_settings = settings.get("left_panel")
-                        if left_panel_settings:
-                            self.left_panel.load_settings(left_panel_settings)
-                        else:
-                            logger.info("No settings found for left_panel in ui_settings.json")
-
-                        generation_panel_settings = settings.get("generation_panel")
-                        if generation_panel_settings:
-                            self.generation_panel.load_settings(generation_panel_settings)
-                        else:
-                            logger.info("No settings found for generation_panel in ui_settings.json")
+                        self.left_panel.load_settings(left_panel_settings)
+                        logger.info("LeftSelectionPanel settings loaded (restore enabled).")
                     else:
-                        logger.info("Restore selections on startup is FALSE. Skipping panel settings load.")
-                    self.statusBar().showMessage("UI settings loaded.", 2000)
-                    logger.info("UI settings loaded successfully.")
+                        # If not restoring, still populate with default/empty states but apply filters if present
+                        self.left_panel.populate_all_lists() # Ensure lists are populated
+                        filters_only = {"filters": left_panel_settings.get("filters", {})}
+                        self.left_panel.load_settings(filters_only) # Load only filters
+                        logger.info("LeftSelectionPanel lists populated, filters applied (restore disabled).")
+                
+                # Load GenerationPanel settings
+                if self.generation_panel:
+                    generation_panel_settings = settings.get("generation_panel", {})
+                    self.generation_panel.load_settings(generation_panel_settings) # This was missing
+                    logger.info("GenerationPanel settings loaded.")
+
             else:
-                logger.info(f"Settings file {UI_SETTINGS_FILE} not found. Using default settings.")
-                self.statusBar().showMessage("Settings file not found. Using defaults.", 2000)
-                self.left_panel.load_settings({}) 
-                self.generation_panel.load_settings({})
+                logger.info(f"UI settings file {UI_SETTINGS_FILE} not found. Using default settings.")
+                # If no settings file, ensure panels are in a default state
+                if self.left_panel: self.left_panel.populate_all_lists()
+                if self.generation_panel: self.generation_panel.populate_scene_combos() # Ensure combos are populated
 
         except Exception as e:
             logger.error(f"Error loading UI settings: {e}", exc_info=True)
-            self.statusBar().showMessage(f"Error loading settings: {e}. Using defaults.", 3000)
-            # Ensure panels are in a known state even if settings load fails partially or completely
-            self.left_panel.load_settings({}) 
-            self.generation_panel.load_settings({})
+            # Fallback to default states in case of error
+            if self.left_panel: self.left_panel.populate_all_lists()
+            if self.generation_panel: self.generation_panel.populate_scene_combos()
         
         # This call was potentially problematic if settings load itself caused issues that affected UI state
         # before this was called. Moving it to be more reliably after all other UI setup and loading.
