@@ -2,7 +2,9 @@
 import sys
 import logging
 from pathlib import Path
+# from PySide6.QtWidgets import QApplication # Remplacé par QAsyncApplication
 from PySide6.QtWidgets import QApplication
+from qasync import QEventLoop
 
 # -------------------------------------------------------------
 # Gestion des imports selon le mode d'exécution
@@ -42,7 +44,7 @@ def main():
     logger = logging.getLogger(__name__) # Obtenir un logger spécifique au module
 
     logger.info("Démarrage de l'application DialogueGenerator...")
-    app = QApplication(sys.argv)
+    app = QApplication(sys.argv)  # Création de l'application Qt standard
 
     logger.info("Initialisation du ContextBuilder...")
     context_builder_instance = ContextBuilder()
@@ -55,7 +57,17 @@ def main():
     main_application_window.show()
     logger.info("MainWindow affichée.")
 
-    sys.exit(app.exec()) 
+    # Intégration de asyncio avec Qt via qasync
+    loop = QEventLoop(app)
+    import asyncio as _asyncio
+    _asyncio.set_event_loop(loop)
+
+    # Lancement de la boucle d'évènements intégrée Qt + asyncio
+    with loop:
+        loop.run_forever()
+
+    logger.info("Application terminée.")
+    sys.exit(0)
 
 if __name__ == "__main__":
     main() 
