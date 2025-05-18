@@ -303,6 +303,7 @@ class ContextBuilder:
     def build_context(self, selected_elements: dict[str, list[str]], scene_instruction: str, max_tokens: int = 16000, include_dialogue_type: bool = True) -> str:
         context_parts = []
         current_tokens = 0
+        logger.debug(f"[ContextBuilder.build_context] Received selected_elements: {selected_elements}")
 
         if scene_instruction:
             instruction_tokens = self._count_tokens(scene_instruction)
@@ -338,6 +339,8 @@ class ContextBuilder:
                     elif element_type == "quests": details = self.get_quest_details_by_name(name)
                     elif element_type == "dialogues_examples": details = self.get_dialogue_example_details_by_title(name)
                     
+                    logger.debug(f"[ContextBuilder.build_context] Processing {element_type}: '{name}'. Details found: {'Yes' if details else 'No'}")
+
                     if details:
                         for level in [1, 2, 3]:
                             singular_type = element_type[:-1] if element_type.endswith("s") and element_type != "species" else element_type
@@ -346,6 +349,7 @@ class ContextBuilder:
                             # Passer les indicateurs conditionnels à _get_prioritized_info
                             conditional_flags = {"include_dialogue_type": include_dialogue_type}
                             info_str = self._get_prioritized_info(details, singular_type, level, **conditional_flags)
+                            logger.debug(f"[ContextBuilder.build_context] For '{name}' (type: {singular_type}, level: {level}), _get_prioritized_info returned: '{info_str[:100]}...'")
                             
                             if not info_str: continue
                             info_tokens = self._count_tokens(info_str)
@@ -384,7 +388,9 @@ class ContextBuilder:
                     current_tokens += vision_tokens
         
         logger.info(f"Contexte construit avec {current_tokens} tokens (approx).")
-        return "\n".join(context_parts)
+        final_context_string = "\n".join(context_parts)
+        logger.debug(f"[ContextBuilder.build_context] Final context string (first 300 chars): {final_context_string[:300]}")
+        return final_context_string
 
     def get_regions(self) -> list[str]:
         if not self.locations: return []

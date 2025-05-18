@@ -91,17 +91,21 @@ PersonnageB: Et ceci est une réponse.
         return len(text.split())
 
     def build_prompt(
-        self, 
-        context_summary: str, 
-        user_specific_goal: str, 
+        self,
+        user_specific_goal: str,
+        scene_protagonists: Optional[Dict[str, str]] = None, # Format: {"personnage_a": "Nom A", "personnage_b": "Nom B"}
+        scene_location: Optional[Dict[str, str]] = None, # Format: {"lieu": "Nom Lieu", "sous_lieu": "Nom Sous-Lieu"}
+        context_summary: Optional[str] = None, # Le reste du contexte général
         generation_params: Optional[Dict[str, Any]] = None
     ) -> Tuple[str, int]:
         """
         Construit le prompt final à envoyer au LLM et estime son nombre de tokens.
 
         Args:
-            context_summary (str): Un résumé textuel du contexte (personnages, lieu, scène).
             user_specific_goal (str): L'instruction spécifique de l'utilisateur pour la scène.
+            scene_protagonists (Optional[Dict[str, str]]): Dictionnaire identifiant le personnage A et B.
+            scene_location (Optional[Dict[str, str]]): Dictionnaire identifiant le lieu et le sous-lieu.
+            context_summary (Optional[str]): Un résumé textuel du contexte général (autres personnages, objets, lore pertinent).
             generation_params (Optional[Dict[str, Any]]): Paramètres additionnels (ex: ton, style)
                                                            qui pourraient modifier le prompt.
 
@@ -111,17 +115,33 @@ PersonnageB: Et ceci est une réponse.
         if generation_params is None:
             generation_params = {}
 
-        prompt_parts = [
-            self.system_prompt_template,
-            "\n--- CONTEXTE DE LA SCÈNE ---",
-            context_summary,
-            "\n--- OBJECTIF DE LA SCÈNE (Instruction Utilisateur) ---",
-            user_specific_goal
-        ]
+        prompt_parts = [self.system_prompt_template]
+
+        # Section dédiée pour les protagonistes et le lieu
+        if scene_protagonists or scene_location:
+            prompt_parts.append("\n--- CADRE DE LA SCÈNE ---")
+            if scene_protagonists:
+                personnage_a = scene_protagonists.get("personnage_a", "Non spécifié")
+                personnage_b = scene_protagonists.get("personnage_b", "Non spécifié")
+                prompt_parts.append(f"Personnage A : {personnage_a}")
+                prompt_parts.append(f"Personnage B : {personnage_b}")
+            if scene_location:
+                lieu = scene_location.get("lieu", "Non spécifié")
+                sous_lieu = scene_location.get("sous_lieu")
+                prompt_parts.append(f"Lieu : {lieu}")
+                if sous_lieu:
+                    prompt_parts.append(f"Sous-Lieu : {sous_lieu}")
+        
+        if context_summary:
+            prompt_parts.append("\n--- CONTEXTE GÉNÉRAL DE LA SCÈNE ---")
+            prompt_parts.append(context_summary)
+        
+        prompt_parts.append("\n--- OBJECTIF DE LA SCÈNE (Instruction Utilisateur) ---")
+        prompt_parts.append(user_specific_goal)
         
         # Exemple d'utilisation de generation_params (peut être étendu)
         if "tone" in generation_params:
-            prompt_parts.append(f"\n--- TON ATTENDU ---")
+            prompt_parts.append("\n--- TON ATTENDU ---")
             prompt_parts.append(str(generation_params["tone"]))
 
         full_prompt = "\n".join(prompt_parts)
@@ -153,7 +173,14 @@ Quête actuelle: Trouver le Grimoire des Ombres.
     dummy_user_goal = "Elara doit convaincre Gorok de la laisser explorer une section particulièrement dangereuse de la bibliothèque. Gorok est réticent."
     dummy_params: Dict[str, Any] = {"tone": "Tendu, avec une pointe d'humour"}
 
-    final_prompt, tokens_count = engine.build_prompt(dummy_context, dummy_user_goal, dummy_params)
+    # Mise à jour de l'appel pour refléter les nouveaux paramètres
+    final_prompt, tokens_count = engine.build_prompt(
+        user_specific_goal=dummy_user_goal,
+        scene_protagonists={"personnage_a": "Elara", "personnage_b": "Gorok"},
+        scene_location={"lieu": "Vieille bibliothèque en ruines", "sous_lieu": "Section des grimoires interdits"},
+        context_summary=dummy_context, # Pour l'exemple, on garde le contexte général ici
+        generation_params=dummy_params
+    )
     
     print("\n--- SYSTEM PROMPT UTILISÉ ---")
     print(engine.system_prompt_template)
@@ -165,9 +192,11 @@ Quête actuelle: Trouver le Grimoire des Ombres.
     custom_system_prompt = "Tu es un barde facétieux. Raconte une histoire drôle."
     custom_engine = PromptEngine(system_prompt_template=custom_system_prompt)
     custom_prompt, custom_tokens_count = custom_engine.build_prompt(
-        "Contexte: une taverne animée", 
-        "Le personnage principal glisse sur une peau de banane."
+        user_specific_goal="Le personnage principal glisse sur une peau de banane.",
+        scene_protagonists={"personnage_a": "Bardolin", "personnage_b": "Aubergiste Ronchon"},
+        scene_location={"lieu": "Taverne du Chardon Rieur"},
+        context_summary="Contexte: une taverne animée un soir de fête.",
     )
-    print("\n--- TEST AVEC SYSTEM PROMPT PERSONNALISÉ ---")
+    print("\n--- TEST AVEC SYSTEM PROMPT PERSONNALISÉ ET NOUVELLE STRUCTURE ---")
     print(custom_prompt)
     print(f"(Estim. tokens: {custom_tokens_count})") 

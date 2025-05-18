@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QGroupBox, QGridLayout, 
                                QLabel, QComboBox, QTextEdit, QPushButton, 
-                               QTabWidget, QLineEdit, QCheckBox, QHBoxLayout, QApplication, QSizePolicy, QProgressBar, QScrollArea, QSplitter, QFrame, QPlainTextEdit, QMessageBox, QSpacerItem, QMenu, QStyle)
+                               QTabWidget, QLineEdit, QCheckBox, QHBoxLayout, QApplication, QSizePolicy, QProgressBar, QScrollArea, QSplitter, QFrame, QPlainTextEdit, QMessageBox, QSpacerItem, QMenu, QStyle, QSpinBox, QDoubleSpinBox)
 from PySide6.QtCore import Qt, Signal, Slot, QSize
 from PySide6.QtGui import QPalette, QColor, QFont, QIcon, QAction
 import logging # Added for logging
@@ -85,6 +85,10 @@ class GenerationPanel(QWidget):
         self.available_llm_models = available_llm_models if available_llm_models else []
         self.current_llm_model_identifier = current_llm_model_identifier
 
+        # Pour éviter les signaux inutiles pendant le chargement 
+        self._is_settings_loading = False
+        self._is_loading_settings = False  # Flag pour éviter les signaux pendant le chargement
+        
         self._init_ui()
         # finalize_ui_setup() est appelé par MainWindow
 
@@ -190,6 +194,20 @@ class GenerationPanel(QWidget):
         generation_params_layout.addWidget(self.k_variants_combo, row, 1)
         row += 1
         
+        # Ajout du contrôle pour max_context_tokens
+        generation_params_layout.addWidget(QLabel("Limite de tokens (contexte GDD):"), row, 0)
+        self.max_context_tokens_spinbox = QDoubleSpinBox()
+        self.max_context_tokens_spinbox.setMinimum(0.5)  # 500 tokens = 0.5k
+        self.max_context_tokens_spinbox.setMaximum(1000) # 1M tokens = 1000k
+        self.max_context_tokens_spinbox.setSingleStep(0.5) # Incréments de 0.5k = 500 tokens
+        self.max_context_tokens_spinbox.setValue(1.5) # Valeur par défaut = 1.5k = 1500 tokens
+        self.max_context_tokens_spinbox.setSuffix("k")  # Ajouter le suffixe "k" pour indiquer "milliers"
+        self.max_context_tokens_spinbox.setDecimals(1)  # Afficher une décimale
+        self.max_context_tokens_spinbox.setToolTip("Nombre maximum de tokens à utiliser pour le contexte GDD en milliers (k). Augmenter permet plus d'informations mais augmente le coût. Réduire limite le coût mais peut réduire les détails.")
+        self.max_context_tokens_spinbox.valueChanged.connect(self._on_max_context_tokens_changed)
+        generation_params_layout.addWidget(self.max_context_tokens_spinbox, row, 1)
+        row += 1
+        
         self.structured_output_checkbox = QCheckBox("Utiliser Sortie Structurée (JSON)")
         self.structured_output_checkbox.setToolTip("Si coché, demande au LLM de formater la sortie en JSON (nécessite un modèle compatible). Peut améliorer la fiabilité du format Yarn.")
         self.structured_output_checkbox.setChecked(True) 
@@ -198,18 +216,42 @@ class GenerationPanel(QWidget):
         generation_params_layout.addWidget(self.structured_output_checkbox, row, 0, 1, 2)
         row +=1
 
-        # --- Section Instructions Utilisateur ---
-        instructions_group = QGroupBox("Instructions Utilisateur pour le LLM")
-        instructions_layout = QVBoxLayout(instructions_group)
-        left_column_layout.addWidget(instructions_group)
+        # --- Section Instructions Utilisateur (modifiée en QTabWidget) ---
+        self.instructions_tabs = QTabWidget()
+        left_column_layout.addWidget(self.instructions_tabs)
 
+        # Onglet 1: Instructions de Scène
+        scene_instructions_widget = QWidget()
+        scene_instructions_layout = QVBoxLayout(scene_instructions_widget)
         self.user_instructions_textedit = QPlainTextEdit()
         self.user_instructions_textedit.setPlaceholderText(
             "Ex: Bob doit annoncer à Alice qu'il part à l'aventure. Ton désiré: Héroïque. Inclure une condition sur la compétence 'Charisme' de Bob."
         )
         self.user_instructions_textedit.setToolTip("Décrivez le but de la scène, le ton, les points clés à aborder, ou toute autre instruction spécifique pour l'IA.")
         self.user_instructions_textedit.textChanged.connect(self._schedule_settings_save_and_token_update)
-        instructions_layout.addWidget(self.user_instructions_textedit)
+        scene_instructions_layout.addWidget(self.user_instructions_textedit)
+        self.instructions_tabs.addTab(scene_instructions_widget, "Instructions de Scène")
+
+        # Onglet 2: Instructions Système LLM
+        system_prompt_widget = QWidget()
+        system_prompt_layout = QVBoxLayout(system_prompt_widget)
+        
+        system_prompt_header_layout = QHBoxLayout()
+        system_prompt_header_layout.addWidget(QLabel("Prompt Système Principal:"))
+        system_prompt_header_layout.addStretch()
+        self.restore_default_system_prompt_button = QPushButton("Restaurer Défaut")
+        self.restore_default_system_prompt_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogResetButton))
+        self.restore_default_system_prompt_button.setToolTip("Restaure le prompt système par défaut de l'application.")
+        self.restore_default_system_prompt_button.clicked.connect(self._restore_default_system_prompt)
+        system_prompt_header_layout.addWidget(self.restore_default_system_prompt_button)
+        system_prompt_layout.addLayout(system_prompt_header_layout)
+
+        self.system_prompt_textedit = QPlainTextEdit()
+        self.system_prompt_textedit.setToolTip("Modifiez le prompt système principal envoyé au LLM. Ce prompt guide le comportement général de l'IA.")
+        # Le contenu sera chargé dans load_settings ou via _restore_default_system_prompt
+        self.system_prompt_textedit.textChanged.connect(self._on_system_prompt_changed)
+        system_prompt_layout.addWidget(self.system_prompt_textedit)
+        self.instructions_tabs.addTab(system_prompt_widget, "Instructions Système LLM")
 
         # --- Section Estimation Tokens et Bouton Générer ---
         token_button_group = QGroupBox("Actions")
@@ -321,19 +363,57 @@ class GenerationPanel(QWidget):
 
 
     def _update_structured_output_checkbox_state(self):
-        is_openai_model = False
-        # On considère qu'un modèle est OpenAI s'il est géré par OpenAIClient et commence par "gpt-"
-        # ou si self.llm_client est une instance de OpenAIClient (ce qui est plus fiable).
-        if self.llm_client and isinstance(self.llm_client, OpenAIClient):
-             if self.current_llm_model_identifier and self.current_llm_model_identifier.startswith("gpt-"):
-                 is_openai_model = True
+        # Si le client LLM est un DummyLLMClient, désactiver et décocher la case
+        # car le dummy ne gère pas la sortie structurée.
+        # Aussi, la rendre non-cochée par défaut si c'est un Dummy.
+        is_dummy = isinstance(self.llm_client, DummyLLMClient)
         
-        self.structured_output_checkbox.setEnabled(is_openai_model)
-        if not is_openai_model and self.structured_output_checkbox.isChecked():
-            self.structured_output_checkbox.setChecked(False) 
-            logger.info("Sortie structurée désactivée car le modèle sélectionné ou le client actuel ne semble pas la supporter (non OpenAI gpt-).")
-        elif is_openai_model:
-             logger.debug(f"Modèle {self.current_llm_model_identifier} est OpenAI, checkbox 'sortie structurée' activée.")
+        if is_dummy:
+            # Garder une trace de l'état précédent si ce n'est pas un dummy
+            if not hasattr(self, '_was_structured_output_checked_before_dummy'):
+                self._was_structured_output_checked_before_dummy = self.structured_output_checkbox.isChecked()
+            self.structured_output_checkbox.setChecked(False)
+            self.structured_output_checkbox.setEnabled(False)
+            self.structured_output_checkbox.setToolTip("La sortie structurée n'est pas applicable avec DummyLLMClient.")
+        else:
+            self.structured_output_checkbox.setEnabled(True)
+            # Restaurer l'état précédent si on revient d'un dummy
+            if hasattr(self, '_was_structured_output_checked_before_dummy'):
+                self.structured_output_checkbox.setChecked(self._was_structured_output_checked_before_dummy)
+                del self._was_structured_output_checked_before_dummy # Nettoyer l'attribut
+            
+            # Mise à jour du tooltip en fonction du modèle actuel (si besoin de plus de logique)
+            current_model_props = self.main_window_ref.get_current_llm_model_properties()
+            if current_model_props and current_model_props.get("supports_json_mode", False):
+                self.structured_output_checkbox.setToolTip("Si coché, demande au LLM de formater la sortie en JSON (modèle compatible). Peut améliorer la fiabilité du format Yarn.")
+            else:
+                # Si le modèle ne supporte pas le mode JSON, on peut choisir de désactiver la case ou juste d'informer.
+                # Pour l'instant, on informe et on laisse cocher, car le support peut être implicite.
+                self.structured_output_checkbox.setToolTip("Si coché, demande au LLM de formater la sortie en JSON. La compatibilité du modèle actuel avec le mode JSON forcé n'est pas garantie.")
+
+    def _restore_default_system_prompt(self):
+        default_prompt = self.prompt_engine._get_default_system_prompt()
+        self.system_prompt_textedit.setPlainText(default_prompt)
+        # Pas besoin de _schedule_settings_save ici, car _on_system_prompt_changed sera appelé par setPlainText
+        # qui appellera _schedule_settings_save_and_token_update.
+        # On force la mise à jour du prompt_engine immédiatement.
+        self._update_prompt_engine_system_prompt()
+        # Déclencher une mise à jour des tokens car le prompt a changé.
+        self.update_token_estimation_signal.emit()
+        QMessageBox.information(self, "Prompt Restauré", "Le prompt système par défaut a été restauré.")
+
+
+    def _on_system_prompt_changed(self):
+        self._update_prompt_engine_system_prompt()
+        self._schedule_settings_save_and_token_update()
+
+    def _update_prompt_engine_system_prompt(self):
+        new_system_prompt = self.system_prompt_textedit.toPlainText()
+        if self.prompt_engine.system_prompt_template != new_system_prompt:
+            self.prompt_engine.system_prompt_template = new_system_prompt
+            logger.info("PromptEngine system_prompt_template mis à jour.")
+            # La mise à jour des tokens est gérée par _schedule_settings_save_and_token_update
+            # ou explicitement par _restore_default_system_prompt
 
 
     def set_llm_client(self, new_llm_client):
@@ -432,67 +512,94 @@ class GenerationPanel(QWidget):
         self._schedule_settings_save_and_token_update()
 
     @Slot()
-    def _schedule_settings_save_and_token_update(self):
-        self.settings_changed.emit()
-        self._trigger_token_update()
-
-    @Slot()
     def _schedule_settings_save(self):
-        self.settings_changed.emit()
+        """Déclenche un signal pour indiquer que les paramètres ont changé."""
+        if not self._is_loading_settings:  # Éviter les sauvegardes pendant le chargement initial
+            self.settings_changed.emit()
 
     @Slot()
+    def _schedule_settings_save_and_token_update(self):
+        """Déclenche un signal pour indiquer que les paramètres ont changé et met à jour l'estimation des tokens."""
+        self._schedule_settings_save()
+        self.update_token_estimation_ui()
+        
     def _trigger_token_update(self):
-        self.update_token_estimation_signal.emit()
-        logger.debug("Token update triggered.")
+        """
+        Méthode appelée par MainWindow quand le contexte change (éléments cochés, combos, etc.).
+        Rafraîchit l'estimation du prompt et le nombre de tokens affichés.
+        """
+        self.update_token_estimation_ui()
 
     @Slot()
     def update_token_estimation_ui(self):
         if not self.prompt_engine or not self.context_builder or not self.llm_client:
             self.token_estimation_label.setText("Erreur: Moteurs non initialisés")
-            # Aussi mettre à jour l'onglet du prompt pour indiquer l'erreur
             self._display_prompt_in_tab("Erreur: Les moteurs (prompt, context, llm) ne sont pas tous initialisés.")
             return
 
         user_specific_goal = self.user_instructions_textedit.toPlainText()
-        selected_elements_for_context = {}
-        if hasattr(self.main_window_ref, '_get_current_context_selections'):
-            selected_elements_for_context = self.main_window_ref._get_current_context_selections()
-        else:
-            logger.warning("MainWindow n'a pas la méthode '_get_current_context_selections'. Le contexte sera limité.")
-            # Fallback pour construction locale (moins complet)
-            char_a = self.character_a_combo.currentText() if self.character_a_combo.currentText() != "(Aucun)" else None
-            char_b = self.character_b_combo.currentText() if self.character_b_combo.currentText() != "(Aucun)" else None
-            scene_region = self.scene_region_combo.currentText() if self.scene_region_combo.currentText() != "(Aucune)" else None
-            scene_sub = self.scene_sub_location_combo.currentText() if self.scene_sub_location_combo.currentText() not in ["(Tous / Non spécifié)", "(Aucun sous-lieu)", "(Sélectionner une région d'abord)"] else None
-            local_selection = {}
-            if char_a: local_selection.setdefault("Personnages", []).append(char_a)
-            if char_b: local_selection.setdefault("Personnages", []).append(char_b)
-            if scene_region: local_selection.setdefault("Lieux", []).append(scene_region)
-            if scene_sub: local_selection.setdefault("Lieux", []).append(scene_sub)
-            selected_elements_for_context = local_selection
-            
-        context_summary = ""
-        full_prompt = "Erreur lors de la construction du contexte ou du prompt." # Message par défaut
+        selected_context_items = self.main_window_ref._get_current_context_selections() if hasattr(self.main_window_ref, '_get_current_context_selections') else {}
+
+        char_a_name = self.character_a_combo.currentText()
+        char_b_name = self.character_b_combo.currentText()
+        scene_region_name = self.scene_region_combo.currentText()
+        scene_sub_location_name = self.scene_sub_location_combo.currentText()
+
+        char_a_name = char_a_name if char_a_name and char_a_name != "(Aucun)" else None
+        char_b_name = char_b_name if char_b_name and char_b_name != "(Aucun)" else None
+        scene_region_name = scene_region_name if scene_region_name and scene_region_name != "(Aucune)" else None
+        scene_sub_location_name = scene_sub_location_name if scene_sub_location_name and scene_sub_location_name != "(Tous / Non spécifié)" and scene_sub_location_name != "(Aucun sous-lieu)" and scene_sub_location_name != "(Sélectionner une région d\'abord)" else None
+
+        scene_protagonists_dict = {}
+        if char_a_name: scene_protagonists_dict["personnage_a"] = char_a_name
+        if char_b_name: scene_protagonists_dict["personnage_b"] = char_b_name
+
+        scene_location_dict = {}
+        if scene_region_name: scene_location_dict["lieu"] = scene_region_name
+        if scene_sub_location_name: scene_location_dict["sous_lieu"] = scene_sub_location_name
+        
+        full_prompt_for_estimation = "Erreur lors de la construction du prompt pour estimation." # Message par défaut
         context_tokens = 0
         prompt_tokens = 0
-        
+
         try:
-            context_summary = self.context_builder.build_context(
-                selected_elements=selected_elements_for_context,
-                scene_instruction=user_specific_goal
+            # Assurer que le prompt_engine a le system_prompt à jour de l'UI pour une estimation correcte
+            self._update_prompt_engine_system_prompt()
+
+            # Similaire à _on_generate_dialogue_button_clicked_local
+            context_summary_text_for_estimation = self.context_builder.build_context(
+                selected_elements=selected_context_items,
+                scene_instruction=user_specific_goal, # L'objectif utilisateur sert d'instruction de scène pour ContextBuilder
+                max_tokens=self.main_window_ref.app_settings.get("max_context_tokens", 1500) # Utilise app_settings de MainWindow
             )
-            full_prompt, prompt_tokens = self.prompt_engine.build_prompt(context_summary, user_specific_goal)
-            context_tokens = self.prompt_engine._count_tokens(context_summary) # Utiliser _count_tokens
+            
+            full_prompt_for_estimation, prompt_tokens = self.prompt_engine.build_prompt(
+                user_specific_goal=user_specific_goal,
+                scene_protagonists=scene_protagonists_dict if scene_protagonists_dict else None,
+                scene_location=scene_location_dict if scene_location_dict else None,
+                context_summary=context_summary_text_for_estimation,
+                generation_params=None # Pas besoin de params spécifiques pour l'estimation ici, ils n'affectent que le contenu pas la structure comptée
+            )
+            # Pour context_tokens, on ne compte que ce qui vient de context_builder
+            # car le system_prompt, les persos/lieux et l'objectif sont fixes en termes de structure.
+            # Ou, plus simplement, on recompte juste la partie context_summary_text_for_estimation.
+            context_tokens = self.prompt_engine._count_tokens(context_summary_text_for_estimation) if context_summary_text_for_estimation else 0
+
+            logger.debug(f"[GenerationPanel.update_token_estimation_ui] Context summary for estimation (first 300 chars): {context_summary_text_for_estimation[:300] if context_summary_text_for_estimation else 'None'}") # LOG AJOUTÉ
+            logger.debug(f"[GenerationPanel.update_token_estimation_ui] Full prompt for estimation (first 300 chars): {full_prompt_for_estimation[:300] if full_prompt_for_estimation else 'None'}") # LOG AJOUTÉ
+
         except Exception as e:
             logger.error(f"Erreur pendant la construction du prompt dans update_token_estimation_ui: {e}", exc_info=True)
-            full_prompt = f"Erreur lors de la génération du prompt estimé:\\n{type(e).__name__}: {e}"
+            full_prompt_for_estimation = f"Erreur lors de la génération du prompt estimé:\\n{type(e).__name__}: {e}"
             # Les tokens resteront à 0 ou à leur dernière valeur valide avant l'erreur
 
-        self.token_estimation_label.setText(f"Tokens (contexte/prompt): {context_tokens} / {prompt_tokens}")
-        logger.debug(f"Token estimation UI updated: Context {context_tokens}, Prompt {prompt_tokens}.")
+        # Affichage des tokens en milliers (k)
+        context_tokens_k = context_tokens / 1000
+        prompt_tokens_k = prompt_tokens / 1000
+        self.token_estimation_label.setText(f"Tokens (contexte GDD/prompt total): {context_tokens_k:.1f}k / {prompt_tokens_k:.1f}k")
+        logger.debug(f"Token estimation UI updated: Context GDD {context_tokens} ({context_tokens_k:.1f}k), Prompt total {prompt_tokens} ({prompt_tokens_k:.1f}k).")
         
-        # Mettre à jour l'onglet "Prompt Estimé" avec le prompt complet calculé
-        self._display_prompt_in_tab(full_prompt)
+        self._display_prompt_in_tab(full_prompt_for_estimation)
 
 
     def _launch_dialogue_generation(self):
@@ -510,57 +617,79 @@ class GenerationPanel(QWidget):
         asyncio.create_task(self._on_generate_dialogue_button_clicked_local())
 
     async def _on_generate_dialogue_button_clicked_local(self):
-        generation_succeeded = False
+        # Appelé par _launch_dialogue_generation qui gère le changement de curseur et le try/except global
+        logger.info("Début de la génération de dialogue (méthode locale asynchrone).")
+        self.generation_progress_bar.setRange(0, 0) # Indeterminate
+        self.generation_progress_bar.setVisible(True)
+        self.generate_dialogue_button.setEnabled(False)
+
         try:
-            logger.info("Coroutine _on_generate_dialogue_button_clicked_local démarrée.")
             k_variants = int(self.k_variants_combo.currentText())
+            user_instructions = self.user_instructions_textedit.toPlainText()
+            # Le system_prompt est maintenant géré directement par self.prompt_engine via _update_prompt_engine_system_prompt
+            # lors de la modification du system_prompt_textedit ou de la restauration par défaut.
+            # Il n'est donc plus nécessaire de le passer explicitement ici à build_prompt,
+            # car self.prompt_engine aura déjà la version la plus à jour.
+
+            selected_context_items = self.main_window_ref._get_current_context_selections() # Récupère les items cochés
             
-            user_specific_goal = self.user_instructions_textedit.toPlainText()
-            selected_elements_for_context = {}
-            if hasattr(self.main_window_ref, '_get_current_context_selections'):
-                selected_elements_for_context = self.main_window_ref._get_current_context_selections()
-            else:
-                logger.warning("MainWindow n'a pas _get_current_context_selections, fallback sur contexte local GenerationPanel.")
-                char_a_name_local = self.character_a_combo.currentText() if self.character_a_combo.currentText() != "(Aucun)" else None
-                char_b_name_local = self.character_b_combo.currentText() if self.character_b_combo.currentText() != "(Aucun)" else None
-                scene_name_local = self.scene_region_combo.currentText() if self.scene_region_combo.currentText() != "(Aucune)" else None
-                sub_location_name_local = self.scene_sub_location_combo.currentText() if self.scene_sub_location_combo.currentText() not in ["(Tous / Non spécifié)", "(Aucun sous-lieu)", "(Sélectionner une région d'abord)"] else None
-                
-                # Construire une scene_instruction plus riche si les éléments principaux sont définis
-                # pour aider ContextBuilder si besoin.
-                # Note: user_specific_goal (l'instruction utilisateur) sera ajoutée par PromptEngine.
-                # Ici, on construit une "scene_instruction" de base pour ContextBuilder.
-                # Cette partie est laissée telle quelle car build_context prend selected_elements et scene_instruction.
-                # Le ContextBuilder devra utiliser ces deux sources.
-                
-                current_scene_instruction_parts = []
-                if char_a_name_local: current_scene_instruction_parts.append(f"Personnage A: {char_a_name_local}")
-                if char_b_name_local: current_scene_instruction_parts.append(f"Personnage B: {char_b_name_local}")
-                if scene_name_local: current_scene_instruction_parts.append(f"Scène: {scene_name_local}")
-                if sub_location_name_local: current_scene_instruction_parts.append(f"Sous-lieu: {sub_location_name_local}")
-                
-                effective_scene_instruction_for_context = ". ".join(current_scene_instruction_parts)
-                if user_specific_goal: # On pourrait fusionner ici, mais build_context prend déjà scene_instruction
-                    # effective_scene_instruction_for_context += ". Objectif: " + user_specific_goal
-                    pass
+            char_a_name = self.character_a_combo.currentText()
+            char_b_name = self.character_b_combo.currentText()
+            scene_region_name = self.scene_region_combo.currentText()
+            scene_sub_location_name = self.scene_sub_location_combo.currentText()
 
+            # Nettoyage des noms pour éviter de passer "(Aucun)" ou des chaînes vides si non pertinents
+            char_a_name = char_a_name if char_a_name and char_a_name != "(Aucun)" else None
+            char_b_name = char_b_name if char_b_name and char_b_name != "(Aucun)" else None
+            scene_region_name = scene_region_name if scene_region_name and scene_region_name != "(Aucune)" else None
+            scene_sub_location_name = scene_sub_location_name if scene_sub_location_name and scene_sub_location_name != "(Tous / Non spécifié)" else None
 
-                local_sel = {}
-                if char_a_name_local: local_sel.setdefault("Personnages", []).append(char_a_name_local)
-                if char_b_name_local: local_sel.setdefault("Personnages", []).append(char_b_name_local)
-                if scene_name_local: local_sel.setdefault("Lieux", []).append(scene_name_local)
-                if sub_location_name_local: local_sel.setdefault("Lieux", []).append(sub_location_name_local)
-                selected_elements_for_context = {**selected_elements_for_context, **local_sel} # fusionner
+            scene_protagonists_dict = {}
+            if char_a_name: scene_protagonists_dict["personnage_a"] = char_a_name
+            if char_b_name: scene_protagonists_dict["personnage_b"] = char_b_name
 
+            scene_location_dict = {}
+            if scene_region_name: scene_location_dict["lieu"] = scene_region_name
+            if scene_sub_location_name: scene_location_dict["sous_lieu"] = scene_sub_location_name
+            
+            # Mettre à jour le moteur de prompt avec le system prompt actuel de l'UI AVANT de construire le contexte
+            # Cela garantit que l'estimation des tokens et la génération utilisent le dernier prompt système.
+            self._update_prompt_engine_system_prompt() 
 
-            context_summary = self.context_builder.build_context(
-                selected_elements=selected_elements_for_context,
-                scene_instruction=user_specific_goal # Ou effective_scene_instruction_for_context ? À clarifier. Pour l'instant, on garde user_specific_goal pour cohérence avec l'appel dans update_token_estimation_ui
-                # Les arguments main_characters, main_location, sub_location ont été supprimés
+            # Construction du contexte via ContextBuilder
+            # Le ContextBuilder doit maintenant aussi prendre les protagonistes et lieu pour potentiellement les exclure du résumé général
+            # ou pour affiner le contexte. Pour l'instant, on passe les items sélectionnés et il fera le tri.
+            # TODO: Affiner ContextBuilder pour qu'il utilise scene_protagonists et scene_location pour mieux cibler le contexte.
+            # Pour l'instant, on passe les items sélectionnés et ContextBuilder.build_context s'attend à une "scene_instruction" qui peut être l'objectif utilisateur.
+            context_summary_text = self.context_builder.build_context(
+                selected_elements=selected_context_items,
+                scene_instruction=user_instructions, # L'objectif utilisateur sert d'instruction de scène pour ContextBuilder
+                max_tokens=self.main_window_ref.app_settings.get("max_context_tokens", 1500) # Utilise app_settings de MainWindow
             )
-            full_prompt, _ = self.prompt_engine.build_prompt(context_summary, user_specific_goal)
-            logger.info(f"Appel de _display_prompt_in_tab avec le prompt de longueur: {len(full_prompt)} chars.")
-            self._display_prompt_in_tab(full_prompt) 
+
+            # Construction du prompt via PromptEngine avec la nouvelle structure
+            full_prompt, estimated_tokens = self.prompt_engine.build_prompt(
+                user_specific_goal=user_instructions,
+                scene_protagonists=scene_protagonists_dict if scene_protagonists_dict else None,
+                scene_location=scene_location_dict if scene_location_dict else None,
+                context_summary=context_summary_text, # Le reste du contexte
+                generation_params={ # TODO: Exposer ces paramètres dans l'UI si nécessaire
+                    "tone": "Neutre", 
+                    "model_identifier": self.current_llm_model_identifier
+                }
+            )
+            # Affichage des tokens en milliers (k)
+            estimated_tokens_k = estimated_tokens / 1000
+            self.token_estimation_label.setText(f"Tokens prompt final: {estimated_tokens_k:.1f}k")
+            self._display_prompt_in_tab(full_prompt)
+
+            logger.debug(f"[GenerationPanel._on_generate_dialogue_button_clicked_local] Context summary sent to LLM (first 300 chars): {context_summary_text[:300] if context_summary_text else 'None'}") # LOG AJOUTÉ
+            logger.debug(f"[GenerationPanel._on_generate_dialogue_button_clicked_local] Full prompt sent to LLM (first 300 chars): {full_prompt[:300] if full_prompt else 'None'}") # LOG AJOUTÉ
+
+            if not self.llm_client:
+                logger.error("Erreur: Client LLM non initialisé.")
+                self.generation_finished.emit(False)
+                return
 
             logger.info(f"Appel de llm_client.generate_variants avec k={k_variants}...")
             
@@ -882,6 +1011,7 @@ class GenerationPanel(QWidget):
             self.main_window_ref.statusBar().showMessage("Erreur: Impossible de tout décocher.", 3000)
 
     def get_settings(self) -> dict:
+        # Récupère les paramètres actuels du panneau pour la sauvegarde.
         settings = {
             "character_a": self.character_a_combo.currentText(),
             "character_b": self.character_b_combo.currentText(),
@@ -889,55 +1019,73 @@ class GenerationPanel(QWidget):
             "scene_sub_location": self.scene_sub_location_combo.currentText(),
             "k_variants": self.k_variants_combo.currentText(),
             "user_instructions": self.user_instructions_textedit.toPlainText(),
-            "llm_model_identifier": self.llm_model_combo.currentData() if self.llm_model_combo.count() > 0 and self.llm_model_combo.currentData() != "dummy_error" else self.current_llm_model_identifier,
-            "structured_output_checked": self.structured_output_checkbox.isChecked(),
+            "llm_model": self.llm_model_combo.currentData(), # Sauvegarde l'identifiant du modèle
+            "structured_output": self.structured_output_checkbox.isChecked(),
+            "system_prompt": self.system_prompt_textedit.toPlainText(), # Ajout du system prompt
+            "max_context_tokens": self.max_context_tokens_spinbox.value() # Ajout de max_context_tokens
         }
-        logger.debug(f"GenerationPanel settings to be saved: {settings}")
+        logger.debug(f"Récupération des paramètres du GenerationPanel: {settings}")
         return settings
 
     def load_settings(self, settings: dict):
-        logger.debug(f"Loading GenerationPanel settings: {settings}")
+        logger.debug(f"Chargement des paramètres dans GenerationPanel: {settings}")
         
-        # Block signals to prevent premature updates
-        blocked_widgets = [
-            self.character_a_combo, self.character_b_combo, 
-            self.scene_region_combo, self.scene_sub_location_combo,
-            self.k_variants_combo, self.user_instructions_textedit,
-            self.llm_model_combo, self.structured_output_checkbox
-        ]
-        for widget in blocked_widgets: widget.blockSignals(True)
-
-        # Ensure combos are populated before setting values
-        if self.character_a_combo.count() == 0: self.populate_character_combos() 
-        if self.scene_region_combo.count() == 0: self.populate_scene_combos()
-        if self.llm_model_combo.count() == 0: self.populate_llm_model_combo()
-
-        self.character_a_combo.setCurrentText(settings.get("character_a", "(Aucun)"))
-        self.character_b_combo.setCurrentText(settings.get("character_b", "(Aucun)"))
+        # Indicateur pour éviter les mises à jour de tokens pendant le chargement
+        self._is_loading_settings = True
         
-        saved_region = settings.get("scene_region", "(Aucune)")
-        self.scene_region_combo.setCurrentText(saved_region)
-        # Trigger _on_scene_region_changed manually AFTER scene_region_combo is unblocked
-        # to populate sub-locations and then set the sub-location.
+        # Charger les combobox pour personnages et scènes
+        # Ces appels vont déclencher currentTextChanged, qui appelle _schedule_settings_save_and_token_update
+        # C'est pourquoi _is_loading_settings est important.
+        self.character_a_combo.setCurrentText(settings.get("character_a", ""))
+        self.character_b_combo.setCurrentText(settings.get("character_b", ""))
+        self.scene_region_combo.setCurrentText(settings.get("scene_region", ""))
+        # _on_scene_region_changed sera appelé, qui remplira les sous-lieux.
+        # Il faut donc charger le sous-lieu APRES que scene_region_combo ait potentiellement re-peuplé sub_location
+        # Ce qui est un peu délicat. On peut appeler processEvents ou simplement le setter après.
+        QApplication.processEvents() # Force le traitement des événements (comme _on_scene_region_changed)
+        self.scene_sub_location_combo.setCurrentText(settings.get("scene_sub_location", ""))
         
-        self.k_variants_combo.setCurrentText(settings.get("k_variants", "2"))
+        self.k_variants_combo.setCurrentText(settings.get("k_variants", "3"))
         self.user_instructions_textedit.setPlainText(settings.get("user_instructions", ""))
         
-        saved_model_id = settings.get("llm_model_identifier")
-        if saved_model_id:
-            self.select_model_in_combo(saved_model_id) 
+        model_identifier = settings.get("llm_model")
+        if model_identifier:
+            self.select_model_in_combo(model_identifier)
+        else:
+            # Si aucun modèle n'est sauvegardé, essayer de sélectionner le premier de la liste
+            if self.llm_model_combo.count() > 0:
+                self.llm_model_combo.setCurrentIndex(0)
         
-        self.structured_output_checkbox.setChecked(settings.get("structured_output_checked", True))
+        self.structured_output_checkbox.setChecked(settings.get("structured_output", True))
+        
+        # Charger le system prompt
+        saved_system_prompt = settings.get("system_prompt")
+        if saved_system_prompt:
+            self.system_prompt_textedit.setPlainText(saved_system_prompt)
+        else:
+            # Si aucun prompt système n'est sauvegardé, charger celui par défaut
+            self._restore_default_system_prompt() # Ceci mettra aussi à jour prompt_engine
+        self._update_prompt_engine_system_prompt() # Assurer la synchro avec prompt_engine
+        
+        # Charger max_context_tokens depuis MainWindow si disponible
+        if hasattr(self.main_window_ref, 'app_settings') and "max_context_tokens" in self.main_window_ref.app_settings:
+            # Convertir tokens en k-tokens pour l'affichage
+            tokens_value = self.main_window_ref.app_settings["max_context_tokens"]
+            k_tokens_value = tokens_value / 1000
+            self.max_context_tokens_spinbox.setValue(k_tokens_value)
+        
+        self._is_loading_settings = False
+        # Déclencher une mise à jour manuelle des tokens après le chargement complet
+        self.update_token_estimation_signal.emit()
+        logger.info("Paramètres du GenerationPanel chargés.")
 
-        # Unblock signals
-        for widget in blocked_widgets: widget.blockSignals(False)
-
-        # Manually trigger updates that depend on loaded values AFTER signals are unblocked
-        self._on_scene_region_changed(self.scene_region_combo.currentText()) # Populate sub-locations
-        # Set sub-location only after its combo is populated
-        if "scene_sub_location" in settings:
-             self.scene_sub_location_combo.setCurrentText(settings.get("scene_sub_location", "(Tous / Non spécifié)"))
-
-        self._trigger_token_update() 
-        self._update_structured_output_checkbox_state() 
-        logger.info("GenerationPanel settings loaded.")
+    @Slot(float)
+    def _on_max_context_tokens_changed(self, new_value: float):
+        """Appelé quand l'utilisateur change la limite de tokens pour le contexte."""
+        # Convertir de k-tokens (ex: 1.5k) en tokens (ex: 1500)
+        tokens_value = int(new_value * 1000)
+        
+        if hasattr(self.main_window_ref, 'app_settings'):
+            self.main_window_ref.app_settings["max_context_tokens"] = tokens_value
+            logger.info(f"Limite de tokens pour le contexte mise à jour: {tokens_value} ({new_value}k)")
+            self._schedule_settings_save_and_token_update()
