@@ -2,8 +2,14 @@ import json
 import os
 from pathlib import Path
 from typing import Optional, Dict, Any, List
+import logging
+
+logger = logging.getLogger(__name__)
 
 UI_SETTINGS_FILE = Path(__file__).parent / "ui_settings.json"
+
+# Chemin par défaut pour les dialogues Unity
+DEFAULT_UNITY_DIALOGUES_PATH = Path("F:/Unity/Alteir/Alteir_Cursor/Assets/Dialogue/generated")
 
 def load_ui_settings() -> Dict[str, Any]:
     """
@@ -17,7 +23,7 @@ def load_ui_settings() -> Dict[str, Any]:
             with open(UI_SETTINGS_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except json.JSONDecodeError:
-            print(f"Warning: Error decoding {UI_SETTINGS_FILE}. Returning default settings.")
+            logger.warning(f"Error decoding {UI_SETTINGS_FILE}. Returning default settings.")
             return {} 
     return {}
 
@@ -32,42 +38,32 @@ def save_ui_settings(settings: Dict[str, Any]) -> None:
         with open(UI_SETTINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(settings, f, indent=4)
     except IOError:
-        print(f"Error: Could not write to {UI_SETTINGS_FILE}.")
+        logger.error(f"Could not write to {UI_SETTINGS_FILE}.")
 
 def get_unity_dialogues_path() -> Optional[Path]:
     """
-    Retrieves the Unity dialogues path from UI settings.
-
-    Validates if the path exists and is a directory and is writable.
-
+    Retourne le chemin des dialogues Unity, en utilisant un chemin par défaut si non configuré.
+    
     Returns:
-        Optional[Path]: The path to Unity dialogues, or None if not configured or invalid.
+        Optional[Path]: Le chemin vers les dialogues Unity.
     """
-    settings = load_ui_settings()
-    path_str = settings.get("unity_dialogues_path")
-
-    if not path_str:
-        print("Error: 'unity_dialogues_path' not found in UI settings. Please configure it.")
-        return None
-
-    dialogues_path = Path(path_str)
-
+    # Utiliser directement le chemin par défaut
+    dialogues_path = DEFAULT_UNITY_DIALOGUES_PATH
+    
+    # Vérifier que le répertoire existe, sinon essayer de le créer
     if not dialogues_path.exists():
-        print(f"Error: The configured Unity dialogues path does not exist: {dialogues_path}. Please check the path in {UI_SETTINGS_FILE.name} or use set_unity_dialogues_path.")
-        return None
+        try:
+            dialogues_path.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Répertoire des dialogues Unity créé: {dialogues_path}")
+        except Exception as e:
+            logger.error(f"Impossible de créer le répertoire des dialogues Unity: {dialogues_path}. Erreur: {e}")
+            return None
     
+    # Si le chemin existe mais n'est pas un répertoire, c'est une erreur
     if not dialogues_path.is_dir():
-        print(f"Error: The configured Unity dialogues path is not a directory: {dialogues_path}.")
+        logger.error(f"Le chemin des dialogues Unity n'est pas un répertoire: {dialogues_path}")
         return None
     
-    if not os.access(dialogues_path, os.W_OK):
-        print(f"Error: The configured Unity dialogues path is not writable: {dialogues_path}.")
-        return None
-    
-    if not os.access(dialogues_path, os.R_OK):
-        print(f"Error: The configured Unity dialogues path is not readable: {dialogues_path}.")
-        return None
-
     return dialogues_path
 
 def set_unity_dialogues_path(new_path_str: str) -> bool:
@@ -84,12 +80,17 @@ def set_unity_dialogues_path(new_path_str: str) -> bool:
     
     test_path = Path(new_path_str)
     if not test_path.is_dir():
-        print(f"Warning: The provided path '{new_path_str}' is not currently a valid directory. ")
-        print(f"Please ensure it exists and is a directory before the application attempts to use it.")
+        logger.warning(f"Le chemin '{new_path_str}' n'est pas un répertoire valide.")
+        try:
+            test_path.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Répertoire créé: {new_path_str}")
+        except Exception as e:
+            logger.error(f"Impossible de créer le répertoire: {new_path_str}. Erreur: {e}")
+            return False
 
     settings["unity_dialogues_path"] = new_path_str
     save_ui_settings(settings)
-    print(f"Info: Unity dialogues path configuration updated to: {new_path_str}")
+    logger.info(f"Chemin des dialogues Unity configuré: {new_path_str}")
     return True
 
 def list_yarn_files(dialogues_base_path: Path, recursive: bool = False) -> List[Path]:
