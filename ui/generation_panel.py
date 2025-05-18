@@ -449,6 +449,8 @@ class GenerationPanel(QWidget):
     def update_token_estimation_ui(self):
         if not self.prompt_engine or not self.context_builder or not self.llm_client:
             self.token_estimation_label.setText("Erreur: Moteurs non initialisés")
+            # Aussi mettre à jour l'onglet du prompt pour indiquer l'erreur
+            self._display_prompt_in_tab("Erreur: Les moteurs (prompt, context, llm) ne sont pas tous initialisés.")
             return
 
         user_specific_goal = self.user_instructions_textedit.toPlainText()
@@ -457,7 +459,7 @@ class GenerationPanel(QWidget):
             selected_elements_for_context = self.main_window_ref._get_current_context_selections()
         else:
             logger.warning("MainWindow n'a pas la méthode '_get_current_context_selections'. Le contexte sera limité.")
-            # Fallback
+            # Fallback pour construction locale (moins complet)
             char_a = self.character_a_combo.currentText() if self.character_a_combo.currentText() != "(Aucun)" else None
             char_b = self.character_b_combo.currentText() if self.character_b_combo.currentText() != "(Aucun)" else None
             scene_region = self.scene_region_combo.currentText() if self.scene_region_combo.currentText() != "(Aucune)" else None
@@ -469,20 +471,28 @@ class GenerationPanel(QWidget):
             if scene_sub: local_selection.setdefault("Lieux", []).append(scene_sub)
             selected_elements_for_context = local_selection
             
-        context_summary = self.context_builder.build_context(
-            selected_elements=selected_elements_for_context,
-            scene_instruction=user_specific_goal
-            # Les arguments main_characters, main_location, sub_location ont été supprimés
-            # car ils ne font pas partie de la signature de ContextBuilder.build_context.
-            # Le ContextBuilder doit pouvoir extraire ces informations si nécessaire à partir
-            # des selected_elements et de scene_instruction.
-        )
+        context_summary = ""
+        full_prompt = "Erreur lors de la construction du contexte ou du prompt." # Message par défaut
+        context_tokens = 0
+        prompt_tokens = 0
         
-        full_prompt, prompt_tokens = self.prompt_engine.build_prompt(context_summary, user_specific_goal)
-        context_tokens = self.prompt_engine._count_tokens(context_summary) # Utiliser _count_tokens
+        try:
+            context_summary = self.context_builder.build_context(
+                selected_elements=selected_elements_for_context,
+                scene_instruction=user_specific_goal
+            )
+            full_prompt, prompt_tokens = self.prompt_engine.build_prompt(context_summary, user_specific_goal)
+            context_tokens = self.prompt_engine._count_tokens(context_summary) # Utiliser _count_tokens
+        except Exception as e:
+            logger.error(f"Erreur pendant la construction du prompt dans update_token_estimation_ui: {e}", exc_info=True)
+            full_prompt = f"Erreur lors de la génération du prompt estimé:\\n{type(e).__name__}: {e}"
+            # Les tokens resteront à 0 ou à leur dernière valeur valide avant l'erreur
 
         self.token_estimation_label.setText(f"Tokens (contexte/prompt): {context_tokens} / {prompt_tokens}")
         logger.debug(f"Token estimation UI updated: Context {context_tokens}, Prompt {prompt_tokens}.")
+        
+        # Mettre à jour l'onglet "Prompt Estimé" avec le prompt complet calculé
+        self._display_prompt_in_tab(full_prompt)
 
 
     def _launch_dialogue_generation(self):
@@ -549,6 +559,7 @@ class GenerationPanel(QWidget):
                 # Les arguments main_characters, main_location, sub_location ont été supprimés
             )
             full_prompt, _ = self.prompt_engine.build_prompt(context_summary, user_specific_goal)
+            logger.info(f"Appel de _display_prompt_in_tab avec le prompt de longueur: {len(full_prompt)} chars.")
             self._display_prompt_in_tab(full_prompt) 
 
             logger.info(f"Appel de llm_client.generate_variants avec k={k_variants}...")
@@ -641,6 +652,7 @@ class GenerationPanel(QWidget):
                 self.generation_finished.emit(generation_succeeded)
 
     def _display_prompt_in_tab(self, prompt_text: str):
+        logger.info(f"_display_prompt_in_tab: Entrée avec prompt_text de longueur {len(prompt_text)} chars.")
         self.variant_display_tabs.blockSignals(True)
         
         prompt_tab_index = -1
@@ -650,6 +662,7 @@ class GenerationPanel(QWidget):
                 break
         
         if prompt_tab_index != -1:
+            logger.info(f"_display_prompt_in_tab: Onglet 'Prompt Estimé' trouvé à l'index {prompt_tab_index}. Mise à jour du contenu.")
             # Onglet existant, mettre à jour son contenu
             widget = self.variant_display_tabs.widget(prompt_tab_index)
             if isinstance(widget, QTextEdit):
@@ -659,6 +672,7 @@ class GenerationPanel(QWidget):
                 if text_edit: text_edit.setPlainText(prompt_text)
                 else: logger.error("Impossible de trouver QTextEdit dans l'onglet Prompt existant.")
         else:
+            logger.info("_display_prompt_in_tab: Onglet 'Prompt Estimé' non trouvé. Création d'un nouvel onglet à l'index 0.")
             # Créer un nouvel onglet pour le prompt
             prompt_tab_widget = QTextEdit()
             prompt_tab_widget.setPlainText(prompt_text)
@@ -666,8 +680,10 @@ class GenerationPanel(QWidget):
             prompt_tab_widget.setFont(QFont("Consolas", 9)) 
             self.variant_display_tabs.insertTab(0, prompt_tab_widget, "Prompt Estimé")
         
+        logger.info("_display_prompt_in_tab: Appel de setCurrentIndex(0).")
         self.variant_display_tabs.setCurrentIndex(0) 
         self.variant_display_tabs.blockSignals(False)
+        logger.info("_display_prompt_in_tab: Sortie.")
 
     @Slot(int)
     def _on_validate_variant_clicked(self, variant_index: int):
