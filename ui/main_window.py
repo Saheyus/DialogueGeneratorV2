@@ -4,7 +4,7 @@ import asyncio # Added for asynchronous tasks
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                                QLabel, QComboBox, QTextEdit, QSplitter, 
                                QListWidget, QListWidgetItem, QTreeView, QAbstractItemView, QLineEdit,
-                               QGroupBox, QHeaderView, QPushButton, QTabWidget, QApplication, QGridLayout, QCheckBox, QSizePolicy, QMessageBox, QSpacerItem)
+                               QGroupBox, QHeaderView, QPushButton, QTabWidget, QApplication, QGridLayout, QCheckBox, QSizePolicy, QMessageBox, QSpacerItem, QFileDialog)
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QPalette, QColor, QAction, QCloseEvent, QGuiApplication
 from PySide6.QtCore import Qt, QSize, QTimer, QItemSelectionModel, QSortFilterProxyModel, QRegularExpression, QSettings, Signal, Slot, QByteArray
 import sys
@@ -155,6 +155,9 @@ class MainWindow(QMainWindow):
 
         self.edit_context_config_action = QAction("&Edit Context Configuration...", self)
         self.edit_context_config_action.triggered.connect(self._open_context_config_file)
+        
+        self.configure_unity_path_action = QAction("Configure &Unity Dialogues Path...", self)
+        self.configure_unity_path_action.triggered.connect(self._configure_unity_dialogues_path)
 
         self.exit_action = QAction("&Exit", self)
         self.exit_action.triggered.connect(self.close)
@@ -168,6 +171,7 @@ class MainWindow(QMainWindow):
         options_menu.addAction(self.restore_selections_action)
         options_menu.addSeparator()
         options_menu.addAction(self.edit_context_config_action) 
+        options_menu.addAction(self.configure_unity_path_action) 
         options_menu.addSeparator()
         options_menu.addAction(self.exit_action)
 
@@ -185,6 +189,29 @@ class MainWindow(QMainWindow):
         else:
             logger.warning(f"Configuration file {CONTEXT_CONFIG_FILE_PATH} does not exist.")
             self.statusBar().showMessage("Error: Context configuration file not found.")
+
+    def _configure_unity_dialogues_path(self):
+        """Ouvre une boîte de dialogue pour configurer le chemin des dialogues Unity."""
+        current_path = config_manager.get_unity_dialogues_path()
+        current_path_str = str(current_path) if current_path else ""
+        
+        new_path = QFileDialog.getExistingDirectory(
+            self,
+            "Sélectionner le dossier des dialogues Unity",
+            current_path_str
+        )
+        
+        if new_path:  # L'utilisateur n'a pas annulé
+            if config_manager.set_unity_dialogues_path(new_path):
+                logger.info(f"Chemin des dialogues Unity configuré: {new_path}")
+                self.statusBar().showMessage(f"Chemin des dialogues Unity configuré: {new_path}", 5000)
+                
+                # Mettre à jour l'interface pour refléter le nouveau chemin
+                if hasattr(self.left_panel, 'populate_yarn_files_list'):
+                    self.left_panel.populate_yarn_files_list()
+            else:
+                logger.error(f"Échec de la configuration du chemin des dialogues Unity: {new_path}")
+                self.statusBar().showMessage("Échec de la configuration du chemin des dialogues Unity", 5000)
 
     def setup_ui(self):
         """Configures the main user interface of the window.
@@ -555,57 +582,50 @@ class MainWindow(QMainWindow):
 
     @Slot(str) # Ajout du décorateur Slot
     def _on_llm_model_selected_from_panel(self, new_model_identifier: str, from_load_settings: bool = False):
-        """Slot pour gérer la sélection d'un nouveau modèle LLM depuis GenerationPanel."""
-        logger.info(f"MainWindow: Changement de modèle LLM demandé pour : {new_model_identifier}")
-        if not new_model_identifier:
-            logger.warning("ID de modèle LLM vide reçu, annulation du changement.")
-            # Optionnellement, remettre le combo du GenerationPanel à l'ancien modèle si possible
-            if self.llm_client and hasattr(self.llm_client, 'model_identifier'):
-                self.generation_panel.select_model_in_combo(self.llm_client.model_identifier)
+        logger.info(f"LLM model selection changed from panel to: {new_model_identifier}")
+        
+        if self.llm_client and hasattr(self.llm_client, 'model') and self.llm_client.model == new_model_identifier and not from_load_settings:
+            logger.debug(f"LLM model unchanged (already {new_model_identifier}), skipping client recreation.")
             return
 
-        # Sauvegarder l'identifiant du modèle dans app_settings
+        # Mise à jour de l'app_settings avant de recharger le client
         self.app_settings["current_llm_model_identifier"] = new_model_identifier
-
-        # Mettre à jour le client LLM. Trouver les détails du modèle depuis self.available_llm_models.
-        selected_model_details = next((m for m in self.available_llm_models if m.get("api_identifier") == new_model_identifier), None)
-
-        if not selected_model_details:
-            logger.warning(f"Modèle LLM '{new_model_identifier}' non trouvé dans available_llm_models.")
-            return
-
-        api_key_var = self.llm_config.get("api_key_env_var", "OPENAI_API_KEY")
+        
+        # Attempt to initialize the client with the new model
         try:
-            # Tenter de créer le nouveau client. Si cela échoue, garder l'ancien.
-            new_llm_client = OpenAIClient(model_identifier=new_model_identifier, api_key_env_var=api_key_var)
+            # Get API key env var from config
+            api_key_var = self.llm_config.get("api_key_env_var", "OPENAI_API_KEY")
             
-            # Si le client est créé avec succès (pas d'exception et clé API trouvée), alors on met à jour.
-            if new_llm_client.client: # Vérifie que le client interne AsyncOpenAI est initialisé (donc clé API ok)
-                self.llm_client = new_llm_client
-                if hasattr(self.generation_panel, 'set_llm_client'):
-                    self.generation_panel.set_llm_client(self.llm_client)
-                logger.info(f"LLM Client mis à jour avec le modèle : {new_model_identifier}")
-                self.statusBar().showMessage(f"Modèle LLM changé en : {new_model_identifier}", 3000)
-                # Déclencher la mise à jour de l'estimation des tokens dans GenerationPanel
-                if hasattr(self.generation_panel, '_trigger_token_update'): # Check if method exists
-                    self.generation_panel._trigger_token_update()
-            else:
-                logger.error(f"Échec de l'initialisation du nouveau LLMClient pour {new_model_identifier} (probablement clé API manquante pour {api_key_var}). L'ancien client est conservé.")
-                QMessageBox.warning(self, "Erreur de Modèle LLM", 
-                                    f"Impossible de changer pour le modèle {new_model_identifier}. "
-                                    f"Vérifiez que la variable d'environnement '{api_key_var}' est bien configurée et que le modèle est accessible. "
-                                    "L'ancien modèle LLM est conservé.")
-                # Remettre le combobox du GenerationPanel sur l'ancien modèle si possible
-                if self.llm_client and hasattr(self.generation_panel, 'select_model_in_combo') and hasattr(self.llm_client, 'model'):
-                    self.generation_panel.select_model_in_combo(self.llm_client.model)
-
-
+            # Create a new client with the selected model
+            new_client = OpenAIClient(model_identifier=new_model_identifier, api_key_env_var=api_key_var)
+            
+            # If successful, update our reference and inform GP
+            self.llm_client = new_client
+            self.generation_panel.set_llm_client(new_client)
+            logger.info(f"LLM Client updated with model: {new_model_identifier}")
+            
+            if not from_load_settings: # Avoid feedback loop on startup
+                self._save_ui_settings("llm_model_change") 
+                
         except Exception as e:
-            logger.error(f"Erreur lors du changement du client LLM pour {new_model_identifier}: {e}")
-            QMessageBox.critical(self, "Erreur LLM", f"Impossible de changer le modèle LLM pour {new_model_identifier}: {e}")
-            # Remettre le combobox du GenerationPanel sur l'ancien modèle si possible
-            if self.llm_client and hasattr(self.generation_panel, 'select_model_in_combo') and hasattr(self.llm_client, 'model'):
-                    self.generation_panel.select_model_in_combo(self.llm_client.model)
+            logger.error(f"Failed to initialize LLM client with model {new_model_identifier}: {e}")
+            QMessageBox.critical(self, "LLM Error", f"Could not initialize LLM client with model {new_model_identifier}: {e}")
+            # We don't fall back to dummy here since we already have a working client.
+            # Just notify the user and keep using the current client.
+            # Optionally reset the UI selection to match the current client.
+            if self.llm_client and hasattr(self.llm_client, 'model'):
+                self.generation_panel.select_model_in_combo(self.llm_client.model)
+
+    def get_unity_dialogues_path(self) -> Optional[Path]:
+        """
+        Retourne le chemin des dialogues Unity.
+        Utilise config_manager.get_unity_dialogues_path() pour récupérer le chemin.
+        
+        Returns:
+            Optional[Path]: Le chemin des dialogues Unity, ou None si non configuré ou invalide.
+        """
+        logger.debug("MainWindow.get_unity_dialogues_path appelé")
+        return config_manager.get_unity_dialogues_path()
 
 # For testing, if you run main_window.py directly (requires some adjustments)
 if __name__ == '__main__':
