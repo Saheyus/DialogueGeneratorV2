@@ -440,7 +440,7 @@ class ContextBuilder:
                 linked_elements["locations"].update(self._extract_linked_names(char_details.get("Lieux de vie"), all_loc_names))
                 relations_text = self._extract_from_dict(char_details, 'Background.Relations')
                 if relations_text and isinstance(relations_text, str):
-                    for word_or_phrase in potential_related_names_from_text(relations_text, all_char_names):
+                    for word_or_phrase in self.potential_related_names_from_text(relations_text, all_char_names):
                          if word_or_phrase != character_name:
                             linked_elements["characters"].add(word_or_phrase)
 
@@ -459,6 +459,16 @@ class ContextBuilder:
             for loc_name in location_names:
                 linked_elements["locations"].discard(loc_name)
         return linked_elements
+
+    @staticmethod
+    def potential_related_names_from_text(text: str, known_character_names: list[str]) -> set[str]:
+        if not text or not isinstance(text, str):
+            return set()
+        found_names = set()
+        for known_name in known_character_names:
+            if re.search(r"\b" + re.escape(known_name) + r"\b", text):
+                found_names.add(known_name)
+        return found_names
 
 if __name__ == '__main__':
     # Configuration du logging pour les tests en standalone
@@ -492,13 +502,4 @@ if __name__ == '__main__':
         context_no_dt = cb.build_context(selected_test_elements, test_instruction, max_tokens=8000, include_dialogue_type=False)
         print(f"\nContexte Généré (avec config, SANS Dialogue Type, limite 8000 tokens):\nNombre de tokens: {cb._count_tokens(context_no_dt)}\n{context_no_dt}")
     else:
-        print("\nSkipping build_context test: tiktoken non dispo ou pas assez de données de test.")
-
-def potential_related_names_from_text(text: str, known_character_names: list[str]) -> set[str]:
-    if not text or not isinstance(text, str):
-        return set()
-    found_names = set()
-    for known_name in known_character_names:
-        if re.search(r"\b" + re.escape(known_name) + r"\b", text):
-            found_names.add(known_name)
-    return found_names 
+        print("\nSkipping build_context test: tiktoken non dispo ou pas assez de données de test.") 
