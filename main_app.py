@@ -64,7 +64,9 @@ def main():
 
     # Lancement de la boucle d'évènements intégrée Qt + asyncio
     with loop:
+        logger.info("Entrée dans la boucle d'événements principale (loop.run_forever()).")
         loop.run_forever()
+        logger.info("Sortie de la boucle d'événements principale (loop.run_forever()).")
 
     logger.info("Application terminée.")
     sys.exit(0)

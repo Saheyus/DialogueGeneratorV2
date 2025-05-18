@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QGroupBox, QGridLayout, 
                                QLabel, QComboBox, QTextEdit, QPushButton, 
-                               QTabWidget, QLineEdit, QCheckBox, QHBoxLayout, QApplication, QSizePolicy, QProgressBar, QScrollArea, QSplitter, QFrame, QPlainTextEdit, QMessageBox, QSpacerItem, QMenu)
+                               QTabWidget, QLineEdit, QCheckBox, QHBoxLayout, QApplication, QSizePolicy, QProgressBar, QScrollArea, QSplitter, QFrame, QPlainTextEdit, QMessageBox, QSpacerItem, QMenu, QStyle)
 from PySide6.QtCore import Qt, Signal, Slot, QSize
 from PySide6.QtGui import QPalette, QColor, QFont, QIcon, QAction
 import logging # Added for logging
@@ -119,7 +119,7 @@ class GenerationPanel(QWidget):
         row += 1
         
         self.swap_characters_button = QPushButton()
-        self.swap_characters_button.setIcon(get_icon_path("swap_horiz.png"))
+        self.swap_characters_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ToolBarHorizontalExtensionButton))
         self.swap_characters_button.setToolTip("Échanger Personnage A et Personnage B")
         self.swap_characters_button.clicked.connect(self._swap_characters)
         self.swap_characters_button.setFixedSize(QSize(28, 28)) 
@@ -222,7 +222,7 @@ class GenerationPanel(QWidget):
         estimation_h_layout.addWidget(self.token_estimation_label)
         estimation_h_layout.addStretch()
         self.refresh_token_button = QPushButton()
-        self.refresh_token_button.setIcon(get_icon_path("refresh.png"))
+        self.refresh_token_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
         self.refresh_token_button.setToolTip("Rafraîchir l'estimation des tokens")
         self.refresh_token_button.clicked.connect(self._trigger_token_update)
         self.refresh_token_button.setFixedSize(QSize(28,28))

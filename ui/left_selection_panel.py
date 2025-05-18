@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QCheckBox, QHBoxLayout, QScrollArea, QFrame, QGroupBox, QPushButton, QSizePolicy, QSpacerItem, QAbstractItemView)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QCheckBox, QHBoxLayout, QScrollArea, QFrame, QGroupBox, QPushButton, QSizePolicy, QSpacerItem, QAbstractItemView, QTabWidget)
 from PySide6.QtCore import Qt, Signal, Slot, QSortFilterProxyModel, QRegularExpression, QTimer
 from PySide6.QtGui import QPalette, QColor
 import logging
@@ -35,7 +35,8 @@ class LeftSelectionPanel(QWidget):
         self.category_data_map = {}
         self.category_display_names = {}
         self.category_item_name_keys = {}
-        self.category_name_key_priorities = {} 
+        self.category_name_key_priorities = {}
+        self.details_panel_instance = None # Ajout pour stocker la référence
 
         # Define categories to be displayed, their data keys, display names, and primary name keys
         self.categories_config = [
@@ -54,8 +55,8 @@ class LeftSelectionPanel(QWidget):
         self.gdd_data_loaded = False # Flag to track if GDD data has been loaded
 
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(5, 5, 5, 5) 
-        self.main_layout.setSpacing(2)  # Espacement vertical réduit pour compacter les groupes
+        self.main_layout.setContentsMargins(0,0,0,0) # Ajuster les marges pour le QTabWidget
+        self.main_layout.setSpacing(0) # Ajuster l'espacement pour le QTabWidget
 
         self._setup_ui_elements()
         self._connect_signals()
@@ -64,6 +65,15 @@ class LeftSelectionPanel(QWidget):
         self.category_data_map[self.yarn_files_category_key] = [] 
 
     def _setup_ui_elements(self):
+        self.tab_widget = QTabWidget()
+        self.main_layout.addWidget(self.tab_widget, 1)
+
+        # --- Onglet de Sélection ---
+        selection_tab_widget = QWidget()
+        self.selection_layout = QVBoxLayout(selection_tab_widget) # Renommé pour clarté
+        self.selection_layout.setContentsMargins(5, 5, 5, 5)
+        self.selection_layout.setSpacing(2)
+
         # Create UI for GDD categories
         for category_config in self.categories_config:
             cat_key = category_config["key"]
@@ -75,13 +85,13 @@ class LeftSelectionPanel(QWidget):
             )
             self.lists[cat_key] = list_widget
             self.filter_edits[cat_key] = filter_edit
-            self.main_layout.addWidget(group_box)
+            self.selection_layout.addWidget(group_box)
 
         # Add a separator
         separator = QFrame()
         separator.setFrameShape(QFrame.Shape.HLine)
         separator.setFrameShadow(QFrame.Shadow.Sunken)
-        self.main_layout.addWidget(separator)
+        self.selection_layout.addWidget(separator)
 
         # Create UI for Existing Yarn Files
         yarn_group_box, yarn_list_widget, yarn_filter_edit = self._create_category_group(
@@ -90,11 +100,22 @@ class LeftSelectionPanel(QWidget):
         )
         self.lists[self.yarn_files_category_key] = yarn_list_widget
         self.filter_edits[self.yarn_files_category_key] = yarn_filter_edit
-        self.main_layout.addWidget(yarn_group_box)
+        self.selection_layout.addWidget(yarn_group_box)
         self.category_display_names[self.yarn_files_category_key] = self.yarn_files_display_name
         # For yarn files, the "name key" is implicitly the file path or name
 
-        self.main_layout.addStretch(1) # Add stretch to push everything up
+        self.selection_layout.addStretch(1) # Add stretch to push everything up
+        
+        self.tab_widget.addTab(selection_tab_widget, "Sélection")
+
+    def add_details_panel_as_tab(self, details_panel: QWidget):
+        """Ajoute le panneau de détails comme un onglet."""
+        if hasattr(self, 'tab_widget'):
+            self.tab_widget.addTab(details_panel, "Détails")
+            self.details_panel_instance = details_panel # Stocker la référence
+            logger.info("DetailsPanel ajouté comme onglet dans LeftSelectionPanel.")
+        else:
+            logger.error("tab_widget non trouvé dans LeftSelectionPanel, impossible d'ajouter l'onglet Détails.")
 
     def _create_category_group(self, title: str, is_yarn_file_list: bool = False):
         group_box = QGroupBox(title)
@@ -154,6 +175,10 @@ class LeftSelectionPanel(QWidget):
         singular_name = self._get_singular_name_for_category_key(category_key)
         self.item_clicked_for_details.emit(category_key, item_text, category_data, singular_name)
 
+        if self.details_panel_instance and hasattr(self.tab_widget, 'setCurrentWidget'):
+            self.tab_widget.setCurrentWidget(self.details_panel_instance)
+            logger.debug(f"Onglet 'Détails' activé après clic sur item GDD '{item_text}'.")
+
     def _on_yarn_file_item_clicked(self, item_widget_or_list_item: QWidget | QListWidgetItem):
         item_text = ""
         if isinstance(item_widget_or_list_item, QWidget) and hasattr(item_widget_or_list_item, 'text_label'):
@@ -174,6 +199,9 @@ class LeftSelectionPanel(QWidget):
             # For now, let's just emit item_clicked_for_details with special handling
             # The 'category_data' for yarn files will be the full path string
             self.item_clicked_for_details.emit(self.yarn_files_category_key, str(full_path), [str(full_path)], self.yarn_files_singular_name)
+            if self.details_panel_instance and hasattr(self.tab_widget, 'setCurrentWidget'):
+                self.tab_widget.setCurrentWidget(self.details_panel_instance)
+                logger.debug(f"Onglet 'Détails' activé après clic sur fichier Yarn '{item_text}'.")
         else:
             logger.warning("Unity dialogues path not configured, cannot get full path for yarn file.")
 

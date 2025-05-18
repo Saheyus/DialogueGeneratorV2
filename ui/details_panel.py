@@ -57,8 +57,6 @@ class DetailsPanel(QWidget):
         self.details_text_edit.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth) # Optional: improve readability
         self.content_layout.addWidget(self.details_text_edit)
         
-        self.content_layout.addStretch(1) # Pushes content to the top if it's short
-        
         self.current_category_key = None
         self.current_item_text = None
         

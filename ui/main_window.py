@@ -189,13 +189,12 @@ class MainWindow(QMainWindow):
         main_layout = QHBoxLayout(central_widget)
 
         self.main_splitter = QSplitter(Qt.Horizontal)
+        self.left_panel.add_details_panel_as_tab(self.details_panel) # Ajout du DetailsPanel comme onglet
         self.main_splitter.addWidget(self.left_panel)
-        self.main_splitter.addWidget(self.details_panel) # Use the instantiated DetailsPanel
         self.main_splitter.addWidget(self.generation_panel)
         
-        self.main_splitter.setStretchFactor(0, 1) 
-        self.main_splitter.setStretchFactor(1, 2) 
-        self.main_splitter.setStretchFactor(2, 2) 
+        self.main_splitter.setStretchFactor(0, 1) # LeftPanel (avec onglets Sélection et Détails)
+        self.main_splitter.setStretchFactor(1, 2) # GenerationPanel
 
         main_layout.addWidget(self.main_splitter)
         
@@ -409,7 +408,7 @@ class MainWindow(QMainWindow):
                 if state_b64: self.restoreState(QByteArray.fromBase64(state_b64.encode()))
                 
                 splitter_sizes = main_window_settings.get("splitter_sizes")
-                if splitter_sizes and len(splitter_sizes) == 3 and hasattr(self, 'main_splitter'): # Check for validity
+                if splitter_sizes and len(splitter_sizes) == 2 and hasattr(self, 'main_splitter'): # Check for validity
                     self.main_splitter.setSizes(splitter_sizes)
                 
                 if hasattr(self, 'restore_selections_action'):
