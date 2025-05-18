@@ -366,32 +366,40 @@ class MainWindow(QMainWindow):
         if not hasattr(self, 'save_settings_timer'): # Peut être appelé avant init complet lors des tests
             return
             
-        settings_data = {
-            "main_window": {
-                "geometry": self.saveGeometry().toBase64().data().decode(),
-                "state": self.saveState().toBase64().data().decode(),
-                "splitter_sizes": self.main_splitter.sizes(),
-                "restore_selections_on_startup": self.restore_selections_action.isChecked()
-            },
-            # Déléguer aux panels pour leurs propres settings
-            "left_panel": self.left_panel.get_settings(),
-            "generation_panel": self.generation_panel.get_settings() 
+        # Charger tous les settings actuels du fichier s'il existe
+        all_current_settings = {}
+        if UI_SETTINGS_FILE.exists():
+            try:
+                with open(UI_SETTINGS_FILE, 'r', encoding='utf-8') as f_read:
+                    all_current_settings = json.load(f_read)
+            except Exception as e:
+                logger.error(f"Error reading existing settings for merge in _save_ui_settings: {e}")
+                all_current_settings = {} # Partir d'un dict vide en cas d'erreur de lecture
+
+        # Préparer les nouvelles données spécifiques à cette session d'UI
+        main_window_session_settings = {
+            "geometry": self.saveGeometry().toBase64().data().decode(),
+            "state": self.saveState().toBase64().data().decode(),
+            "splitter_sizes": self.main_splitter.sizes(),
+            "restore_selections_on_startup": self.restore_selections_action.isChecked()
         }
         
-        # Ajouter l'identifiant du modèle LLM sélectionné par défaut pour le prochain démarrage
-        if self.llm_client and hasattr(self.llm_client, 'model') and self.llm_client.model: # S'assurer que llm_client existe et a un modèle
-            settings_data["main_window"]["default_llm_model"] = self.llm_client.model
-        elif self.llm_config: # Fallback sur la config si le client n'est pas encore prêt ou a échoué
-            settings_data["main_window"]["default_llm_model"] = self.llm_config.get("default_model_identifier")
+        if self.llm_client and hasattr(self.llm_client, 'model') and self.llm_client.model:
+            main_window_session_settings["default_llm_model"] = self.llm_client.model
+        elif self.llm_config:
+            main_window_session_settings["default_llm_model"] = self.llm_config.get("default_model_identifier")
+
+        # Mettre à jour (ou ajouter) les sections gérées par MainWindow dans all_current_settings
+        all_current_settings["main_window"] = main_window_session_settings
+        all_current_settings["left_panel"] = self.left_panel.get_settings()
+        all_current_settings["generation_panel"] = self.generation_panel.get_settings()
 
         try:
-            with open(UI_SETTINGS_FILE, 'w', encoding='utf-8') as f:
-                json.dump(settings_data, f, indent=4)
+            with open(UI_SETTINGS_FILE, 'w', encoding='utf-8') as f_write:
+                json.dump(all_current_settings, f_write, indent=4) # Sauvegarder le dict fusionné
             logger.info(f"UI settings saved to {UI_SETTINGS_FILE}")
-            # self.statusBar().showMessage("UI settings saved.", 2000) # Peut être redondant si appelé souvent
         except Exception as e:
             logger.error(f"Error saving UI settings to {UI_SETTINGS_FILE}: {e}")
-            # self.statusBar().showMessage(f"Error saving UI settings: {e}", 5000)
 
     def _load_ui_settings(self):
         """Loads UI settings including geometry, state, and panel-specific settings."""
