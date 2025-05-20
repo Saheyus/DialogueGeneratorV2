@@ -16,7 +16,7 @@ from typing import Optional, List
 # Local imports from the same 'ui' package
 from .left_selection_panel import LeftSelectionPanel # Added import
 from .details_panel import DetailsPanel # Added import
-from .generation_panel import GenerationPanel # Added import
+from .generation_panel_base import GenerationPanel # New import
 # from .config_dialog import ConfigDialog  # Assuming ConfigDialog is in ui package -> Fichier manquant, commenté
 from .utils import get_icon_path # Assurez-vous que utils.py et get_icon_path existent
 
@@ -236,16 +236,17 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Ready.")
 
     def _get_current_context_selections(self) -> dict:
-        """Retrieves all user selections relevant for context building.
+        """Récupère les sélections de contexte actuelles pour le GenerationPanel."""
+        if not self.generation_panel:
+            return {}
+        
+        # Accès via le sous-widget scene_selection_widget
+        char_a_name = self.generation_panel.scene_selection_widget.character_a_combo.currentText()
+        char_b_name = self.generation_panel.scene_selection_widget.character_b_combo.currentText()
+        scene_region_name = self.generation_panel.scene_selection_widget.scene_region_combo.currentText()
+        scene_sub_location_name = self.generation_panel.scene_selection_widget.scene_sub_location_combo.currentText()
 
-        Combines selections from GenerationPanel (character/scene combos)
-        and LeftSelectionPanel (checked items in lists). This data is then
-        passed to the ContextBuilder.
-
-        Returns:
-            dict: A dictionary with item categories (e.g., "characters", "locations")
-                  and a list of selected item names for each category.
-        """
+        # Nettoyage des valeurs pour les rendre utilisables (None si non pertinent)
         ignore_values = {"-- None --", "<None>", "-- All --", ""}
         # Initialize avec toutes les clés attendues par ContextBuilder pour éviter des KeyError plus tard
         selections = {
@@ -259,17 +260,13 @@ class MainWindow(QMainWindow):
         # Par exemple, si 'quests' est une catégorie non affichée mais attendue par ContextBuilder:
         # if "quests" not in selections: selections["quests"] = [] 
 
-        char_a_name = self.generation_panel.character_a_combo.currentText()
-        char_b_name = self.generation_panel.character_b_combo.currentText()
         if char_a_name not in ignore_values: selections["characters"].append(char_a_name)
         if char_b_name not in ignore_values: selections["characters"].append(char_b_name)
 
-        current_region_name = self.generation_panel.scene_region_combo.currentText()
-        current_sub_location_name = self.generation_panel.scene_sub_location_combo.currentText()
-        if current_sub_location_name not in ignore_values:
-            selections["locations"].append(current_sub_location_name)
-        elif current_region_name not in ignore_values:
-            selections["locations"].append(current_region_name)
+        if scene_sub_location_name not in ignore_values:
+            selections["locations"].append(scene_sub_location_name)
+        elif scene_region_name not in ignore_values:
+            selections["locations"].append(scene_region_name)
 
         # Get selections from LeftSelectionPanel
         left_panel_settings = self.left_panel.get_settings()
@@ -329,16 +326,22 @@ class MainWindow(QMainWindow):
             logger.warning("_update_token_estimation_and_prompt_display: ContextBuilder or PromptEngine not initialized.")
             return None, 0, None, 0
 
+        if not self.generation_panel or not self.generation_panel.isVisible():
+            return None, 0, None, 0
+
+        # Accès via le sous-widget generation_params_widget
+        include_dialogue_type_flag = self.generation_panel.generation_params_widget.structured_output_checkbox.isChecked()
+        # Accès via le sous-widget instructions_widget
+        user_instructions = self.generation_panel.instructions_widget.get_user_instructions_text()
+
         selected_elements = self._get_current_context_selections()
-        user_instruction_text = self.generation_panel.user_instructions_textedit.toPlainText()
-        include_dialogue_type_flag = self.generation_panel.structured_output_checkbox.isChecked()
         
         MAX_TOKENS_FOR_CONTEXT_BUILDING = 32000 
         
         try:
             context_string = self.context_builder.build_context(
                 selected_elements,
-                user_instruction_text, 
+                user_instructions, 
                 max_tokens=self.app_settings.get("max_context_tokens", 1500), # Utiliser app_settings
                 include_dialogue_type=include_dialogue_type_flag
             )
@@ -348,7 +351,7 @@ class MainWindow(QMainWindow):
             
             estimated_full_prompt_text, estimated_total_token_count = self.prompt_engine.build_prompt(
                 context_summary=context_string, 
-                user_specific_goal=user_instruction_text,
+                user_specific_goal=user_instructions,
                 generation_params=generation_parameters
             )
             

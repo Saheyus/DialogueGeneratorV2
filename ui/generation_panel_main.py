@@ -12,6 +12,13 @@ import uuid
 
 # Import local de la fonction utilitaire
 from .utils import get_icon_path
+# Ajout de l'import du nouveau widget extrait
+from .generation_panel.scene_selection_widget import SceneSelectionWidget
+from .generation_panel.context_actions_widget import ContextActionsWidget
+from .generation_panel.generation_params_widget import GenerationParamsWidget
+from .generation_panel.instructions_tabs_widget import InstructionsTabsWidget
+from .generation_panel.token_and_generate_widget import TokenAndGenerateWidget
+from .generation_panel.variants_display_widget import VariantsDisplayWidget
 
 # New service import
 try:
@@ -103,184 +110,43 @@ class GenerationPanel(QWidget):
         main_splitter.addWidget(left_column_widget)
 
         # --- Section Sélection Personnages et Scène ---
-        selection_group = QGroupBox("Contexte Principal de la Scène")
-        selection_layout = QGridLayout(selection_group)
-        left_column_layout.addWidget(selection_group)
-
-        row = 0
-        selection_layout.addWidget(QLabel("Personnage A:"), row, 0)
-        self.character_a_combo = QComboBox()
-        self.character_a_combo.setToolTip("Sélectionnez le premier personnage principal de la scène.")
-        self.character_a_combo.currentTextChanged.connect(self._schedule_settings_save_and_token_update)
-        selection_layout.addWidget(self.character_a_combo, row, 1)
-        row += 1
-
-        selection_layout.addWidget(QLabel("Personnage B:"), row, 0)
-        self.character_b_combo = QComboBox()
-        self.character_b_combo.setToolTip("Sélectionnez le second personnage principal de la scène (optionnel).")
-        self.character_b_combo.currentTextChanged.connect(self._schedule_settings_save_and_token_update)
-        selection_layout.addWidget(self.character_b_combo, row, 1)
-        row += 1
-        
-        self.swap_characters_button = QPushButton()
-        self.swap_characters_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ToolBarHorizontalExtensionButton))
-        self.swap_characters_button.setToolTip("Échanger Personnage A et Personnage B")
-        self.swap_characters_button.clicked.connect(self._swap_characters)
-        self.swap_characters_button.setFixedSize(QSize(28, 28)) 
-        selection_layout.addWidget(self.swap_characters_button, 0, 2, 2, 1, Qt.AlignmentFlag.AlignCenter)
-
-        selection_layout.addWidget(QLabel("Région de la Scène:"), row, 0)
-        self.scene_region_combo = QComboBox()
-        self.scene_region_combo.setToolTip("Sélectionnez la région où se déroule la scène.")
-        self.scene_region_combo.currentTextChanged.connect(self._on_scene_region_changed)
-        selection_layout.addWidget(self.scene_region_combo, row, 1, 1, 2) 
-        row += 1
-
-        selection_layout.addWidget(QLabel("Sous-Lieu (optionnel):"), row, 0)
-        self.scene_sub_location_combo = QComboBox()
-        self.scene_sub_location_combo.setToolTip("Sélectionnez le sous-lieu plus spécifique (si applicable).")
-        self.scene_sub_location_combo.currentTextChanged.connect(self._schedule_settings_save_and_token_update)
-        selection_layout.addWidget(self.scene_sub_location_combo, row, 1, 1, 2)
-        row += 1
+        # Remplacement par le widget extrait
+        self.scene_selection_widget = SceneSelectionWidget()
+        left_column_layout.addWidget(self.scene_selection_widget)
+        # Connexion des signaux du widget extrait aux méthodes existantes
+        self.scene_selection_widget.character_a_changed.connect(self._schedule_settings_save_and_token_update)
+        self.scene_selection_widget.character_b_changed.connect(self._schedule_settings_save_and_token_update)
+        self.scene_selection_widget.scene_region_changed.connect(self._on_scene_region_changed)
+        self.scene_selection_widget.scene_sub_location_changed.connect(self._schedule_settings_save_and_token_update)
+        self.scene_selection_widget.swap_characters_clicked.connect(self._swap_characters)
 
         # --- Section Actions sur le Contexte ---
-        context_actions_group = QGroupBox("Actions sur le Contexte Secondaire")
-        context_actions_layout = QHBoxLayout(context_actions_group)
-        left_column_layout.addWidget(context_actions_group)
-
-        self.select_linked_button = QPushButton("Lier Éléments Connexes")
-        self.select_linked_button.setIcon(get_icon_path("link.png"))
-        self.select_linked_button.setToolTip(
-            "Coche automatiquement dans le panneau de gauche les éléments (personnages, lieux) liés aux personnages A/B et à la scène sélectionnés ici."
-        )
-        self.select_linked_button.clicked.connect(self._on_select_linked_elements_clicked)
-        context_actions_layout.addWidget(self.select_linked_button)
-
-        self.unlink_unrelated_button = QPushButton("Décocher Non-Connexes")
-        self.unlink_unrelated_button.setIcon(get_icon_path("link_off.png"))
-        self.unlink_unrelated_button.setToolTip(
-            "Décoche dans le panneau de gauche les éléments qui ne sont PAS liés aux personnages A/B et à la scène sélectionnés ici."
-        )
-        self.unlink_unrelated_button.clicked.connect(self._on_unlink_unrelated_clicked)
-        context_actions_layout.addWidget(self.unlink_unrelated_button)
-
-        self.uncheck_all_button = QPushButton("Tout Décocher")
-        self.uncheck_all_button.setIcon(get_icon_path("clear_all.png"))
-        self.uncheck_all_button.setToolTip(
-            "Décoche tous les éléments dans toutes les listes du panneau de gauche."
-        )
-        self.uncheck_all_button.clicked.connect(self._on_uncheck_all_clicked)
-        context_actions_layout.addWidget(self.uncheck_all_button)
+        self.context_actions_widget = ContextActionsWidget()
+        left_column_layout.addWidget(self.context_actions_widget)
+        self.context_actions_widget.select_linked_clicked.connect(self._on_select_linked_elements_clicked)
+        self.context_actions_widget.unlink_unrelated_clicked.connect(self._on_unlink_unrelated_clicked)
+        self.context_actions_widget.uncheck_all_clicked.connect(self._on_uncheck_all_clicked)
 
         # --- Section Paramètres de Génération ---
-        generation_params_group = QGroupBox("Paramètres de Génération")
-        generation_params_layout = QGridLayout(generation_params_group)
-        left_column_layout.addWidget(generation_params_group)
-
-        row = 0
-        generation_params_layout.addWidget(QLabel("Modèle LLM:"), row, 0)
-        self.llm_model_combo = QComboBox()
-        self.llm_model_combo.setToolTip("Choisissez le modèle de langage à utiliser pour la génération.")
-        self.llm_model_combo.currentTextChanged.connect(self._on_llm_model_combo_changed) # Connecter le signal
-        generation_params_layout.addWidget(self.llm_model_combo, row, 1)
-        row += 1
-
-        generation_params_layout.addWidget(QLabel("Nombre de Variantes (k):"), row, 0)
-        self.k_variants_combo = QComboBox()
-        self.k_variants_combo.addItems([str(i) for i in range(1, 6)]) 
-        self.k_variants_combo.setCurrentText("2")
-        self.k_variants_combo.setToolTip("Nombre de dialogues alternatifs à générer.")
-        self.k_variants_combo.currentTextChanged.connect(self._schedule_settings_save)
-        generation_params_layout.addWidget(self.k_variants_combo, row, 1)
-        row += 1
-        
-        # Ajout du contrôle pour max_context_tokens
-        generation_params_layout.addWidget(QLabel("Limite de tokens (contexte GDD):"), row, 0)
-        self.max_context_tokens_spinbox = QDoubleSpinBox()
-        self.max_context_tokens_spinbox.setMinimum(0.5)  # 500 tokens = 0.5k
-        self.max_context_tokens_spinbox.setMaximum(1000) # 1M tokens = 1000k
-        self.max_context_tokens_spinbox.setSingleStep(0.5) # Incréments de 0.5k = 500 tokens
-        self.max_context_tokens_spinbox.setValue(1.5) # Valeur par défaut = 1.5k = 1500 tokens
-        self.max_context_tokens_spinbox.setSuffix("k")  # Ajouter le suffixe "k" pour indiquer "milliers"
-        self.max_context_tokens_spinbox.setDecimals(1)  # Afficher une décimale
-        self.max_context_tokens_spinbox.setToolTip("Nombre maximum de tokens à utiliser pour le contexte GDD en milliers (k). Augmenter permet plus d'informations mais augmente le coût. Réduire limite le coût mais peut réduire les détails.")
-        self.max_context_tokens_spinbox.valueChanged.connect(self._on_max_context_tokens_changed)
-        generation_params_layout.addWidget(self.max_context_tokens_spinbox, row, 1)
-        row += 1
-        
-        self.structured_output_checkbox = QCheckBox("Utiliser Sortie Structurée (JSON)")
-        self.structured_output_checkbox.setToolTip("Si coché, demande au LLM de formater la sortie en JSON (nécessite un modèle compatible). Peut améliorer la fiabilité du format Yarn.")
-        self.structured_output_checkbox.setChecked(True) 
-        self.structured_output_checkbox.setEnabled(True) # Sera mis à jour par _update_structured_output_checkbox_state
-        self.structured_output_checkbox.stateChanged.connect(self._schedule_settings_save)
-        generation_params_layout.addWidget(self.structured_output_checkbox, row, 0, 1, 2)
-        row +=1
+        self.generation_params_widget = GenerationParamsWidget()
+        left_column_layout.addWidget(self.generation_params_widget)
+        self.generation_params_widget.llm_model_changed.connect(self._on_llm_model_combo_changed)
+        self.generation_params_widget.k_variants_changed.connect(self._schedule_settings_save)
+        self.generation_params_widget.max_context_tokens_changed.connect(self._on_max_context_tokens_changed)
+        self.generation_params_widget.structured_output_changed.connect(self._schedule_settings_save)
 
         # --- Section Instructions Utilisateur (modifiée en QTabWidget) ---
-        self.instructions_tabs = QTabWidget()
-        left_column_layout.addWidget(self.instructions_tabs)
-
-        # Onglet 1: Instructions de Scène
-        scene_instructions_widget = QWidget()
-        scene_instructions_layout = QVBoxLayout(scene_instructions_widget)
-        self.user_instructions_textedit = QPlainTextEdit()
-        self.user_instructions_textedit.setPlaceholderText(
-            "Ex: Bob doit annoncer à Alice qu'il part à l'aventure. Ton désiré: Héroïque. Inclure une condition sur la compétence 'Charisme' de Bob."
-        )
-        self.user_instructions_textedit.setToolTip("Décrivez le but de la scène, le ton, les points clés à aborder, ou toute autre instruction spécifique pour l'IA.")
-        self.user_instructions_textedit.textChanged.connect(self._schedule_settings_save_and_token_update)
-        scene_instructions_layout.addWidget(self.user_instructions_textedit)
-        self.instructions_tabs.addTab(scene_instructions_widget, "Instructions de Scène")
-
-        # Onglet 2: Instructions Système LLM
-        system_prompt_widget = QWidget()
-        system_prompt_layout = QVBoxLayout(system_prompt_widget)
-        
-        system_prompt_header_layout = QHBoxLayout()
-        system_prompt_header_layout.addWidget(QLabel("Prompt Système Principal:"))
-        system_prompt_header_layout.addStretch()
-        self.restore_default_system_prompt_button = QPushButton("Restaurer Défaut")
-        self.restore_default_system_prompt_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogResetButton))
-        self.restore_default_system_prompt_button.setToolTip("Restaure le prompt système par défaut de l'application.")
-        self.restore_default_system_prompt_button.clicked.connect(self._restore_default_system_prompt)
-        system_prompt_header_layout.addWidget(self.restore_default_system_prompt_button)
-        system_prompt_layout.addLayout(system_prompt_header_layout)
-
-        self.system_prompt_textedit = QPlainTextEdit()
-        self.system_prompt_textedit.setToolTip("Modifiez le prompt système principal envoyé au LLM. Ce prompt guide le comportement général de l'IA.")
-        # Le contenu sera chargé dans load_settings ou via _restore_default_system_prompt
-        self.system_prompt_textedit.textChanged.connect(self._on_system_prompt_changed)
-        system_prompt_layout.addWidget(self.system_prompt_textedit)
-        self.instructions_tabs.addTab(system_prompt_widget, "Instructions Système LLM")
+        self.instructions_tabs_widget = InstructionsTabsWidget()
+        left_column_layout.addWidget(self.instructions_tabs_widget)
+        self.instructions_tabs_widget.user_instructions_changed.connect(self._schedule_settings_save_and_token_update)
+        self.instructions_tabs_widget.system_prompt_changed.connect(self._on_system_prompt_changed)
+        self.instructions_tabs_widget.restore_default_system_prompt_clicked.connect(self._restore_default_system_prompt)
 
         # --- Section Estimation Tokens et Bouton Générer ---
-        token_button_group = QGroupBox("Actions")
-        token_button_layout = QVBoxLayout(token_button_group)
-        left_column_layout.addWidget(token_button_group)
-        
-        estimation_h_layout = QHBoxLayout()
-        self.token_estimation_label = QLabel("Estimation tokens (contexte/prompt): N/A")
-        self.token_estimation_label.setToolTip("Estimation du nombre de tokens basé sur le contexte sélectionné et les instructions.")
-        estimation_h_layout.addWidget(self.token_estimation_label)
-        estimation_h_layout.addStretch()
-        self.refresh_token_button = QPushButton()
-        self.refresh_token_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
-        self.refresh_token_button.setToolTip("Rafraîchir l'estimation des tokens")
-        self.refresh_token_button.clicked.connect(self._trigger_token_update)
-        self.refresh_token_button.setFixedSize(QSize(28,28))
-        estimation_h_layout.addWidget(self.refresh_token_button)
-        token_button_layout.addLayout(estimation_h_layout)
-
-        self.generation_progress_bar = QProgressBar()
-        self.generation_progress_bar.setVisible(False) 
-        token_button_layout.addWidget(self.generation_progress_bar)
-
-        self.generate_dialogue_button = QPushButton("Générer Dialogues")
-        self.generate_dialogue_button.setIcon(get_icon_path("robot.png"))
-        self.generate_dialogue_button.setToolTip("Lance la génération des dialogues avec les paramètres actuels (F5).")
-        self.generate_dialogue_button.clicked.connect(self._launch_dialogue_generation) 
-        self.generate_dialogue_button.setStyleSheet("font-weight: bold; padding: 5px;")
-        token_button_layout.addWidget(self.generate_dialogue_button)
+        self.token_and_generate_widget = TokenAndGenerateWidget()
+        left_column_layout.addWidget(self.token_and_generate_widget)
+        self.token_and_generate_widget.refresh_token_clicked.connect(self._trigger_token_update)
+        self.token_and_generate_widget.generate_dialogue_clicked.connect(self._launch_dialogue_generation)
 
         left_column_layout.addStretch() 
 
@@ -290,10 +156,9 @@ class GenerationPanel(QWidget):
         right_column_layout.setContentsMargins(0,0,0,0)
         main_splitter.addWidget(right_column_widget)
 
-        self.variant_display_tabs = QTabWidget()
-        self.variant_display_tabs.setToolTip("Les dialogues générés par l'IA apparaîtront ici, chacun dans son onglet.")
-        self.variant_display_tabs.setTabsClosable(False) 
-        right_column_layout.addWidget(self.variant_display_tabs)
+        self.variants_display_widget = VariantsDisplayWidget()
+        right_column_layout.addWidget(self.variants_display_widget)
+        self.variants_display_widget.validate_variant_clicked.connect(self._on_validate_variant_clicked)
 
         main_splitter.setStretchFactor(0, 1) 
         main_splitter.setStretchFactor(1, 2) 
@@ -305,6 +170,17 @@ class GenerationPanel(QWidget):
         
         self.update_token_estimation_signal.connect(self.update_token_estimation_ui) 
 
+        # Alias pour compatibilité avec l'ancien code (à refactoriser progressivement)
+        self.llm_model_combo = self.generation_params_widget.llm_model_combo
+        self.k_variants_combo = self.generation_params_widget.k_variants_combo
+        self.max_context_tokens_spinbox = self.generation_params_widget.max_context_tokens_spinbox
+        self.structured_output_checkbox = self.generation_params_widget.structured_output_checkbox
+        self.token_estimation_label = self.token_and_generate_widget.token_estimation_label
+        self.generation_progress_bar = self.token_and_generate_widget.generation_progress_bar
+        self.generate_dialogue_button = self.token_and_generate_widget.generate_dialogue_button
+        self.refresh_token_button = self.token_and_generate_widget.refresh_token_button
+        self.variant_display_tabs = self.variants_display_widget.variant_display_tabs
+
     def finalize_ui_setup(self):
         logger.debug("Finalizing GenerationPanel UI setup...")
         self.populate_character_combos()
@@ -314,15 +190,15 @@ class GenerationPanel(QWidget):
         logger.debug("GenerationPanel UI setup finalized.")
 
     def populate_llm_model_combo(self):
-        self.llm_model_combo.blockSignals(True)
-        self.llm_model_combo.clear()
+        self.generation_params_widget.blockSignals(True)
+        self.generation_params_widget.clear()
         found_current_model = False
         
         if not self.available_llm_models:
             logger.warning("Aucun modèle LLM disponible à afficher dans le ComboBox.")
-            self.llm_model_combo.addItem("Aucun modèle configuré", userData="dummy_error")
-            self.llm_model_combo.setEnabled(False)
-            self.llm_model_combo.blockSignals(False)
+            self.generation_params_widget.addItem("Aucun modèle configuré", userData="dummy_error")
+            self.generation_params_widget.setEnabled(False)
+            self.generation_params_widget.blockSignals(False)
             return
 
         for model_info in self.available_llm_models:
@@ -330,16 +206,16 @@ class GenerationPanel(QWidget):
             api_identifier = model_info.get("api_identifier")
             notes = model_info.get("notes", "")
             tooltip = f"{display_name}\nIdentifiant: {api_identifier}\n{notes}"
-            self.llm_model_combo.addItem(display_name, userData=api_identifier)
-            self.llm_model_combo.setItemData(self.llm_model_combo.count() - 1, tooltip, Qt.ItemDataRole.ToolTipRole)
+            self.generation_params_widget.addItem(display_name, userData=api_identifier)
+            self.generation_params_widget.setItemData(self.generation_params_widget.count() - 1, tooltip, Qt.ItemDataRole.ToolTipRole)
             if api_identifier == self.current_llm_model_identifier:
-                self.llm_model_combo.setCurrentIndex(self.llm_model_combo.count() - 1)
+                self.generation_params_widget.setCurrentIndex(self.generation_params_widget.count() - 1)
                 found_current_model = True
         
-        if not found_current_model and self.llm_model_combo.count() > 0:
+        if not found_current_model and self.generation_params_widget.count() > 0:
             logger.warning(f"Modèle LLM actuel '{self.current_llm_model_identifier}' non trouvé dans la liste. Sélection du premier disponible.")
-            self.llm_model_combo.setCurrentIndex(0)
-            new_default_identifier = self.llm_model_combo.currentData()
+            self.generation_params_widget.setCurrentIndex(0)
+            new_default_identifier = self.generation_params_widget.currentData()
             if new_default_identifier and new_default_identifier != self.current_llm_model_identifier:
                 self.current_llm_model_identifier = new_default_identifier
                 # Pas besoin d'émettre llm_model_selection_changed ici, car c'est l'initialisation.
@@ -458,56 +334,56 @@ class GenerationPanel(QWidget):
 
     def populate_character_combos(self):
         characters = sorted(self.context_builder.get_characters_names())
-        self.character_a_combo.blockSignals(True)
-        self.character_b_combo.blockSignals(True)
-        self.character_a_combo.clear()
-        self.character_b_combo.clear()
-        self.character_a_combo.addItems(["(Aucun)"] + characters)
-        self.character_b_combo.addItems(["(Aucun)"] + characters)
-        self.character_a_combo.blockSignals(False)
-        self.character_b_combo.blockSignals(False)
+        self.scene_selection_widget.character_a_combo.blockSignals(True)
+        self.scene_selection_widget.character_b_combo.blockSignals(True)
+        self.scene_selection_widget.character_a_combo.clear()
+        self.scene_selection_widget.character_b_combo.clear()
+        self.scene_selection_widget.character_a_combo.addItems(["(Aucun)"] + characters)
+        self.scene_selection_widget.character_b_combo.addItems(["(Aucun)"] + characters)
+        self.scene_selection_widget.character_a_combo.blockSignals(False)
+        self.scene_selection_widget.character_b_combo.blockSignals(False)
         logger.debug("Character combos populated.")
 
     def populate_scene_combos(self):
         regions = sorted(self.context_builder.get_regions())
-        self.scene_region_combo.blockSignals(True)
-        self.scene_sub_location_combo.blockSignals(True)
-        self.scene_region_combo.clear()
-        self.scene_region_combo.addItem("(Aucune)") 
-        self.scene_region_combo.addItems(regions)
-        self.scene_region_combo.blockSignals(False)
-        self.scene_sub_location_combo.blockSignals(False)
-        self._on_scene_region_changed(self.scene_region_combo.currentText() or "(Aucune)")
+        self.scene_selection_widget.scene_region_combo.blockSignals(True)
+        self.scene_selection_widget.scene_sub_location_combo.blockSignals(True)
+        self.scene_selection_widget.scene_region_combo.clear()
+        self.scene_selection_widget.scene_region_combo.addItem("(Aucune)") 
+        self.scene_selection_widget.scene_region_combo.addItems(regions)
+        self.scene_selection_widget.scene_region_combo.blockSignals(False)
+        self.scene_selection_widget.scene_sub_location_combo.blockSignals(False)
+        self._on_scene_region_changed(self.scene_selection_widget.scene_region_combo.currentText() or "(Aucune)")
         logger.debug("Scene region combo populated.")
 
     @Slot(str)
     def _on_scene_region_changed(self, region_name: str):
-        self.scene_sub_location_combo.clear()
+        self.scene_selection_widget.scene_sub_location_combo.clear()
         if region_name and region_name != "(Aucun)" and region_name != "(Sélectionner une région)":
             try:
                 # sub_locations = sorted(self.context_builder.get_sub_locations_for_region(region_name))
                 sub_locations = sorted(self.context_builder.get_sub_locations(region_name))
                 if not sub_locations:
                     logger.info(f"Aucun sous-lieu trouvé pour la région : {region_name}")
-                    self.scene_sub_location_combo.addItem("(Aucun sous-lieu)")
+                    self.scene_selection_widget.scene_sub_location_combo.addItem("(Aucun sous-lieu)")
                 else:
-                    self.scene_sub_location_combo.addItems(["(Tous / Non spécifié)"] + sub_locations)
-                    self.scene_sub_location_combo.setEnabled(True)
+                    self.scene_selection_widget.scene_sub_location_combo.addItems(["(Tous / Non spécifié)"] + sub_locations)
+                    self.scene_selection_widget.scene_sub_location_combo.setEnabled(True)
             except Exception as e:
                 logger.error(f"Erreur lors de la récupération des sous-lieux pour la région {region_name}: {e}", exc_info=True)
-                self.scene_sub_location_combo.addItem("(Erreur de chargement des sous-lieux)")
-                self.scene_sub_location_combo.setEnabled(False)
+                self.scene_selection_widget.scene_sub_location_combo.addItem("(Erreur de chargement des sous-lieux)")
+                self.scene_selection_widget.scene_sub_location_combo.setEnabled(False)
         else:
-            self.scene_sub_location_combo.addItem("(Sélectionner une région d'abord)")
-            self.scene_sub_location_combo.setEnabled(False)
+            self.scene_selection_widget.scene_sub_location_combo.addItem("(Sélectionner une région d'abord)")
+            self.scene_selection_widget.scene_sub_location_combo.setEnabled(False)
         self._schedule_settings_save_and_token_update()
         logger.debug(f"Sub-location combo updated for region: {region_name}")
 
     def _swap_characters(self):
-        current_a_index = self.character_a_combo.currentIndex()
-        current_b_index = self.character_b_combo.currentIndex()
-        self.character_a_combo.setCurrentIndex(current_b_index)
-        self.character_b_combo.setCurrentIndex(current_a_index)
+        current_a_index = self.scene_selection_widget.character_a_combo.currentIndex()
+        current_b_index = self.scene_selection_widget.character_b_combo.currentIndex()
+        self.scene_selection_widget.character_a_combo.setCurrentIndex(current_b_index)
+        self.scene_selection_widget.character_b_combo.setCurrentIndex(current_a_index)
         logger.debug("Characters A and B swapped.")
         self._schedule_settings_save_and_token_update()
 
@@ -540,10 +416,10 @@ class GenerationPanel(QWidget):
         user_specific_goal = self.user_instructions_textedit.toPlainText()
         selected_context_items = self.main_window_ref._get_current_context_selections() if hasattr(self.main_window_ref, '_get_current_context_selections') else {}
 
-        char_a_name = self.character_a_combo.currentText()
-        char_b_name = self.character_b_combo.currentText()
-        scene_region_name = self.scene_region_combo.currentText()
-        scene_sub_location_name = self.scene_sub_location_combo.currentText()
+        char_a_name = self.scene_selection_widget.character_a_combo.currentText()
+        char_b_name = self.scene_selection_widget.character_b_combo.currentText()
+        scene_region_name = self.scene_selection_widget.scene_region_combo.currentText()
+        scene_sub_location_name = self.scene_selection_widget.scene_sub_location_combo.currentText()
 
         char_a_name = char_a_name if char_a_name and char_a_name != "(Aucun)" else None
         char_b_name = char_b_name if char_b_name and char_b_name != "(Aucun)" else None
@@ -633,10 +509,10 @@ class GenerationPanel(QWidget):
 
             selected_context_items = self.main_window_ref._get_current_context_selections() # Récupère les items cochés
             
-            char_a_name = self.character_a_combo.currentText()
-            char_b_name = self.character_b_combo.currentText()
-            scene_region_name = self.scene_region_combo.currentText()
-            scene_sub_location_name = self.scene_sub_location_combo.currentText()
+            char_a_name = self.scene_selection_widget.character_a_combo.currentText()
+            char_b_name = self.scene_selection_widget.character_b_combo.currentText()
+            scene_region_name = self.scene_selection_widget.scene_region_combo.currentText()
+            scene_sub_location_name = self.scene_selection_widget.scene_sub_location_combo.currentText()
 
             # Nettoyage des noms pour éviter de passer "(Aucun)" ou des chaînes vides si non pertinents
             char_a_name = char_a_name if char_a_name and char_a_name != "(Aucun)" else None
@@ -715,13 +591,13 @@ class GenerationPanel(QWidget):
 
             logger.debug(f"Valeur de 'variants' reçue du LLM Client: {type(variants)} - Contenu (si liste): {variants if isinstance(variants, list) else 'Non une liste'}")
             
-            self.variant_display_tabs.blockSignals(True)
+            self.variants_display_widget.blockSignals(True)
             num_tabs_to_keep = 0
-            if self.variant_display_tabs.count() > 0 and self.variant_display_tabs.tabText(0) == "Prompt Estimé":
+            if self.variants_display_widget.count() > 0 and self.variants_display_widget.tabText(0) == "Prompt Estimé":
                 num_tabs_to_keep = 1
             
-            while self.variant_display_tabs.count() > num_tabs_to_keep:
-                self.variant_display_tabs.removeTab(num_tabs_to_keep)
+            while self.variants_display_widget.count() > num_tabs_to_keep:
+                self.variants_display_widget.removeTab(num_tabs_to_keep)
             
             if variants:
                 for i, variant_text in enumerate(variants):
@@ -743,34 +619,34 @@ class GenerationPanel(QWidget):
                     )
                     tab_layout.addWidget(validate_button)
                     
-                    self.variant_display_tabs.addTab(variant_tab_content_widget, f"Variante {i+1}")
+                    self.variants_display_widget.addTab(variant_tab_content_widget, f"Variante {i+1}")
                 generation_succeeded = True
                 logger.info(f"{len(variants)} variantes affichées.")
             else:
                 logger.warning("Aucune variante reçue du LLM ou variants est None/vide.")
                 error_tab = QTextEdit("Aucune variante n'a été générée par le LLM ou une erreur s'est produite.")
                 error_tab.setReadOnly(True)
-                self.variant_display_tabs.addTab(error_tab, "Erreur Génération")
+                self.variants_display_widget.addTab(error_tab, "Erreur Génération")
             
-            self.variant_display_tabs.blockSignals(False)
+            self.variants_display_widget.blockSignals(False)
 
         except asyncio.CancelledError:
             logger.warning("La tâche de génération de dialogue a été annulée.")
             return 
         except Exception as e:
             logger.error(f"Erreur majeure lors de la génération des dialogues: {e}", exc_info=True)
-            self.variant_display_tabs.blockSignals(True)
+            self.variants_display_widget.blockSignals(True)
             num_tabs_to_keep_err = 0
-            if self.variant_display_tabs.count() > 0 and self.variant_display_tabs.tabText(0) == "Prompt Estimé":
+            if self.variants_display_widget.count() > 0 and self.variants_display_widget.tabText(0) == "Prompt Estimé":
                 num_tabs_to_keep_err = 1
-            while self.variant_display_tabs.count() > num_tabs_to_keep_err:
-                self.variant_display_tabs.removeTab(num_tabs_to_keep_err)
+            while self.variants_display_widget.count() > num_tabs_to_keep_err:
+                self.variants_display_widget.removeTab(num_tabs_to_keep_err)
             
             error_tab_content = QTextEdit()
             error_tab_content.setPlainText(f"Une erreur majeure est survenue lors de la génération:\n\n{type(e).__name__}: {e}")
             error_tab_content.setReadOnly(True)
-            self.variant_display_tabs.addTab(error_tab_content, "Erreur Critique")
-            self.variant_display_tabs.blockSignals(False)
+            self.variants_display_widget.addTab(error_tab_content, "Erreur Critique")
+            self.variants_display_widget.blockSignals(False)
         finally:
             current_task = asyncio.current_task()
             if not current_task or not current_task.cancelled(): 
@@ -782,18 +658,18 @@ class GenerationPanel(QWidget):
 
     def _display_prompt_in_tab(self, prompt_text: str):
         logger.info(f"_display_prompt_in_tab: Entrée avec prompt_text de longueur {len(prompt_text)} chars.")
-        self.variant_display_tabs.blockSignals(True)
+        self.variants_display_widget.blockSignals(True)
         
         prompt_tab_index = -1
-        for i in range(self.variant_display_tabs.count()):
-            if self.variant_display_tabs.tabText(i) == "Prompt Estimé":
+        for i in range(self.variants_display_widget.count()):
+            if self.variants_display_widget.tabText(i) == "Prompt Estimé":
                 prompt_tab_index = i
                 break
         
         if prompt_tab_index != -1:
             logger.info(f"_display_prompt_in_tab: Onglet 'Prompt Estimé' trouvé à l'index {prompt_tab_index}. Mise à jour du contenu.")
             # Onglet existant, mettre à jour son contenu
-            widget = self.variant_display_tabs.widget(prompt_tab_index)
+            widget = self.variants_display_widget.widget(prompt_tab_index)
             if isinstance(widget, QTextEdit):
                  widget.setPlainText(prompt_text)
             else: # Si c'est un QWidget contenant un QTextEdit (moins probable avec le code actuel)
@@ -807,19 +683,19 @@ class GenerationPanel(QWidget):
             prompt_tab_widget.setPlainText(prompt_text)
             prompt_tab_widget.setReadOnly(True)
             prompt_tab_widget.setFont(QFont("Consolas", 9)) 
-            self.variant_display_tabs.insertTab(0, prompt_tab_widget, "Prompt Estimé")
+            self.variants_display_widget.insertTab(0, prompt_tab_widget, "Prompt Estimé")
         
         logger.info("_display_prompt_in_tab: Appel de setCurrentIndex(0).")
-        self.variant_display_tabs.setCurrentIndex(0) 
-        self.variant_display_tabs.blockSignals(False)
+        self.variants_display_widget.setCurrentIndex(0) 
+        self.variants_display_widget.blockSignals(False)
         logger.info("_display_prompt_in_tab: Sortie.")
 
     @Slot(int)
     def _on_validate_variant_clicked(self, variant_index: int):
         actual_tab_index = -1
         expected_tab_name = f"Variante {variant_index + 1}"
-        for i in range(self.variant_display_tabs.count()):
-            if self.variant_display_tabs.tabText(i) == expected_tab_name:
+        for i in range(self.variants_display_widget.count()):
+            if self.variants_display_widget.tabText(i) == expected_tab_name:
                 actual_tab_index = i
                 break
 
@@ -828,7 +704,7 @@ class GenerationPanel(QWidget):
             self.main_window_ref.statusBar().showMessage(f"Erreur: Onglet pour variante {variant_index + 1} non trouvé.", 5000)
             return
 
-        tab_content_widget = self.variant_display_tabs.widget(actual_tab_index)
+        tab_content_widget = self.variants_display_widget.widget(actual_tab_index)
         if not tab_content_widget:
             logger.error(f"Contenu de l'onglet pour la variante {variant_index + 1} est None.")
             return
@@ -843,9 +719,9 @@ class GenerationPanel(QWidget):
         dialogue_text_content = text_edit.toPlainText()
 
         title_from_text = f"GeneratedDialogue_Variant{variant_index + 1}"
-        char_a_name = self.character_a_combo.currentText() if self.character_a_combo.currentText() != "(Aucun)" else "PersonnageA"
-        char_b_name = self.character_b_combo.currentText() if self.character_b_combo.currentText() != "(Aucun)" else "PersonnageB"
-        scene_name = self.scene_region_combo.currentText() if self.scene_region_combo.currentText() != "(Aucune)" else "LieuIndéfini"
+        char_a_name = self.scene_selection_widget.character_a_combo.currentText() if self.scene_selection_widget.character_a_combo.currentText() != "(Aucun)" else "PersonnageA"
+        char_b_name = self.scene_selection_widget.character_b_combo.currentText() if self.scene_selection_widget.character_b_combo.currentText() != "(Aucun)" else "PersonnageB"
+        scene_name = self.scene_selection_widget.scene_region_combo.currentText() if self.scene_selection_widget.scene_region_combo.currentText() != "(Aucune)" else "LieuIndéfini"
         
         try:
             first_line = dialogue_text_content.split('\n', 1)[0]
@@ -910,10 +786,10 @@ class GenerationPanel(QWidget):
         Récupère les personnages A/B et la scène, puis demande au LeftSelectionPanel
         de cocher tous les éléments du GDD qui leur sont liés.
         """
-        char_a_raw = self.character_a_combo.currentText()
-        char_b_raw = self.character_b_combo.currentText()
-        scene_region_raw = self.scene_region_combo.currentText()
-        scene_sub_location_raw = self.scene_sub_location_combo.currentText()
+        char_a_raw = self.scene_selection_widget.character_a_combo.currentText()
+        char_b_raw = self.scene_selection_widget.character_b_combo.currentText()
+        scene_region_raw = self.scene_selection_widget.scene_region_combo.currentText()
+        scene_sub_location_raw = self.scene_selection_widget.scene_sub_location_combo.currentText()
 
         placeholders = ["(Aucun)", "(Aucune)", "(Tous / Non spécifié)", "(Aucun sous-lieu)", "(Sélectionner une région d'abord)"]
 
@@ -954,10 +830,10 @@ class GenerationPanel(QWidget):
         Récupère les personnages A/B et la scène, puis demande au LeftSelectionPanel
         de ne garder cochés QUE les éléments du GDD qui leur sont liés.
         """
-        char_a_raw = self.character_a_combo.currentText()
-        char_b_raw = self.character_b_combo.currentText()
-        scene_region_raw = self.scene_region_combo.currentText()
-        scene_sub_location_raw = self.scene_sub_location_combo.currentText()
+        char_a_raw = self.scene_selection_widget.character_a_combo.currentText()
+        char_b_raw = self.scene_selection_widget.character_b_combo.currentText()
+        scene_region_raw = self.scene_selection_widget.scene_region_combo.currentText()
+        scene_sub_location_raw = self.scene_selection_widget.scene_sub_location_combo.currentText()
 
         placeholders = ["(Aucun)", "(Aucune)", "(Tous / Non spécifié)", "(Aucun sous-lieu)", "(Sélectionner une région d'abord)"]
 
@@ -1013,10 +889,10 @@ class GenerationPanel(QWidget):
     def get_settings(self) -> dict:
         # Récupère les paramètres actuels du panneau pour la sauvegarde.
         settings = {
-            "character_a": self.character_a_combo.currentText(),
-            "character_b": self.character_b_combo.currentText(),
-            "scene_region": self.scene_region_combo.currentText(),
-            "scene_sub_location": self.scene_sub_location_combo.currentText(),
+            "character_a": self.scene_selection_widget.character_a_combo.currentText(),
+            "character_b": self.scene_selection_widget.character_b_combo.currentText(),
+            "scene_region": self.scene_selection_widget.scene_region_combo.currentText(),
+            "scene_sub_location": self.scene_selection_widget.scene_sub_location_combo.currentText(),
             "k_variants": self.k_variants_combo.currentText(),
             "user_instructions": self.user_instructions_textedit.toPlainText(),
             "llm_model": self.llm_model_combo.currentData(), # Sauvegarde l'identifiant du modèle
@@ -1036,14 +912,14 @@ class GenerationPanel(QWidget):
         # Charger les combobox pour personnages et scènes
         # Ces appels vont déclencher currentTextChanged, qui appelle _schedule_settings_save_and_token_update
         # C'est pourquoi _is_loading_settings est important.
-        self.character_a_combo.setCurrentText(settings.get("character_a", ""))
-        self.character_b_combo.setCurrentText(settings.get("character_b", ""))
-        self.scene_region_combo.setCurrentText(settings.get("scene_region", ""))
+        self.scene_selection_widget.character_a_combo.setCurrentText(settings.get("character_a", ""))
+        self.scene_selection_widget.character_b_combo.setCurrentText(settings.get("character_b", ""))
+        self.scene_selection_widget.scene_region_combo.setCurrentText(settings.get("scene_region", ""))
         # _on_scene_region_changed sera appelé, qui remplira les sous-lieux.
         # Il faut donc charger le sous-lieu APRES que scene_region_combo ait potentiellement re-peuplé sub_location
         # Ce qui est un peu délicat. On peut appeler processEvents ou simplement le setter après.
         QApplication.processEvents() # Force le traitement des événements (comme _on_scene_region_changed)
-        self.scene_sub_location_combo.setCurrentText(settings.get("scene_sub_location", ""))
+        self.scene_selection_widget.scene_sub_location_combo.setCurrentText(settings.get("scene_sub_location", ""))
         
         self.k_variants_combo.setCurrentText(settings.get("k_variants", "3"))
         self.user_instructions_textedit.setPlainText(settings.get("user_instructions", ""))
