@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QGroupBox, QGridLayout, 
-                               QLabel, QComboBox, QTextEdit, QPushButton, 
-                               QTabWidget, QLineEdit, QCheckBox, QHBoxLayout, QApplication, QSizePolicy, QProgressBar, QScrollArea, QSplitter, QFrame, QPlainTextEdit, QMessageBox, QSpacerItem, QMenu, QStyle, QSpinBox, QDoubleSpinBox)
+                               QLabel, QTextEdit, QPushButton, 
+                               QTabWidget, QApplication, QSizePolicy, QScrollArea, QSplitter, QMessageBox, QSpacerItem, QStyle, QHBoxLayout)
 from PySide6.QtCore import Qt, Signal, Slot, QSize
 from PySide6.QtGui import QPalette, QColor, QFont, QIcon, QAction
 import logging # Added for logging
@@ -110,11 +110,11 @@ class GenerationPanel(QWidget):
         main_splitter.addWidget(left_column_widget)
 
         # --- Section Sélection Personnages et Scène ---
-        self.scene_selection_widget = SceneSelectionWidget()
+        self.scene_selection_widget = SceneSelectionWidget(self.context_builder)
         left_column_layout.addWidget(self.scene_selection_widget)
         self.scene_selection_widget.character_a_changed.connect(self._schedule_settings_save_and_token_update)
         self.scene_selection_widget.character_b_changed.connect(self._schedule_settings_save_and_token_update)
-        self.scene_selection_widget.scene_region_changed.connect(self._on_scene_region_changed)
+        self.scene_selection_widget.scene_region_changed.connect(self._schedule_settings_save_and_token_update)
         self.scene_selection_widget.scene_sub_location_changed.connect(self._schedule_settings_save_and_token_update)
         self.scene_selection_widget.swap_characters_clicked.connect(self._swap_characters)
 
@@ -177,9 +177,10 @@ class GenerationPanel(QWidget):
 
     def finalize_ui_setup(self):
         logger.debug("Finalizing GenerationPanel UI setup...")
-        self.populate_character_combos()
-        self.populate_scene_combos()
-        # self.populate_llm_model_combo() # Maintenant géré par GenerationParamsWidget
+        character_names = sorted(self.context_builder.get_characters_names())
+        region_names = sorted(self.context_builder.get_regions())
+        self.scene_selection_widget.populate_characters(character_names)
+        self.scene_selection_widget.populate_regions(region_names)
         self.generation_params_widget.populate_llm_model_combo() # S'assurer qu'il est peuplé
         self._trigger_token_update() 
         logger.debug("GenerationPanel UI setup finalized.")
@@ -231,59 +232,12 @@ class GenerationPanel(QWidget):
         self._trigger_token_update()
         self._update_structured_output_checkbox_state()
 
-    def populate_character_combos(self):
-        characters = sorted(self.context_builder.get_characters_names())
-        self.scene_selection_widget.character_a_combo.blockSignals(True)
-        self.scene_selection_widget.character_b_combo.blockSignals(True)
-        self.scene_selection_widget.character_a_combo.clear()
-        self.scene_selection_widget.character_b_combo.clear()
-        self.scene_selection_widget.character_a_combo.addItems(["(Aucun)"] + characters)
-        self.scene_selection_widget.character_b_combo.addItems(["(Aucun)"] + characters)
-        self.scene_selection_widget.character_a_combo.blockSignals(False)
-        self.scene_selection_widget.character_b_combo.blockSignals(False)
-        logger.debug("Character combos populated.")
-
-    def populate_scene_combos(self):
-        regions = sorted(self.context_builder.get_regions())
-        self.scene_selection_widget.scene_region_combo.blockSignals(True)
-        self.scene_selection_widget.scene_sub_location_combo.blockSignals(True)
-        self.scene_selection_widget.scene_region_combo.clear()
-        self.scene_selection_widget.scene_region_combo.addItem("(Aucune)") 
-        self.scene_selection_widget.scene_region_combo.addItems(regions)
-        self.scene_selection_widget.scene_region_combo.blockSignals(False)
-        self.scene_selection_widget.scene_sub_location_combo.blockSignals(False)
-        self._on_scene_region_changed(self.scene_selection_widget.scene_region_combo.currentText() or "(Aucune)")
-        logger.debug("Scene region combo populated.")
-
-    @Slot(str)
-    def _on_scene_region_changed(self, region_name: str):
-        self.scene_selection_widget.scene_sub_location_combo.clear()
-        if region_name and region_name != "(Aucun)" and region_name != "(Sélectionner une région)":
-            try:
-                # sub_locations = sorted(self.context_builder.get_sub_locations_for_region(region_name))
-                sub_locations = sorted(self.context_builder.get_sub_locations(region_name))
-                if not sub_locations:
-                    logger.info(f"Aucun sous-lieu trouvé pour la région : {region_name}")
-                    self.scene_selection_widget.scene_sub_location_combo.addItem("(Aucun sous-lieu)")
-                else:
-                    self.scene_selection_widget.scene_sub_location_combo.addItems(["(Tous / Non spécifié)"] + sub_locations)
-                    self.scene_selection_widget.scene_sub_location_combo.setEnabled(True)
-            except Exception as e:
-                logger.error(f"Erreur lors de la récupération des sous-lieux pour la région {region_name}: {e}", exc_info=True)
-                self.scene_selection_widget.scene_sub_location_combo.addItem("(Erreur de chargement des sous-lieux)")
-                self.scene_selection_widget.scene_sub_location_combo.setEnabled(False)
-        else:
-            self.scene_selection_widget.scene_sub_location_combo.addItem("(Sélectionner une région d'abord)")
-            self.scene_selection_widget.scene_sub_location_combo.setEnabled(False)
-        self._schedule_settings_save_and_token_update()
-        logger.debug(f"Sub-location combo updated for region: {region_name}")
-
     def _swap_characters(self):
         current_a_index = self.scene_selection_widget.character_a_combo.currentIndex()
         current_b_index = self.scene_selection_widget.character_b_combo.currentIndex()
         self.scene_selection_widget.character_a_combo.setCurrentIndex(current_b_index)
         self.scene_selection_widget.character_b_combo.setCurrentIndex(current_a_index)
-        logger.debug("Characters A and B swapped.")
+        logger.debug("Characters A and B swapped via GenerationPanelBase method.")
         self._schedule_settings_save_and_token_update()
 
     @Slot()

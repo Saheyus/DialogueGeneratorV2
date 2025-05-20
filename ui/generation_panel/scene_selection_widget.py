@@ -1,5 +1,8 @@
 from PySide6.QtWidgets import (QWidget, QGroupBox, QGridLayout, QLabel, QComboBox, QPushButton, QStyle)
 from PySide6.QtCore import Qt, Signal, QSize
+import logging
+
+logger = logging.getLogger(__name__)
 
 class SceneSelectionWidget(QWidget):
     character_a_changed = Signal(str)
@@ -8,8 +11,9 @@ class SceneSelectionWidget(QWidget):
     scene_sub_location_changed = Signal(str)
     swap_characters_clicked = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(self, context_builder, parent=None):
         super().__init__(parent)
+        self.context_builder = context_builder
         self._init_ui()
 
     def _init_ui(self):
@@ -40,6 +44,7 @@ class SceneSelectionWidget(QWidget):
         self.layout.addWidget(QLabel("Région de la Scène:"), row, 0)
         self.scene_region_combo = QComboBox()
         self.scene_region_combo.setToolTip("Sélectionnez la région où se déroule la scène.")
+        self.scene_region_combo.currentTextChanged.connect(self._on_scene_region_changed_internal)
         self.scene_region_combo.currentTextChanged.connect(self.scene_region_changed.emit)
         self.layout.addWidget(self.scene_region_combo, row, 1, 1, 2)
         row += 1
@@ -52,6 +57,85 @@ class SceneSelectionWidget(QWidget):
         row += 1
 
         self.setLayout(self.layout)
+
+    def populate_characters(self, character_names: list):
+        logger.debug(f"Peuplement des personnages avec: {character_names}")
+        self.character_a_combo.blockSignals(True)
+        self.character_b_combo.blockSignals(True)
+        
+        current_char_a = self.character_a_combo.currentText()
+        current_char_b = self.character_b_combo.currentText()
+        
+        self.character_a_combo.clear()
+        self.character_b_combo.clear()
+        
+        all_chars_with_none = ["(Aucun)"] + sorted(character_names)
+        self.character_a_combo.addItems(all_chars_with_none)
+        self.character_b_combo.addItems(all_chars_with_none)
+        
+        if current_char_a in all_chars_with_none:
+            self.character_a_combo.setCurrentText(current_char_a)
+        if current_char_b in all_chars_with_none:
+            self.character_b_combo.setCurrentText(current_char_b)
+            
+        self.character_a_combo.blockSignals(False)
+        self.character_b_combo.blockSignals(False)
+        logger.debug("Combobox des personnages peuplées.")
+
+    def populate_regions(self, region_names: list):
+        logger.debug(f"Peuplement des régions avec: {region_names}")
+        self.scene_region_combo.blockSignals(True)
+        current_region = self.scene_region_combo.currentText()
+        self.scene_region_combo.clear()
+        all_regions_with_none = ["(Aucune)"] + sorted(region_names)
+        self.scene_region_combo.addItems(all_regions_with_none)
+        if current_region in all_regions_with_none:
+            self.scene_region_combo.setCurrentText(current_region)
+        else:
+             self._on_scene_region_changed_internal(self.scene_region_combo.currentText())
+
+        self.scene_region_combo.blockSignals(False)
+        if self.scene_region_combo.currentText() == current_region :
+            self._on_scene_region_changed_internal(current_region) 
+        logger.debug("Combobox des régions peuplée.")
+
+    def _on_scene_region_changed_internal(self, region_name: str):
+        logger.debug(f"Changement de région détecté (interne): {region_name}")
+        self.scene_sub_location_combo.blockSignals(True)
+        current_sub_location = self.scene_sub_location_combo.currentText()
+        self.scene_sub_location_combo.clear()
+        
+        sub_locations_with_none = ["(Sélectionner une région d'abord)"]
+        
+        if region_name and region_name != "(Aucune)" and region_name != "(Sélectionner une région)":
+            try:
+                sub_locations = sorted(self.context_builder.get_sub_locations(region_name))
+                if not sub_locations:
+                    logger.info(f"Aucun sous-lieu trouvé pour la région : {region_name}")
+                    sub_locations_with_none = ["(Aucun sous-lieu)"]
+                else:
+                    sub_locations_with_none = ["(Tous / Non spécifié)"] + sub_locations
+                self.scene_sub_location_combo.setEnabled(True)
+            except Exception as e:
+                logger.error(f"Erreur lors de la récupération des sous-lieux pour la région {region_name}: {e}", exc_info=True)
+                sub_locations_with_none = ["(Erreur de chargement)"]
+                self.scene_sub_location_combo.setEnabled(False)
+        else:
+            self.scene_sub_location_combo.setEnabled(False)
+
+        self.scene_sub_location_combo.addItems(sub_locations_with_none)
+        if current_sub_location in sub_locations_with_none:
+            self.scene_sub_location_combo.setCurrentText(current_sub_location)
+        
+        self.scene_sub_location_combo.blockSignals(False)
+        logger.debug(f"Combobox des sous-lieux mis à jour pour la région: {region_name}")
+
+    def swap_characters(self):
+        logger.debug("Personnages A et B échangés.")
+        current_a_index = self.character_a_combo.currentIndex()
+        current_b_index = self.character_b_combo.currentIndex()
+        self.character_a_combo.setCurrentIndex(current_b_index)
+        self.character_b_combo.setCurrentIndex(current_a_index)
 
     def set_characters(self, characters):
         self.character_a_combo.blockSignals(True)
@@ -89,7 +173,25 @@ class SceneSelectionWidget(QWidget):
         }
 
     def set_selected(self, character_a, character_b, scene_region, scene_sub_location):
-        self.character_a_combo.setCurrentText(character_a or "")
-        self.character_b_combo.setCurrentText(character_b or "")
-        self.scene_region_combo.setCurrentText(scene_region or "")
-        self.scene_sub_location_combo.setCurrentText(scene_sub_location or "") 
+        logger.debug(f"SceneSelectionWidget.set_selected appelé avec : A='{character_a}', B='{character_b}', Region='{scene_region}', SubL='{scene_sub_location}'")
+        self.character_a_combo.blockSignals(True)
+        self.character_b_combo.blockSignals(True)
+        self.scene_region_combo.blockSignals(True)
+        self.scene_sub_location_combo.blockSignals(True)
+
+        self.character_a_combo.setCurrentText(character_a or "(Aucun)")
+        self.character_b_combo.setCurrentText(character_b or "(Aucun)")
+        
+        new_region_text = scene_region or "(Aucune)"
+        region_changed = self.scene_region_combo.currentText() != new_region_text
+        self.scene_region_combo.setCurrentText(new_region_text)
+        if region_changed :
+             self._on_scene_region_changed_internal(new_region_text)
+        
+        self.scene_sub_location_combo.setCurrentText(scene_sub_location or "(Tous / Non spécifié)")
+
+        self.character_a_combo.blockSignals(False)
+        self.character_b_combo.blockSignals(False)
+        self.scene_region_combo.blockSignals(False)
+        self.scene_sub_location_combo.blockSignals(False)
+        logger.debug("Sélections du SceneSelectionWidget mises à jour.") 
