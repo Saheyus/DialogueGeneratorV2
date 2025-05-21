@@ -160,3 +160,27 @@ class GeneratedVariantsTabsWidget(QTabWidget):
                          widget.widget().setFocus() # Donner le focus si rendu éditable
                     return
         logger.warning(f"Tentative de rendre éditable l'onglet '{tab_name}' non trouvé.") 
+
+    def display_variants(self, variants, prompt: str = None):
+        """
+        Affiche le prompt estimé (si fourni) et les variantes dans les onglets.
+        variants: list[str] ou list[dict] (avec 'title' et 'content')
+        prompt: str (texte du prompt estimé)
+        """
+        # 1. Mettre à jour ou créer l'onglet du prompt estimé
+        if prompt is not None:
+            self.update_or_add_tab("Prompt Estimé", prompt, set_current=True)
+        # 2. Supprimer les anciens onglets de variantes
+        self.remove_variant_tabs()
+        # 3. Ajouter les nouveaux onglets de variantes
+        if variants:
+            for i, variant in enumerate(variants):
+                if isinstance(variant, dict):
+                    title = variant.get("title") or f"Variante {i+1}"
+                    content = variant.get("content", "")
+                else:
+                    title = f"Variante {i+1}"
+                    content = variant
+                self.update_or_add_tab(title, content, set_current=(i==0 and prompt is None))
+        else:
+            logger.info("Aucune variante à afficher dans display_variants.") 

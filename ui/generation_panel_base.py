@@ -25,6 +25,7 @@ try:
     from ..services.linked_selector import LinkedSelectorService
     from ..services.yarn_renderer import YarnRenderer # Ajout YarnRenderer
     from ..llm_client import OpenAIClient, DummyLLMClient # Ajout OpenAIClient et DummyLLMClient
+    from ..services.dialogue_generation_service import DialogueGenerationService # Ajout du nouveau service
 except ImportError:
     # Support exécution directe
     import sys, os, pathlib
@@ -34,6 +35,7 @@ except ImportError:
     from DialogueGenerator.services.linked_selector import LinkedSelectorService
     from DialogueGenerator.services.yarn_renderer import YarnRenderer # Ajout YarnRenderer
     from DialogueGenerator.llm_client import OpenAIClient, DummyLLMClient # Ajout OpenAIClient et DummyLLMClient
+    from DialogueGenerator.services.dialogue_generation_service import DialogueGenerationService # Ajout du nouveau service
 
 logger = logging.getLogger(__name__) # Added logger
 
@@ -88,6 +90,7 @@ class GenerationPanel(QWidget):
         self.main_window_ref = main_window_ref
         self.linked_selector = LinkedSelectorService(self.context_builder)
         self.yarn_renderer = YarnRenderer()
+        self.dialogue_generation_service = DialogueGenerationService(self.context_builder, self.prompt_engine) # Instanciation
         
         self.available_llm_models = available_llm_models if available_llm_models else []
         self.current_llm_model_identifier = current_llm_model_identifier
@@ -151,7 +154,7 @@ class GenerationPanel(QWidget):
         self.token_actions_widget.refresh_token_clicked.connect(self._trigger_token_update)
         self.token_actions_widget.generate_dialogue_clicked.connect(self._launch_dialogue_generation)
 
-        left_column_layout.addStretch() 
+        left_column_layout.addStretch(1)
 
         # --- Colonne de Droite: Affichage des Variantes (remplacée par le widget) ---
         right_column_widget = QWidget()
@@ -159,7 +162,7 @@ class GenerationPanel(QWidget):
         self.generated_variants_tabs = GeneratedVariantsTabsWidget() # Utilisation du widget extrait
         right_column_layout.addWidget(self.generated_variants_tabs)
         main_splitter.addWidget(right_column_widget)
-        
+
         # Connecter les signaux du nouveau widget si nécessaire
         self.generated_variants_tabs.validate_variant_requested.connect(self._on_validate_variant_requested_from_tabs)
         self.generated_variants_tabs.save_all_variants_requested.connect(self._on_save_all_variants_requested_from_tabs)
@@ -259,76 +262,89 @@ class GenerationPanel(QWidget):
         """
         self.update_token_estimation_ui()
 
-    @Slot()
     def update_token_estimation_ui(self):
-        if not self.prompt_engine or not self.context_builder or not self.llm_client:
-            self.token_actions_widget.set_token_estimation_text("Erreur: Moteurs non initialisés")
-            self._display_prompt_in_tab("Erreur: Les moteurs (prompt, context, llm) ne sont pas tous initialisés.")
+        if not self.prompt_engine or not self.context_builder or not self.llm_client or not self.dialogue_generation_service: # Ajout vérification service
+            self.token_actions_widget.set_token_estimation_text("Erreur: Moteurs/Service non initialisés")
+            self._display_prompt_in_tab("Erreur: Les moteurs (prompt, context, llm) ou le service de génération ne sont pas tous initialisés.")
             return
 
-        user_specific_goal = self.instructions_widget.get_user_instructions_text()
-        selected_context_items = self.main_window_ref._get_current_context_selections() if hasattr(self.main_window_ref, '_get_current_context_selections') else {}
+        # Préparer les arguments pour le service
+        user_instructions = self.instructions_widget.get_user_instructions_text()
+        
+        # S'assurer que le system_prompt de prompt_engine est à jour avant de potentiellement le surcharger
+        self._update_prompt_engine_system_prompt() 
+        system_prompt_override_from_ui = self.instructions_widget.get_system_prompt_text()
+        
+        # Déterminer si le prompt de l'UI est un "override" réel
+        # On ne passe system_prompt_override au service QUE si le texte de l'UI est différent du défaut interne du prompt_engine
+        # Ceci évite de forcer un "override" si l'utilisateur a juste restauré le défaut.
+        # Le service, lui, réappliquera le system_prompt par défaut de l'engine s'il reçoit None.
+        system_prompt_for_service = None
+        if self.prompt_engine.system_prompt_template != system_prompt_override_from_ui : # Compare avec le template actuel de l'engine
+            system_prompt_for_service = system_prompt_override_from_ui
+        elif system_prompt_override_from_ui != self.prompt_engine._get_default_system_prompt(): # Cas où le template a été changé mais l'UI correspond toujours
+             system_prompt_for_service = system_prompt_override_from_ui
+
+
+        # Récupérer les sélections de contexte GDD (via MainWindow) et y ajouter les infos de scène
+        context_selections_for_service = self.main_window_ref._get_current_context_selections() if hasattr(self.main_window_ref, '_get_current_context_selections') else {}
 
         char_a_name = self.scene_selection_widget.character_a_combo.currentText()
         char_b_name = self.scene_selection_widget.character_b_combo.currentText()
         scene_region_name = self.scene_selection_widget.scene_region_combo.currentText()
         scene_sub_location_name = self.scene_selection_widget.scene_sub_location_combo.currentText()
 
-        char_a_name = char_a_name if char_a_name and char_a_name != "(Aucun)" else None
-        char_b_name = char_b_name if char_b_name and char_b_name != "(Aucun)" else None
-        scene_region_name = scene_region_name if scene_region_name and scene_region_name != "(Aucune)" else None
-        scene_sub_location_name = scene_sub_location_name if scene_sub_location_name and scene_sub_location_name != "(Tous / Non spécifié)" and scene_sub_location_name != "(Aucun sous-lieu)" and scene_sub_location_name != "(Sélectionner une région d\'abord)" else None
+        placeholders = ["(Aucun)", "(Aucune)", "(Tous / Non spécifié)", "(Aucun sous-lieu)", "(Sélectionner une région d\'abord)"]
 
-        scene_protagonists_dict = {}
-        if char_a_name: scene_protagonists_dict["personnage_a"] = char_a_name
-        if char_b_name: scene_protagonists_dict["personnage_b"] = char_b_name
+        protagonists = {}
+        if char_a_name and char_a_name not in placeholders: protagonists["personnage_a"] = char_a_name
+        if char_b_name and char_b_name not in placeholders: protagonists["personnage_b"] = char_b_name
+        # On met _scene_protagonists dans le dictionnaire même s'il est vide, 
+        # car le service s'attend à pouvoir le .pop() (avec un défaut {}).
+        context_selections_for_service["_scene_protagonists"] = protagonists
 
-        scene_location_dict = {}
-        if scene_region_name: scene_location_dict["lieu"] = scene_region_name
-        if scene_sub_location_name: scene_location_dict["sous_lieu"] = scene_sub_location_name
+        location = {}
+        if scene_region_name and scene_region_name not in placeholders: location["lieu"] = scene_region_name
+        if scene_sub_location_name and scene_sub_location_name not in placeholders: location["sous_lieu"] = scene_sub_location_name
+        context_selections_for_service["_scene_location"] = location
         
-        full_prompt_for_estimation = "Erreur lors de la construction du prompt pour estimation." # Message par défaut
-        context_tokens = 0
-        prompt_tokens = 0
+        max_context_tokens_for_builder = int(self.generation_params_widget.max_context_tokens_spinbox.value() * 1000)
+        structured_output_flag = self.generation_params_widget.structured_output_checkbox.isChecked()
+
+        full_prompt_for_display = "Erreur lors de la préparation de la prévisualisation."
+        estimated_total_tokens = 0
+        # context_summary_tokens = 0 # Si on veut le réintroduire
 
         try:
-            # Assurer que le prompt_engine a le system_prompt à jour de l'UI pour une estimation correcte
-            self._update_prompt_engine_system_prompt()
-
-            # Similaire à _on_generate_dialogue_button_clicked_local
-            context_summary_text_for_estimation = self.context_builder.build_context(
-                selected_elements=selected_context_items,
-                scene_instruction=user_specific_goal, # L'objectif utilisateur sert d'instruction de scène pour ContextBuilder
-                max_tokens=self.main_window_ref.app_settings.get("max_context_tokens", 1500) # Utilise app_settings de MainWindow
+            full_prompt_for_display, estimated_total_tokens, context_summary_text = self.dialogue_generation_service.prepare_generation_preview(
+                user_instructions=user_instructions,
+                system_prompt_override=system_prompt_for_service, # Peut être None
+                context_selections=context_selections_for_service, 
+                max_context_tokens=max_context_tokens_for_builder,
+                structured_output=structured_output_flag
             )
             
-            full_prompt_for_estimation, prompt_tokens = self.prompt_engine.build_prompt(
-                user_specific_goal=user_specific_goal,
-                scene_protagonists=scene_protagonists_dict if scene_protagonists_dict else None,
-                scene_location=scene_location_dict if scene_location_dict else None,
-                context_summary=context_summary_text_for_estimation,
-                generation_params=None # Pas besoin de params spécifiques pour l'estimation ici, ils n'affectent que le contenu pas la structure comptée
-            )
-            # Pour context_tokens, on ne compte que ce qui vient de context_builder
-            # car le system_prompt, les persos/lieux et l'objectif sont fixes en termes de structure.
-            # Ou, plus simplement, on recompte juste la partie context_summary_text_for_estimation.
-            context_tokens = self.prompt_engine._count_tokens(context_summary_text_for_estimation) if context_summary_text_for_estimation else 0
-
-            logger.debug(f"[GenerationPanel.update_token_estimation_ui] Context summary for estimation (first 300 chars): {context_summary_text_for_estimation[:300] if context_summary_text_for_estimation else 'None'}") # LOG AJOUTÉ
-            logger.debug(f"[GenerationPanel.update_token_estimation_ui] Full prompt for estimation (first 300 chars): {full_prompt_for_estimation[:300] if full_prompt_for_estimation else 'None'}") # LOG AJOUTÉ
+            # Pour afficher la distinction, nous avons besoin des tokens du contexte seul.
+            # Le service ne le retourne pas encore séparément.
+            # Pour l'instant, nous recalculons les tokens du résumé du contexte ici.
+            # Idéalement, le service le fournirait.
+            context_summary_tokens = self.prompt_engine._count_tokens(context_summary_text) if context_summary_text else 0
 
         except Exception as e:
-            logger.error(f"Erreur pendant la construction du prompt dans update_token_estimation_ui: {e}", exc_info=True)
-            full_prompt_for_estimation = f"Erreur lors de la génération du prompt estimé:\\n{type(e).__name__}: {e}"
-            # Les tokens resteront à 0 ou à leur dernière valeur valide avant l'erreur
+            logger.error(f"Erreur lors de l'appel à prepare_generation_preview: {e}", exc_info=True)
+            full_prompt_for_display = f"Erreur lors de la préparation de la prévisualisation:\\n{type(e).__name__}: {e}"
+            estimated_total_tokens = 0
+            context_summary_tokens = 0
 
-        # Affichage des tokens en milliers (k)
-        context_tokens_k = context_tokens / 1000
-        prompt_tokens_k = prompt_tokens / 1000
-        self.token_actions_widget.set_token_estimation_text(f"Tokens (contexte GDD/prompt total): {context_tokens_k:.1f}k / {prompt_tokens_k:.1f}k")
-        logger.debug(f"Token estimation UI updated: Context GDD {context_tokens} ({context_tokens_k:.1f}k), Prompt total {prompt_tokens} ({prompt_tokens_k:.1f}k).")
+
+        # Affichage des tokens
+        context_tokens_k = context_summary_tokens / 1000
+        prompt_tokens_k = estimated_total_tokens / 1000
         
-        self._display_prompt_in_tab(full_prompt_for_estimation)
+        self.token_actions_widget.set_token_estimation_text(f"Tokens (contexte GDD/prompt total): {context_tokens_k:.1f}k / {prompt_tokens_k:.1f}k")
+        logger.debug(f"Token estimation UI updated (via service): Context GDD {context_summary_tokens} ({context_tokens_k:.1f}k), Prompt total {estimated_total_tokens} ({prompt_tokens_k:.1f}k).")
+        
+        self._display_prompt_in_tab(full_prompt_for_display if full_prompt_for_display else "Aucun prompt n'a pu être généré.")
 
 
     def _launch_dialogue_generation(self):
@@ -346,58 +362,67 @@ class GenerationPanel(QWidget):
         asyncio.create_task(self._on_generate_dialogue_button_clicked_local())
 
     async def _on_generate_dialogue_button_clicked_local(self):
-        logger.info("Début de la génération de dialogue (méthode locale asynchrone).")
+        logger.info("Début de la génération de dialogue via GenerationPanelBase (appel au service).")
         generation_succeeded = False
         try:
+            # 1. Collecter les paramètres UI
             k_variants = int(self.generation_params_widget.k_variants_combo.currentText())
-            max_context_tokens = self.generation_params_widget.max_context_tokens_spinbox.value() * 1000
+            max_context_tokens_for_builder = int(self.generation_params_widget.max_context_tokens_spinbox.value() * 1000)
             structured_output = self.generation_params_widget.structured_output_checkbox.isChecked()
-            user_instructions = self.instructions_widget.get_user_instructions_text() # Depuis le widget d'instructions
-            system_prompt_override = self.instructions_widget.get_system_prompt_text() # Depuis le widget d'instructions
-
-            context_selections = self._get_current_context_selections_for_generation()
+            user_instructions = self.instructions_widget.get_user_instructions_text()
+            system_prompt_override = self.instructions_widget.get_system_prompt_text()
             current_llm_model_identifier = self.generation_params_widget.llm_model_combo.currentData()
 
-            full_prompt, estimated_tokens = self.prompt_engine.build_prompt(
-                context_builder=self.context_builder,
-                context_elements=context_selections,
-                user_instructions=user_instructions,
-                max_tokens=max_context_tokens,
-                dialogue_type_flag=structured_output,
-                system_prompt_override=system_prompt_override
-            )
+            # Obtenir les sélections de contexte GDD général (via MainWindow)
+            context_selections_dict = self.main_window_ref._get_current_context_selections()
+            
+            # Extraire les infos de scène directement depuis SceneSelectionWidget et les ajouter au dict
+            char_a_name = self.scene_selection_widget.character_a_combo.currentText()
+            char_b_name = self.scene_selection_widget.character_b_combo.currentText()
+            scene_region_name = self.scene_selection_widget.scene_region_combo.currentText()
+            scene_sub_location_name = self.scene_selection_widget.scene_sub_location_combo.currentText()
 
-            if not full_prompt:
-                QMessageBox.warning(self, "Erreur de Prompt", "Impossible de construire le prompt. Vérifiez les logs.")
+            placeholders = ["(Aucun)", "(Aucune)", "(Tous / Non spécifié)", "(Aucun sous-lieu)", "(Sélectionner une région d'abord)"]
+            
+            protagonists = {}
+            if char_a_name and char_a_name not in placeholders: protagonists["personnage_a"] = char_a_name
+            if char_b_name and char_b_name not in placeholders: protagonists["personnage_b"] = char_b_name
+            if protagonists: context_selections_dict["_scene_protagonists"] = protagonists
+
+            location = {}
+            if scene_region_name and scene_region_name not in placeholders: location["lieu"] = scene_region_name
+            if scene_sub_location_name and scene_sub_location_name not in placeholders: location["sous_lieu"] = scene_sub_location_name
+            if location: context_selections_dict["_scene_location"] = location
+
+            if not self.llm_client:
+                QMessageBox.critical(self, "Erreur LLM", "Le client LLM n'est pas disponible.")
+                logger.error("LLM client non disponible pour la génération.")
                 return
 
-            estimated_tokens_k = estimated_tokens / 1000
-            self.token_actions_widget.set_token_estimation_text(f"Tokens prompt final: {estimated_tokens_k:.1f}k")
-            self.generated_variants_tabs.update_or_add_tab("Prompt Estimé", full_prompt, set_current=True)
+            # 2. Appeler le service de génération
+            variants, full_prompt, estimated_tokens = await self.dialogue_generation_service.generate_dialogue_variants(
+                llm_client=self.llm_client,
+                k_variants=k_variants,
+                max_context_tokens_for_context_builder=max_context_tokens_for_builder,
+                structured_output=structured_output,
+                user_instructions=user_instructions,
+                system_prompt_override=system_prompt_override,
+                context_selections=context_selections_dict, # Contient maintenant _scene_protagonists et _scene_location
+                current_llm_model_identifier=current_llm_model_identifier
+            )
 
-            QApplication.processEvents()
-
-            logger.info(f"Appel de llm_client.generate_variants avec k={k_variants}...")
-            if structured_output:
-                logger.info("Sortie structurée demandée (JSON).")
-            
-            variants = await self.llm_client.generate_variants(full_prompt, k_variants, structured_output)
-            
-            if variants:
-                self.generated_variants_tabs.remove_variant_tabs() # Supprimer les anciennes variantes
-                for i, variant_content in enumerate(variants):
-                    tab_title = f"Variante {i+1}"
-                    self.generated_variants_tabs.update_or_add_tab(tab_title, variant_content, set_current=(i==0))
-                logger.info(f"{len(variants)} variantes affichées.")
-                if variants: # Si au moins une variante a été générée et est valide
-                    generation_succeeded = True
+            # 3. Mettre à jour l'UI avec les résultats
+            self.token_actions_widget.set_token_estimation_text(f"Tokens prompt final: {(estimated_tokens or 0) / 1000:.1f}k")
+            self.generated_variants_tabs.display_variants(variants or [], full_prompt)
+            if full_prompt is not None:
+                generation_succeeded = True if variants is not None else False
             else:
-                QMessageBox.warning(self, "Génération Échouée", "Le LLM n'a retourné aucune variante ou une erreur s'est produite.")
-                logger.warning("LLM n'a retourné aucune variante ou une erreur s'est produite pendant la génération.")
+                QMessageBox.warning(self, "Erreur de Prompt", "Impossible de construire le prompt. Vérifiez les logs.")
+                generation_succeeded = False
 
         except Exception as e:
-            logger.exception("Erreur majeure lors de la génération de dialogue")
-            QMessageBox.critical(self, "Erreur Critique", f"Une erreur inattendue est survenue: {e}")
+            logger.exception("Erreur majeure dans GenerationPanelBase._on_generate_dialogue_button_clicked_local")
+            QMessageBox.critical(self, "Erreur Critique", f"Une erreur inattendue est survenue dans GenerationPanel: {e}")
         finally:
             current_task = asyncio.current_task()
             if not current_task or not current_task.cancelled(): 

@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import (QWidget, QGroupBox, QGridLayout, QLabel, QComboBox, QCheckBox, QDoubleSpinBox)
+from PySide6.QtWidgets import (QWidget, QGroupBox, QGridLayout, QLabel, QComboBox, QCheckBox, QDoubleSpinBox, QVBoxLayout)
 from PySide6.QtCore import Signal, Qt
 import logging
 
@@ -20,10 +20,11 @@ class GenerationParamsWidget(QWidget):
         self.populate_llm_model_combo()
 
     def _init_ui(self):
-        self.group_box = QGroupBox("Paramètres de Génération", self)
-        layout = QGridLayout(self.group_box)
+        self.group_box = QGroupBox("Options LLM", self)
+        self.main_layout = QVBoxLayout(self.group_box)
         
         row = 0
+        layout = QGridLayout()
         layout.addWidget(QLabel("Modèle LLM:"), row, 0)
         self.llm_model_combo = QComboBox()
         self.llm_model_combo.setToolTip("Choisissez le modèle de langage à utiliser pour la génération.")
@@ -59,7 +60,11 @@ class GenerationParamsWidget(QWidget):
         self.structured_output_checkbox.stateChanged.connect(self._on_structured_output_changed)
         layout.addWidget(self.structured_output_checkbox, row, 0, 1, 2)
         
-        self.setLayout(layout)
+        self.main_layout.addLayout(layout)
+
+        # Correction : ajouter le group_box au layout principal du widget
+        main_layout = QVBoxLayout(self)
+        main_layout.addWidget(self.group_box)
 
     def populate_llm_model_combo(self):
         self.llm_model_combo.blockSignals(True)
