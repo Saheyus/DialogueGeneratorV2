@@ -1,0 +1,24 @@
+title: {{ interaction.interaction_id }}
+---
+{% if header_tags %}
+tags: {{ header_tags|join(', ') }}
+{% endif %}
+
+{% if header_commands %}
+{% for command in header_commands %}
+<<{{ command }}>>
+{% endfor %}
+{% endif %}
+===
+
+{% for element in elements %}
+{% if element.__class__.__name__ == 'DialogueLineElement' %}
+{{ element.speaker }}: {{ element.text }}
+{% elif element.__class__.__name__ == 'PlayerChoicesBlockElement' %}
+{% for choice in element.choices %}
+-> {{ choice.text }}
+    <<jump {{ choice.next_interaction_id }}>>
+{% endfor %}
+{% endif %}
+{% endfor %}
+=== 
