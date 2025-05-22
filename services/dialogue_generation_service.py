@@ -2,6 +2,7 @@ import logging
 import json
 import re
 from typing import Optional, Any, Tuple, List, Dict, Union
+import uuid
 
 try:
     from ..context_builder import ContextBuilder
@@ -29,9 +30,21 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 class DialogueGenerationService:
-    def __init__(self, context_builder: ContextBuilder, prompt_engine: PromptEngine):
+    def __init__(self, context_builder: ContextBuilder, prompt_engine: PromptEngine, interaction_service=None):
+        """
+        Initialise le service de génération de dialogues.
+        
+        Args:
+            context_builder: Composant qui construit le contexte basé sur les sélections utilisateur
+            prompt_engine: Composant qui construit les prompts pour le LLM
+            interaction_service: Service pour gérer les interactions (optionnel)
+        """
         self.context_builder = context_builder
         self.prompt_engine = prompt_engine
+        self.interaction_service = interaction_service
+        
+        # Initialisation du logger
+        self.logger = logging.getLogger(__name__)
 
     async def generate_dialogue_variants(
         self,
@@ -241,90 +254,177 @@ class DialogueGenerationService:
             logger.exception("Erreur majeure lors de la génération d'interactions structurées")
             return None, full_prompt, estimated_tokens
             
+    def _extract_json_from_text(self, text: str) -> Optional[str]:
+        """Extracts a JSON string from a text that might contain markdown code blocks.
+
+        Args:
+            text: The input text.
+
+        Returns:
+            The extracted JSON string, or None if not found.
+        """
+        # Regex to find JSON within markdown-style code blocks (```json ... ``` or ``` ... ```)
+        # It captures the content within the innermost curly braces assuming it's the JSON object.
+        match = re.search(r'```(?:json)?\s*({.*?})\s*```', text, re.DOTALL)
+        if match:
+            return match.group(1)
+        
+        # If no markdown block is found, try to find a JSON object directly
+        # This is a simplified regex, might need to be more robust depending on expected LLM output
+        match = re.search(r'({.*?})', text, re.DOTALL)
+        if match:
+            return match.group(1)
+            
+        return None
+
     def _parse_llm_response_to_interaction(self, response_text: str) -> Optional[Interaction]:
         """
         Parse la réponse du LLM pour extraire et créer un objet Interaction.
-        
-        Args:
-            response_text: Réponse textuelle du LLM contenant la structure JSON
-            
-        Returns:
-            Un objet Interaction si le parsing réussit, None sinon
+        Utilise interaction_service pour s'assurer que l'ID est robuste.
         """
         try:
-            # Nettoyer la réponse pour extraire le JSON
-            # Rechercher des délimiteurs de code JSON
-            json_match = re.search(r'```(?:json)?\s*({.*?})\s*```', response_text, re.DOTALL)
-            
-            if json_match:
-                json_str = json_match.group(1)
-            else:
-                # Si pas de délimiteurs, essayer de prendre tout le texte
-                json_str = response_text.strip()
+            json_str = self._extract_json_from_text(response_text)
+            if not json_str:
+                logger.error("Impossible d'extraire du JSON de la réponse pour _parse_llm_response_to_interaction.")
+                return None
                 
-            # Parser le JSON
-            interaction_data = json.loads(json_str)
-            
-            # Créer l'Interaction à partir des données JSON
-            interaction_id = interaction_data.get("interaction_id", "")
+            interaction_data = json.loads(json_str) # Renommé de data à interaction_data pour clarté
+
+            # Récupérer le titre ou en générer un à partir du contenu
             title = interaction_data.get("title", "")
-            header_tags = interaction_data.get("header_tags", [])
-            header_commands = interaction_data.get("header_commands", [])
-            next_interaction_id_if_no_choices = interaction_data.get("next_interaction_id_if_no_choices")
+            if not title:
+                first_dialogue = self._find_first_dialogue_text(interaction_data)
+                if first_dialogue:
+                    title = first_dialogue[:30] + "..." if len(first_dialogue) > 30 else first_dialogue
+                else:
+                    title = "Nouvelle interaction"
+                interaction_data["title"] = title  # Mettre à jour le titre dans les données
             
-            # Créer l'objet Interaction
-            interaction = Interaction(
-                interaction_id=interaction_id,
-                title=title,
-                header_tags=header_tags,
-                header_commands=header_commands,
-                next_interaction_id_if_no_choices=next_interaction_id_if_no_choices
+            # Traitement de l'ID d'interaction
+            current_interaction_id = interaction_data.get("interaction_id", "")
+            # prefix = None # Le préfixe n'est plus utilisé ici pour garantir un ID UUID pur
+            
+            final_interaction_id = current_interaction_id
+
+            if self.interaction_service:
+                if not current_interaction_id or not self._is_valid_id(current_interaction_id):
+                    # On ne dérive plus le préfixe du titre ici pour obtenir un UUID pur.
+                    # Si un préfixe était désiré, il devrait être géré plus haut ou passé différemment.
+                    final_interaction_id = self.interaction_service.generate_interaction_id(prefix=None)
+                    logger.info(f"Généré nouvel ID UUID pur via _parse_llm: {final_interaction_id} (ancien: '{current_interaction_id}', titre: '{title}')")
+                else:
+                    logger.info(f"Utilisation de l'ID existant valide via _parse_llm: {current_interaction_id}")
+            else:
+                # Sans service d'interaction, on garde l'ID fourni ou on génère un ID basique
+                if not current_interaction_id:
+                    if title:
+                        cleaned_title = re.sub(r'[^a-zA-Z0-9]', '_', title.lower())
+                        final_interaction_id = cleaned_title[:50]
+                    else:
+                        import time
+                        final_interaction_id = f"interaction_{int(time.time())}"
+                    logger.warning(f"Généré ID basique (non-robuste) via _parse_llm: {final_interaction_id} - InteractionService non disponible")
+            
+            # Mettre à jour l'ID dans le dictionnaire avant de créer l'objet
+            interaction_data["interaction_id"] = final_interaction_id
+            
+            # Créer l'objet Interaction en utilisant Interaction.from_dict pour la cohérence
+            # si tous les champs nécessaires sont dans interaction_data et au bon format.
+            # Sinon, continuer avec l'instanciation manuelle.
+            # Pour l'instant, on s'assure que `from_dict` est utilisé si possible, sinon construction manuelle.
+            
+            # Assurons-nous que les éléments sont bien parsés et ajoutés.
+            # L'implémentation précédente de _parse_llm_response_to_interaction construisait l'objet Interaction
+            # et ajoutait les éléments manuellement. Il faut conserver cette logique si from_dict ne gère pas tout.
+            # Interaction.from_dict DEVRAIT gérer la création des éléments si le JSON est structuré correctement.
+
+            # Option 1: Utiliser from_dict si la structure de interaction_data correspond parfaitement
+            # return Interaction.from_dict(interaction_data) 
+            
+            # Option 2: Construction manuelle (comme c'était fait avant, mais avec le nouvel ID)
+            # Cela garantit que la logique de gestion des éléments est préservée.
+            new_interaction = Interaction(
+                interaction_id=final_interaction_id, # Utilise l'ID finalisé
+                title=interaction_data.get("title", ""), # Utilise le titre mis à jour
+                header_tags=interaction_data.get("header_tags", []),
+                header_commands=interaction_data.get("header_commands", []),
+                next_interaction_id_if_no_choices=interaction_data.get("next_interaction_id_if_no_choices")
             )
             
-            # Ajouter les éléments
             for element_data in interaction_data.get("elements", []):
                 element_type = element_data.get("element_type")
-                
+                element = None
                 if element_type == "dialogue_line":
-                    element = DialogueLineElement(
-                        text=element_data.get("text", ""),
-                        speaker=element_data.get("speaker"),
-                        tags=element_data.get("tags", []),
-                        pre_line_commands=element_data.get("pre_line_commands", []),
-                        post_line_commands=element_data.get("post_line_commands", [])
-                    )
-                    interaction.elements.append(element)
-                    
+                    element = DialogueLineElement.from_dict(element_data)
                 elif element_type == "command":
-                    element = CommandElement(
-                        command_string=element_data.get("command_string", "")
-                    )
-                    interaction.elements.append(element)
-                    
+                    element = CommandElement.from_dict(element_data)
                 elif element_type == "player_choices_block":
-                    choices_block = PlayerChoicesBlockElement()
-                    
-                    for choice_data in element_data.get("choices", []):
-                        choice = PlayerChoiceOption(
-                            text=choice_data.get("text", ""),
-                            next_interaction_id=choice_data.get("next_interaction_id", ""),
-                            condition=choice_data.get("condition"),
-                            actions=choice_data.get("actions", []),
-                            tags=choice_data.get("tags", [])
-                        )
-                        choices_block.choices.append(choice)
-                        
-                    interaction.elements.append(choices_block)
-            
-            return interaction
+                    element = PlayerChoicesBlockElement.from_dict(element_data)
+                
+                if element:
+                    new_interaction.elements.append(element)
+                else:
+                    logger.warning(f"Type d'élément inconnu ou données invalides dans _parse_llm: {element_type}")
+
+            logger.info(f"Interaction (re)parsée avec ID: {new_interaction.interaction_id}, Titre: {new_interaction.title}")
+            return new_interaction
             
         except json.JSONDecodeError as e:
-            logger.error(f"Erreur de décodage JSON: {str(e)}")
-            logger.debug(f"Réponse problématique: {response_text}")
+            logger.error(f"Erreur de décodage JSON dans _parse_llm: {str(e)}. Réponse: {response_text[:200]}...")
             return None
         except Exception as e:
-            logger.exception(f"Erreur inattendue lors du parsing de l'interaction: {str(e)}")
+            logger.exception(f"Erreur inattendue dans _parse_llm: {str(e)}")
             return None
+
+    def _is_valid_id(self, interaction_id: str) -> bool:
+        """
+        Vérifie si un ID d'interaction est dans un format valide/robuste.
+        
+        Args:
+            interaction_id: L'ID à vérifier
+            
+        Returns:
+            True si l'ID est au format UUID ou prefix_UUID, False sinon
+        """
+        # Format UUID standard
+        try:
+            uuid.UUID(interaction_id)
+            return True
+        except ValueError:
+            pass
+        
+        # Format prefix_UUID
+        if '_' in interaction_id:
+            parts = interaction_id.split('_')
+            if len(parts) >= 2:
+                try:
+                    # Essayer de parser la dernière partie comme UUID
+                    uuid.UUID(parts[-1])
+                    return True
+                except ValueError:
+                    pass
+        
+        return False
+
+    def _find_first_dialogue_text(self, data: Dict) -> Optional[str]:
+        """
+        Trouve le premier texte de dialogue dans les données pour générer un titre.
+        
+        Args:
+            data: Les données de l'interaction
+            
+        Returns:
+            Le premier texte de dialogue trouvé ou None
+        """
+        try:
+            if "elements" in data:
+                for element in data["elements"]:
+                    if element.get("element_type") == "dialogue_line" and "text" in element:
+                        return element["text"]
+        except Exception as e:
+            logger.warning(f"Erreur dans _find_first_dialogue_text: {e}")
+            pass
+        return None 
 
     def prepare_generation_preview(
         self,
@@ -401,12 +501,10 @@ class DialogueGenerationService:
     def parse_interaction_response(self, raw_response: str) -> Optional[Interaction]:
         """
         Analyse la réponse du LLM pour créer un objet Interaction.
-        
-        Args:
-            raw_response: La réponse textuelle du LLM
-            
-        Returns:
-            L'objet Interaction créé ou None en cas d'échec
+        NOTE: Cette méthode contient une logique similaire à _parse_llm_response_to_interaction.
+        Elle devrait être révisée ou supprimée si _parse_llm_response_to_interaction est la méthode principale.
+        Pour l'instant, on la laisse pour ne pas casser d'éventuels appels existants non identifiés,
+        mais la logique robuste d'ID est maintenant dans _parse_llm_response_to_interaction.
         """
         try:
             # Nettoyer la réponse pour extraire seulement le JSON
@@ -417,51 +515,37 @@ class DialogueGenerationService:
                 
             data = json.loads(json_str)
             
-            # Vérifier si nous avons les éléments essentiels
             if not isinstance(data, dict):
                 logger.error(f"Les données extraites ne sont pas un dictionnaire: {type(data)}")
                 return None
                 
-            # S'assurer que nous avons un titre
-            if "title" not in data and "interaction_id" in data:
-                # Générer un titre basé sur l'ID si absent
-                data["title"] = f"Interaction {data['interaction_id'][:8]}"
-            elif "title" not in data:
-                # Générer un titre basé sur le contenu
+            # ID et Titre gérés comme dans _parse_llm_response_to_interaction (simplifié ici)
+            title = data.get("title", "")
+            if not title:
                 first_dialogue = self._find_first_dialogue_text(data)
-                if first_dialogue:
-                    data["title"] = first_dialogue[:30] + "..." if len(first_dialogue) > 30 else first_dialogue
+                title = (first_dialogue[:30] + "..." if len(first_dialogue) > 30 else first_dialogue) if first_dialogue else "Nouvelle interaction"
+                data["title"] = title
+
+            interaction_id = data.get("interaction_id", "")
+            # La logique robuste d'ID est maintenant dans _parse_llm_response_to_interaction
+            # Si cette méthode est toujours appelée, elle utilisera l'ID tel quel ou un ID basique.
+            if not interaction_id:
+                if title:
+                    cleaned_title = re.sub(r'[^a-zA-Z0-9]', '_', title.lower())
+                    interaction_id = cleaned_title[:50]
                 else:
-                    data["title"] = "Nouvelle interaction"
-            
-            # Créer l'objet Interaction
+                    import time
+                    interaction_id = f"interaction_{int(time.time())}"
+                data["interaction_id"] = interaction_id
+                logger.warning(f"parse_interaction_response a généré un ID basique: {interaction_id}")
+
             interaction = Interaction.from_dict(data)
-            logger.info(f"Interaction créée avec succès. ID: {interaction.interaction_id}, titre: {interaction.title}")
+            logger.info(f"Interaction créée (via parse_interaction_response). ID: {interaction.interaction_id}, titre: {interaction.title}")
             return interaction
             
         except json.JSONDecodeError as e:
-            logger.error(f"Erreur de décodage JSON: {e}")
-            logger.debug(f"Contenu qui a causé l'erreur: {raw_response[:200]}...")
+            logger.error(f"Erreur de décodage JSON (parse_interaction_response): {e}")
             return None
         except Exception as e:
-            logger.exception(f"Erreur lors de l'analyse de la réponse d'interaction: {e}")
-            return None
-            
-    def _find_first_dialogue_text(self, data: Dict) -> Optional[str]:
-        """
-        Trouve le premier texte de dialogue dans les données pour générer un titre.
-        
-        Args:
-            data: Les données de l'interaction
-            
-        Returns:
-            Le premier texte de dialogue trouvé ou None
-        """
-        try:
-            if "elements" in data:
-                for element in data["elements"]:
-                    if element.get("element_type") == "dialogue_line" and "text" in element:
-                        return element["text"]
-        except:
-            pass
-        return None 
+            logger.exception(f"Erreur (parse_interaction_response): {e}")
+            return None 
