@@ -1,10 +1,10 @@
 {
-  "interaction_id": "rencontre_uresair_khairgul",
+  "interaction_id": "e4630b3e-0c45-4d8a-9f65-91a4706fdde6",
   "elements": [
     {
       "element_type": "dialogue_line",
       "speaker": "Seigneuresse Uresaïr",
-      "text": "Vous êtes donc l'un des enfants de ce culte, Khair-gul. Que cherchez-vous ici, dans les ombres du Léviathan pétrifié ?",
+      "text": "Qui es-tu, intrus, à te tenir ici dans les ombres des Bibliothèques Veineuses ?",
       "tags": [],
       "pre_line_commands": [],
       "post_line_commands": []
@@ -15,8 +15,8 @@
     },
     {
       "element_type": "dialogue_line",
-      "speaker": "Khair-gul",
-      "text": "Je suis ici pour guérir, Seigneuresse. Les âmes perdues de ce lieu ont besoin des soins d'un médecin. Et vous, pourquoi vous cachez-vous dans ces bibliothèques veineuses ?",
+      "speaker": "Akthar-Neth Amatru",
+      "text": "Je suis Akthar-Neth Amatru, l’Exégète, un humble serviteur de l'Anentropie. Votre présence ici est un signe, ô Rebelle Immortelle.",
       "tags": [],
       "pre_line_commands": [],
       "post_line_commands": []
@@ -28,7 +28,7 @@
     {
       "element_type": "dialogue_line",
       "speaker": "Seigneuresse Uresaïr",
-      "text": "Je ne suis pas ici pour être guérie, mais pour préserver ce qui reste de mon essence. Chaque jour, je sens l'oubli me rattraper.",
+      "text": "Un signe ? Ou peut-être un piège, comme tant d'autres ?",
       "tags": [],
       "pre_line_commands": [],
       "post_line_commands": []
@@ -39,8 +39,8 @@
     },
     {
       "element_type": "dialogue_line",
-      "speaker": "Khair-gul",
-      "text": "L'oubli est un mal que je comprends. Mais parfois, il faut faire face à ce qui nous terrifie pour retrouver notre force. Vous ne devriez pas porter ce poids seule.",
+      "speaker": "Akthar-Neth Amatru",
+      "text": "Non, je ne suis pas ici pour vous nuire. J'ai vu des visions qui m'ont conduit vers vous, une chance de restaurer ce qui a été perdu.",
       "tags": [],
       "pre_line_commands": [],
       "post_line_commands": []
@@ -53,15 +53,15 @@
       "element_type": "player_choices_block",
       "choices": [
         {
-          "text": "Je ne suis pas là pour discuter de mes faiblesses.",
-          "next_interaction_id": "rencontre_uresair_rejet",
+          "text": "Je n'ai aucune confiance en vos visions, quittez ce lieu.",
+          "next_interaction_id": "conversation_akthar_repart",
           "condition": null,
           "actions": [],
           "tags": []
         },
         {
-          "text": "Peut-être avez-vous raison. Que proposez-vous ?",
-          "next_interaction_id": "rencontre_uresair_accepte",
+          "text": "Parlez de ces visions, peut-être y a-t-il une vérité cachée.",
+          "next_interaction_id": "conversation_akthar_visions",
           "condition": null,
           "actions": [],
           "tags": []
@@ -71,10 +71,9 @@
   ],
   "header_commands": [],
   "header_tags": [
-    "première rencontre",
-    "dialogue",
-    "Léviathan pétrifié"
+    "rencontre",
+    "dialogue"
   ],
   "next_interaction_id_if_no_choices": null,
-  "title": "Première rencontre entre Uresaïr et Khair-gul"
+  "title": "La rencontre entre Uresaïr et Akthar-Neth"
 }

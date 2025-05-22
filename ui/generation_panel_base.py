@@ -87,7 +87,8 @@ class GenerationPanel(QWidget):
         self.yarn_renderer = JinjaYarnRenderer()
         self.dialogue_generation_service = DialogueGenerationService(
             self.context_builder, 
-            self.prompt_engine
+            self.prompt_engine,
+            self.interaction_service
         )
         
         self.available_llm_models = available_llm_models if available_llm_models else []
