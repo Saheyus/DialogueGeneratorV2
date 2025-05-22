@@ -9,6 +9,8 @@ from typing import Optional, Callable, Any # Added Any
 import json # Ajout pour charger la config LLM potentiellement ici aussi si besoin
 from pathlib import Path
 import uuid
+import sys
+import os
 
 # Import local de la fonction utilitaire
 from .utils import get_icon_path
@@ -19,20 +21,21 @@ from .generation_panel.generation_params_widget import GenerationParamsWidget
 from .generation_panel.instructions_tabs_widget import InstructionsTabsWidget
 from .generation_panel.token_and_generate_widget import TokenAndGenerateWidget
 from .generation_panel.variants_display_widget import VariantsDisplayWidget
+from .generation_panel.interaction_sequence_widget import InteractionSequenceWidget
+from .generation_panel.interaction_editor_widget import InteractionEditorWidget
 
 # New service import
 try:
     from ..services.linked_selector import LinkedSelectorService
-    from ..services.yarn_renderer import YarnRenderer # Ajout YarnRenderer
+    from ..services.yarn_renderer import JinjaYarnRenderer # Corrigé: JinjaYarnRenderer
     from ..llm_client import OpenAIClient, DummyLLMClient # Ajout OpenAIClient et DummyLLMClient
 except ImportError:
     # Support exécution directe
-    import sys, os, pathlib
     current_dir = pathlib.Path(__file__).resolve().parent.parent
     if str(current_dir) not in sys.path:
         sys.path.insert(0, str(current_dir))
     from DialogueGenerator.services.linked_selector import LinkedSelectorService
-    from DialogueGenerator.services.yarn_renderer import YarnRenderer # Ajout YarnRenderer
+    from DialogueGenerator.services.yarn_renderer import JinjaYarnRenderer # Corrigé: JinjaYarnRenderer
     from DialogueGenerator.llm_client import OpenAIClient, DummyLLMClient # Ajout OpenAIClient et DummyLLMClient
 
 logger = logging.getLogger(__name__) # Added logger
@@ -41,6 +44,8 @@ logger = logging.getLogger(__name__) # Added logger
 # Bien que la liste des modèles soit passée par MainWindow, cela pourrait servir pour d'autres settings.
 DIALOGUE_GENERATOR_DIR = Path(__file__).resolve().parent.parent
 LLM_CONFIG_FILE_PATH = DIALOGUE_GENERATOR_DIR / "llm_config.json"
+# Dossier par défaut pour stocker les interactions
+DEFAULT_INTERACTIONS_DIR = DIALOGUE_GENERATOR_DIR / "data" / "interactions"
 
 class GenerationPanel(QWidget):
     """Manages UI elements for dialogue generation parameters, context selection, and results display.
@@ -87,7 +92,7 @@ class GenerationPanel(QWidget):
         self.llm_client = llm_client
         self.main_window_ref = main_window_ref
         self.linked_selector = LinkedSelectorService(self.context_builder)
-        self.yarn_renderer = YarnRenderer()
+        self.yarn_renderer = JinjaYarnRenderer()
         
         self.available_llm_models = available_llm_models if available_llm_models else []
         self.current_llm_model_identifier = current_llm_model_identifier
@@ -109,10 +114,47 @@ class GenerationPanel(QWidget):
         left_column_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         main_splitter.addWidget(left_column_widget)
 
+        # --- Séquence d'Interactions Modulaire ---
+        # Création du repository et du service pour les interactions
+        interactions_dir = DEFAULT_INTERACTIONS_DIR
+        os.makedirs(interactions_dir, exist_ok=True)
+        self.interaction_repository = FileInteractionRepository(str(interactions_dir))
+        self.interaction_service = InteractionService(repository=self.interaction_repository)
+        
+        # Onglets central contenant les interactions et autres fonctionnalités
+        central_tabs = QTabWidget()
+        left_column_layout.addWidget(central_tabs)
+        
+        # --- Onglet 1 : Interactions ---
+        interactions_tab = QWidget()
+        interactions_tab_layout = QVBoxLayout(interactions_tab)
+        interactions_tab_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        # Initialisation du widget avec le service
+        self.interaction_sequence_widget = InteractionSequenceWidget(
+            interaction_service=self.interaction_service
+        )
+        interactions_tab_layout.addWidget(self.interaction_sequence_widget)
+        self.interaction_sequence_widget.interaction_selected.connect(self._on_interaction_selected)
+        self.interaction_sequence_widget.sequence_changed.connect(self._on_sequence_changed)
+        self.interaction_sequence_widget.edit_interaction_requested.connect(self._on_edit_interaction_requested)
+        
+        # Initialisation de l'éditeur d'interaction
+        self.interaction_editor_widget = InteractionEditorWidget(self.interaction_service)
+        self.interaction_editor_widget.interaction_changed.connect(self._on_interaction_changed)
+        interactions_tab_layout.addWidget(self.interaction_editor_widget)
+        
+        interactions_tab_layout.addStretch(1)
+        central_tabs.addTab(interactions_tab, "Interactions")
+        
+        # --- Onglet 2 : Génération ---
+        generation_tab = QWidget()
+        generation_tab_layout = QVBoxLayout(generation_tab)
+        generation_tab_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
         # --- Section Sélection Personnages et Scène ---
-        # Remplacement par le widget extrait
         self.scene_selection_widget = SceneSelectionWidget()
-        left_column_layout.addWidget(self.scene_selection_widget)
+        generation_tab_layout.addWidget(self.scene_selection_widget)
         # Connexion des signaux du widget extrait aux méthodes existantes
         self.scene_selection_widget.character_a_changed.connect(self._schedule_settings_save_and_token_update)
         self.scene_selection_widget.character_b_changed.connect(self._schedule_settings_save_and_token_update)
@@ -122,14 +164,14 @@ class GenerationPanel(QWidget):
 
         # --- Section Actions sur le Contexte ---
         self.context_actions_widget = ContextActionsWidget()
-        left_column_layout.addWidget(self.context_actions_widget)
+        generation_tab_layout.addWidget(self.context_actions_widget)
         self.context_actions_widget.select_linked_clicked.connect(self._on_select_linked_elements_clicked)
         self.context_actions_widget.unlink_unrelated_clicked.connect(self._on_unlink_unrelated_clicked)
         self.context_actions_widget.uncheck_all_clicked.connect(self._on_uncheck_all_clicked)
 
         # --- Section Paramètres de Génération ---
         self.generation_params_widget = GenerationParamsWidget()
-        left_column_layout.addWidget(self.generation_params_widget)
+        generation_tab_layout.addWidget(self.generation_params_widget)
         self.generation_params_widget.llm_model_changed.connect(self._on_llm_model_combo_changed)
         self.generation_params_widget.k_variants_changed.connect(self._schedule_settings_save)
         self.generation_params_widget.max_context_tokens_changed.connect(self._on_max_context_tokens_changed)
@@ -137,18 +179,19 @@ class GenerationPanel(QWidget):
 
         # --- Section Instructions Utilisateur (modifiée en QTabWidget) ---
         self.instructions_tabs_widget = InstructionsTabsWidget()
-        left_column_layout.addWidget(self.instructions_tabs_widget)
+        generation_tab_layout.addWidget(self.instructions_tabs_widget)
         self.instructions_tabs_widget.user_instructions_changed.connect(self._schedule_settings_save_and_token_update)
         self.instructions_tabs_widget.system_prompt_changed.connect(self._on_system_prompt_changed)
         self.instructions_tabs_widget.restore_default_system_prompt_clicked.connect(self._restore_default_system_prompt)
 
         # --- Section Estimation Tokens et Bouton Générer ---
         self.token_and_generate_widget = TokenAndGenerateWidget()
-        left_column_layout.addWidget(self.token_and_generate_widget)
+        generation_tab_layout.addWidget(self.token_and_generate_widget)
         self.token_and_generate_widget.refresh_token_clicked.connect(self._trigger_token_update)
         self.token_and_generate_widget.generate_dialogue_clicked.connect(self._launch_dialogue_generation)
 
-        left_column_layout.addStretch() 
+        generation_tab_layout.addStretch(1)
+        central_tabs.addTab(generation_tab, "Génération")
 
         # --- Colonne de Droite: Affichage des Variantes ---
         right_column_widget = QWidget()
@@ -957,11 +1000,79 @@ class GenerationPanel(QWidget):
 
     @Slot(float)
     def _on_max_context_tokens_changed(self, new_value: float):
-        """Appelé quand l'utilisateur change la limite de tokens pour le contexte."""
-        # Convertir de k-tokens (ex: 1.5k) en tokens (ex: 1500)
+        """Gère le changement de valeur dans le spinbox max_context_tokens."""
         tokens_value = int(new_value * 1000)
+        logger.info(f"Limite de tokens pour le contexte mise à jour: {tokens_value}")
+        self._schedule_settings_save_and_token_update()
+
+    # --- Gestion des Interactions ---
+    
+    @Slot(uuid.UUID)
+    def _on_interaction_selected(self, interaction_id: uuid.UUID):
+        """Gère la sélection d'une interaction dans la liste.
         
-        if hasattr(self.main_window_ref, 'app_settings'):
-            self.main_window_ref.app_settings["max_context_tokens"] = tokens_value
-            logger.info(f"Limite de tokens pour le contexte mise à jour: {tokens_value} ({new_value}k)")
-            self._schedule_settings_save_and_token_update()
+        Args:
+            interaction_id: L'identifiant de l'interaction sélectionnée ou None si aucune.
+        """
+        if interaction_id:
+            logger.info(f"Interaction sélectionnée : {interaction_id}")
+            interaction = self.interaction_service.get_by_id(str(interaction_id))
+            if interaction:
+                title_display = getattr(interaction, 'title', str(interaction_id)[:8])
+                self.main_window_ref.statusBar().showMessage(f"Interaction '{title_display}' sélectionnée.", 3000)
+                
+                # Afficher l'interaction dans l'éditeur
+                self.interaction_editor_widget.set_interaction(interaction)
+            else:
+                logger.warning(f"Interaction {interaction_id} non trouvée par le service.")
+                self.main_window_ref.statusBar().showMessage(f"Erreur: Interaction {interaction_id} non trouvée.", 3000)
+                self.interaction_editor_widget.set_interaction(None)
+        else:
+            logger.info("Aucune interaction sélectionnée.")
+            self.main_window_ref.statusBar().showMessage("Sélection d'interaction effacée.", 3000)
+            self.interaction_editor_widget.set_interaction(None)
+
+    @Slot()
+    def _on_sequence_changed(self):
+        """Gère le changement dans la séquence d'interactions (ajout, suppression, réorganisation)."""
+        logger.info("La séquence d'interactions a changé (ajout, suppression, réorganisation).")
+        self.main_window_ref.statusBar().showMessage("Séquence d'interactions modifiée.", 3000)
+    
+    @Slot(uuid.UUID)
+    def _on_edit_interaction_requested(self, interaction_id: uuid.UUID):
+        """Gère la demande d'édition d'une interaction.
+        
+        Args:
+            interaction_id: L'identifiant de l'interaction à éditer.
+        """
+        logger.info(f"Demande d'édition pour l'interaction : {interaction_id}")
+        interaction = self.interaction_service.get_by_id(str(interaction_id))
+        if interaction:
+            # Sélectionner l'onglet Interactions s'il ne l'est pas déjà
+            tabs = self.findChild(QTabWidget)
+            if tabs:
+                interactions_tab_index = tabs.indexOf(self.interaction_sequence_widget.parent())
+                if interactions_tab_index >= 0 and tabs.currentIndex() != interactions_tab_index:
+                    tabs.setCurrentIndex(interactions_tab_index)
+            
+            # Afficher l'interaction dans l'éditeur
+            self.interaction_editor_widget.set_interaction(interaction)
+            title_display = getattr(interaction, 'title', str(interaction_id)[:8])
+            self.main_window_ref.statusBar().showMessage(f"Édition de l'interaction '{title_display}'", 3000)
+        else:
+            QMessageBox.warning(self, "Erreur", f"Impossible de trouver l'interaction {str(interaction_id)} pour l'édition.")
+    
+    @Slot(Interaction)
+    def _on_interaction_changed(self, interaction: Interaction):
+        """Gère le changement d'une interaction après édition.
+        
+        Args:
+            interaction: L'interaction modifiée.
+        """
+        logger.info(f"Interaction modifiée : {interaction.interaction_id}")
+        
+        # Mettre à jour l'affichage de la séquence
+        self.interaction_sequence_widget.refresh_list()
+        
+        title_display = getattr(interaction, 'title', str(interaction.interaction_id)[:8])
+        self.main_window_ref.statusBar().showMessage(f"Interaction '{title_display}' mise à jour.", 3000)

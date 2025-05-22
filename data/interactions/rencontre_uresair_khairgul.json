@@ -1,0 +1,80 @@
+{
+  "interaction_id": "rencontre_uresair_khairgul",
+  "elements": [
+    {
+      "element_type": "dialogue_line",
+      "speaker": "Seigneuresse Uresaïr",
+      "text": "Vous êtes donc l'un des enfants de ce culte, Khair-gul. Que cherchez-vous ici, dans les ombres du Léviathan pétrifié ?",
+      "tags": [],
+      "pre_line_commands": [],
+      "post_line_commands": []
+    },
+    {
+      "element_type": "command",
+      "command_string": "wait(2)"
+    },
+    {
+      "element_type": "dialogue_line",
+      "speaker": "Khair-gul",
+      "text": "Je suis ici pour guérir, Seigneuresse. Les âmes perdues de ce lieu ont besoin des soins d'un médecin. Et vous, pourquoi vous cachez-vous dans ces bibliothèques veineuses ?",
+      "tags": [],
+      "pre_line_commands": [],
+      "post_line_commands": []
+    },
+    {
+      "element_type": "command",
+      "command_string": "wait(2)"
+    },
+    {
+      "element_type": "dialogue_line",
+      "speaker": "Seigneuresse Uresaïr",
+      "text": "Je ne suis pas ici pour être guérie, mais pour préserver ce qui reste de mon essence. Chaque jour, je sens l'oubli me rattraper.",
+      "tags": [],
+      "pre_line_commands": [],
+      "post_line_commands": []
+    },
+    {
+      "element_type": "command",
+      "command_string": "wait(2)"
+    },
+    {
+      "element_type": "dialogue_line",
+      "speaker": "Khair-gul",
+      "text": "L'oubli est un mal que je comprends. Mais parfois, il faut faire face à ce qui nous terrifie pour retrouver notre force. Vous ne devriez pas porter ce poids seule.",
+      "tags": [],
+      "pre_line_commands": [],
+      "post_line_commands": []
+    },
+    {
+      "element_type": "command",
+      "command_string": "wait(2)"
+    },
+    {
+      "element_type": "player_choices_block",
+      "choices": [
+        {
+          "text": "Je ne suis pas là pour discuter de mes faiblesses.",
+          "next_interaction_id": "rencontre_uresair_rejet",
+          "condition": null,
+          "actions": [],
+          "tags": []
+        },
+        {
+          "text": "Peut-être avez-vous raison. Que proposez-vous ?",
+          "next_interaction_id": "rencontre_uresair_accepte",
+          "condition": null,
+          "actions": [],
+          "tags": []
+        }
+      ]
+    }
+  ],
+  "header_commands": [],
+  "header_tags": [
+    "première rencontre",
+    "dialogue",
+    "Léviathan pétrifié"
+  ],
+  "next_interaction_id_if_no_choices": null,
+  "title": "Première rencontre entre Uresaïr et Khair-gul"
+}

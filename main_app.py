@@ -1,7 +1,9 @@
 # DialogueGenerator/main_app.py
 import sys
 import logging
+import os
 from pathlib import Path
+from datetime import datetime
 # from PySide6.QtWidgets import QApplication # Remplacé par QAsyncApplication
 from PySide6.QtWidgets import QApplication
 from qasync import QEventLoop
@@ -36,11 +38,21 @@ except ImportError:  # Lancement direct du script
     from DialogueGenerator.context_builder import ContextBuilder
     from DialogueGenerator.ui.main_window import MainWindow
 
-def main():
-    logging.basicConfig(level=logging.INFO, 
-                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                        handlers=[logging.StreamHandler()])
+# --- Configuration du logging fichier + console ---
+LOGS_DIR = os.path.join(os.path.dirname(__file__), '..', 'logs')
+os.makedirs(LOGS_DIR, exist_ok=True)
+log_filename = os.path.join(LOGS_DIR, datetime.now().strftime('%Y-%m-%d') + '.log')
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_filename, encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+
+def main():
     logger = logging.getLogger(__name__) # Obtenir un logger spécifique au module
 
     logger.info("Démarrage de l'application DialogueGenerator...")

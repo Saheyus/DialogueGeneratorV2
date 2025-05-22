@@ -1,8 +1,11 @@
 import json
 import os
+import logging
 from pathlib import Path
 from typing import Dict, List, Optional
 from DialogueGenerator.models.dialogue_structure import Interaction
+
+logger = logging.getLogger(__name__)
 
 class FileInteractionRepository:
     """Implémentation du repository d'interactions utilisant des fichiers JSON.
@@ -19,6 +22,7 @@ class FileInteractionRepository:
         """
         self.storage_dir = Path(storage_dir)
         os.makedirs(self.storage_dir, exist_ok=True)
+        logger.info(f"FileInteractionRepository initialisé avec le dossier de stockage : {self.storage_dir.absolute()}")
     
     def _get_file_path(self, interaction_id: str) -> Path:
         """Obtient le chemin du fichier pour une interaction donnée.
@@ -70,18 +74,28 @@ class FileInteractionRepository:
         Returns:
             La liste de toutes les interactions.
         """
+        logger.info(f"[DEBUG] FileRepo.get_all: dossier={self.storage_dir}")
         interactions = []
         
-        for file_path in self.storage_dir.glob('*.json'):
+        print(f"[DEBUG] Chargement des interactions depuis : {self.storage_dir.absolute()}")
+        json_files = list(self.storage_dir.glob('*.json'))
+        print(f"[DEBUG] Fichiers JSON trouvés : {len(json_files)}")
+        
+        for file_path in json_files:
+            print(f"[DEBUG] Traitement du fichier : {file_path}")
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     interaction = Interaction.from_dict(data)
                     interactions.append(interaction)
+                    print(f"[DEBUG] Interaction chargée : {interaction.interaction_id}, titre: {getattr(interaction, 'title', '<sans titre>')}")
+                    logger.info(f"[DEBUG] Interaction chargée: id={getattr(interaction, 'interaction_id', None)}, titre={getattr(interaction, 'title', None)}")
             except (json.JSONDecodeError, KeyError, FileNotFoundError) as e:
-                print(f"Erreur lors de la lecture de {file_path}: {e}")
+                print(f"[DEBUG] Erreur lors de la lecture de {file_path}: {e}")
                 continue
         
+        print(f"[DEBUG] Total des interactions chargées : {len(interactions)}")
+        logger.info(f"[DEBUG] Total interactions lues: {len(interactions)}")
         return interactions
     
     def delete(self, interaction_id: str) -> bool:
@@ -122,4 +136,13 @@ class FileInteractionRepository:
                 file_path.unlink()
             except (PermissionError, OSError) as e:
                 print(f"Erreur lors de la suppression de {file_path}: {e}")
-                continue 
+                continue
+
+    def add(self, interaction):
+        logger.info(f"[DEBUG] FileRepo.add: id={interaction.interaction_id}, titre={getattr(interaction, 'title', None)}")
+        path = self._get_file_path(interaction.interaction_id)
+        logger.info(f"[DEBUG] Chemin de sauvegarde: {path}")
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(interaction.to_json())
+        logger.info(f"[DEBUG] Interaction écrite dans {path}")
+        return interaction 

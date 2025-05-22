@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QGroupBox, QGridLayout, 
                                QLabel, QTextEdit, QPushButton, 
-                               QTabWidget, QApplication, QSizePolicy, QScrollArea, QSplitter, QMessageBox, QSpacerItem, QStyle, QHBoxLayout)
+                               QTabWidget, QApplication, QSizePolicy, QScrollArea, QSplitter, QMessageBox, QSpacerItem, QStyle, QHBoxLayout, QCheckBox)
 from PySide6.QtCore import Qt, Signal, Slot, QSize
 from PySide6.QtGui import QPalette, QColor, QFont, QIcon, QAction, QCursor
 import logging
@@ -10,6 +10,17 @@ import json
 from pathlib import Path
 import uuid
 import os
+
+# Import pour Interaction
+try:
+    from ..models.dialogue_structure.interaction import Interaction
+except ImportError:
+    import sys
+    from pathlib import Path
+    current_dir = Path(__file__).resolve().parent.parent
+    if str(current_dir) not in sys.path:
+        sys.path.insert(0, str(current_dir))
+    from DialogueGenerator.models.dialogue_structure.interaction import Interaction
 
 # Import local de la fonction utilitaire
 from .utils import get_icon_path
@@ -86,6 +97,7 @@ class GenerationPanel(QWidget):
         self._is_loading_settings = False
         
         self._init_ui()
+        print(f"[DEBUG] GenerationPanel construit: self={self}, generated_variants_tabs={getattr(self, 'generated_variants_tabs', None)} @ {id(getattr(self, 'generated_variants_tabs', None))}")
 
     def _init_ui(self):
         main_layout = QHBoxLayout(self)
@@ -130,6 +142,13 @@ class GenerationPanel(QWidget):
         self.generation_params_widget.max_context_tokens_changed.connect(self._on_max_context_tokens_changed_from_widget)
         self.generation_params_widget.structured_output_changed.connect(self._schedule_settings_save)
         self.generation_params_widget.settings_changed.connect(self._schedule_settings_save_and_token_update)
+        
+        # Ajout d'une checkbox pour la génération d'interactions structurées
+        self.generate_interaction_checkbox = QCheckBox("Générer une Interaction structurée")
+        self.generate_interaction_checkbox.setToolTip("Si coché, le LLM générera une structure JSON compatible avec le modèle Interaction")
+        self.generate_interaction_checkbox.setChecked(False)
+        self.generate_interaction_checkbox.stateChanged.connect(self._on_generate_interaction_state_changed)
+        generation_tab_layout.addWidget(self.generate_interaction_checkbox)
 
         self.instructions_widget = InstructionsWidget()
         generation_tab_layout.addWidget(self.instructions_widget)
@@ -169,9 +188,11 @@ class GenerationPanel(QWidget):
         right_column_layout = QVBoxLayout(right_column_widget)
         self.generated_variants_tabs = GeneratedVariantsTabsWidget()
         right_column_layout.addWidget(self.generated_variants_tabs)
+        print(f"[DEBUG] _init_ui: generated_variants_tabs instance={self.generated_variants_tabs} @ {id(self.generated_variants_tabs)}")
         main_splitter.addWidget(right_column_widget)
 
         self.generated_variants_tabs.validate_variant_requested.connect(self._on_validate_variant_requested_from_tabs)
+        self.generated_variants_tabs.validate_interaction_requested.connect(self._on_validate_interaction_requested_from_tabs)
         self.generated_variants_tabs.save_all_variants_requested.connect(self._on_save_all_variants_requested_from_tabs)
         self.generated_variants_tabs.regenerate_variant_requested.connect(self._on_regenerate_variant_requested_from_tabs)
 
@@ -284,6 +305,10 @@ class GenerationPanel(QWidget):
              system_prompt_for_service = system_prompt_override_from_ui
 
         context_selections_for_service = self.main_window_ref._get_current_context_selections() if hasattr(self.main_window_ref, '_get_current_context_selections') else {}
+        
+        # Ajouter le réglage de génération d'interaction aux sélections de contexte
+        generate_interaction = self.generate_interaction_checkbox.isChecked()
+        context_selections_for_service["generate_interaction"] = generate_interaction
 
         char_a_name = self.scene_selection_widget.character_a_combo.currentText()
         char_b_name = self.scene_selection_widget.character_b_combo.currentText()
@@ -352,11 +377,13 @@ class GenerationPanel(QWidget):
             k_variants = int(self.generation_params_widget.k_variants_combo.currentText())
             max_context_tokens_for_builder = int(self.generation_params_widget.max_context_tokens_spinbox.value() * 1000)
             structured_output = self.generation_params_widget.structured_output_checkbox.isChecked()
+            generate_interaction = self.generate_interaction_checkbox.isChecked()
             user_instructions = self.instructions_widget.get_user_instructions_text()
             system_prompt_override = self.instructions_widget.get_system_prompt_text()
             current_llm_model_identifier = self.generation_params_widget.llm_model_combo.currentData()
 
             context_selections_dict = self.main_window_ref._get_current_context_selections()
+            context_selections_dict["generate_interaction"] = generate_interaction
             
             char_a_name = self.scene_selection_widget.character_a_combo.currentText()
             char_b_name = self.scene_selection_widget.character_b_combo.currentText()
@@ -380,24 +407,50 @@ class GenerationPanel(QWidget):
                 logger.error("LLM client non disponible pour la génération.")
                 return
 
-            variants, full_prompt, estimated_tokens = await self.dialogue_generation_service.generate_dialogue_variants(
-                llm_client=self.llm_client,
-                k_variants=k_variants,
-                max_context_tokens_for_context_builder=max_context_tokens_for_builder,
-                structured_output=structured_output,
-                user_instructions=user_instructions,
-                system_prompt_override=system_prompt_override,
-                context_selections=context_selections_dict,
-                current_llm_model_identifier=current_llm_model_identifier
-            )
-
-            self.token_actions_widget.set_token_estimation_text(f"Tokens prompt final: {(estimated_tokens or 0) / 1000:.1f}k")
-            self.generated_variants_tabs.display_variants(variants or [], full_prompt)
-            if full_prompt is not None:
-                generation_succeeded = True if variants is not None else False
+            # Choisir la méthode de génération en fonction du mode sélectionné
+            if generate_interaction:
+                logger.info("Utilisation du mode de génération d'Interactions structurées")
+                variants, full_prompt, estimated_tokens = await self.dialogue_generation_service.generate_interaction_variants(
+                    llm_client=self.llm_client,
+                    k_variants=k_variants,
+                    max_context_tokens_for_context_builder=max_context_tokens_for_builder,
+                    user_instructions=user_instructions,
+                    system_prompt_override=system_prompt_override,
+                    context_selections=context_selections_dict,
+                    current_llm_model_identifier=current_llm_model_identifier
+                )
+                
+                self.token_actions_widget.set_token_estimation_text(f"Tokens prompt final: {(estimated_tokens or 0) / 1000:.1f}k")
+                # Utiliser la nouvelle méthode pour afficher les interactions
+                self.generated_variants_tabs.display_interaction_variants(variants or [], full_prompt)
+                
+                if full_prompt is not None:
+                    generation_succeeded = True if variants is not None else False
+                else:
+                    QMessageBox.warning(self, "Erreur de Prompt", "Impossible de construire le prompt. Vérifiez les logs.")
+                    generation_succeeded = False
             else:
-                QMessageBox.warning(self, "Erreur de Prompt", "Impossible de construire le prompt. Vérifiez les logs.")
-                generation_succeeded = False
+                # Mode de génération classique (texte brut)
+                logger.info("Utilisation du mode de génération de texte classique")
+                variants, full_prompt, estimated_tokens = await self.dialogue_generation_service.generate_dialogue_variants(
+                    llm_client=self.llm_client,
+                    k_variants=k_variants,
+                    max_context_tokens_for_context_builder=max_context_tokens_for_builder,
+                    structured_output=structured_output,
+                    user_instructions=user_instructions,
+                    system_prompt_override=system_prompt_override,
+                    context_selections=context_selections_dict,
+                    current_llm_model_identifier=current_llm_model_identifier
+                )
+
+                self.token_actions_widget.set_token_estimation_text(f"Tokens prompt final: {(estimated_tokens or 0) / 1000:.1f}k")
+                self.generated_variants_tabs.display_variants(variants or [], full_prompt)
+                if full_prompt is not None:
+                    generation_succeeded = True if variants is not None else False
+                else:
+                    QMessageBox.warning(self, "Erreur de Prompt", "Impossible de construire le prompt. Vérifiez les logs.")
+                    generation_succeeded = False
+                    
         except Exception as e:
             logger.exception("Erreur majeure dans GenerationPanelBase._on_generate_dialogue_button_clicked_local")
             QMessageBox.critical(self, "Erreur Critique", f"Une erreur inattendue est survenue dans GenerationPanel: {e}")
@@ -420,6 +473,72 @@ class GenerationPanel(QWidget):
         logger.info(f"Validation de la variante '{tab_name}' demandée depuis le widget d'onglets.")
         QMessageBox.information(self, "Validation", f"La variante '{tab_name}' serait validée avec le contenu:\n{content[:200]}...")
 
+    @Slot(str, Interaction)
+    def _on_validate_interaction_requested_from_tabs(self, tab_name: str, interaction: Interaction):
+        """Gère la validation d'une interaction générée depuis un onglet de variante.
+        
+        Cette méthode sauvegarde l'interaction, met à jour la liste des interactions,
+        puis affiche l'interaction validée dans l'éditeur.
+        
+        Points importants:
+        - Déconnecte temporairement le signal interaction_selected pour éviter des effets de bord
+          lors du changement d'onglet qui pourrait vider l'éditeur
+        - Sélectionne l'onglet "Interactions" automatiquement
+        - Force l'affichage direct de l'interaction validée dans l'éditeur
+        
+        Args:
+            tab_name: Nom de l'onglet source
+            interaction: L'objet Interaction à valider et sauvegarder
+        """
+        print(f"[DEBUG] SLOT _on_validate_interaction_requested_from_tabs appelé pour tab_name={tab_name}, id={interaction.interaction_id}, self.generated_variants_tabs={self.generated_variants_tabs} @ {id(self.generated_variants_tabs)}")
+        logger.info(f"[DEBUG] Début validation interaction depuis onglet: tab_name={tab_name}, id={interaction.interaction_id}, titre={interaction.title}")
+        try:
+            # Sauvegarder l'interaction dans le service
+            self.interaction_service.save(interaction)
+            logger.info(f"[DEBUG] Interaction sauvegardée avec ID: {interaction.interaction_id}, titre: {interaction.title}")
+            
+            # Afficher une boîte de dialogue de confirmation
+            QMessageBox.information(self, "Interaction Validée", f"L'interaction '{interaction.title}' a été ajoutée à la séquence.")
+            
+            # Déconnecter temporairement le signal pour éviter le vidage de l'éditeur
+            # Obtenir la signature de la méthode avec le bon type de paramètre
+            try:
+                self.interaction_sequence_widget.interaction_selected.disconnect(self._on_interaction_selected)
+                print(f"[DEBUG] Signal interaction_selected déconnecté avec succès")
+            except Exception as e:
+                print(f"[DEBUG] Erreur lors de la déconnexion du signal: {e}")
+            
+            # Rafraîchir la liste des interactions
+            self.interaction_sequence_widget.refresh_list(select_id=str(interaction.interaction_id))
+            logger.info(f"[DEBUG] refresh_list appelé avec select_id={interaction.interaction_id}")
+            
+            # Debug: vérifier le type de l'ID
+            print(f"[DEBUG] Type de interaction.interaction_id: {type(interaction.interaction_id)}, valeur: {interaction.interaction_id}")
+            
+            # Sélectionner l'onglet "Interactions" si possible
+            if hasattr(self.main_window_ref, 'central_tabs'):
+                tabs = self.main_window_ref.central_tabs
+                for i in range(tabs.count()):
+                    if tabs.tabText(i) == "Interactions":
+                        tabs.setCurrentIndex(i)
+                        logger.info(f"[DEBUG] Passage à l'onglet Interactions (index {i}) via main_window_ref.central_tabs")
+                        break
+            
+            # Forcer directement l'éditeur à afficher l'interaction
+            print(f"[DEBUG] Appel direct de interaction_editor_widget.set_interaction()")
+            self.interaction_editor_widget.set_interaction(interaction)
+            
+            # Reconnecter le signal après avoir effectué les changements
+            try:
+                self.interaction_sequence_widget.interaction_selected.connect(self._on_interaction_selected)
+                print(f"[DEBUG] Signal interaction_selected reconnecté avec succès")
+            except Exception as e:
+                print(f"[DEBUG] Erreur lors de la reconnexion du signal: {e}")
+            
+        except Exception as e:
+            logger.exception(f"Erreur lors de la validation de l'interaction: {str(e)}")
+            QMessageBox.critical(self, "Erreur", f"Impossible de valider l'interaction: {str(e)}")
+
     @Slot(list)
     def _on_save_all_variants_requested_from_tabs(self, variants_data: list):
         logger.info(f"Sauvegarde de {len(variants_data)} variantes demandée depuis le widget d'onglets.")
@@ -438,6 +557,8 @@ class GenerationPanel(QWidget):
         settings = self.scene_selection_widget.get_selected()
         settings.update(self.generation_params_widget.get_settings())
         settings.update(self.instructions_widget.get_settings())
+        # Ajouter le réglage de génération d'interaction
+        settings["generate_interaction"] = self.generate_interaction_checkbox.isChecked()
         logger.debug(f"Récupération des paramètres du GenerationPanel (combinés): {settings}")
         return settings
 
@@ -454,6 +575,10 @@ class GenerationPanel(QWidget):
         QApplication.processEvents() 
 
         self.generation_params_widget.load_settings(settings)
+        
+        # Charger le réglage de génération d'interaction
+        generate_interaction = settings.get("generate_interaction", False)
+        self.generate_interaction_checkbox.setChecked(generate_interaction)
         
         default_system_prompt_for_widget = self.prompt_engine._get_default_system_prompt() if self.prompt_engine else ""
         self.instructions_widget.load_settings(
@@ -561,12 +686,29 @@ class GenerationPanel(QWidget):
             logger.warning("Impossible de tout décocher: left_panel ou méthode uncheck_all_items non trouvée.")
             self.main_window_ref.statusBar().showMessage("Erreur: Impossible de tout décocher.", 3000)
 
-    @Slot(uuid.UUID)
-    def _on_interaction_selected(self, interaction_id: Optional[uuid.UUID]):
-        if interaction_id:
+    @Slot(object)
+    def _on_interaction_selected(self, interaction_id):
+        """Gère la sélection d'une interaction dans la liste.
+        
+        Cette méthode est appelée lorsque l'utilisateur sélectionne une interaction
+        dans la liste des interactions. Elle récupère l'interaction depuis le service
+        et l'affiche dans l'éditeur.
+        
+        Compatibilité ID:
+        - Supporte les identifiants sous forme d'UUID ou de chaîne de caractères
+        - Convertit les identifiants en chaîne pour la récupération dans le service
+        
+        Args:
+            interaction_id: L'identifiant de l'interaction sélectionnée (UUID ou str)
+                            ou None si aucune sélection
+        """
+        print(f"[DEBUG] _on_interaction_selected appelé avec interaction_id={interaction_id}, type={type(interaction_id)}")
+        if interaction_id is not None:
             logger.info(f"Interaction sélectionnée : {interaction_id}")
             interaction = self.interaction_service.get_by_id(str(interaction_id))
+            print(f"[DEBUG] Interaction récupérée depuis le service: {interaction}")
             if interaction:
+                print(f"[DEBUG] Appel de interaction_editor_widget.set_interaction() avec interaction trouvée")
                 self.interaction_editor_widget.set_interaction(interaction)
                 self.interaction_editor_widget.show()
                 title_display = interaction.interaction_id 
@@ -574,10 +716,12 @@ class GenerationPanel(QWidget):
                     title_display = interaction.title
                 self.main_window_ref.statusBar().showMessage(f"Interaction '{title_display}' sélectionnée.", 3000)
             else:
+                print(f"[DEBUG] Interaction {interaction_id} non trouvée par le service")
                 self.interaction_editor_widget.set_interaction(None)
                 logger.warning(f"Interaction {interaction_id} non trouvée par le service.")
                 self.main_window_ref.statusBar().showMessage(f"Erreur: Interaction {interaction_id} non trouvée.", 3000)
         else:
+            print(f"[DEBUG] interaction_id est None, effacement de l'éditeur")
             self.interaction_editor_widget.set_interaction(None)
             logger.info("Aucune interaction sélectionnée.")
             self.main_window_ref.statusBar().showMessage("Sélection d'interaction effacée.", 3000)
@@ -586,3 +730,19 @@ class GenerationPanel(QWidget):
     def _on_sequence_changed(self):
         logger.info("La séquence d'interactions a changé (ajout, suppression, réorganisation).")
         self.main_window_ref.statusBar().showMessage("Séquence d'interactions modifiée.", 3000)
+
+    @Slot(bool)
+    def _on_generate_interaction_state_changed(self, state):
+        """Gère le changement d'état de la checkbox de génération d'interactions."""
+        is_checked = state == Qt.CheckState.Checked
+        logger.info(f"Mode de génération d'Interaction structurée: {'activé' if is_checked else 'désactivé'}")
+        self._schedule_settings_save_and_token_update()
+        
+        # Mise à jour visuelle en fonction du mode
+        if is_checked:
+            self.generation_params_widget.structured_output_checkbox.setChecked(True)
+            self.generation_params_widget.structured_output_checkbox.setEnabled(False)
+            self.generation_params_widget.structured_output_checkbox.setToolTip("La sortie structurée est requise pour la génération d'Interactions")
+        else:
+            self.generation_params_widget.structured_output_checkbox.setEnabled(True)
+            self.generation_params_widget.structured_output_checkbox.setToolTip("Demande au LLM de générer du JSON au lieu de texte brut")

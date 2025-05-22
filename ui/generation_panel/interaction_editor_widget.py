@@ -443,14 +443,13 @@ class InteractionEditorWidget(QWidget):
         self._update_ui_state(False)
     
     def set_interaction(self, interaction: Optional[Interaction]):
-        """Définit l'interaction à éditer et met à jour l'interface.
-        
-        Args:
-            interaction: L'interaction à éditer, ou None pour effacer l'interface.
-        """
+        """Charge une interaction dans l'éditeur."""
+        print(f"[DEBUG] InteractionEditorWidget.set_interaction() appelé avec interaction={interaction}")
         self._clear_ui()
         self.current_interaction = interaction
+        
         if interaction:
+            print(f"[DEBUG] Chargement de l'interaction: id={interaction.interaction_id}, titre={getattr(interaction, 'title', 'N/A')}")
             self.id_label.setText(str(interaction.interaction_id))
             self.title_edit.setText(getattr(interaction, 'title', ""))
             self._load_dialogue_lines()
@@ -458,6 +457,7 @@ class InteractionEditorWidget(QWidget):
             self._load_commands()
             self._update_ui_state(True)  # Toujours activer l'éditeur si interaction
         else:
+            print(f"[DEBUG] Effacement de l'éditeur (interaction=None)")
             self._update_ui_state(False)
     
     def _clear_ui(self):

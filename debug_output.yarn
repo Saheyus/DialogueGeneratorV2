@@ -1,0 +1,16 @@
+title: dialogue_marchand
+---
+tags: boutique, marchand
+
+<<set $has_visited_shop = true>>
+===
+
+Marchand: Bonjour aventurier !
+Marchand: Qu'est-ce qui vous amène dans ma boutique ?
+-> Je cherche des armes
+    <<jump acheter_armes>>
+-> Je veux vendre des objets
+    <<jump vendre_objets>>
+-> Juste en train de regarder
+    <<jump fin_dialogue>>
+=== 

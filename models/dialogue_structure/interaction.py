@@ -4,12 +4,13 @@ from .dialogue_elements import AbstractDialogueElement, DialogueLineElement, Pla
 class Interaction:
     def __init__(self, interaction_id: str, elements: Optional[List[AbstractDialogueElement]] = None,
                  header_commands: Optional[List[str]] = None, header_tags: Optional[List[str]] = None,
-                 next_interaction_id_if_no_choices: Optional[str] = None):
+                 next_interaction_id_if_no_choices: Optional[str] = None, title: str = ""):
         self.interaction_id = interaction_id
         self.elements = elements or []
         self.header_commands = header_commands or []
         self.header_tags = header_tags or []
         self.next_interaction_id_if_no_choices = next_interaction_id_if_no_choices
+        self.title = title
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -17,7 +18,8 @@ class Interaction:
             "elements": [e.to_dict() for e in self.elements],
             "header_commands": self.header_commands,
             "header_tags": self.header_tags,
-            "next_interaction_id_if_no_choices": self.next_interaction_id_if_no_choices
+            "next_interaction_id_if_no_choices": self.next_interaction_id_if_no_choices,
+            "title": self.title
         }
 
     @classmethod
@@ -38,5 +40,6 @@ class Interaction:
             elements=elements,
             header_commands=data.get('header_commands'),
             header_tags=data.get('header_tags'),
-            next_interaction_id_if_no_choices=data.get('next_interaction_id_if_no_choices')
+            next_interaction_id_if_no_choices=data.get('next_interaction_id_if_no_choices'),
+            title=data.get('title', "")
         ) 

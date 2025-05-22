@@ -64,6 +64,68 @@ PersonnageB: Et ceci est une réponse.
 ===
 """
 
+    def _get_interaction_system_prompt(self) -> str:
+        """
+        Retourne un system prompt spécifique à la génération d'Interactions structurées.
+        
+        Ce prompt instruit le LLM à générer une structure JSON compatible avec le modèle
+        Interaction et ses éléments associés (DialogueLineElement, PlayerChoicesBlockElement, etc.)
+        
+        Returns:
+            str: Le system prompt pour la génération d'Interactions.
+        """
+        return \
+"""
+Tu es un assistant expert en écriture de dialogues pour jeux de rôle (RPG).
+Ta tâche est de générer une interaction structurée au format JSON.
+L'interaction doit être cohérente avec le contexte fourni (personnages, lieu, quête).
+L'interaction doit suivre l'instruction utilisateur concernant l'objectif de la scène.
+
+FORMAT JSON À RESPECTER STRICTEMENT:
+
+```json
+{
+  "interaction_id": "un_id_unique_pour_cette_interaction",
+  "title": "Titre descriptif de l'interaction",
+  "elements": [
+    {
+      "element_type": "dialogue_line",
+      "speaker": "Nom du personnage qui parle",
+      "text": "Texte du dialogue"
+    },
+    {
+      "element_type": "command",
+      "command_string": "wait(2)"
+    },
+    {
+      "element_type": "player_choices_block",
+      "choices": [
+        {
+          "text": "Ce que le joueur peut dire/faire (option 1)",
+          "next_interaction_id": "id_interaction_suivante_option_1"
+        },
+        {
+          "text": "Ce que le joueur peut dire/faire (option 2)",
+          "next_interaction_id": "id_interaction_suivante_option_2"
+        }
+      ]
+    }
+  ],
+  "header_tags": ["tag1", "tag2"],
+  "next_interaction_id_if_no_choices": null
+}
+```
+
+RÈGLES À SUIVRE:
+1. L'interaction doit être complète et autonome
+2. L'ordre des éléments est important et sera respecté lors du rendu
+3. Ne fournis que la structure JSON, sans explication ni commentaire
+4. Utilise un ID d'interaction unique et descriptif (par exemple: "rencontre_tavernier_initial")
+5. Pour les choix du joueur, invente des ID logiques pour les interactions suivantes (par exemple: "rencontre_tavernier_accepte_quete")
+6. Les éléments peuvent être répétés (plusieurs lignes de dialogue, plusieurs commandes, etc.)
+7. Utilise les personnages mentionnés dans le contexte comme "speaker" des lignes de dialogue
+"""
+
     def _count_tokens(self, text: str, model_name: str = "gpt-4") -> int:
         """
         Compte le nombre de tokens dans un texte en utilisant tiktoken si disponible.
@@ -114,8 +176,12 @@ PersonnageB: Et ceci est une réponse.
         """
         if generation_params is None:
             generation_params = {}
-
-        prompt_parts = [self.system_prompt_template]
+            
+        # Déterminer quel prompt système utiliser
+        generate_interaction = generation_params.get("generate_interaction", False)
+        current_system_prompt = self._get_interaction_system_prompt() if generate_interaction else self.system_prompt_template
+        
+        prompt_parts = [current_system_prompt]
 
         # Section dédiée pour les protagonistes et le lieu
         if scene_protagonists or scene_location:
@@ -143,6 +209,12 @@ PersonnageB: Et ceci est une réponse.
         if "tone" in generation_params:
             prompt_parts.append("\n--- TON ATTENDU ---")
             prompt_parts.append(str(generation_params["tone"]))
+            
+        # Si on génère une interaction, ajouter un rappel sur le format JSON attendu
+        if generate_interaction:
+            prompt_parts.append("\n--- RAPPEL FORMAT JSON ---")
+            prompt_parts.append("Génère uniquement la structure JSON demandée, sans texte d'introduction ni de conclusion.")
+            prompt_parts.append("Respecte strictement le format d'Interaction spécifié dans les instructions.")
 
         full_prompt = "\n".join(prompt_parts)
         

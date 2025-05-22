@@ -17,7 +17,7 @@ class SceneSelectionWidget(QWidget):
         self._init_ui()
 
     def _init_ui(self):
-        self.group_box = QGroupBox("Contexte Principal de la Scène", self)
+        self.group_box = QGroupBox("Scène Principale", self)
         self.layout = QGridLayout(self.group_box)
         row = 0
         self.layout.addWidget(QLabel("Personnage A:"), row, 0)
