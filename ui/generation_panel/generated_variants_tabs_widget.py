@@ -377,9 +377,7 @@ class GeneratedVariantsTabsWidget(QTabWidget):
         # 3. Ajouter les nouveaux onglets de variantes d'interactions
         if interaction_variants:
             for i, interaction in enumerate(interaction_variants):
-                tab_name = f"Variante {i+1}"
-                if hasattr(interaction, 'title') and interaction.title:
-                    tab_name = f"Variante {i+1}: {interaction.title}"
+                tab_name = f"Variante {i+1}"  # Titre simplifié sans le titre de l'interaction
                 print(f"[DEBUG] Ajout de l'onglet: {tab_name}, interaction_id={getattr(interaction, 'interaction_id', None)}")
                 
                 # Log du JSON pour debug

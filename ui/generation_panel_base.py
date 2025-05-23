@@ -33,6 +33,7 @@ from .generation_panel.token_estimation_actions_widget import TokenEstimationAct
 from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTabsWidget
 from .generation_panel.interaction_sequence_widget import InteractionSequenceWidget
 from .generation_panel.interaction_editor_widget import InteractionEditorWidget
+from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
 
 # New service import
 try:
@@ -151,6 +152,12 @@ class GenerationPanel(QWidget):
         self.generate_interaction_checkbox.stateChanged.connect(self._on_generate_interaction_state_changed)
         generation_tab_layout.addWidget(self.generate_interaction_checkbox)
 
+        # Widget de contrôle de structure de dialogue
+        self.dialogue_structure_widget = DialogueStructureWidget()
+        generation_tab_layout.addWidget(self.dialogue_structure_widget)
+        self.dialogue_structure_widget.structure_changed.connect(self._on_dialogue_structure_changed)
+        self.dialogue_structure_widget.structure_changed.connect(self._schedule_settings_save_and_token_update)
+
         self.instructions_widget = InstructionsWidget()
         generation_tab_layout.addWidget(self.instructions_widget)
         self.instructions_widget.user_instructions_changed.connect(self._schedule_settings_save_and_token_update)
@@ -199,11 +206,11 @@ class GenerationPanel(QWidget):
 
         # Ajustement des indices et des proportions pour le splitter
         main_splitter.setStretchFactor(0, 1)  # central_tabs (anciennement index 1)
-        main_splitter.setStretchFactor(1, 2)  # right_column_widget (anciennement index 2)
+        main_splitter.setStretchFactor(1, 3)  # right_column_widget (anciennement index 2) - augmenté de 2 à 3
         
-        # Ajustement des largeurs initiales
-        initial_widths = [self.width() * 1 // 3 if self.width() > 0 else 300, 
-                          self.width() * 2 // 3 if self.width() > 0 else 500]
+        # Ajustement des largeurs initiales - plus de place pour le panneau de droite
+        initial_widths = [self.width() * 1 // 4 if self.width() > 0 else 250, 
+                          self.width() * 3 // 4 if self.width() > 0 else 750]  # Augmenté de 2/3 à 3/4
         if all(w > 50 for w in initial_widths):
             main_splitter.setSizes(initial_widths)
         else:
@@ -309,7 +316,14 @@ class GenerationPanel(QWidget):
         
         # Ajouter le réglage de génération d'interaction aux sélections de contexte
         generate_interaction = self.generate_interaction_checkbox.isChecked()
-        context_selections_for_service["generate_interaction"] = generate_interaction
+        if "generation_settings" not in context_selections_for_service:
+            context_selections_for_service["generation_settings"] = {}
+        context_selections_for_service["generation_settings"]["generate_interaction"] = generate_interaction
+        
+        # Ajouter la structure de dialogue si on génère des interactions
+        if generate_interaction:
+            dialogue_structure = self.dialogue_structure_widget.get_structure_description()
+            context_selections_for_service["generation_settings"]["dialogue_structure"] = dialogue_structure
 
         char_a_name = self.scene_selection_widget.character_a_combo.currentText()
         char_b_name = self.scene_selection_widget.character_b_combo.currentText()
@@ -411,6 +425,13 @@ class GenerationPanel(QWidget):
             # Choisir la méthode de génération en fonction du mode sélectionné
             if generate_interaction:
                 logger.info("Utilisation du mode de génération d'Interactions structurées")
+                
+                # Ajouter la structure de dialogue aux paramètres
+                dialogue_structure_description = self.dialogue_structure_widget.get_structure_description()
+                if "generation_settings" not in context_selections_dict:
+                    context_selections_dict["generation_settings"] = {}
+                context_selections_dict["generation_settings"]["dialogue_structure"] = dialogue_structure_description
+                
                 variants, full_prompt, estimated_tokens = await self.dialogue_generation_service.generate_interaction_variants(
                     llm_client=self.llm_client,
                     k_variants=k_variants,
@@ -747,3 +768,9 @@ class GenerationPanel(QWidget):
         else:
             self.generation_params_widget.structured_output_checkbox.setEnabled(True)
             self.generation_params_widget.structured_output_checkbox.setToolTip("Demande au LLM de générer du JSON au lieu de texte brut")
+
+    @Slot(list)
+    def _on_dialogue_structure_changed(self, structure):
+        """Appelé quand la structure de dialogue change."""
+        logger.debug(f"Structure de dialogue modifiée: {structure}")
+        # La structure a déjà été modifiée dans le widget, pas besoin de la réappliquer

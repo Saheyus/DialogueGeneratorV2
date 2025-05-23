@@ -179,6 +179,7 @@ RÈGLES À SUIVRE:
             
         # Déterminer quel prompt système utiliser
         generate_interaction = generation_params.get("generate_interaction", False)
+        dialogue_structure = generation_params.get("dialogue_structure", None)
         current_system_prompt = self._get_interaction_system_prompt() if generate_interaction else self.system_prompt_template
         
         prompt_parts = [current_system_prompt]
@@ -189,8 +190,8 @@ RÈGLES À SUIVRE:
             if scene_protagonists:
                 personnage_a = scene_protagonists.get("personnage_a", "Non spécifié")
                 personnage_b = scene_protagonists.get("personnage_b", "Non spécifié")
-                prompt_parts.append(f"Personnage A : {personnage_a}")
-                prompt_parts.append(f"Personnage B : {personnage_b}")
+                prompt_parts.append(f"Personnage A (Joueur) : {personnage_a}")
+                prompt_parts.append(f"Personnage B (PNJ) : {personnage_b}")
             if scene_location:
                 lieu = scene_location.get("lieu", "Non spécifié")
                 sous_lieu = scene_location.get("sous_lieu")
@@ -201,6 +202,19 @@ RÈGLES À SUIVRE:
         if context_summary:
             prompt_parts.append("\n--- CONTEXTE GÉNÉRAL DE LA SCÈNE ---")
             prompt_parts.append(context_summary)
+            
+        # Ajouter la structure de dialogue si définie (pour les interactions structurées)
+        if generate_interaction and dialogue_structure:
+            prompt_parts.append("\n--- STRUCTURE DE DIALOGUE REQUISE ---")
+            prompt_parts.append(dialogue_structure)
+            prompt_parts.append("")
+            prompt_parts.append("RÈGLES SPÉCIFIQUES À LA STRUCTURE:")
+            prompt_parts.append("• Respecte EXACTEMENT l'ordre et le type d'éléments définis")
+            prompt_parts.append("• Personnage A = Joueur (ne parle QUE par les choix, jamais en dialogue direct)")
+            prompt_parts.append("• Personnage B = PNJ (parle UNIQUEMENT en dialogue direct, jamais par choix)")
+            prompt_parts.append("• 'PNJ' = élément 'dialogue_line' avec Personnage B comme speaker")
+            prompt_parts.append("• 'PJ' = élément 'player_choices_block' avec les options du joueur")
+            prompt_parts.append("• 'Stop' = fin de l'interaction, aucun élément après")
         
         prompt_parts.append("\n--- OBJECTIF DE LA SCÈNE (Instruction Utilisateur) ---")
         prompt_parts.append(user_specific_goal)

@@ -201,6 +201,10 @@ class DialogueGenerationService:
             scene_protagonists_dict = context_selections.pop("_scene_protagonists", None)
             scene_location_dict = context_selections.pop("_scene_location", None)
             
+            # Extraire les paramètres de génération, y compris la structure de dialogue
+            generation_settings = context_selections.pop("generation_settings", {})
+            dialogue_structure = generation_settings.get("dialogue_structure", None)
+            
             # 3. Construire le prompt avec le format JSON pour Interaction
             original_system_prompt = None
             if system_prompt_override is not None and self.prompt_engine.system_prompt_template != system_prompt_override:
@@ -209,7 +213,10 @@ class DialogueGenerationService:
                 logger.info("Utilisation d'un system_prompt_override pour la génération d'interactions.")
                 
             # Utiliser le paramètre generate_interaction pour utiliser le prompt spécifique aux interactions
-            generation_params = {"generate_interaction": True}
+            generation_params = {
+                "generate_interaction": True,
+                "dialogue_structure": dialogue_structure
+            }
             
             full_prompt, estimated_tokens = self.prompt_engine.build_prompt(
                 user_specific_goal=user_instructions,
