@@ -42,15 +42,25 @@ def save_ui_settings(settings: Dict[str, Any]) -> None:
 
 def get_unity_dialogues_path() -> Optional[Path]:
     """
-    Retourne le chemin des dialogues Unity, en utilisant un chemin par défaut si non configuré.
+    Retourne le chemin des dialogues Unity depuis ui_settings.json, avec validation.
+    Utilise un chemin par défaut si non configuré.
     
     Returns:
-        Optional[Path]: Le chemin vers les dialogues Unity.
+        Optional[Path]: Le chemin vers les dialogues Unity, ou None si invalide.
     """
-    # Utiliser directement le chemin par défaut
-    dialogues_path = DEFAULT_UNITY_DIALOGUES_PATH
+    # 1. Essayer de récupérer depuis ui_settings.json
+    settings = load_ui_settings()
+    unity_path_str = settings.get("unity_dialogues_path")
     
-    # Vérifier que le répertoire existe, sinon essayer de le créer
+    dialogues_path = None
+    if unity_path_str:
+        dialogues_path = Path(unity_path_str)
+    else:
+        # 2. Si pas configuré, utiliser le chemin par défaut
+        dialogues_path = DEFAULT_UNITY_DIALOGUES_PATH
+        logger.info(f"Chemin Unity non configuré, utilisation du chemin par défaut: {dialogues_path}")
+    
+    # 3. Vérifier que le répertoire existe, sinon essayer de le créer
     if not dialogues_path.exists():
         try:
             dialogues_path.mkdir(parents=True, exist_ok=True)
@@ -59,9 +69,18 @@ def get_unity_dialogues_path() -> Optional[Path]:
             logger.error(f"Impossible de créer le répertoire des dialogues Unity: {dialogues_path}. Erreur: {e}")
             return None
     
-    # Si le chemin existe mais n'est pas un répertoire, c'est une erreur
+    # 4. Si le chemin existe mais n'est pas un répertoire, c'est une erreur
     if not dialogues_path.is_dir():
         logger.error(f"Le chemin des dialogues Unity n'est pas un répertoire: {dialogues_path}")
+        return None
+    
+    # 5. Valider les droits d'accès R/W (comme spécifié dans la règle dialoguepath)
+    if not os.access(dialogues_path, os.W_OK):
+        logger.error(f"Le chemin des dialogues Unity n'est pas accessible en écriture: {dialogues_path}")
+        return None
+    
+    if not os.access(dialogues_path, os.R_OK):
+        logger.error(f"Le chemin des dialogues Unity n'est pas accessible en lecture: {dialogues_path}")
         return None
     
     return dialogues_path

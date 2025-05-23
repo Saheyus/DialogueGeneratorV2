@@ -11,7 +11,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from DialogueGenerator import config_manager
-from DialogueGenerator.config_manager import UI_SETTINGS_FILE, load_ui_settings, save_ui_settings # Importer pour patcher directement
+from DialogueGenerator.config_manager import UI_SETTINGS_FILE, load_ui_settings, save_ui_settings
 
 class TestConfigManager(unittest.TestCase):
 
@@ -29,14 +29,13 @@ class TestConfigManager(unittest.TestCase):
         elif UI_SETTINGS_FILE.exists():
             UI_SETTINGS_FILE.unlink()
 
-    @patch(f'{config_manager.__name__}.save_ui_settings') # Mocker save_ui_settings directement
-    @patch(f'{config_manager.__name__}.load_ui_settings') # Mocker load_ui_settings directement
+    @patch(f'{config_manager.__name__}.save_ui_settings')
+    @patch(f'{config_manager.__name__}.load_ui_settings')
     def test_set_unity_dialogues_path_new_file(self, mock_load_ui_settings, mock_save_ui_settings):
         """Teste la définition du chemin quand ui_settings.json n'existe pas ou est vide."""
-        mock_load_ui_settings.return_value = {}  # Simule un fichier non existant ou vide
+        mock_load_ui_settings.return_value = {}
         
         test_path = "C:/test/path"
-        # Path.is_dir est utilisé par set_unity_dialogues_path pour un warning, mais n'affecte pas le retour/sauvegarde
         with patch('pathlib.Path.is_dir', return_value=True): 
             result = config_manager.set_unity_dialogues_path(test_path)
         
@@ -62,93 +61,127 @@ class TestConfigManager(unittest.TestCase):
 
     @patch(f'{config_manager.__name__}.save_ui_settings')
     @patch(f'{config_manager.__name__}.load_ui_settings')
-    @patch('pathlib.Path.is_dir', return_value=False) # Simule que le chemin n'est pas un dir
-    def test_set_unity_dialogues_path_invalid_path_is_not_dir(self, mock_is_dir, mock_load_ui_settings, mock_save_ui_settings):
-        """Teste la définition avec un chemin qui n'est pas un répertoire."""
+    @patch('pathlib.Path.mkdir')
+    @patch('pathlib.Path.is_dir', return_value=False)
+    def test_set_unity_dialogues_path_creates_directory(self, mock_is_dir, mock_mkdir, mock_load_ui_settings, mock_save_ui_settings):
+        """Teste la création de répertoire quand le chemin n'existe pas."""
         mock_load_ui_settings.return_value = {}
-        test_path = "C:/not_a_dir"
+        test_path = "C:/new_dir"
         
         result = config_manager.set_unity_dialogues_path(test_path)
-        self.assertTrue(result) # La fonction set est permissive, logue un warning.
-        mock_load_ui_settings.assert_called_once()
+        self.assertTrue(result)
+        mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
         mock_save_ui_settings.assert_called_once_with({"unity_dialogues_path": test_path})
 
-    # Les tests pour get_unity_dialogues_path restent globalement les mêmes,
-    # mais on va s'assurer qu'ils mockent load_ui_settings au lieu de open/json.load directement
-    # pour être cohérents avec la structure de config_manager.
-
+    # Tests pour la nouvelle implémentation de get_unity_dialogues_path qui utilise ui_settings.json + validation
     @patch('os.access')
-    @patch('pathlib.Path.is_dir')
-    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.is_dir', return_value=True)
+    @patch('pathlib.Path.exists', return_value=True)
     @patch(f'{config_manager.__name__}.load_ui_settings')
-    def test_get_unity_dialogues_path_success(self, mock_load_ui_settings, mock_path_exists, mock_is_dir, mock_os_access):
-        """Teste la récupération d'un chemin valide et existant."""
+    def test_get_unity_dialogues_path_from_settings_success(self, mock_load_ui_settings, mock_exists, mock_is_dir, mock_os_access):
+        """Teste la récupération du chemin depuis ui_settings.json avec validation complète."""
         test_path_str = "E:/valid/path"
         mock_load_ui_settings.return_value = {"unity_dialogues_path": test_path_str}
-        mock_path_exists.return_value = True
-        mock_is_dir.return_value = True
-        mock_os_access.side_effect = [True, True] # W_OK, R_OK
-
+        mock_os_access.side_effect = [True, True]  # W_OK, R_OK
+        
         retrieved_path = config_manager.get_unity_dialogues_path()
+        
         self.assertIsNotNone(retrieved_path)
         self.assertEqual(retrieved_path, Path(test_path_str))
         mock_load_ui_settings.assert_called_once()
         mock_os_access.assert_any_call(Path(test_path_str), os.W_OK)
         mock_os_access.assert_any_call(Path(test_path_str), os.R_OK)
 
-    @patch(f'{config_manager.__name__}.load_ui_settings')
-    def test_get_unity_dialogues_path_not_configured(self, mock_load_ui_settings):
-        """Teste la récupération quand le chemin n'est pas dans les settings."""
-        mock_load_ui_settings.return_value = {"other_key": "value"} # Pas de clé 'unity_dialogues_path'
-        retrieved_path = config_manager.get_unity_dialogues_path()
-        self.assertIsNone(retrieved_path)
-        mock_load_ui_settings.assert_called_once()
-
-    @patch('pathlib.Path.exists', return_value=False) # Le chemin n'existe pas
-    @patch(f'{config_manager.__name__}.load_ui_settings')
-    def test_get_unity_dialogues_path_not_exists(self, mock_load_ui_settings, mock_path_exists):
-        """Teste la récupération quand le chemin configuré n'existe pas."""
-        mock_load_ui_settings.return_value = {"unity_dialogues_path": "F:/non_existent_path"}
-        retrieved_path = config_manager.get_unity_dialogues_path()
-        self.assertIsNone(retrieved_path)
-        mock_load_ui_settings.assert_called_once()
-
-    @patch('pathlib.Path.is_dir', return_value=False) # N'est pas un répertoire
-    @patch('pathlib.Path.exists', return_value=True)
-    @patch(f'{config_manager.__name__}.load_ui_settings')
-    def test_get_unity_dialogues_path_not_a_directory(self, mock_load_ui_settings, mock_path_exists, mock_is_dir):
-        """Teste la récupération quand le chemin n'est pas un dossier."""
-        mock_load_ui_settings.return_value = {"unity_dialogues_path": "G:/not_a_dir_file.txt"}
-        retrieved_path = config_manager.get_unity_dialogues_path()
-        self.assertIsNone(retrieved_path)
-        mock_load_ui_settings.assert_called_once()
-
-    @patch('os.access', side_effect=[False]) # Non accessible en écriture
+    @patch('os.access')
+    @patch('pathlib.Path.mkdir')
     @patch('pathlib.Path.is_dir', return_value=True)
-    @patch('pathlib.Path.exists', return_value=True)
+    @patch('pathlib.Path.exists', return_value=False)
     @patch(f'{config_manager.__name__}.load_ui_settings')
-    def test_get_unity_dialogues_path_not_writable(self, mock_load_ui_settings, mock_path_exists, mock_is_dir, mock_os_access):
-        """Teste la récupération quand le chemin n'est pas accessible en écriture."""
-        test_path_str = "H:/not_writable"
+    def test_get_unity_dialogues_path_creates_configured_directory(self, mock_load_ui_settings, mock_exists, mock_is_dir, mock_mkdir, mock_os_access):
+        """Teste la création du répertoire configuré s'il n'existe pas."""
+        test_path_str = "E:/new/path"
         mock_load_ui_settings.return_value = {"unity_dialogues_path": test_path_str}
-        retrieved_path = config_manager.get_unity_dialogues_path()
-        self.assertIsNone(retrieved_path)
-        mock_load_ui_settings.assert_called_once()
-        mock_os_access.assert_called_once_with(Path(test_path_str), os.W_OK)
+        mock_os_access.side_effect = [True, True]  # W_OK, R_OK après création
         
-    @patch('os.access', side_effect=[True, False]) # Accessible en écriture, mais pas en lecture
+        retrieved_path = config_manager.get_unity_dialogues_path()
+        
+        self.assertIsNotNone(retrieved_path)
+        self.assertEqual(retrieved_path, Path(test_path_str))
+        mock_load_ui_settings.assert_called_once()
+
+    @patch('os.access')
+    @patch('pathlib.Path.mkdir')
+    @patch('pathlib.Path.is_dir', return_value=True)
+    @patch('pathlib.Path.exists', return_value=False)
+    @patch(f'{config_manager.__name__}.load_ui_settings')
+    @patch(f'{config_manager.__name__}.DEFAULT_UNITY_DIALOGUES_PATH')
+    def test_get_unity_dialogues_path_uses_default_when_not_configured(self, mock_default_path, mock_load_ui_settings, mock_exists, mock_is_dir, mock_mkdir, mock_os_access):
+        """Teste l'utilisation du chemin par défaut quand non configuré."""
+        mock_load_ui_settings.return_value = {}  # Pas de unity_dialogues_path
+        mock_default_path.exists.return_value = False
+        mock_default_path.is_dir.return_value = True
+        mock_os_access.side_effect = [True, True]  # W_OK, R_OK
+        
+        with patch.object(config_manager, 'DEFAULT_UNITY_DIALOGUES_PATH', mock_default_path):
+            retrieved_path = config_manager.get_unity_dialogues_path()
+        
+        self.assertEqual(retrieved_path, mock_default_path)
+        mock_load_ui_settings.assert_called_once()
+        mock_default_path.mkdir.assert_called_once_with(parents=True, exist_ok=True)
+
+    @patch('os.access', side_effect=[False, True])  # Pas d'écriture, mais lecture OK
     @patch('pathlib.Path.is_dir', return_value=True)
     @patch('pathlib.Path.exists', return_value=True)
     @patch(f'{config_manager.__name__}.load_ui_settings')
-    def test_get_unity_dialogues_path_not_readable(self, mock_load_ui_settings, mock_path_exists, mock_is_dir, mock_os_access):
-        """Teste la récupération quand le chemin n'est pas accessible en lecture."""
-        test_path_str = "I:/not_readable"
+    def test_get_unity_dialogues_path_no_write_access(self, mock_load_ui_settings, mock_exists, mock_is_dir, mock_os_access):
+        """Teste le rejet quand pas d'accès en écriture."""
+        test_path_str = "E:/readonly/path"
         mock_load_ui_settings.return_value = {"unity_dialogues_path": test_path_str}
+        
         retrieved_path = config_manager.get_unity_dialogues_path()
+        
         self.assertIsNone(retrieved_path)
         mock_load_ui_settings.assert_called_once()
-        mock_os_access.assert_any_call(Path(test_path_str), os.W_OK)
-        mock_os_access.assert_any_call(Path(test_path_str), os.R_OK)
+
+    @patch('os.access', side_effect=[True, False])  # Écriture OK, mais pas de lecture
+    @patch('pathlib.Path.is_dir', return_value=True)
+    @patch('pathlib.Path.exists', return_value=True)
+    @patch(f'{config_manager.__name__}.load_ui_settings')
+    def test_get_unity_dialogues_path_no_read_access(self, mock_load_ui_settings, mock_exists, mock_is_dir, mock_os_access):
+        """Teste le rejet quand pas d'accès en lecture."""
+        test_path_str = "E:/writeonly/path"
+        mock_load_ui_settings.return_value = {"unity_dialogues_path": test_path_str}
+        
+        retrieved_path = config_manager.get_unity_dialogues_path()
+        
+        self.assertIsNone(retrieved_path)
+        mock_load_ui_settings.assert_called_once()
+
+    @patch('pathlib.Path.is_dir', return_value=False)
+    @patch('pathlib.Path.exists', return_value=True)
+    @patch(f'{config_manager.__name__}.load_ui_settings')
+    def test_get_unity_dialogues_path_not_directory(self, mock_load_ui_settings, mock_exists, mock_is_dir):
+        """Teste le rejet quand le chemin existe mais n'est pas un répertoire."""
+        test_path_str = "E:/file.txt"
+        mock_load_ui_settings.return_value = {"unity_dialogues_path": test_path_str}
+        
+        retrieved_path = config_manager.get_unity_dialogues_path()
+        
+        self.assertIsNone(retrieved_path)
+        mock_load_ui_settings.assert_called_once()
+
+    @patch('pathlib.Path.mkdir', side_effect=OSError("Permission denied"))
+    @patch('pathlib.Path.exists', return_value=False)
+    @patch(f'{config_manager.__name__}.load_ui_settings')
+    def test_get_unity_dialogues_path_creation_fails(self, mock_load_ui_settings, mock_exists, mock_mkdir):
+        """Teste le cas où la création du répertoire échoue."""
+        test_path_str = "E:/cannot/create"
+        mock_load_ui_settings.return_value = {"unity_dialogues_path": test_path_str}
+        
+        retrieved_path = config_manager.get_unity_dialogues_path()
+        
+        self.assertIsNone(retrieved_path)
+        mock_load_ui_settings.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main() 

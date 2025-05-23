@@ -4,4 +4,4 @@
 # from .context_actions_widget import ContextActionsWidget
 # from .generation_params_widget import GenerationParamsWidget
 
-# from .generation_panel import GenerationPanel 
+# from ..generation_panel_base import GenerationPanel # Supprimé pour éviter l'import circulaire 
