@@ -293,6 +293,79 @@ class GeneratedVariantsTabsWidget(QTabWidget):
         else:
             logger.info("Aucune variante à afficher dans display_variants.")
             
+    def _format_interaction_for_display(self, interaction: Interaction) -> str:
+        """Convertit une interaction en texte lisible pour l'affichage utilisateur.
+        
+        Args:
+            interaction: L'objet Interaction à formater
+            
+        Returns:
+            Chaîne formatée pour l'affichage humain
+        """
+        try:
+            lines = []
+            
+            # Titre et ID
+            title = getattr(interaction, 'title', 'Sans titre')
+            lines.append(f"=== {title} ===")
+            lines.append(f"ID: {interaction.interaction_id}")
+            lines.append("")
+            
+            # Tags d'en-tête si présents
+            if hasattr(interaction, 'header_tags') and interaction.header_tags:
+                lines.append(f"Tags: {', '.join(interaction.header_tags)}")
+                lines.append("")
+            
+            # Parcourir les éléments
+            if hasattr(interaction, 'elements') and interaction.elements:
+                for i, element in enumerate(interaction.elements):
+                    element_type = getattr(element, 'element_type', 'unknown')
+                    
+                    if element_type == 'dialogue_line':
+                        speaker = getattr(element, 'speaker', 'Inconnu')
+                        text = getattr(element, 'text', '')
+                        lines.append(f"💬 {speaker}: \"{text}\"")
+                        
+                        # Afficher les tags si présents
+                        if hasattr(element, 'tags') and element.tags:
+                            lines.append(f"   Tags: {', '.join(element.tags)}")
+                            
+                    elif element_type == 'command':
+                        command = getattr(element, 'command_string', '')
+                        lines.append(f"⚙️ Commande: {command}")
+                        
+                    elif element_type == 'player_choices_block':
+                        lines.append("🎯 Choix du joueur:")
+                        choices = getattr(element, 'choices', [])
+                        for j, choice in enumerate(choices):
+                            choice_text = getattr(choice, 'text', '')
+                            next_id = getattr(choice, 'next_interaction_id', None)
+                            lines.append(f"   {j+1}. \"{choice_text}\"")
+                            if next_id:
+                                lines.append(f"      → Mène à: {next_id}")
+                            
+                            # Condition si présente
+                            condition = getattr(choice, 'condition', None)
+                            if condition:
+                                lines.append(f"      Condition: {condition}")
+                                
+                            # Actions si présentes
+                            actions = getattr(choice, 'actions', [])
+                            if actions:
+                                lines.append(f"      Actions: {', '.join(actions)}")
+                    
+                    lines.append("")  # Ligne vide entre les éléments
+            
+            # Interaction suivante par défaut
+            if hasattr(interaction, 'next_interaction_id_if_no_choices') and interaction.next_interaction_id_if_no_choices:
+                lines.append(f"➡️ Suite automatique: {interaction.next_interaction_id_if_no_choices}")
+            
+            return "\n".join(lines)
+            
+        except Exception as e:
+            logger.error(f"Erreur lors du formatage de l'interaction pour affichage: {e}")
+            return f"Erreur lors de l'affichage de l'interaction: {str(e)}"
+
     def display_interaction_variants(self, interaction_variants: List[Interaction], prompt: str = None):
         print(f"[DEBUG] display_interaction_variants appelé sur widget={self} @ {id(self)} avec {len(interaction_variants)} interactions")
         # 1. Mettre à jour ou créer l'onglet du prompt estimé
@@ -308,20 +381,31 @@ class GeneratedVariantsTabsWidget(QTabWidget):
                 if hasattr(interaction, 'title') and interaction.title:
                     tab_name = f"Variante {i+1}: {interaction.title}"
                 print(f"[DEBUG] Ajout de l'onglet: {tab_name}, interaction_id={getattr(interaction, 'interaction_id', None)}")
+                
+                # Log du JSON pour debug
+                try:
+                    interaction_dict = interaction.to_dict()
+                    formatted_json = json.dumps(interaction_dict, indent=2, ensure_ascii=False)
+                    logger.debug(f"JSON de l'interaction '{tab_name}':\n{formatted_json}")
+                except Exception as e:
+                    logger.error(f"Erreur lors de la sérialisation JSON de l'interaction '{tab_name}': {e}")
+                
                 self.stored_interactions[tab_name] = interaction
                 # Création du widget d'onglet
                 tab = QWidget()
                 tab_layout = QVBoxLayout(tab)
-                # Affichage JSON formaté
+                
+                # Affichage formaté lisible au lieu du JSON brut
                 content_area = QTextEdit()
-                try:
-                    interaction_dict = interaction.to_dict()
-                    formatted_json = json.dumps(interaction_dict, indent=2, ensure_ascii=False)
-                    content_area.setPlainText(formatted_json)
-                except Exception as e:
-                    content_area.setPlainText(f"Erreur lors de l'affichage de l'interaction: {str(e)}")
+                formatted_text = self._format_interaction_for_display(interaction)
+                content_area.setPlainText(formatted_text)
                 content_area.setReadOnly(True)
+                # Utilisation d'une police à chasse fixe pour un meilleur alignement
+                font = content_area.font()
+                font.setFamily("Consolas, Monaco, monospace")
+                content_area.setFont(font)
                 tab_layout.addWidget(content_area)
+                
                 # Bouton de validation
                 validate_button = QPushButton("Valider cette interaction")
                 validate_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton))
@@ -331,7 +415,7 @@ class GeneratedVariantsTabsWidget(QTabWidget):
                 tab_layout.addWidget(validate_button)
                 self.addTab(tab, tab_name)
                 self.setCurrentWidget(tab)
-            logger.info(f"{len(interaction_variants)} variantes d'interactions affichées.")
+            logger.info(f"{len(interaction_variants)} variantes d'interactions affichées en format lisible.")
         else:
             logger.info("Aucune variante d'interaction à afficher.")
             
