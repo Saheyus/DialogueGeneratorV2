@@ -1,0 +1,60 @@
+{
+  "interaction_id": "abc123-def456-ghi789",
+  "title": "Première Rencontre avec l'Exégète",
+  "elements": [
+    {
+      "element_type": "dialogue_line",
+      "text": "La Seigneuresse Uresaïr entre dans la Bibliothèque Veineuse, son corps de verre vert émettant une lueur étouffée. Elle aperçoit Akthar-Neth Amatru, l'Exégète, en train de consulter un texte ancien.",
+      "speaker": null,
+      "tags": [
+        "description"
+      ],
+      "pre_line_commands": [],
+      "post_line_commands": []
+    },
+    {
+      "element_type": "player_choices_block",
+      "choices": [
+        {
+          "text": "Saluer l'Exégète poliment.",
+          "next_interaction_id": "ghi789-jkl012-mno345",
+          "condition": null,
+          "actions": [],
+          "tags": []
+        },
+        {
+          "text": "Questionner immédiatement sur le culte.",
+          "next_interaction_id": "pqr678-stu901-vwx234",
+          "condition": null,
+          "actions": [],
+          "tags": []
+        },
+        {
+          "text": "Observer en silence avant d'engager la conversation.",
+          "next_interaction_id": "yz123-ab456-cd789",
+          "condition": null,
+          "actions": [],
+          "tags": []
+        }
+      ]
+    },
+    {
+      "element_type": "dialogue_line",
+      "text": "Akthar-Neth Amatru lève la tête, reconnaissant immédiatement la silhouette d'Uresaïr. \"Ah, la Rebelle Immortelle honore notre sanctuaire de sa présence. Que puis-je faire pour vous, Maîtresse des Intervalles ?\"",
+      "speaker": "Akthar-Neth Amatru",
+      "tags": [
+        "révérence",
+        "curiosité"
+      ],
+      "pre_line_commands": [],
+      "post_line_commands": []
+    }
+  ],
+  "header_commands": [],
+  "header_tags": [
+    "première rencontre",
+    "intro",
+    "quête"
+  ],
+  "next_interaction_id_if_no_choices": null
+}
