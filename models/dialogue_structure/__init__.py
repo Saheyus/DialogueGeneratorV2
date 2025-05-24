@@ -1,7 +1,8 @@
 # Ce fichier permet de reconnaître ce dossier comme un package Python
 
 from .dialogue_elements import (
-    AbstractDialogueElement,
+    # AbstractDialogueElement,
+    AnyDialogueElement,
     DialogueLineElement,
     PlayerChoiceOption,
     PlayerChoicesBlockElement,
@@ -11,7 +12,8 @@ from .dialogue_elements import (
 from .interaction import Interaction
 
 __all__ = [
-    'AbstractDialogueElement',
+    # 'AbstractDialogueElement',
+    'AnyDialogueElement',
     'DialogueLineElement',
     'PlayerChoiceOption',
     'PlayerChoicesBlockElement',

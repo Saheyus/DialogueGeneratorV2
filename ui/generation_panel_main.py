@@ -24,8 +24,8 @@ from .generation_panel.scene_selection_widget import SceneSelectionWidget
 from .generation_panel.context_actions_widget import ContextActionsWidget
 from .generation_panel.generation_params_widget import GenerationParamsWidget
 from .generation_panel.instructions_widget import InstructionsWidget
-from .generation_panel.token_estimation_actions_widget import TokenAndGenerateWidget
-from .generation_panel.generated_variants_tabs_widget import VariantsDisplayWidget
+from .generation_panel.token_estimation_actions_widget import TokenEstimationActionsWidget
+from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTabsWidget
 from .generation_panel.interaction_sequence_widget import InteractionSequenceWidget
 from .generation_panel.interaction_editor_widget import InteractionEditorWidget
 
@@ -142,7 +142,7 @@ class GenerationPanel(QWidget):
         interactions_tab_layout.addWidget(self.interaction_sequence_widget)
         self.interaction_sequence_widget.interaction_selected.connect(self._on_interaction_selected)
         self.interaction_sequence_widget.sequence_changed.connect(self._on_sequence_changed)
-        self.interaction_sequence_widget.edit_interaction_requested.connect(self._on_edit_interaction_requested)
+        self.interaction_sequence_widget.interaction_selected.connect(self._on_edit_interaction_requested)
         
         # Initialisation de l'éditeur d'interaction
         self.interaction_editor_widget = InteractionEditorWidget(self.interaction_service)
@@ -158,7 +158,7 @@ class GenerationPanel(QWidget):
         generation_tab_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # --- Section Sélection Personnages et Scène ---
-        self.scene_selection_widget = SceneSelectionWidget()
+        self.scene_selection_widget = SceneSelectionWidget(self.context_builder)
         generation_tab_layout.addWidget(self.scene_selection_widget)
         # Connexion des signaux du widget extrait aux méthodes existantes
         self.scene_selection_widget.character_a_changed.connect(self._schedule_settings_save_and_token_update)
@@ -175,9 +175,11 @@ class GenerationPanel(QWidget):
         self.context_actions_widget.uncheck_all_clicked.connect(self._on_uncheck_all_clicked)
 
         # --- Section Paramètres de Génération ---
-        self.generation_params_widget = GenerationParamsWidget()
+        self.generation_params_widget = GenerationParamsWidget(
+            self.available_llm_models,
+            self.current_llm_model_identifier
+        )
         generation_tab_layout.addWidget(self.generation_params_widget)
-        self.generation_params_widget.llm_model_changed.connect(self._on_llm_model_combo_changed)
         self.generation_params_widget.k_variants_changed.connect(self._schedule_settings_save)
         self.generation_params_widget.max_context_tokens_changed.connect(self._on_max_context_tokens_changed)
         self.generation_params_widget.structured_output_changed.connect(self._schedule_settings_save)
@@ -190,10 +192,10 @@ class GenerationPanel(QWidget):
         self.instructions_widget.restore_default_system_prompt_clicked.connect(self._restore_default_system_prompt)
 
         # --- Section Estimation Tokens et Bouton Générer ---
-        self.token_and_generate_widget = TokenAndGenerateWidget()
-        generation_tab_layout.addWidget(self.token_and_generate_widget)
-        self.token_and_generate_widget.refresh_token_clicked.connect(self._trigger_token_update)
-        self.token_and_generate_widget.generate_dialogue_clicked.connect(self._launch_dialogue_generation)
+        self.token_actions_widget = TokenEstimationActionsWidget()
+        generation_tab_layout.addWidget(self.token_actions_widget)
+        self.token_actions_widget.refresh_token_clicked.connect(self._trigger_token_update)
+        self.token_actions_widget.generate_dialogue_clicked.connect(self._launch_dialogue_generation)
 
         generation_tab_layout.addStretch(1)
         central_tabs.addTab(generation_tab, "Génération")
@@ -204,9 +206,9 @@ class GenerationPanel(QWidget):
         right_column_layout.setContentsMargins(0,0,0,0)
         main_splitter.addWidget(right_column_widget)
 
-        self.variants_display_widget = VariantsDisplayWidget()
+        self.variants_display_widget = GeneratedVariantsTabsWidget()
         right_column_layout.addWidget(self.variants_display_widget)
-        self.variants_display_widget.validate_variant_clicked.connect(self._on_validate_variant_clicked)
+        self.variants_display_widget.validate_interaction_requested.connect(self._on_validate_interaction_clicked)
 
         main_splitter.setStretchFactor(0, 1) 
         main_splitter.setStretchFactor(1, 2) 
@@ -223,68 +225,26 @@ class GenerationPanel(QWidget):
         self.k_variants_combo = self.generation_params_widget.k_variants_combo
         self.max_context_tokens_spinbox = self.generation_params_widget.max_context_tokens_spinbox
         self.structured_output_checkbox = self.generation_params_widget.structured_output_checkbox
-        self.token_estimation_label = self.token_and_generate_widget.token_estimation_label
-        self.generation_progress_bar = self.token_and_generate_widget.generation_progress_bar
-        self.generate_dialogue_button = self.token_and_generate_widget.generate_dialogue_button
-        self.refresh_token_button = self.token_and_generate_widget.refresh_token_button
-        self.variant_display_tabs = self.variants_display_widget.variant_display_tabs
+        self.token_estimation_label = self.token_actions_widget.token_estimation_label
+        self.generation_progress_bar = self.token_actions_widget.generation_progress_bar
+        self.generate_dialogue_button = self.token_actions_widget.generate_dialogue_button
+        self.refresh_token_button = self.token_actions_widget.refresh_token_button
+        self.variant_display_tabs = self.variants_display_widget
 
     def finalize_ui_setup(self):
         logger.debug("Finalizing GenerationPanel UI setup...")
         self.populate_character_combos()
         self.populate_scene_combos()
-        self.populate_llm_model_combo() # Charger les modèles LLM dans le ComboBox
+        self.generation_params_widget.populate_llm_model_combo()
         self._trigger_token_update() 
         logger.debug("GenerationPanel UI setup finalized.")
 
     def populate_llm_model_combo(self):
-        self.generation_params_widget.blockSignals(True)
-        self.generation_params_widget.clear()
-        found_current_model = False
-        
-        if not self.available_llm_models:
-            logger.warning("Aucun modèle LLM disponible à afficher dans le ComboBox.")
-            self.generation_params_widget.addItem("Aucun modèle configuré", userData="dummy_error")
-            self.generation_params_widget.setEnabled(False)
-            self.generation_params_widget.blockSignals(False)
-            return
-
-        for model_info in self.available_llm_models:
-            display_name = model_info.get("display_name", model_info.get("api_identifier"))
-            api_identifier = model_info.get("api_identifier")
-            notes = model_info.get("notes", "")
-            tooltip = f"{display_name}\nIdentifiant: {api_identifier}\n{notes}"
-            self.generation_params_widget.addItem(display_name, userData=api_identifier)
-            self.generation_params_widget.setItemData(self.generation_params_widget.count() - 1, tooltip, Qt.ItemDataRole.ToolTipRole)
-            if api_identifier == self.current_llm_model_identifier:
-                self.generation_params_widget.setCurrentIndex(self.generation_params_widget.count() - 1)
-                found_current_model = True
-        
-        if not found_current_model and self.generation_params_widget.count() > 0:
-            logger.warning(f"Modèle LLM actuel '{self.current_llm_model_identifier}' non trouvé dans la liste. Sélection du premier disponible.")
-            self.generation_params_widget.setCurrentIndex(0)
-            new_default_identifier = self.generation_params_widget.currentData()
-            if new_default_identifier and new_default_identifier != self.current_llm_model_identifier:
-                self.current_llm_model_identifier = new_default_identifier
-                # Pas besoin d'émettre llm_model_selection_changed ici, car c'est l'initialisation.
-                # MainWindow sera informé par la valeur de retour de get_settings si nécessaire.
-        
-        self.llm_model_combo.setEnabled(self.llm_model_combo.count() > 0 and self.llm_model_combo.itemData(0) != "dummy_error")
-        self.llm_model_combo.blockSignals(False)
-        self._update_structured_output_checkbox_state()
-
-    @Slot(str)
-    def _on_llm_model_combo_changed(self, text_model_display_name: str):
-        selected_identifier = self.llm_model_combo.currentData()
-        if selected_identifier and selected_identifier != self.current_llm_model_identifier and selected_identifier != "dummy_error":
-            logger.info(f"Sélection du modèle LLM changée dans GenerationPanel pour : {selected_identifier} ({text_model_display_name})")
-            self.current_llm_model_identifier = selected_identifier
-            self.llm_model_selection_changed.emit(selected_identifier) 
-            self._schedule_settings_save_and_token_update() 
-            self._update_structured_output_checkbox_state()
-        elif selected_identifier == "dummy_error":
-             logger.warning("Changement de modèle LLM ignoré car 'Aucun modèle configuré' est sélectionné.")
-
+        logger.debug("GenerationPanel.populate_llm_model_combo appelé, déléguant à GenerationParamsWidget.")
+        if hasattr(self, 'generation_params_widget') and self.generation_params_widget:
+            self.generation_params_widget.populate_llm_model_combo()
+        else:
+            logger.error("generation_params_widget non initialisé lors de l'appel à populate_llm_model_combo.")
 
     def _update_structured_output_checkbox_state(self):
         # Si le client LLM est un DummyLLMClient, désactiver et décocher la case
@@ -317,12 +277,8 @@ class GenerationPanel(QWidget):
 
     def _restore_default_system_prompt(self):
         default_prompt = self.prompt_engine._get_default_system_prompt()
-        self.system_prompt_textedit.setPlainText(default_prompt)
-        # Pas besoin de _schedule_settings_save ici, car _on_system_prompt_changed sera appelé par setPlainText
-        # qui appellera _schedule_settings_save_and_token_update.
-        # On force la mise à jour du prompt_engine immédiatement.
+        self.instructions_widget.set_system_prompt_text(default_prompt)
         self._update_prompt_engine_system_prompt()
-        # Déclencher une mise à jour des tokens car le prompt a changé.
         self.update_token_estimation_signal.emit()
         QMessageBox.information(self, "Prompt Restauré", "Le prompt système par défaut a été restauré.")
 
@@ -332,7 +288,7 @@ class GenerationPanel(QWidget):
         self._schedule_settings_save_and_token_update()
 
     def _update_prompt_engine_system_prompt(self):
-        new_system_prompt = self.system_prompt_textedit.toPlainText()
+        new_system_prompt = self.instructions_widget.get_system_prompt_text()
         if self.prompt_engine.system_prompt_template != new_system_prompt:
             self.prompt_engine.system_prompt_template = new_system_prompt
             logger.info("PromptEngine system_prompt_template mis à jour.")
@@ -343,42 +299,28 @@ class GenerationPanel(QWidget):
     def set_llm_client(self, new_llm_client):
         logger.info(f"GenerationPanel: Réception d'un nouveau client LLM: {type(new_llm_client).__name__}")
         self.llm_client = new_llm_client
-        if hasattr(new_llm_client, 'model'): # Vérifie si le client a un attribut 'model'
-            self.current_llm_model_identifier = new_llm_client.model
-            self.select_model_in_combo(new_llm_client.model) 
-        else: # Pour les clients comme DummyLLMClient qui n'ont pas 'model' mais on peut inférer
+        
+        new_model_identifier_from_client = None
+        if hasattr(new_llm_client, 'model_identifier') and new_llm_client.model_identifier:
+            new_model_identifier_from_client = new_llm_client.model_identifier
+        elif hasattr(new_llm_client, 'model') and new_llm_client.model: # Ancien attribut
+            new_model_identifier_from_client = new_llm_client.model
+        
+        if new_model_identifier_from_client:
+            self.current_llm_model_identifier = new_model_identifier_from_client
+             # MODIFIÉ: Délégué à GenerationParamsWidget
+            if hasattr(self, 'generation_params_widget') and self.generation_params_widget:
+                self.generation_params_widget.select_model_in_combo(new_model_identifier_from_client)
+        else: 
             if isinstance(new_llm_client, DummyLLMClient):
-                self.current_llm_model_identifier = "dummy" # ou un identifiant spécifique pour dummy
-                self.select_model_in_combo("dummy") # Assurez-vous que "dummy" peut être trouvé ou géré
+                self.current_llm_model_identifier = "dummy" 
+                if hasattr(self, 'generation_params_widget') and self.generation_params_widget:
+                    self.generation_params_widget.select_model_in_combo("dummy")
             else:
-                logger.warning("Nouveau client LLM n'a pas d'attribut 'model', l'identifiant actuel pourrait être incorrect.")
+                logger.warning("Nouveau client LLM n'a pas d'attribut 'model_identifier' ou 'model', l'identifiant actuel pourrait être incorrect.")
 
         self._trigger_token_update()
         self._update_structured_output_checkbox_state()
-
-    def select_model_in_combo(self, model_identifier: str):
-        self.llm_model_combo.blockSignals(True)
-        found = False
-        for i in range(self.llm_model_combo.count()):
-            if self.llm_model_combo.itemData(i) == model_identifier:
-                self.llm_model_combo.setCurrentIndex(i)
-                logger.debug(f"Modèle '{model_identifier}' sélectionné programmatiquement dans le ComboBox LLM.")
-                found = True
-                break
-        if not found:
-            logger.warning(f"Tentative de sélection du modèle '{model_identifier}' dans ComboBox LLM, mais non trouvé. Le premier item sera peut-être sélectionné par défaut.")
-            # Optionnel: si non trouvé et que la liste n'est pas vide et pas l'erreur dummy, sélectionner le premier.
-            if self.llm_model_combo.count() > 0 and self.llm_model_combo.itemData(0) != "dummy_error":
-                # self.llm_model_combo.setCurrentIndex(0)
-                # self.current_llm_model_identifier = self.llm_model_combo.currentData()
-                # logger.info(f"Modèle '{model_identifier}' non trouvé, '{self.current_llm_model_identifier}' sélectionné à la place.")
-                # self.llm_model_selection_changed.emit(self.current_llm_model_identifier) # Informer MainWindow
-                pass # Laisser le combobox tel quel ou sur la sélection précédente.
-                     # La logique dans _on_llm_model_combo_changed gère l'émission du signal si l'utilisateur change.
-
-
-        self.llm_model_combo.blockSignals(False)
-        self._update_structured_output_checkbox_state() # Mettre à jour après la sélection
 
     def populate_character_combos(self):
         characters = sorted(self.context_builder.get_characters_names())
@@ -461,7 +403,7 @@ class GenerationPanel(QWidget):
             self._display_prompt_in_tab("Erreur: Les moteurs (prompt, context, llm) ne sont pas tous initialisés.")
             return
 
-        user_specific_goal = self.user_instructions_textedit.toPlainText()
+        user_specific_goal = self.instructions_widget.get_user_instructions_text()
         selected_context_items = self.main_window_ref._get_current_context_selections() if hasattr(self.main_window_ref, '_get_current_context_selections') else {}
 
         char_a_name = self.scene_selection_widget.character_a_combo.currentText()
@@ -549,12 +491,8 @@ class GenerationPanel(QWidget):
 
         try:
             k_variants = int(self.k_variants_combo.currentText())
-            user_instructions = self.user_instructions_textedit.toPlainText()
-            # Le system_prompt est maintenant géré directement par self.prompt_engine via _update_prompt_engine_system_prompt
-            # lors de la modification du system_prompt_textedit ou de la restauration par défaut.
-            # Il n'est donc plus nécessaire de le passer explicitement ici à build_prompt,
-            # car self.prompt_engine aura déjà la version la plus à jour.
-
+            user_instructions = self.instructions_widget.get_user_instructions_text()
+            
             selected_context_items = self.main_window_ref._get_current_context_selections() # Récupère les items cochés
             
             char_a_name = self.scene_selection_widget.character_a_combo.currentText()
@@ -617,66 +555,74 @@ class GenerationPanel(QWidget):
 
             logger.info(f"Appel de llm_client.generate_variants avec k={k_variants}...")
             
-            # Modification pour gérer la sortie structurée
-            # Cela nécessite que OpenAIClient.generate_variants soit adapté.
-            response_format_param = None
+            target_response_model = None
+            # LOGS AJOUTÉS POUR DIAGNOSTIC
+            logger.info(f"[LOG_DEBUG_STRUCT] Vérification pour sortie structurée:")
+            logger.info(f"[LOG_DEBUG_STRUCT]   structured_output_checkbox.isChecked(): {self.structured_output_checkbox.isChecked()}")
+            logger.info(f"[LOG_DEBUG_STRUCT]   isinstance(self.llm_client, OpenAIClient): {isinstance(self.llm_client, OpenAIClient)}")
+            if self.llm_client:
+                logger.info(f"[LOG_DEBUG_STRUCT]   type(self.llm_client): {type(self.llm_client).__name__}")
+
             if self.structured_output_checkbox.isChecked() and isinstance(self.llm_client, OpenAIClient):
-                logger.info("Sortie structurée demandée (JSON).")
-                # L'API OpenAI attend un objet pour 'response_format', par exemple {'type': 'json_object'}
-                # Pour utiliser un schéma JSON spécifique, il faut l'inclure dans les 'tools' ou 'functions'
-                # et forcer son utilisation. Pour l'instant, on ne fait que demander du JSON simple.
-                # IMPORTANT: Le prompt doit aussi instruire le LLM à produire du JSON.
-                # Notre PromptEngine devrait être adapté pour inclure ces instructions et le schéma si nécessaire.
-                response_format_param = {"type": "json_object"}
-                # Il faudra aussi ajuster le system_prompt/user_prompt pour indiquer au LLM de suivre un schéma JSON
-                # (par exemple, celui de YarnScene et YarnNode).
-                # full_prompt += "\n\nIMPORTANT: Formattez votre réponse comme un objet JSON valide respectant le schéma YarnScene (une liste de YarnNode)."
-
-            # TODO: Refactor ILLMClient and OpenAIClient to accept response_format_param
-            # For now, this parameter is not used by the current llm_client.generate_variants signature.
-            # variants = await self.llm_client.generate_variants(full_prompt, k_variants, response_format=response_format_param) # Hypothetical
-            variants = await self.llm_client.generate_variants(full_prompt, k_variants) # Current signature
-
-            logger.debug(f"Valeur de 'variants' reçue du LLM Client: {type(variants)} - Contenu (si liste): {variants if isinstance(variants, list) else 'Non une liste'}")
-            
-            self.variants_display_widget.blockSignals(True)
-            num_tabs_to_keep = 0
-            if self.variants_display_widget.count() > 0 and self.variants_display_widget.tabText(0) == "Prompt Estimé":
-                num_tabs_to_keep = 1
-            
-            while self.variants_display_widget.count() > num_tabs_to_keep:
-                self.variants_display_widget.removeTab(num_tabs_to_keep)
-            
-            if variants:
-                for i, variant_text in enumerate(variants):
-                    variant_tab_content_widget = QWidget()
-                    tab_layout = QVBoxLayout(variant_tab_content_widget)
-                    tab_layout.setContentsMargins(5, 5, 5, 5)
-                    tab_layout.setSpacing(5)
-
-                    text_edit = QTextEdit()
-                    text_edit.setPlainText(variant_text)
-                    text_edit.setReadOnly(True)
-                    text_edit.setFont(QFont("Consolas", 10)) 
-                    tab_layout.addWidget(text_edit)
-
-                    validate_button = QPushButton(f"Valider et Enregistrer Variante {i+1} en .yarn")
-                    validate_button.setIcon(get_icon_path("save.png"))
-                    validate_button.clicked.connect(
-                        lambda checked=False, index=i: self._on_validate_variant_clicked(index)
-                    )
-                    tab_layout.addWidget(validate_button)
-                    
-                    self.variants_display_widget.addTab(variant_tab_content_widget, f"Variante {i+1}")
-                generation_succeeded = True
-                logger.info(f"{len(variants)} variantes affichées.")
+                logger.info("Sortie structurée demandée, utilisation du modèle Interaction.")
+                # Assurez-vous que Interaction est importé au début du fichier
+                # from DialogueGenerator.models.dialogue_structure.interaction import Interaction
+                target_response_model = Interaction
             else:
-                logger.warning("Aucune variante reçue du LLM ou variants est None/vide.")
-                error_tab = QTextEdit("Aucune variante n'a été générée par le LLM ou une erreur s'est produite.")
-                error_tab.setReadOnly(True)
-                self.variants_display_widget.addTab(error_tab, "Erreur Génération")
-            
-            self.variants_display_widget.blockSignals(False)
+                logger.info("[LOG_DEBUG_STRUCT] Conditions non remplies pour la sortie structurée (target_response_model restera None).")
+
+            # Appel modifié à generate_variants
+            variants = await self.llm_client.generate_variants(
+                prompt=full_prompt, 
+                k=k_variants, 
+                response_model=target_response_model
+            )
+
+            logger.debug(f"Valeur de 'variants' reçue du LLM Client: Type={type(variants)}, Nombre={len(variants) if variants else 0}")
+            if variants:
+                logger.debug(f"Type du premier élément dans variants: {type(variants[0])}")
+
+                self.variants_display_widget.blockSignals(True)
+                num_tabs_to_keep = 0
+                if self.variants_display_widget.count() > 0 and self.variants_display_widget.tabText(0) == "Prompt Estimé":
+                    num_tabs_to_keep = 1
+                
+                while self.variants_display_widget.count() > num_tabs_to_keep:
+                    self.variants_display_widget.removeTab(num_tabs_to_keep)
+                
+                if variants:
+                    for i, variant_data in enumerate(variants):
+                        if isinstance(variant_data, Interaction):
+                            try:
+                                self.variants_display_widget.add_interaction_tab(f"Variante {i+1}", variant_data)
+                                logger.info(f"[LOG_DEBUG] Variante {i+1} (Interaction) ajoutée via add_interaction_tab.")
+                            except Exception as e_add_tab:
+                                logger.error(f"Erreur lors de l'ajout de l'onglet d'interaction: {e_add_tab}")
+                                # Fallback simple si add_interaction_tab échoue
+                                text_edit = QTextEdit(f"// Erreur d'affichage de l'objet Interaction: {e_add_tab}")
+                                text_edit.setReadOnly(True)
+                                self.variants_display_widget.addTab(text_edit, f"Variante {i+1} (Erreur)")
+
+                        elif isinstance(variant_data, str):
+                            self.variants_display_widget.add_variant_tab(f"Variante {i+1}", variant_data)
+                            logger.info(f"[LOG_DEBUG] Variante {i+1} (str) ajoutée via add_variant_tab: {variant_data[:100]}...")
+                        else:
+                            display_text = f"// Erreur: Type de variante inattendu: {type(variant_data)}"
+                            logger.warning(f"[LOG_DEBUG] Variante {i+1} (inattendu): {type(variant_data)}")
+                            # Fallback simple
+                            text_edit = QTextEdit(display_text)
+                            text_edit.setReadOnly(True)
+                            self.variants_display_widget.addTab(text_edit, f"Variante {i+1} (Inattendu)")
+                    
+                    generation_succeeded = True
+                    logger.info(f"{len(variants)} variantes affichées.")
+                else:
+                    logger.warning("Aucune variante reçue du LLM ou variants est None/vide.")
+                    error_tab = QTextEdit("Aucune variante n'a été générée par le LLM ou une erreur s'est produite.")
+                    error_tab.setReadOnly(True)
+                    self.variants_display_widget.addTab(error_tab, "Erreur Génération")
+                
+                self.variants_display_widget.blockSignals(False)
 
         except asyncio.CancelledError:
             logger.warning("La tâche de génération de dialogue a été annulée.")
@@ -716,116 +662,31 @@ class GenerationPanel(QWidget):
         
         if prompt_tab_index != -1:
             logger.info(f"_display_prompt_in_tab: Onglet 'Prompt Estimé' trouvé à l'index {prompt_tab_index}. Mise à jour du contenu.")
-            # Onglet existant, mettre à jour son contenu
-            widget = self.variants_display_widget.widget(prompt_tab_index)
-            if isinstance(widget, QTextEdit):
-                 widget.setPlainText(prompt_text)
-            else: # Si c'est un QWidget contenant un QTextEdit (moins probable avec le code actuel)
-                text_edit = widget.findChild(QTextEdit)
-                if text_edit: text_edit.setPlainText(prompt_text)
-                else: logger.error("Impossible de trouver QTextEdit dans l'onglet Prompt existant.")
+            self.variants_display_widget.update_or_add_tab("Prompt Estimé", prompt_text, set_current=True)
         else:
-            logger.info("_display_prompt_in_tab: Onglet 'Prompt Estimé' non trouvé. Création d'un nouvel onglet à l'index 0.")
-            # Créer un nouvel onglet pour le prompt
-            prompt_tab_widget = QTextEdit()
-            prompt_tab_widget.setPlainText(prompt_text)
-            prompt_tab_widget.setReadOnly(True)
-            prompt_tab_widget.setFont(QFont("Consolas", 9)) 
-            self.variants_display_widget.insertTab(0, prompt_tab_widget, "Prompt Estimé")
+            logger.info("_display_prompt_in_tab: Onglet 'Prompt Estimé' non trouvé. Création d'un nouvel onglet via update_or_add_tab.")
+            self.variants_display_widget.update_or_add_tab("Prompt Estimé", prompt_text, set_current=True)
         
-        logger.info("_display_prompt_in_tab: Appel de setCurrentIndex(0).")
-        self.variants_display_widget.setCurrentIndex(0) 
         self.variants_display_widget.blockSignals(False)
-        logger.info("_display_prompt_in_tab: Sortie.")
 
     @Slot(int)
-    def _on_validate_variant_clicked(self, variant_index: int):
-        actual_tab_index = -1
-        expected_tab_name = f"Variante {variant_index + 1}"
-        for i in range(self.variants_display_widget.count()):
-            if self.variants_display_widget.tabText(i) == expected_tab_name:
-                actual_tab_index = i
-                break
+    def _on_validate_interaction_clicked(self, variant_index: int):
+        # Cette méthode est maintenant connectée à validate_interaction_requested
+        # Elle recevra (tab_name: str, interaction: Interaction)
+        # Pour l'instant, nous la laissons telle quelle, mais elle devrait être adaptée
+        # ou une nouvelle méthode _on_validate_interaction_clicked devrait être créée.
+        # Si on veut garder cette logique pour une variante TEXTE, il faudrait connecter
+        # le signal validate_variant_requested (qui prend tab_name, content)
 
-        if actual_tab_index == -1:
-            logger.error(f"Onglet pour la variante {variant_index + 1} non trouvé.")
-            self.main_window_ref.statusBar().showMessage(f"Erreur: Onglet pour variante {variant_index + 1} non trouvé.", 5000)
-            return
+        # Pour l'instant, supposons que ce slot est TEMPORAIREMENT désactivé ou sera refait.
+        # Il faudrait que ce soit connecté à `validate_interaction_requested` et prenne `(tab_name, interaction)`.
+        logger.warning("_on_validate_interaction_clicked appelé, mais devrait être remplacé/adapté pour la validation d'Interactions.")
+        QMessageBox.information(self, "Validation", "La logique de validation d'une variante texte simple n'est pas encore entièrement migrée pour les Interactions structurées via ce slot.")
+        return
 
-        tab_content_widget = self.variants_display_widget.widget(actual_tab_index)
-        if not tab_content_widget:
-            logger.error(f"Contenu de l'onglet pour la variante {variant_index + 1} est None.")
-            return
-
-        text_edit: Optional[QTextEdit] = tab_content_widget.findChild(QTextEdit)
-        
-        if not text_edit:
-            logger.error(f"QTextEdit non trouvé dans l'onglet de la variante {variant_index + 1}.")
-            self.main_window_ref.statusBar().showMessage(f"Erreur: QTextEdit non trouvé pour variante {variant_index + 1}.", 5000)
-            return
-
-        dialogue_text_content = text_edit.toPlainText()
-
-        title_from_text = f"GeneratedDialogue_Variant{variant_index + 1}"
-        char_a_name = self.scene_selection_widget.character_a_combo.currentText() if self.scene_selection_widget.character_a_combo.currentText() != "(Aucun)" else "PersonnageA"
-        char_b_name = self.scene_selection_widget.character_b_combo.currentText() if self.scene_selection_widget.character_b_combo.currentText() != "(Aucun)" else "PersonnageB"
-        scene_name = self.scene_selection_widget.scene_region_combo.currentText() if self.scene_selection_widget.scene_region_combo.currentText() != "(Aucune)" else "LieuIndéfini"
-        
-        try:
-            first_line = dialogue_text_content.split('\n', 1)[0]
-            if first_line.startswith("---title:"):
-                extracted_title = first_line.replace("---title:", "").strip()
-                if extracted_title: title_from_text = extracted_title
-        except Exception: 
-            pass 
-
-        metadata = {
-            "title": title_from_text,
-            "character_a": char_a_name,
-            "character_b": char_b_name,
-            "scene": scene_name,
-        }
-
-        try:
-            yarn_content = self.yarn_renderer.render(dialogue_content=dialogue_text_content, metadata=metadata)
-        except Exception as e:
-            logger.error(f"Erreur lors du rendu Yarn pour la variante {variant_index + 1}: {e}", exc_info=True)
-            self.main_window_ref.statusBar().showMessage(f"Erreur rendu Yarn: {e}", 5000)
-            QMessageBox.critical(self, "Erreur de Rendu Yarn", f"Impossible de générer le contenu .yarn:\n{e}")
-            return
-
-        base_dialogues_path = None
-        if hasattr(self.main_window_ref, 'get_unity_dialogues_path'):
-             base_dialogues_path = self.main_window_ref.get_unity_dialogues_path()
-
-        if not base_dialogues_path:
-            QMessageBox.warning(self, "Chemin Manquant", 
-                                "Le chemin des dialogues Unity n'est pas configuré. Impossible de sauvegarder.")
-            self.main_window_ref.statusBar().showMessage("Erreur: Chemin des dialogues Unity non configuré.", 5000)
-            return
-        
-        generated_path = base_dialogues_path / "generated"
-        try:
-            generated_path.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            logger.error(f"Impossible de créer le dossier {generated_path}: {e}")
-            QMessageBox.critical(self, "Erreur de Dossier", f"Impossible de créer le dossier de destination:\n{generated_path}\nErreur: {e}")
-            return
-
-        clean_title = "".join(c if c.isalnum() or c in ('_', '-') else '_' for c in title_from_text)
-        if not clean_title: clean_title = f"dialogue_variant_{variant_index + 1}"
-        output_filename = f"{clean_title}.yarn"
-        output_filepath = generated_path / output_filename
-
-        try:
-            with open(output_filepath, "w", encoding="utf-8") as f:
-                f.write(yarn_content)
-            logger.info(f"Variante {variant_index + 1} sauvegardée avec succès sous: {output_filepath}")
-            self.main_window_ref.statusBar().showMessage(f"Dialogue sauvegardé : {output_filename}", 5000)
-        except IOError as e:
-            logger.error(f"Erreur lors de la sauvegarde du fichier .yarn ({output_filepath}): {e}", exc_info=True)
-            self.main_window_ref.statusBar().showMessage(f"Erreur sauvegarde: {e}", 5000)
-            QMessageBox.critical(self, "Erreur de Sauvegarde", f"Impossible de sauvegarder le fichier .yarn:\n{output_filepath}\nErreur: {e}")
+        # Le code ci-dessous est l'ancienne logique pour une variante texte.
+        # Il faudra l'adapter pour prendre une Interaction, la convertir en .yarn si nécessaire,
+        # puis la sauvegarder.
 
     @Slot()
     def _on_select_linked_elements_clicked(self) -> None:
@@ -942,11 +803,11 @@ class GenerationPanel(QWidget):
             "scene_region": self.scene_selection_widget.scene_region_combo.currentText(),
             "scene_sub_location": self.scene_selection_widget.scene_sub_location_combo.currentText(),
             "k_variants": self.k_variants_combo.currentText(),
-            "user_instructions": self.user_instructions_textedit.toPlainText(),
+            "user_instructions": self.instructions_widget.get_user_instructions_text(),
             "llm_model": self.llm_model_combo.currentData(), # Sauvegarde l'identifiant du modèle
             "structured_output": self.structured_output_checkbox.isChecked(),
-            "system_prompt": self.system_prompt_textedit.toPlainText(), # Ajout du system prompt
-            "max_context_tokens": self.max_context_tokens_spinbox.value() # Ajout de max_context_tokens
+            "system_prompt": self.instructions_widget.get_system_prompt_text(),
+            "max_context_tokens": self.max_context_tokens_spinbox.value()
         }
         logger.debug(f"Récupération des paramètres du GenerationPanel: {settings}")
         return settings
@@ -954,52 +815,59 @@ class GenerationPanel(QWidget):
     def load_settings(self, settings: dict):
         logger.debug(f"Chargement des paramètres dans GenerationPanel: {settings}")
         
-        # Indicateur pour éviter les mises à jour de tokens pendant le chargement
         self._is_loading_settings = True
         
-        # Charger les combobox pour personnages et scènes
-        # Ces appels vont déclencher currentTextChanged, qui appelle _schedule_settings_save_and_token_update
-        # C'est pourquoi _is_loading_settings est important.
         self.scene_selection_widget.character_a_combo.setCurrentText(settings.get("character_a", ""))
         self.scene_selection_widget.character_b_combo.setCurrentText(settings.get("character_b", ""))
         self.scene_selection_widget.scene_region_combo.setCurrentText(settings.get("scene_region", ""))
-        # _on_scene_region_changed sera appelé, qui remplira les sous-lieux.
-        # Il faut donc charger le sous-lieu APRES que scene_region_combo ait potentiellement re-peuplé sub_location
-        # Ce qui est un peu délicat. On peut appeler processEvents ou simplement le setter après.
-        QApplication.processEvents() # Force le traitement des événements (comme _on_scene_region_changed)
+        QApplication.processEvents()
         self.scene_selection_widget.scene_sub_location_combo.setCurrentText(settings.get("scene_sub_location", ""))
         
         self.k_variants_combo.setCurrentText(settings.get("k_variants", "3"))
-        self.user_instructions_textedit.setPlainText(settings.get("user_instructions", ""))
         
+        # MODIFIÉ: Appel à load_settings de InstructionsWidget
+        instruction_settings_to_load = {
+            "user_instructions": settings.get("user_instructions", ""),
+            "system_prompt": settings.get("system_prompt") # Peut être None, InstructionsWidget.load_settings gère cela
+        }
+        default_system_prompt_for_iw = self.prompt_engine._get_default_system_prompt() if self.prompt_engine else ""
+        self.instructions_widget.load_settings(
+            instruction_settings_to_load, 
+            default_user_instructions="", # La valeur est déjà extraite dans instruction_settings_to_load
+            default_system_prompt=default_system_prompt_for_iw
+        )
+        # Les anciennes lignes :
+        # self.instructions_widget.set_user_instructions_text(settings.get("user_instructions", "")) # ERREUR: méthode inexistante
+        # saved_system_prompt = settings.get("system_prompt")
+        # if saved_system_prompt:
+        #     self.instructions_widget.set_system_prompt_text(saved_system_prompt)
+        # else:
+        #     self._restore_default_system_prompt()
+        # sont maintenant gérées par self.instructions_widget.load_settings()
+
         model_identifier = settings.get("llm_model")
         if model_identifier:
-            self.select_model_in_combo(model_identifier)
+            # MODIFIÉ: Délégué à GenerationParamsWidget
+            if hasattr(self, 'generation_params_widget') and self.generation_params_widget:
+                self.generation_params_widget.select_model_in_combo(model_identifier)
         else:
             # Si aucun modèle n'est sauvegardé, essayer de sélectionner le premier de la liste
-            if self.llm_model_combo.count() > 0:
-                self.llm_model_combo.setCurrentIndex(0)
+            # La logique est maintenant dans GenerationParamsWidget.populate_llm_model_combo
+            if hasattr(self, 'generation_params_widget') and self.generation_params_widget and self.generation_params_widget.llm_model_combo.count() > 0:
+                 self.generation_params_widget.llm_model_combo.setCurrentIndex(0)
         
         self.structured_output_checkbox.setChecked(settings.get("structured_output", True))
         
-        # Charger le system prompt
-        saved_system_prompt = settings.get("system_prompt")
-        if saved_system_prompt:
-            self.system_prompt_textedit.setPlainText(saved_system_prompt)
-        else:
-            # Si aucun prompt système n'est sauvegardé, charger celui par défaut
-            self._restore_default_system_prompt() # Ceci mettra aussi à jour prompt_engine
-        self._update_prompt_engine_system_prompt() # Assurer la synchro avec prompt_engine
-        
         # Charger max_context_tokens depuis MainWindow si disponible
         if hasattr(self.main_window_ref, 'app_settings') and "max_context_tokens" in self.main_window_ref.app_settings:
-            # Convertir tokens en k-tokens pour l'affichage
             tokens_value = self.main_window_ref.app_settings["max_context_tokens"]
             k_tokens_value = tokens_value / 1000
             self.max_context_tokens_spinbox.setValue(k_tokens_value)
         
+        # Assurer la synchro avec prompt_engine après le chargement des settings de InstructionsWidget
+        self._update_prompt_engine_system_prompt() 
+
         self._is_loading_settings = False
-        # Déclencher une mise à jour manuelle des tokens après le chargement complet
         self.update_token_estimation_signal.emit()
         logger.info("Paramètres du GenerationPanel chargés.")
 

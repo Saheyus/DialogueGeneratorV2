@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from openai import AsyncOpenAI
 import json # Ajout pour charger la config
 from pathlib import Path # Ajout pour le chemin de la config
+from typing import List, Optional, Type, TypeVar, Union # Ajout de Type, TypeVar, Union
+from pydantic import BaseModel # Ajout de BaseModel pour le typage
 
 logger = logging.getLogger(__name__)
 
@@ -15,16 +17,17 @@ LLM_CONFIG_PATH = Path(__file__).resolve().parent / "llm_config.json"
 class ILLMClient(ABC):
     """Interface pour les clients LLM."""
     @abstractmethod
-    async def generate_variants(self, prompt: str, k: int) -> list[str]:
+    async def generate_variants(self, prompt: str, k: int, response_model: Optional[Type[BaseModel]] = None) -> List[Union[str, BaseModel]]:
         """
         Génère k variantes de texte à partir du prompt donné.
 
         Args:
             prompt (str): Le prompt à envoyer au LLM.
             k (int): Le nombre de variantes à générer.
+            response_model (Optional[Type[BaseModel]]): Le modèle Pydantic attendu pour la sortie structurée.
 
         Returns:
-            list[str]: Une liste de k chaînes de caractères, chaque chaîne étant une variante.
+            list[Union[str, BaseModel]]: Une liste de k éléments, chaque élément étant une variante ou une instance de response_model.
         """
         pass
 
@@ -43,13 +46,39 @@ class DummyLLMClient(ILLMClient):
         self.delay_seconds = delay_seconds
         logger.info(f"DummyLLMClient initialisé avec un délai de {self.delay_seconds}s par variante.")
 
-    async def generate_variants(self, prompt: str, k: int) -> list[str]:
-        logger.info(f"DummyLLMClient (délai={self.delay_seconds}s): Début de la génération de {k} variante(s)...")
+    async def generate_variants(self, prompt: str, k: int, response_model: Optional[Type[BaseModel]] = None) -> List[Union[str, BaseModel]]:
+        logger.info(f"DummyLLMClient (délai={self.delay_seconds}s): Début de la génération de {k} variante(s). response_model: {response_model}")
         variants = []
         for i in range(k):
             if self.delay_seconds > 0:
                 await asyncio.sleep(self.delay_seconds)
-            variant_text = f"""---title: TitreDummy_Variant{i+1}_{k}
+            
+            if response_model:
+                # Simuler une sortie structurée si un modèle est demandé
+                # Pour un vrai test, il faudrait instancier response_model avec des données factices
+                # Ici, on retourne juste un dict simple pour l'exemple
+                dummy_structured_output = {
+                    "title": f"Dummy Structured Title {i+1}",
+                    "description": f"Dummy description for variant {i+1}. Prompt: {prompt[:30]}...",
+                    "items": [f"item_dummy_{j}" for j in range(k)]
+                }
+                try:
+                    # Essayer de valider/créer une instance du modèle Pydantic
+                    # Cela suppose que le modèle Pydantic peut être instancié à partir du dict
+                    # En réalité, il faudrait un constructeur ou .model_validate()
+                    # Pour l'instant, on retourne le dict, ce qui n'est pas idéal mais simule la structure
+                    # Pour un test plus poussé, il faudrait créer des instances réelles de response_model
+                    parsed_dummy = response_model.model_validate(dummy_structured_output) 
+                    variants.append(parsed_dummy)
+                    logger.info(f"DummyLLMClient: Variante structurée {i+1} (simulée) générée.")
+                except Exception as e_dummy_parse:
+                    logger.warning(f"DummyLLMClient: Erreur de validation du modèle Pydantic factice pour la variante {i+1}: {e_dummy_parse}. Retour d'un dict brut.")
+                    # En cas d'échec de validation avec le modèle (ex: champs manquants/incorrects dans dummy_structured_output)
+                    # on retourne un dict brut pour ne pas planter, mais ce n'est pas une instance du modèle.
+                    variants.append(dummy_structured_output) # Ce ne sera pas de type BaseModel
+
+            else:
+                variant_text = f"""---title: TitreDummy_Variant{i+1}_{k}
 tags: tag_dummy
 character_a: PersonnageA_Dummy
 character_b: PersonnageB_Dummy
@@ -108,48 +137,101 @@ class OpenAIClient(ILLMClient):
             logger.error(f"Erreur inattendue lors du chargement de {LLM_CONFIG_PATH}: {e}")
             return {}
 
-    async def generate_variants(self, prompt: str, k: int) -> list[str]:
+    async def generate_variants(self, prompt: str, k: int, response_model: Optional[Type[BaseModel]] = None) -> List[Union[str, BaseModel]]:
         if not self.client:
             error_msg = "OpenAIClient n'a pas pu être initialisé (clé API manquante ou autre erreur)."
             logger.error(error_msg)
+            # Retourner une liste d'erreurs de type str, ou lever une exception
+            if response_model: # Si un modèle est attendu, il faut théoriquement retourner une liste de ce type
+                               # Mais en cas d'erreur fondamentale, un str est plus informatif ici.
+                return [f"Erreur: {error_msg}"] * k # Ou des instances d'un modèle d'erreur Pydantic
             return [f"Erreur: {error_msg}"] * k
 
         variants = []
-        logger.info(f"OpenAIClient: Envoi de la requête pour {k} variante(s) au modèle {self.model}.")
+        logger.info(f"OpenAIClient: Envoi de la requête pour {k} variante(s) au modèle {self.model}. Mode structuré: {bool(response_model)}.")
         try:
-            # Pour obtenir k variantes distinctes, nous faisons k appels séparés.
-            # L'API ChatCompletion ne garantit pas k choix distincts avec le paramètre `n` 
-            # si `temperature` est bas. Faire k appels est plus explicite.
             tasks = []
             for _ in range(k):
-                tasks.append(
-                    self.client.chat.completions.create(
-                        model=self.model,
-                        messages=[
-                            {"role": "system", "content": "Tu es un assistant expert en écriture de dialogues pour jeux de rôle (RPG) au format Yarn Spinner."},
-                            {"role": "user", "content": prompt}
-                        ],
-                        temperature=0.7, # Un peu de créativité
-                        # max_tokens=1000 # Ajuster au besoin, attention aux coûts
+                if response_model:
+                    # Utilisation de la méthode .parse() pour la sortie structurée
+                    # Note: La méthode .parse() ne prend pas de paramètre 'n' pour plusieurs choix.
+                    # Donc, si k > 1 avec response_model, on fait k appels .parse().
+                    # Chaque appel à .parse() garantit une sortie conforme au response_model.
+                    tasks.append(
+                        self.client.beta.chat.completions.parse(
+                            model=self.model,
+                            messages=[
+                                {"role": "system", "content": "Tu es un assistant expert en génération de données structurées au format JSON spécifié."},
+                                {"role": "user", "content": prompt}
+                            ],
+                            response_format=response_model,
+                            temperature=0.7, # Peut être ajusté
+                        )
                     )
-                )
+                else:
+                    # Logique existante pour la sortie textuelle
+                    tasks.append(
+                        self.client.chat.completions.create(
+                            model=self.model,
+                            messages=[
+                                {"role": "system", "content": "Tu es un assistant expert en écriture de dialogues pour jeux de rôle (RPG) au format Yarn Spinner."},
+                                {"role": "user", "content": prompt}
+                            ],
+                            temperature=0.7, # Un peu de créativité
+                        )
+                    )
             
             responses = await asyncio.gather(*tasks)
             
             for i, response in enumerate(responses):
-                if response.choices and response.choices[0].message and response.choices[0].message.content:
-                    variants.append(response.choices[0].message.content.strip())
-                    logger.info(f"OpenAIClient: Variante {i+1}/{k} reçue.")
+                if response_model:
+                    # MODIFIÉ: Extraire l'objet Pydantic de la réponse ParsedChatCompletion
+                    parsed_object: Optional[BaseModel] = None
+                    if response.choices and response.choices[0].message and response.choices[0].message.parsed:
+                        parsed_object = response.choices[0].message.parsed
+                    else:
+                        # Gérer le cas où la structure attendue n'est pas trouvée
+                        logger.error("OpenAIClient: Impossible d'extraire l'objet parsé de la réponse ParsedChatCompletion.")
+                        # Retourner une erreur ou une chaîne vide, selon la gestion d'erreur souhaitée
+                        # Pour l'instant, on propage None, ce qui sera traité comme une erreur par GenerationPanel
+                        pass 
+
+                    if k == 1:
+                        if parsed_object:
+                            variants.append(parsed_object)
+                            logger.info(f"OpenAIClient: Variante structurée 1/1 reçue et parsée.")
+                        else:
+                            # Ajouter une chaîne d'erreur si le parsing a échoué en amont
+                            variants.append("// Erreur: OpenAI n'a pas retourné un objet structuré valide après parsing.")
+                    else:
+                        if parsed_object:
+                            logger.warning(f"OpenAIClient: .parse() a retourné un seul objet structuré, mais k={k} était demandé. Retour de la même instance {k} fois.")
+                            for _ in range(k):
+                                variants.append(parsed_object) 
+                            logger.info(f"OpenAIClient: Variante structurée (dupliquée {k} fois) reçue et parsée.")
+                        else:
+                            error_message = "// Erreur: OpenAI n'a pas retourné un objet structuré valide après parsing (pour k > 1)."
+                            for _ in range(k):
+                                variants.append(error_message)
                 else:
-                    logger.warning(f"OpenAIClient: Réponse inattendue ou vide pour la variante {i+1}.")
-                    variants.append("// Erreur: Réponse vide ou malformée du LLM.")
+                    # Logique existante pour la réponse textuelle (response_or_parsed_item est ici un objet ChatCompletion)
+                    if response.choices and response.choices[0].message and response.choices[0].message.content:
+                        variants.append(response.choices[0].message.content.strip())
+                        logger.info(f"OpenAIClient: Variante textuelle {i+1}/{k} reçue.")
             
             logger.info(f"OpenAIClient: {len(variants)} variante(s) reçue(s) avec succès.")
 
         except Exception as e:
-            logger.error(f"OpenAIClient: Erreur lors de l'appel à l'API OpenAI: {e}")
+            logger.error(f"OpenAIClient: Erreur lors de l'appel à l'API OpenAI: {e}", exc_info=True) # Ajout de exc_info
             # Renvoyer des messages d'erreur pour chaque variante attendue
-            variants = [f"// Erreur lors de la génération OpenAI: {e}"] * k
+            error_content = f"// Erreur lors de la génération OpenAI: {str(e)}"
+            if response_model:
+                 # En cas d'erreur avec response_model, on ne peut pas garantir le type.
+                 # On retourne une liste de chaînes d'erreur.
+                 # Idéalement, on pourrait avoir un modèle Pydantic d'erreur et retourner des instances de cela.
+                 variants = [error_content] * k
+            else:
+                variants = [error_content] * k
         
         return variants
 
@@ -175,38 +257,97 @@ async def main_test():
     
     # Charger la configuration LLM pour le test
     llm_config = OpenAIClient.load_llm_config()
-    default_model = llm_config.get("default_model_identifier", "gpt-3.5-turbo")
+    default_model = llm_config.get("default_model_identifier", "gpt-4o") # Changé pour gpt-4o pour tester structured output
     api_key_var = llm_config.get("api_key_env_var", "OPENAI_API_KEY")
 
-    # Test Dummy
-    dummy_client = DummyLLMClient()
+    # --- Test Dummy ---
+    dummy_client = DummyLLMClient(delay_seconds=0.1)
     dummy_prompt = "Instructions pour le dummy..."
-    dummy_variants = await dummy_client.generate_variants(dummy_prompt, 2)
-    print("\n--- Variants du DummyLLMClient ---")
-    for i, v in enumerate(dummy_variants):
-        print(f"Variante {i+1}:\n{v}\n")
+    dummy_variants_text = await dummy_client.generate_variants(dummy_prompt, 1) # Test texte
+    print("\n--- Variant texte du DummyLLMClient ---")
+    print(f"Variante 1:\n{dummy_variants_text[0]}\n")
 
-    # Test OpenAI
+    # Définition d'un modèle Pydantic simple pour le test du dummy structuré
+    class DummyTestModel(BaseModel):
+        title: str
+        description: str
+        items: List[str]
+
+    dummy_variants_structured = await dummy_client.generate_variants(dummy_prompt, 1, response_model=DummyTestModel)
+    print("\n--- Variant structuré (simulé) du DummyLLMClient ---")
+    if dummy_variants_structured and isinstance(dummy_variants_structured[0], DummyTestModel):
+        print(f"Variante 1 (type {type(dummy_variants_structured[0])}):\n{dummy_variants_structured[0].model_dump_json(indent=2)}\n")
+    elif dummy_variants_structured: # Si c'est un dict brut (erreur de validation)
+        print(f"Variante 1 (type {type(dummy_variants_structured[0])} - validation échouée):\n{dummy_variants_structured[0]}\n")
+    else:
+        print("Aucune variante structurée (simulée) retournée par le dummy.")
+
+    # --- Test OpenAI ---
     openai_client = OpenAIClient(model_identifier=default_model, api_key_env_var=api_key_var)
     if not openai_client.api_key:
         print(f"{api_key_var} n'est pas configurée. Le test OpenAI sera sauté.")
+        await dummy_client.close()
         return
 
-    # Récupérer le system prompt et le contexte du PromptEngine pour un test plus réaliste
     from prompt_engine import PromptEngine
-    engine = PromptEngine()
-    test_context = "PersonnageA: Bob, PersonnageB: Alice, Lieu: Taverne"
-    test_user_goal = "Bob veut commander une bière à Alice."
-    openai_prompt, _ = engine.build_prompt(test_context, test_user_goal)
+    from DialogueGenerator.models.dialogue_structure.interaction import Interaction # MODIFIÉ: Import de Interaction
+
+    engine = PromptEngine() # Utilisation du PromptEngine par défaut pour l'instant
     
-    print(f"\n--- Envoi du prompt suivant à {openai_client.model} ---")
-    print(openai_prompt)
+    # Test OpenAI - Sortie Textuelle (ancienne méthode)
+    test_user_goal_text = "Donne-moi une description de la taverne du Crâne Fêlé."
+    openai_prompt_text, _ = engine.build_prompt(user_specific_goal=test_user_goal_text) # Contexte minimal
+    
+    print(f"\n--- Envoi du prompt TEXTUEL suivant à {openai_client.model} ---")
+    print(openai_prompt_text)
+    print("--------------------------------------------------")
+    openai_variants_text = await openai_client.generate_variants(openai_prompt_text, 1)
+    print(f"\n--- Variants TEXTUELS de l'OpenAIClient ({openai_client.model}) ---")
+    if openai_variants_text and isinstance(openai_variants_text[0], str):
+        print(f"Variante 1:\n{openai_variants_text[0]}\n")
+    else:
+        print(f"Réponse inattendue pour variante textuelle: {openai_variants_text}")
+
+    # Test OpenAI - Sortie Structurée (nouvelle méthode avec Interaction)
+    # Il faut un prompt qui guide le LLM vers la structure attendue, même avec .parse()
+    # .parse() garantit la forme, mais un bon prompt garantit le contenu pertinent.
+    # Pour Interaction, le system_prompt de PromptEngine est déjà conçu pour cela.
+    # On va simuler un appel qui demanderait une Interaction complète.
+    test_user_goal_structured = "Génère une interaction simple où Bob demande une bière à Alice dans la Taverne du Crâne Fêlé. Alice répond et lui sert."
+    
+    # Le PromptEngine doit être configuré pour générer le prompt pour une Interaction
+    # (ce qui est déjà le cas si generation_params={'generate_interaction': True} est passé)
+    openai_prompt_structured, _ = engine.build_prompt(
+        user_specific_goal=test_user_goal_structured,
+        scene_protagonists={"personnage_a": "Bob", "personnage_b": "Alice"},
+        scene_location={"lieu": "Taverne du Crâne Fêlé"},
+        context_summary="Bob est un aventurier assoiffé. Alice est la tenancière.",
+        generation_params={"generate_interaction": True} # Pour utiliser le system_prompt d'interaction
+    )
+
+    print(f"\n--- Envoi du prompt STRUCTURÉ (pour Interaction) suivant à {openai_client.model} ---")
+    print(openai_prompt_structured)
     print("--------------------------------------------------")
 
-    openai_variants = await openai_client.generate_variants(openai_prompt, 1) # Test avec 1 variante pour commencer
-    print(f"\n--- Variants de l'OpenAIClient ({openai_client.model}) ---")
-    for i, v in enumerate(openai_variants):
-        print(f"Variante {i+1}:\n{v}\n")
+    # Appel avec le modèle Pydantic Interaction
+    # k=1 car .parse() ne gère pas plusieurs choix directement, il faut boucler si k > 1.
+    openai_variants_structured = await openai_client.generate_variants(openai_prompt_structured, 1, response_model=Interaction)
+    print(f"\n--- Variants STRUCTURÉS (Interaction) de l'OpenAIClient ({openai_client.model}) ---")
+    if openai_variants_structured:
+        for i, v_struct in enumerate(openai_variants_structured):
+            if isinstance(v_struct, Interaction):
+                print(f"Variante Structurée {i+1} (type {type(v_struct)}):")
+                print(v_struct.model_dump_json(indent=2))
+            elif isinstance(v_struct, str): # Cas d'erreur retourné comme string
+                print(f"Variante Structurée {i+1} (Erreur):\n{v_struct}")
+            else:
+                print(f"Variante Structurée {i+1} (type {type(v_struct)} inattendu):\n{v_struct}")
+        print("\n")
+    else:
+        print("Aucune variante structurée (Interaction) retournée.")
+    
+    await dummy_client.close()
+    await openai_client.close() # S'assurer que le client OpenAI est fermé
 
 if __name__ == '__main__':
     # Pour exécuter le test async : python -m DialogueGenerator.llm_client 

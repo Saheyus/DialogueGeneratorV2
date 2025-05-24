@@ -124,11 +124,12 @@ class GeneratedVariantsTabsWidget(QTabWidget):
         # Afficher l'interaction en JSON formaté
         content_area = QTextEdit()
         try:
-            interaction_dict = interaction.to_dict()
+            interaction_dict = interaction.model_dump(mode='python')
             formatted_json = json.dumps(interaction_dict, indent=2, ensure_ascii=False)
             content_area.setPlainText(formatted_json)
         except Exception as e:
             content_area.setPlainText(f"Erreur lors de l'affichage de l'interaction: {str(e)}")
+            logger.error(f"Erreur lors de la sérialisation JSON de l'interaction '{tab_name}': {str(e)}", exc_info=True)
             
         content_area.setReadOnly(True)
         tab_layout.addWidget(content_area)

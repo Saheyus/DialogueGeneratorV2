@@ -94,7 +94,7 @@ class FileInteractionRepository:
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                interaction = Interaction.from_dict(data)
+                interaction = Interaction.model_validate(data)
                 # Optionnel: vérifier si le nom de fichier actuel correspond au nom attendu et renommer si besoin
                 # expected_filename = self._construct_filename(interaction.interaction_id, interaction.title)
                 # if file_path.name != expected_filename:
@@ -148,7 +148,7 @@ class FileInteractionRepository:
 
 
         # Sauvegarder l'interaction dans le nouveau fichier
-        data = interaction.to_dict()
+        data = interaction.model_dump(mode='json')
         try:
             with open(new_file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
@@ -206,7 +206,7 @@ class FileInteractionRepository:
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    interaction = Interaction.from_dict(data)
+                    interaction = Interaction.model_validate(data)
                     interactions.append(interaction)
                     # print(f"[DEBUG] Interaction chargée : {interaction.interaction_id}, titre: {getattr(interaction, 'title', '<sans titre>')}")
                     logger.info(f"[DEBUG] Interaction chargée: id={getattr(interaction, 'interaction_id', None)}, titre={getattr(interaction, 'title', None)}")

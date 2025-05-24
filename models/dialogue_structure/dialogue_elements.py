@@ -1,107 +1,50 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Union, Literal
+from pydantic import BaseModel, Field
 from abc import ABC, abstractmethod
 
-class AbstractDialogueElement(ABC):
-    element_type: str
+class DialogueLineElement(BaseModel):
+    element_type: Literal["dialogue_line"] = Field("dialogue_line", description="Type de l'élément : ligne de dialogue.")
+    text: str = Field(..., description="Texte du dialogue.")
+    speaker: Optional[str] = Field(None, description="Nom du personnage qui parle.")
+    tags: List[str] = Field(default_factory=list, description="Tags associés à la ligne.")
+    pre_line_commands: List[str] = Field(default_factory=list, description="Commandes à exécuter avant la ligne.")
+    post_line_commands: List[str] = Field(default_factory=list, description="Commandes à exécuter après la ligne.")
 
-    @abstractmethod
-    def to_dict(self) -> Dict[str, Any]:
-        pass
+class PlayerChoiceOption(BaseModel):
+    text: str = Field(..., description="Texte de l'option de choix.")
+    next_interaction_id: str = Field(..., description="ID de l'interaction suivante si ce choix est sélectionné.")
+    condition: Optional[str] = Field(None, description="Condition pour que ce choix soit visible/actif.")
+    actions: List[str] = Field(default_factory=list, description="Actions à exécuter si ce choix est sélectionné.")
+    tags: List[str] = Field(default_factory=list, description="Tags associés à ce choix.")
 
-    @classmethod
-    @abstractmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'AbstractDialogueElement':
-        pass
+class PlayerChoicesBlockElement(BaseModel):
+    element_type: Literal["player_choices_block"] = Field("player_choices_block", description="Type de l'élément : bloc de choix pour le joueur.")
+    choices: List[PlayerChoiceOption] = Field(default_factory=list, description="Liste des options de choix.")
 
-class DialogueLineElement(AbstractDialogueElement):
-    element_type: str = "dialogue_line"
+class CommandElement(BaseModel):
+    element_type: Literal["command"] = Field("command", description="Type de l'élément : commande Yarn.")
+    command_string: str = Field(..., description="La commande Yarn à exécuter (ex: '<<wait 1>>').")
 
-    def __init__(self, text: str, speaker: Optional[str] = None, tags: Optional[List[str]] = None,
-                 pre_line_commands: Optional[List[str]] = None, post_line_commands: Optional[List[str]] = None):
-        self.speaker = speaker
-        self.text = text
-        self.tags = tags or []
-        self.pre_line_commands = pre_line_commands or []
-        self.post_line_commands = post_line_commands or []
+AnyDialogueElement = Union[DialogueLineElement, PlayerChoicesBlockElement, CommandElement]
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "element_type": self.element_type,
-            "speaker": self.speaker,
-            "text": self.text,
-            "tags": self.tags,
-            "pre_line_commands": self.pre_line_commands,
-            "post_line_commands": self.post_line_commands
-        }
+# La classe AbstractDialogueElement n'est plus nécessaire avec Pydantic et Union discriminée
+# Si une base commune non-Pydantic est requise pour une autre logique, elle peut être réintroduite,
+# mais pour le schéma OpenAI, l'Union est préférable.
 
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'DialogueLineElement':
-        return cls(
-            text=data['text'],
-            speaker=data.get('speaker'),
-            tags=data.get('tags'),
-            pre_line_commands=data.get('pre_line_commands'),
-            post_line_commands=data.get('post_line_commands')
-        )
+# Commentaire original pour référence (supprimé car la logique est maintenant dans Pydantic)
+# class AbstractDialogueElement(ABC):
+#     element_type: str
+# 
+#     @abstractmethod
+#     def to_dict(self) -> Dict[str, Any]:
+#         pass
+# 
+#     @classmethod
+#     @abstractmethod
+#     def from_dict(cls, data: Dict[str, Any]) -> 'AbstractDialogueElement':
+#         pass
 
-class PlayerChoiceOption:
-    def __init__(self, text: str, next_interaction_id: str, condition: Optional[str] = None,
-                 actions: Optional[List[str]] = None, tags: Optional[List[str]] = None):
-        self.text = text
-        self.next_interaction_id = next_interaction_id
-        self.condition = condition
-        self.actions = actions or []
-        self.tags = tags or []
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "text": self.text,
-            "next_interaction_id": self.next_interaction_id,
-            "condition": self.condition,
-            "actions": self.actions,
-            "tags": self.tags
-        }
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'PlayerChoiceOption':
-        return cls(
-            text=data['text'],
-            next_interaction_id=data['next_interaction_id'],
-            condition=data.get('condition'),
-            actions=data.get('actions'),
-            tags=data.get('tags')
-        )
-
-class PlayerChoicesBlockElement(AbstractDialogueElement):
-    element_type: str = "player_choices_block"
-
-    def __init__(self, choices: Optional[List[PlayerChoiceOption]] = None):
-        self.choices = choices or []
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "element_type": self.element_type,
-            "choices": [choice.to_dict() for choice in self.choices]
-        }
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'PlayerChoicesBlockElement':
-        return cls(
-            choices=[PlayerChoiceOption.from_dict(c) for c in data.get('choices', [])]
-        )
-
-class CommandElement(AbstractDialogueElement):
-    element_type: str = "command"
-
-    def __init__(self, command_string: str):
-        self.command_string = command_string
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "element_type": self.element_type,
-            "command_string": self.command_string
-        }
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'CommandElement':
-        return cls(command_string=data['command_string']) 
+# Vérifications (à faire manuellement ou via tests après) :
+# - S'assurer que tous les champs optionnels ont des valeurs par défaut (None ou default_factory).
+# - S'assurer que les types sont corrects (List[str] et non Optional[List[str]] si une liste vide est la valeur par défaut).
+# - Vérifier que la discrimination fonctionne comme attendu avec element_type. 

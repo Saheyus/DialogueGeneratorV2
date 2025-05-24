@@ -4,8 +4,11 @@ from typing import Dict, Any, List, Optional
 import jinja2
 
 from DialogueGenerator.models.dialogue_structure import (
-    Interaction, AbstractDialogueElement, DialogueLineElement,
-    PlayerChoicesBlockElement, PlayerChoiceOption
+    Interaction, 
+    AnyDialogueElement,
+    DialogueLineElement,
+    PlayerChoicesBlockElement, PlayerChoiceOption,
+    CommandElement
 )
 
 class JinjaYarnRenderer:
@@ -106,7 +109,7 @@ class JinjaYarnRenderer:
         Returns:
             Le contenu du template par défaut sous forme de chaîne.
         """
-        return """title: {{ interaction.interaction_id }}
+        return """title: {{ interaction.title if interaction.title else interaction.interaction_id }}
 ---
 {% if header_tags %}
 tags: {{ header_tags|join(', ') }}
@@ -119,13 +122,20 @@ tags: {{ header_tags|join(', ') }}
 ===
 
 {% for element in elements %}
-{% if element.__class__.__name__ == 'DialogueLineElement' %}
-{{ element.speaker }}: {{ element.text }}
-{% elif element.__class__.__name__ == 'PlayerChoicesBlockElement' %}
+{% if element.element_type == 'dialogue_line' %}
+{{ element.speaker if element.speaker else 'Narrateur' }}: {{ element.text }}
+{% for cmd in element.pre_line_commands %}<<{{ cmd }}>>
+{% endfor %}
+{% if element.speaker if element.speaker else 'Narrateur' %}: {% endif %}{{ element.text }}
+{% for cmd in element.post_line_commands %}<<{{ cmd }}>>
+{% endfor %}
+{% elif element.element_type == 'player_choices_block' %}
 {% for choice in element.choices %}
 -> {{ choice.text }}
     <<jump {{ choice.next_interaction_id }}>>
 {% endfor %}
+{% elif element.element_type == 'command' %}
+<<{{ element.command_string }}>>
 {% endif %}
 {% endfor %}
 ===""" 

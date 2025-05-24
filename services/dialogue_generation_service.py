@@ -362,11 +362,11 @@ class DialogueGenerationService:
                 element_type = element_data.get("element_type")
                 element = None
                 if element_type == "dialogue_line":
-                    element = DialogueLineElement.from_dict(element_data)
+                    element = DialogueLineElement.model_validate(element_data)
                 elif element_type == "command":
-                    element = CommandElement.from_dict(element_data)
+                    element = CommandElement.model_validate(element_data)
                 elif element_type == "player_choices_block":
-                    element = PlayerChoicesBlockElement.from_dict(element_data)
+                    element = PlayerChoicesBlockElement.model_validate(element_data)
                 
                 if element:
                     new_interaction.elements.append(element)
@@ -534,25 +534,18 @@ class DialogueGenerationService:
                 data["title"] = title
 
             interaction_id = data.get("interaction_id", "")
-            # La logique robuste d'ID est maintenant dans _parse_llm_response_to_interaction
-            # Si cette méthode est toujours appelée, elle utilisera l'ID tel quel ou un ID basique.
-            if not interaction_id:
-                if title:
-                    cleaned_title = re.sub(r'[^a-zA-Z0-9]', '_', title.lower())
-                    interaction_id = cleaned_title[:50]
-                else:
-                    import time
-                    interaction_id = f"interaction_{int(time.time())}"
+            if not interaction_id: # Générer un ID basique si absent
+                interaction_id = title.lower().replace(" ", "_")[:30] + f"_{uuid.uuid4().hex[:6]}"
                 data["interaction_id"] = interaction_id
-                logger.warning(f"parse_interaction_response a généré un ID basique: {interaction_id}")
 
-            interaction = Interaction.from_dict(data)
-            logger.info(f"Interaction créée (via parse_interaction_response). ID: {interaction.interaction_id}, titre: {interaction.title}")
-            return interaction
-            
+            # MODIFIÉ: Utilisation de model_validate pour créer l'instance d'Interaction
+            # Cela suppose que la structure de `data` correspond au modèle Interaction Pydantic
+            # y compris la gestion des `elements` par discrimination.
+            return Interaction.model_validate(data)
+
         except json.JSONDecodeError as e:
-            logger.error(f"Erreur de décodage JSON (parse_interaction_response): {e}")
+            logger.error(f"Erreur de décodage JSON dans parse_interaction_response: {str(e)}. Réponse: {raw_response[:200]}...")
             return None
         except Exception as e:
-            logger.exception(f"Erreur (parse_interaction_response): {e}")
+            logger.exception(f"Erreur inattendue dans parse_interaction_response: {str(e)}")
             return None 

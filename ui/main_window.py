@@ -16,7 +16,8 @@ from typing import Optional, List
 # Local imports from the same 'ui' package
 from .left_selection_panel import LeftSelectionPanel # Added import
 from .details_panel import DetailsPanel # Added import
-from .generation_panel_base import GenerationPanel # New import
+# from .generation_panel_base import GenerationPanel # New import # MODIFIÉ: Commenté
+from .generation_panel_main import GenerationPanel # MODIFIÉ: Ajout de cet import
 # from .config_dialog import ConfigDialog  # Assuming ConfigDialog is in ui package -> Fichier manquant, commenté
 from .utils import get_icon_path # Assurez-vous que utils.py et get_icon_path existent
 
