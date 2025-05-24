@@ -1,0 +1,44 @@
+{
+  "interaction_id": "dba3c8f1-3d4c-4e02-b7cd-fdbe6b631e9b",
+  "title": "Première rencontre entre Uresaïr et Akthar-Neth Amatru dans les Bibliothèques Veineuses",
+  "header_tags": [
+    "rencontre",
+    "dialogue",
+    "mystère"
+  ],
+  "next_interaction_id_if_no_choices": null,
+  "phase_1": {
+    "element_type": "dialogue_line",
+    "text": "Une réverbération éthérée pulse entre les veines cristallines des Bibliothèques Veineuses. Au centre d'une intersection de lumière et d'ombre, Akthar-Neth Amatru attend, sa silhouette vénérable se fondant presque dans le décor organique. La Seigneuresse Uresaïr, accompagnée de l'Éthérée, entre dans la vaste salle, le son de ses pas résonnant doucement sur les parois.",
+    "speaker": null,
+    "tags": [],
+    "pre_line_commands": [],
+    "post_line_commands": []
+  },
+  "phase_2": {
+    "element_type": "player_choices_block",
+    "choices": [
+      {
+        "text": "S'approcher prudemment d'Akthar-Neth Amatru et le saluer.",
+        "next_interaction_id": "9f8c3d8e-1f8b-4d2d-bc1e-2e5a4e1e6e6d",
+        "condition": null,
+        "actions": [],
+        "tags": []
+      },
+      {
+        "text": "Observer silencieusement la résonance du lieu avant d'engager la conversation.",
+        "next_interaction_id": "c3b4d2f9-5d7c-4c7f-9d2e-5a4b3f6e7e8f",
+        "condition": null,
+        "actions": [],
+        "tags": []
+      },
+      {
+        "text": "Interroger immédiatement Akthar-Neth sur sa présence.",
+        "next_interaction_id": "a4d3e5f6-8b7c-4d1e-9e2b-6a7b3f5f7e8d",
+        "condition": null,
+        "actions": [],
+        "tags": []
+      }
+    ]
+  }
+}

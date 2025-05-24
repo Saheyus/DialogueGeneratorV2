@@ -16,7 +16,7 @@ import os
 from DialogueGenerator.models.dialogue_structure.interaction import Interaction
 from DialogueGenerator.services.interaction_service import InteractionService
 from DialogueGenerator.services.repositories.file_repository import FileInteractionRepository
-from DialogueGenerator.models.dialogue_structure.dynamic_interaction_schema import build_interaction_model_from_structure, validate_interaction_elements_order
+from DialogueGenerator.models.dialogue_structure.dynamic_interaction_schema import build_interaction_model_from_structure, validate_interaction_elements_order, convert_dynamic_to_standard_interaction
 
 # Import local de la fonction utilitaire
 from .utils import get_icon_path
@@ -215,7 +215,8 @@ class GenerationPanel(QWidget):
 
         self.variants_display_widget = GeneratedVariantsTabsWidget()
         right_column_layout.addWidget(self.variants_display_widget)
-        self.variants_display_widget.validate_interaction_requested.connect(self._on_validate_interaction_clicked)
+        # Connecte la validation d'une interaction générée au nouveau slot de sauvegarde
+        self.variants_display_widget.validate_interaction_requested.connect(self._on_validate_interaction_requested_from_tabs)
 
         main_splitter.setStretchFactor(0, 1) 
         main_splitter.setStretchFactor(1, 2) 
@@ -610,15 +611,28 @@ class GenerationPanel(QWidget):
                                 logger.error(f"[VALIDATION STRUCTURE] La variante générée ne respecte pas la structure imposée : {structure}")
                                 error_text = ("// Erreur : La variante générée ne respecte pas la structure imposée :\n"
                                               f"Structure attendue : {structure}\n"
-                                              f"Types reçus : {[type(e).__name__ for e in getattr(variant_data, 'elements', [])]}\n"
-                                              "Corrigez le prompt ou relancez la génération.")
+                                              f"Types reçus : {[type(e).__name__ for e in getattr(variant_data, 'elements', [])]}"
+                                              f" (avant conversion si DynamicInteraction)")
                                 text_edit = QTextEdit(error_text)
                                 text_edit.setReadOnly(True)
                                 self.variants_display_widget.addTab(text_edit, f"Variante {i+1} (Erreur Structure)")
                                 continue
                             logger.info(f"[VALIDATION STRUCTURE] Variante {i+1} conforme à la structure imposée.")
-                            self.variants_display_widget.add_interaction_tab(f"Variante {i+1}", variant_data)
-                            logger.info(f"[LOG_DEBUG] Variante {i+1} (Interaction) ajoutée via add_interaction_tab.")
+                            
+                            # +++ CONVERSION EN INTERACTION STANDARD +++
+                            try:
+                                standard_interaction = convert_dynamic_to_standard_interaction(variant_data)
+                                self.variants_display_widget.add_interaction_tab(f"Variante {i+1}", standard_interaction)
+                                logger.info(f"[LOG_DEBUG] Variante {i+1} (DynamicInteraction convertie en Interaction) ajoutée via add_interaction_tab. ID: {standard_interaction.interaction_id}")
+                            except ValueError as ve:
+                                logger.error(f"Erreur de conversion de DynamicInteraction en Interaction: {ve}", exc_info=True)
+                                error_text_conversion = ("// Erreur : Impossible de convertir la variante DynamicInteraction en Interaction standard.\n"
+                                                       f"{ve}")
+                                text_edit_conv = QTextEdit(error_text_conversion)
+                                text_edit_conv.setReadOnly(True)
+                                self.variants_display_widget.addTab(text_edit_conv, f"Variante {i+1} (Erreur Conversion)")
+                                continue
+                                
                         elif isinstance(variant_data, str):
                             self.variants_display_widget.add_variant_tab(f"Variante {i+1}", variant_data)
                             logger.info(f"[LOG_DEBUG] Variante {i+1} (str) ajoutée via add_variant_tab: {variant_data[:100]}...")
@@ -685,24 +699,55 @@ class GenerationPanel(QWidget):
         
         self.variants_display_widget.blockSignals(False)
 
+    # --- Validation et sauvegarde d'une Interaction générée ---
+    @Slot(str, Interaction)
+    def _on_validate_interaction_requested_from_tabs(self, tab_name: str, interaction: Interaction):
+        """Sauvegarde l'interaction validée et met à jour l'UI.
+
+        Args:
+            tab_name: Nom de l'onglet source (non utilisé pour l'instant mais conservé pour compatibilité).
+            interaction: L'objet Interaction à sauvegarder.
+        """
+        logger.info(f"[VALIDATE] Demande de validation depuis l'onglet '{tab_name}' pour l'interaction ID={interaction.interaction_id}")
+        try:
+            # 1) Sauvegarde via le service → JSON sur disque
+            self.interaction_service.save(interaction)
+
+            # 2) Feedback utilisateur
+            title_display = interaction.title if getattr(interaction, 'title', None) else str(interaction.interaction_id)[:8]
+            QMessageBox.information(self, "Interaction Validée", f"L'interaction '{title_display}' a été sauvegardée.")
+
+            # 3) Rafraîchir la liste des interactions et sélectionner la nouvelle
+            try:
+                # Déconnecte temporairement pour éviter les effets de bord pendant la mise à jour
+                self.interaction_sequence_widget.interaction_selected.disconnect(self._on_interaction_selected)
+            except Exception:
+                pass  # Pas critique si déjà déconnecté
+
+            self.interaction_sequence_widget.refresh_list(select_id=str(interaction.interaction_id))
+
+            # Affiche l'interaction dans l'éditeur
+            self.interaction_editor_widget.set_interaction(interaction)
+
+            # Reconnecte le signal
+            try:
+                self.interaction_sequence_widget.interaction_selected.connect(self._on_interaction_selected)
+            except Exception:
+                pass
+
+            # Message de statut dans la barre inférieure si disponible
+            if hasattr(self.main_window_ref, 'statusBar'):
+                self.main_window_ref.statusBar().showMessage(f"Interaction '{title_display}' sauvegardée.", 3000)
+
+        except Exception as e:
+            logger.exception("Erreur lors de la validation/sauvegarde de l'interaction.")
+            QMessageBox.critical(self, "Erreur", f"Impossible de sauvegarder l'interaction : {e}")
+
+    # Ancien slot conservé (désormais inutilisé)
     @Slot(int)
     def _on_validate_interaction_clicked(self, variant_index: int):
-        # Cette méthode est maintenant connectée à validate_interaction_requested
-        # Elle recevra (tab_name: str, interaction: Interaction)
-        # Pour l'instant, nous la laissons telle quelle, mais elle devrait être adaptée
-        # ou une nouvelle méthode _on_validate_interaction_clicked devrait être créée.
-        # Si on veut garder cette logique pour une variante TEXTE, il faudrait connecter
-        # le signal validate_variant_requested (qui prend tab_name, content)
-
-        # Pour l'instant, supposons que ce slot est TEMPORAIREMENT désactivé ou sera refait.
-        # Il faudrait que ce soit connecté à `validate_interaction_requested` et prenne `(tab_name, interaction)`.
-        logger.warning("_on_validate_interaction_clicked appelé, mais devrait être remplacé/adapté pour la validation d'Interactions.")
-        QMessageBox.information(self, "Validation", "La logique de validation d'une variante texte simple n'est pas encore entièrement migrée pour les Interactions structurées via ce slot.")
-        return
-
-        # Le code ci-dessous est l'ancienne logique pour une variante texte.
-        # Il faudra l'adapter pour prendre une Interaction, la convertir en .yarn si nécessaire,
-        # puis la sauvegarder.
+        logger.warning("_on_validate_interaction_clicked est obsolète. Utilisation du nouveau slot de validation d'interaction.")
+        QMessageBox.information(self, "Validation", "Ce mécanisme de validation est obsolète.")
 
     @Slot()
     def _on_select_linked_elements_clicked(self) -> None:
