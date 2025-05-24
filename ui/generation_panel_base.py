@@ -115,7 +115,25 @@ class GenerationPanel(QWidget):
         central_tabs = QTabWidget()
         main_splitter.addWidget(central_tabs) # Maintenant à l'index 0
 
-        # --- Onglet 1 : Génération ---
+        # --- Onglet 1 : Interactions ---
+        interactions_tab = QWidget()
+        interactions_tab_layout = QVBoxLayout(interactions_tab)
+        interactions_tab_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        self.interaction_sequence_widget = InteractionSequenceWidget(self.interaction_service)
+        interactions_tab_layout.addWidget(self.interaction_sequence_widget)
+        self.interaction_sequence_widget.interaction_selected.connect(self._on_interaction_selected)
+        self.interaction_sequence_widget.sequence_changed.connect(self._on_sequence_changed)
+        
+        # Ajout de l'éditeur d'interaction juste sous la séquence
+        self.interaction_editor_widget = InteractionEditorWidget(self.interaction_service, self.context_builder)
+        interactions_tab_layout.addWidget(self.interaction_editor_widget)
+        self.interaction_editor_widget.interaction_saved.connect(lambda: self.interaction_sequence_widget.refresh_list(select_id=self.interaction_editor_widget.current_interaction.interaction_id if self.interaction_editor_widget.current_interaction else None))
+
+        interactions_tab_layout.addStretch(1)
+        central_tabs.addTab(interactions_tab, "Interactions")
+
+        # --- Onglet 2 : Génération ---
         generation_tab = QWidget()
         generation_tab_layout = QVBoxLayout(generation_tab)
         generation_tab_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -172,24 +190,6 @@ class GenerationPanel(QWidget):
 
         generation_tab_layout.addStretch(1)
         central_tabs.addTab(generation_tab, "Génération")
-
-        # --- Onglet 2 : Interactions ---
-        interactions_tab = QWidget()
-        interactions_tab_layout = QVBoxLayout(interactions_tab)
-        interactions_tab_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        self.interaction_sequence_widget = InteractionSequenceWidget(self.interaction_service)
-        interactions_tab_layout.addWidget(self.interaction_sequence_widget)
-        self.interaction_sequence_widget.interaction_selected.connect(self._on_interaction_selected)
-        self.interaction_sequence_widget.sequence_changed.connect(self._on_sequence_changed)
-        
-        # Ajout de l'éditeur d'interaction juste sous la séquence
-        self.interaction_editor_widget = InteractionEditorWidget(self.interaction_service, self.context_builder)
-        interactions_tab_layout.addWidget(self.interaction_editor_widget)
-        self.interaction_editor_widget.interaction_saved.connect(lambda: self.interaction_sequence_widget.refresh_list(select_id=self.interaction_editor_widget.current_interaction.interaction_id if self.interaction_editor_widget.current_interaction else None))
-
-        interactions_tab_layout.addStretch(1)
-        central_tabs.addTab(interactions_tab, "Interactions")
 
         # --- Colonne de Droite: Affichage des Variantes ---
         right_column_widget = QWidget()
