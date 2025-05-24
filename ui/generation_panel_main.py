@@ -532,39 +532,30 @@ class GenerationPanel(QWidget):
             if scene_sub_location_name: scene_location_dict["sous_lieu"] = scene_sub_location_name
             
             # Mettre à jour le moteur de prompt avec le system prompt actuel de l'UI AVANT de construire le contexte
-            # Cela garantit que l'estimation des tokens et la génération utilisent le dernier prompt système.
             self._update_prompt_engine_system_prompt() 
 
-            # Construction du contexte via ContextBuilder
-            # Le ContextBuilder doit maintenant aussi prendre les protagonistes et lieu pour potentiellement les exclure du résumé général
-            # ou pour affiner le contexte. Pour l'instant, on passe les items sélectionnés et il fera le tri.
-            # TODO: Affiner ContextBuilder pour qu'il utilise scene_protagonists et scene_location pour mieux cibler le contexte.
-            # Pour l'instant, on passe les items sélectionnés et ContextBuilder.build_context s'attend à une "scene_instruction" qui peut être l'objectif utilisateur.
             context_summary_text = self.context_builder.build_context(
                 selected_elements=selected_context_items,
                 scene_instruction=user_instructions, 
-                max_tokens=self.main_window_ref.config_service.get_ui_setting("max_context_tokens", 1500) # Assurer que c'est bien config_service ici
+                max_tokens=self.main_window_ref.config_service.get_ui_setting("max_context_tokens", 1500)
             )
 
-            # Construction du prompt via PromptEngine avec la nouvelle structure
             full_prompt, estimated_tokens = self.prompt_engine.build_prompt(
                 user_specific_goal=user_instructions,
                 scene_protagonists=scene_protagonists_dict if scene_protagonists_dict else None,
                 scene_location=scene_location_dict if scene_location_dict else None,
-                context_summary=context_summary_text, # Le reste du contexte
-                generation_params={ # TODO: Exposer ces paramètres dans l'UI si nécessaire
+                context_summary=context_summary_text,
+                generation_params={
                     "tone": "Neutre", 
                     "model_identifier": self.current_llm_model_identifier,
                     "dialogue_structure": self.dialogue_structure_widget.get_structure_description()
                 }
             )
-            # Affichage des tokens en milliers (k)
-            estimated_tokens_k = estimated_tokens / 1000
-            self.token_estimation_label.setText(f"Tokens prompt final: {estimated_tokens_k:.1f}k")
+            self.token_estimation_label.setText(f"Tokens prompt final: {estimated_tokens / 1000:.1f}k")
             self._display_prompt_in_tab(full_prompt)
 
-            logger.debug(f"[GenerationPanel._on_generate_dialogue_button_clicked_local] Context summary sent to LLM (first 300 chars): {context_summary_text[:300] if context_summary_text else 'None'}") # LOG AJOUTÉ
-            logger.debug(f"[GenerationPanel._on_generate_dialogue_button_clicked_local] Full prompt sent to LLM (first 300 chars): {full_prompt[:300] if full_prompt else 'None'}") # LOG AJOUTÉ
+            logger.debug(f"[GenerationPanel._on_generate_dialogue_button_clicked_local] Context summary sent to LLM (first 300 chars): {context_summary_text[:300] if context_summary_text else 'None'}")
+            logger.debug(f"[GenerationPanel._on_generate_dialogue_button_clicked_local] Full prompt sent to LLM (first 300 chars): {full_prompt[:300] if full_prompt else 'None'}")
 
             if not self.llm_client:
                 logger.error("Erreur: Client LLM non initialisé.")
@@ -574,22 +565,21 @@ class GenerationPanel(QWidget):
             logger.info(f"Appel de llm_client.generate_variants avec k={k_variants}...")
             
             target_response_model = None
-            # LOGS AJOUTÉS POUR DIAGNOSTIC
-            logger.info(f"[LOG_DEBUG_STRUCT] Vérification pour sortie structurée:")
-            logger.info(f"[LOG_DEBUG_STRUCT]   structured_output_checkbox.isChecked(): {self.structured_output_checkbox.isChecked()}")
-            logger.info(f"[LOG_DEBUG_STRUCT]   isinstance(self.llm_client, OpenAIClient): {isinstance(self.llm_client, OpenAIClient)}")
-            if self.llm_client:
-                logger.info(f"[LOG_DEBUG_STRUCT]   type(self.llm_client): {type(self.llm_client).__name__}")
-
-            if self.structured_output_checkbox.isChecked() and isinstance(self.llm_client, OpenAIClient):
-                # Utilisation du modèle dynamique selon la structure choisie
+            current_model_props = self.main_window_ref.get_current_llm_model_properties()
+            # MODIFIÉ: Condition pour sortie structurée basée sur les propriétés du modèle
+            if self.structured_output_checkbox.isChecked() and current_model_props and current_model_props.get("supports_json_mode", False):
                 structure = self.dialogue_structure_widget.get_structure()
                 target_response_model = build_interaction_model_from_structure(structure)
-                logger.info(f"[LOG_DEBUG_STRUCT] Modèle Pydantic dynamique utilisé pour la structure: {structure}")
+                logger.info(f"[LOG_DEBUG_STRUCT] Modèle Pydantic dynamique utilisé pour la structure: {structure}. Modèle LLM: {current_model_props.get('api_identifier')}")
             else:
-                logger.info("[LOG_DEBUG_STRUCT] Conditions non remplies pour la sortie structurée (target_response_model restera None).")
+                logger.info("[LOG_DEBUG_STRUCT] Conditions non remplies pour la sortie structurée ou modèle non compatible.")
+                if not self.structured_output_checkbox.isChecked():
+                    logger.info("[LOG_DEBUG_STRUCT]   Raison: Checkbox 'structured_output' non cochée.")
+                if not current_model_props:
+                    logger.info("[LOG_DEBUG_STRUCT]   Raison: Impossible de récupérer les propriétés du modèle LLM actuel.")
+                elif not current_model_props.get("supports_json_mode", False):
+                    logger.info(f"[LOG_DEBUG_STRUCT]   Raison: Modèle LLM actuel '{current_model_props.get('api_identifier')}' ne supporte pas json_mode (supports_json_mode: {current_model_props.get('supports_json_mode')}).")
 
-            # Appel modifié à generate_variants
             variants = await self.llm_client.generate_variants(
                 prompt=full_prompt, 
                 k=k_variants, 
