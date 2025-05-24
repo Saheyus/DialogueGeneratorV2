@@ -391,15 +391,13 @@ class GenerationPanel(QWidget):
         try:
             k_variants = int(self.generation_params_widget.k_variants_combo.currentText())
             max_context_tokens_for_builder = int(self.generation_params_widget.max_context_tokens_spinbox.value() * 1000)
-            structured_output = self.generation_params_widget.structured_output_checkbox.isChecked()
-            generate_interaction = self.generate_interaction_checkbox.isChecked()
+            structured_text_output = self.generation_params_widget.structured_output_checkbox.isChecked()
+            generate_interaction_mode = self.generate_interaction_checkbox.isChecked()
             user_instructions = self.instructions_widget.get_user_instructions_text()
-            system_prompt_override = self.instructions_widget.get_system_prompt_text()
+            system_prompt_override = self.instructions_widget.get_system_prompt_text() if self.instructions_widget.is_system_prompt_customized() else None
             current_llm_model_identifier = self.generation_params_widget.llm_model_combo.currentData()
 
             context_selections_dict = self.main_window_ref._get_current_context_selections()
-            context_selections_dict["generate_interaction"] = generate_interaction
-            
             char_a_name = self.scene_selection_widget.character_a_combo.currentText()
             char_b_name = self.scene_selection_widget.character_b_combo.currentText()
             scene_region_name = self.scene_selection_widget.scene_region_combo.currentText()
@@ -416,22 +414,25 @@ class GenerationPanel(QWidget):
             if scene_region_name and scene_region_name not in placeholders: location["lieu"] = scene_region_name
             if scene_sub_location_name and scene_sub_location_name not in placeholders: location["sous_lieu"] = scene_sub_location_name
             if location: context_selections_dict["_scene_location"] = location
+            
+            context_selections_dict["generate_interaction"] = generate_interaction_mode
+            if generate_interaction_mode:
+                dialogue_structure_description = self.dialogue_structure_widget.get_structure_description()
+                if "generation_settings" not in context_selections_dict:
+                    context_selections_dict["generation_settings"] = {}
+                context_selections_dict["generation_settings"]["dialogue_structure"] = dialogue_structure_description
 
             if not self.llm_client:
                 QMessageBox.critical(self, "Erreur LLM", "Le client LLM n'est pas disponible.")
                 logger.error("LLM client non disponible pour la génération.")
                 return
 
-            # Choisir la méthode de génération en fonction du mode sélectionné
-            if generate_interaction:
-                logger.info("Utilisation du mode de génération d'Interactions structurées")
-                
-                # Ajouter la structure de dialogue aux paramètres
-                dialogue_structure_description = self.dialogue_structure_widget.get_structure_description()
-                if "generation_settings" not in context_selections_dict:
-                    context_selections_dict["generation_settings"] = {}
-                context_selections_dict["generation_settings"]["dialogue_structure"] = dialogue_structure_description
-                
+            variants = None
+            full_prompt = None
+            estimated_tokens = 0
+
+            if generate_interaction_mode:
+                logger.info("GenerationPanel: Appel de generate_interaction_variants du service.")
                 variants, full_prompt, estimated_tokens = await self.dialogue_generation_service.generate_interaction_variants(
                     llm_client=self.llm_client,
                     k_variants=k_variants,
@@ -441,44 +442,40 @@ class GenerationPanel(QWidget):
                     context_selections=context_selections_dict,
                     current_llm_model_identifier=current_llm_model_identifier
                 )
-                
-                self.token_actions_widget.set_token_estimation_text(f"Tokens prompt final: {(estimated_tokens or 0) / 1000:.1f}k")
-                # Utiliser la nouvelle méthode pour afficher les interactions
                 self.generated_variants_tabs.display_interaction_variants(variants or [], full_prompt)
-                
-                if full_prompt is not None:
-                    generation_succeeded = True if variants is not None else False
-                else:
-                    QMessageBox.warning(self, "Erreur de Prompt", "Impossible de construire le prompt. Vérifiez les logs.")
-                    generation_succeeded = False
             else:
-                # Mode de génération classique (texte brut)
-                logger.info("Utilisation du mode de génération de texte classique")
-            variants, full_prompt, estimated_tokens = await self.dialogue_generation_service.generate_dialogue_variants(
-                llm_client=self.llm_client,
-                k_variants=k_variants,
-                max_context_tokens_for_context_builder=max_context_tokens_for_builder,
-                structured_output=structured_output,
-                user_instructions=user_instructions,
-                system_prompt_override=system_prompt_override,
-                context_selections=context_selections_dict,
-                current_llm_model_identifier=current_llm_model_identifier
-            )
-
+                logger.info("GenerationPanel: Appel de generate_dialogue_variants du service (texte).")
+                variants, full_prompt, estimated_tokens = await self.dialogue_generation_service.generate_dialogue_variants(
+                    llm_client=self.llm_client,
+                    k_variants=k_variants,
+                    max_context_tokens_for_context_builder=max_context_tokens_for_builder,
+                    structured_output=structured_text_output,
+                    user_instructions=user_instructions,
+                    system_prompt_override=system_prompt_override,
+                    context_selections=context_selections_dict,
+                    current_llm_model_identifier=current_llm_model_identifier
+                )
+                self.generated_variants_tabs.display_variants(variants or [], full_prompt)
+            
             self.token_actions_widget.set_token_estimation_text(f"Tokens prompt final: {(estimated_tokens or 0) / 1000:.1f}k")
-            self.generated_variants_tabs.display_variants(variants or [], full_prompt)
-            if full_prompt is not None:
-                generation_succeeded = True if variants is not None else False
-            else:
-                QMessageBox.warning(self, "Erreur de Prompt", "Impossible de construire le prompt. Vérifiez les logs.")
+
+            if full_prompt is not None and variants is not None:
+                generation_succeeded = True
+            elif full_prompt is None:
+                 QMessageBox.warning(self, "Erreur de Prompt", "Impossible de construire le prompt. Vérifiez les logs.")
+                 generation_succeeded = False
+            else: # full_prompt ok, mais variants est None ou vide
+                QMessageBox.warning(self, "Aucune Variante", "Le LLM n'a retourné aucune variante ou une erreur est survenue.")
                 generation_succeeded = False
                     
         except Exception as e:
             logger.exception("Erreur majeure dans GenerationPanelBase._on_generate_dialogue_button_clicked_local")
             QMessageBox.critical(self, "Erreur Critique", f"Une erreur inattendue est survenue dans GenerationPanel: {e}")
+            generation_succeeded = False # Assurer que c'est False en cas d'exception
         finally:
-            current_task = asyncio.current_task()
-            if not current_task or not current_task.cancelled(): 
+            # Assurer que current_task est défini avant de vérifier s'il est annulé
+            current_task_obj = asyncio.current_task()
+            if not current_task_obj or not current_task_obj.cancelled(): 
                 self.token_actions_widget.set_progress_bar_visibility(False)
                 self.token_actions_widget.set_generate_button_enabled(True)
                 QApplication.processEvents() 

@@ -3,6 +3,8 @@ import json
 import re
 from typing import Optional, Any, Tuple, List, Dict, Union
 import uuid
+from abc import ABC, abstractmethod
+import asyncio
 
 try:
     from ..context_builder import ContextBuilder
@@ -12,6 +14,7 @@ try:
     from ..models.dialogue_structure.dialogue_elements import (
         DialogueLineElement, PlayerChoicesBlockElement, CommandElement, PlayerChoiceOption
     )
+    from ..services.interaction_service import InteractionService
 except ImportError:
     # Support pour exécution directe ou tests unitaires hors contexte de package complet
     import sys
@@ -26,11 +29,38 @@ except ImportError:
     from DialogueGenerator.models.dialogue_structure.dialogue_elements import (
         DialogueLineElement, PlayerChoicesBlockElement, CommandElement, PlayerChoiceOption
     )
+    from DialogueGenerator.services.interaction_service import InteractionService
 
 logger = logging.getLogger(__name__)
 
-class DialogueGenerationService:
-    def __init__(self, context_builder: ContextBuilder, prompt_engine: PromptEngine, interaction_service=None):
+class IDialogueGenerationService(ABC):
+    @abstractmethod
+    async def generate_dialogue_variants(self, 
+                                         llm_client: ILLMClient, 
+                                         k_variants: int, 
+                                         max_context_tokens_for_context_builder: int, 
+                                         structured_output: bool, 
+                                         user_instructions: str, 
+                                         system_prompt_override: Optional[str], 
+                                         context_selections: Dict[str, Any], 
+                                         current_llm_model_identifier: str
+                                         ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], Optional[int]]:
+        pass
+
+    @abstractmethod
+    async def generate_interaction_variants(self,
+                                            llm_client: ILLMClient,
+                                            k_variants: int,
+                                            max_context_tokens_for_context_builder: int,
+                                            user_instructions: str, # Notamment la structure du dialogue
+                                            system_prompt_override: Optional[str],
+                                            context_selections: Dict[str, Any],
+                                            current_llm_model_identifier: str
+                                            ) -> Tuple[Optional[List[Interaction]], Optional[str], Optional[int]]:
+        pass
+
+class DialogueGenerationService(IDialogueGenerationService):
+    def __init__(self, context_builder: ContextBuilder, prompt_engine: PromptEngine, interaction_service: InteractionService):
         """
         Initialise le service de génération de dialogues.
         
@@ -45,222 +75,188 @@ class DialogueGenerationService:
         
         # Initialisation du logger
         self.logger = logging.getLogger(__name__)
+        logger.info("DialogueGenerationService initialized.")
 
-    async def generate_dialogue_variants(
-        self,
-        llm_client: ILLMClient, # Le client LLM est passé à chaque appel
-        k_variants: int,
-        max_context_tokens_for_context_builder: int, # Renommé pour clarté
-        structured_output: bool,
-        user_instructions: str, # C'est le user_specific_goal pour PromptEngine
-        system_prompt_override: Optional[str],
-        context_selections: Dict[str, Any], # Utilisé par ContextBuilder pour générer context_summary
-        # Les paramètres suivants sont extraits de context_selections ou sont implicites
-        # pour construire scene_protagonists et scene_location pour PromptEngine
-        current_llm_model_identifier: Optional[str] # Pour info, pas directement utilisé ici car le client est déjà configuré
-    ) -> Tuple[Optional[List[str]], Optional[str], Optional[int]]:
-        """
-        Génère des variantes de dialogue en utilisant le client LLM.
-        """ # Docstring abrégée pour la concision du diff
-        logger.info(f"Début de la génération de dialogue via DialogueGenerationService. Modèle: {current_llm_model_identifier}")
-        
-        full_prompt = None # S'assurer qu'il est défini en cas d'erreur précoce
+    async def generate_dialogue_variants(self, 
+                                         llm_client: ILLMClient, 
+                                         k_variants: int, 
+                                         max_context_tokens_for_context_builder: int, 
+                                         structured_output: bool,
+                                         user_instructions: str, 
+                                         system_prompt_override: Optional[str], 
+                                         context_selections: Dict[str, Any],
+                                         current_llm_model_identifier: str
+                                         ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], Optional[int]]:
+        logger.info(f"Service: Starting TEXT dialogue generation. Model: {current_llm_model_identifier}, K: {k_variants}")
+        original_system_prompt = None
+        final_prompt_str = None
         estimated_tokens = 0
+        variants_output: Optional[List[Dict[str, Any]]] = []
 
         try:
-            # 1. Construire le contexte avec ContextBuilder
-            # Note: user_instructions est aussi passé à context_builder comme scene_instruction.
-            context_summary = self.context_builder.build_context(
-                selected_elements=context_selections, 
-                scene_instruction=user_instructions, # L'instruction utilisateur peut aussi guider le ContextBuilder
-                max_tokens=max_context_tokens_for_context_builder
+            context_summary_text = self._build_context_summary(
+                context_selections, user_instructions, max_context_tokens_for_context_builder
             )
-            if context_summary is None: # Si build_context retourne None (par exemple, si context_selections est vide et que c'est géré ainsi)
-                context_summary = "" # Assurer une chaîne vide au lieu de None pour PromptEngine
-                logger.warning("ContextBuilder a retourné None pour le résumé du contexte. Utilisation d'une chaîne vide.")
 
-            # 2. Extraire les informations de scène pour PromptEngine depuis context_selections
-            # Les clés exactes dépendent de ce que _get_current_context_selections() de MainWindow retourne.
-            # On suppose qu'il y a des clés comme 'personnage_a', 'personnage_b', 'lieu', 'sous_lieu'.
-            # Ces clés doivent correspondre à celles utilisées dans le dictionnaire retourné par 
-            # MainWindow._get_current_context_selections() et SceneSelectionWidget.get_selected()
-            
-            # Tentative d'extraction des noms de personnages et lieux depuis context_selections
-            # Normalement, SceneSelectionWidget s'occupe de la sélection directe de ceux-ci.
-            # context_selections est un dict avec des listes d'objets GDD, PAS les sélections directes des comboboxes.
-            # IL FAUT AJOUTER les personnages A/B et le lieu/sous-lieu comme arguments séparés 
-            # ou les passer dans un dictionnaire dédié si on ne veut pas modifier la signature de generate_dialogue_variants.
-            
-            # Pour l'instant, on les suppose absents de context_selections et on les passe à None
-            # Ceci est une simplification et pourrait nécessiter un ajustement de l'appelant (GenerationPanelBase)
-            # pour passer char_a_name, char_b_name, scene_region_name, scene_sub_location_name séparément.
-            # OU, mieux, les inclure dans context_selections AVEC des clés spécifiques.
-            
-            # Solution actuelle: on attend de l'appelant (GenerationPanelBase) qu'il peuple context_selections
-            # avec des clés spécifiques pour les protagonistes et le lieu, par exemple :
-            # context_selections["_scene_protagonists"] = {"personnage_a": "NomA", ...}
-            # context_selections["_scene_location"] = {"lieu": "NomLieu", ...}
-            
-            scene_protagonists_dict = context_selections.pop("_scene_protagonists", None)
-            scene_location_dict = context_selections.pop("_scene_location", None)
-
-            # 3. Construire le prompt final avec PromptEngine
-            # Surcharger le prompt système si un override est fourni
-            original_system_prompt = None
             if system_prompt_override is not None and self.prompt_engine.system_prompt_template != system_prompt_override:
                 original_system_prompt = self.prompt_engine.system_prompt_template
                 self.prompt_engine.system_prompt_template = system_prompt_override
-                logger.info("Utilisation d'un system_prompt_override.")
+                logger.info(f"System prompt temporarily set for TEXT: '{system_prompt_override[:100]}...'" ) 
 
-            full_prompt, estimated_tokens = self.prompt_engine.build_prompt(
-                user_specific_goal=user_instructions, # C'est l'instruction utilisateur principale
-                scene_protagonists=scene_protagonists_dict,
-                scene_location=scene_location_dict,
-                context_summary=context_summary,  # Le contexte généré par ContextBuilder
-                generation_params={"structured_output": structured_output} # Exemple de param de génération
-            )
-
-            if original_system_prompt is not None: # Restaurer l'original s'il a été surchargé
-                self.prompt_engine.system_prompt_template = original_system_prompt
-
-            if not full_prompt:
-                logger.error("DialogueGenerationService: Impossible de construire le prompt final avec PromptEngine.")
-                return None, None, None
-
-            logger.info(f"Prompt final construit ({estimated_tokens} tokens estimés). Appel de llm_client.generate_variants (k={k_variants}).")
-            if structured_output:
-                logger.info("Sortie structurée (JSON) demandée au LLM (via le prompt).")
-
-            # 4. Appeler le client LLM
-            # L'argument structured_output a été retiré car non géré par l'interface ILLMClient
-            # La demande de sortie structurée est gérée au niveau du prompt.
-            variants = await llm_client.generate_variants(full_prompt, k_variants)
-
-            if variants:
-                logger.info(f"{len(variants)} variante(s) reçue(s) du LLM.")
-                return variants, full_prompt, estimated_tokens
-            else:
-                logger.warning("DialogueGenerationService: Le LLM n'a retourné aucune variante.")
-                return [], full_prompt, estimated_tokens
-
-        except Exception as e:
-            logger.exception("DialogueGenerationService: Erreur majeure lors de la génération de dialogue")
-            return None, full_prompt, estimated_tokens # Retourne le prompt s'il a pu être généré, pour debug 
-
-    async def generate_interaction_variants(
-        self,
-        llm_client: ILLMClient,
-        k_variants: int = 1,
-        max_context_tokens_for_context_builder: int = 4000,
-        user_instructions: str = "",
-        system_prompt_override: Optional[str] = None,
-        context_selections: Optional[Dict[str, Any]] = None,
-        current_llm_model_identifier: Optional[str] = None
-    ) -> Tuple[Optional[List[Interaction]], Optional[str], Optional[int]]:
-        """
-        Génère des variantes d'interactions structurées en utilisant le client LLM.
-        
-        Cette méthode est similaire à generate_dialogue_variants, mais elle est spécifiquement
-        conçue pour générer des objets Interaction structurés plutôt que du texte brut.
-        
-        Args:
-            llm_client: Le client LLM à utiliser
-            k_variants: Nombre de variantes à générer
-            max_context_tokens_for_context_builder: Limite de tokens pour le contexte
-            user_instructions: Instructions de l'utilisateur pour la génération
-            system_prompt_override: Prompt système personnalisé (optionnel)
-            context_selections: Sélections de contexte (personnages, lieux, etc.)
-            current_llm_model_identifier: Identifiant du modèle LLM (pour debug)
-            
-        Returns:
-            Tuple contenant:
-            - Liste d'objets Interaction générés
-            - Prompt complet utilisé
-            - Nombre estimé de tokens
-        """
-        logger.info(f"Début de la génération d'interactions structurées. Modèle: {current_llm_model_identifier}")
-        
-        if context_selections is None:
-            context_selections = {}
-            
-        full_prompt = None
-        estimated_tokens = 0
-        
-        try:
-            # 1. Construire le contexte
-            context_summary = self.context_builder.build_context(
-                selected_elements=context_selections,
-                scene_instruction=user_instructions,
-                max_tokens=max_context_tokens_for_context_builder
-            )
-            if context_summary is None:
-                context_summary = ""
-                logger.warning("ContextBuilder a retourné None pour le résumé du contexte. Utilisation d'une chaîne vide.")
-                
-            # 2. Extraire les informations de scène
-            scene_protagonists_dict = context_selections.pop("_scene_protagonists", None)
-            scene_location_dict = context_selections.pop("_scene_location", None)
-            
-            # Extraire les paramètres de génération, y compris la structure de dialogue
-            generation_settings = context_selections.pop("generation_settings", {})
-            dialogue_structure = generation_settings.get("dialogue_structure", None)
-            
-            # 3. Construire le prompt avec le format JSON pour Interaction
-            original_system_prompt = None
-            if system_prompt_override is not None and self.prompt_engine.system_prompt_template != system_prompt_override:
-                original_system_prompt = self.prompt_engine.system_prompt_template
-                self.prompt_engine.system_prompt_template = system_prompt_override
-                logger.info("Utilisation d'un system_prompt_override pour la génération d'interactions.")
-                
-            # Utiliser le paramètre generate_interaction pour utiliser le prompt spécifique aux interactions
-            generation_params = {
-                "generate_interaction": True,
-                "dialogue_structure": dialogue_structure
+            generation_params_for_prompt_build = {
+                "structured_generation_request": structured_output,
+                "generate_interaction": False 
             }
-            
-            full_prompt, estimated_tokens = self.prompt_engine.build_prompt(
+            final_prompt_str, estimated_tokens = self.prompt_engine.build_prompt(
+                context_summary=context_summary_text,
                 user_specific_goal=user_instructions,
-                scene_protagonists=scene_protagonists_dict,
-                scene_location=scene_location_dict,
-                context_summary=context_summary,
-                generation_params=generation_params
+                generation_params=generation_params_for_prompt_build
             )
+            logger.info(f"Final prompt for TEXT dialogue built. Estimated tokens: {estimated_tokens}. Length: {len(final_prompt_str)} chars.")
             
-            if original_system_prompt is not None:
-                self.prompt_engine.system_prompt_template = original_system_prompt
-                
-            if not full_prompt:
-                logger.error("Impossible de construire le prompt pour la génération d'interactions.")
-                return None, None, None
-                
-            logger.info(f"Prompt final pour interactions construit ({estimated_tokens} tokens). Appel de llm_client.generate_variants (k={k_variants}).")
+            if not final_prompt_str:
+                logger.error("Failed to build prompt string (empty) for TEXT dialogue.")
+                self._restore_prompt_on_error(original_system_prompt)
+                return None, "Error: Prompt could not be built.", 0
+
+            if not llm_client:
+                logger.error("LLM client is None, cannot generate TEXT variants.")
+                self._restore_prompt_on_error(original_system_prompt)
+                return None, final_prompt_str, estimated_tokens
+
+            logger.debug(f"Calling LLM to generate {k_variants} TEXT variants.")
+            llm_raw_variants = await llm_client.generate_variants(prompt=final_prompt_str, k=k_variants)
             
-            # 4. Appeler le LLM
-            raw_variants = await llm_client.generate_variants(full_prompt, k_variants)
-            
-            if not raw_variants:
-                logger.warning("Le LLM n'a retourné aucune variante d'interaction.")
-                return [], full_prompt, estimated_tokens
-                
-            # 5. Parser les réponses JSON en objets Interaction
-            interaction_variants = []
-            for i, raw_variant in enumerate(raw_variants):
-                try:
-                    interaction = self._parse_llm_response_to_interaction(raw_variant)
-                    if interaction:
-                        interaction_variants.append(interaction)
-                    else:
-                        logger.warning(f"La variante {i+1} n'a pas pu être convertie en Interaction.")
-                except Exception as e:
-                    logger.exception(f"Erreur lors du parsing de la variante {i+1}: {str(e)}")
-            
-            logger.info(f"{len(interaction_variants)}/{len(raw_variants)} variantes d'interaction générées avec succès.")
-            return interaction_variants, full_prompt, estimated_tokens
-            
+            if llm_raw_variants:
+                variants_output = []
+                for i, variant_text in enumerate(llm_raw_variants):
+                    variants_output.append({
+                        "id": str(asyncio.get_event_loop().time()) + f"-txt-{i}",
+                        "title": f"Variante Texte {i+1}",
+                        "content": variant_text,
+                        "is_new": True 
+                    })
+                logger.info(f"LLM generated {len(variants_output)} TEXT variants.")
+            else:
+                logger.warning("LLM returned no TEXT variants.")
+                variants_output = []
+
+            self._restore_prompt_on_error(original_system_prompt) # Restore even on success
+            return variants_output, final_prompt_str, estimated_tokens
+
         except Exception as e:
-            logger.exception("Erreur majeure lors de la génération d'interactions structurées")
-            return None, full_prompt, estimated_tokens
+            logger.exception("Error during TEXT dialogue generation in DialogueGenerationService:")
+            self._restore_prompt_on_error(original_system_prompt)
+            return None, final_prompt_str if final_prompt_str else "Error during TEXT generation.", estimated_tokens
+
+    async def generate_interaction_variants(self,
+                                            llm_client: ILLMClient,
+                                            k_variants: int,
+                                            max_context_tokens_for_context_builder: int,
+                                            user_instructions: str, # Devrait inclure la description de la structure
+                                            system_prompt_override: Optional[str],
+                                            context_selections: Dict[str, Any],
+                                            current_llm_model_identifier: str
+                                            ) -> Tuple[Optional[List[Interaction]], Optional[str], Optional[int]]:
+        logger.info(f"Service: Starting INTERACTION generation. Model: {current_llm_model_identifier}, K: {k_variants}")
+        original_system_prompt = None
+        final_prompt_str = None
+        estimated_tokens = 0
+        interactions_output: Optional[List[Interaction]] = []
+
+        try:
+            # context_selections déjà enrichi avec _scene_protagonists, _scene_location, generate_interaction=True
+            # et generation_settings.dialogue_structure par GenerationPanel
+            context_summary_text = self._build_context_summary(
+                context_selections, user_instructions, max_context_tokens_for_context_builder
+            )
+
+            if system_prompt_override is not None and self.prompt_engine.system_prompt_template != system_prompt_override:
+                original_system_prompt = self.prompt_engine.system_prompt_template
+                self.prompt_engine.system_prompt_template = system_prompt_override
+                logger.info(f"System prompt temporarily set for INTERACTION: '{system_prompt_override[:100]}...'" )
             
+            dialogue_structure_description = context_selections.get("generation_settings", {}).get("dialogue_structure", "")
+
+            generation_params_for_prompt_build = {
+                "structured_generation_request": True, 
+                "generate_interaction": True,
+                "dialogue_structure_description": dialogue_structure_description
+            }
+
+            final_prompt_str, estimated_tokens = self.prompt_engine.build_prompt(
+                context_summary=context_summary_text,
+                user_specific_goal=user_instructions, 
+                generation_params=generation_params_for_prompt_build
+            )
+            logger.info(f"Final prompt for INTERACTION built. Estimated tokens: {estimated_tokens}. Length: {len(final_prompt_str)} chars.")
+
+            if not final_prompt_str:
+                logger.error("Failed to build prompt string (empty) for INTERACTION.")
+                self._restore_prompt_on_error(original_system_prompt)
+                return None, "Error: Prompt could not be built for INTERACTION.", 0
+
+            if not llm_client:
+                logger.error("LLM client is None, cannot generate INTERACTION variants.")
+                self._restore_prompt_on_error(original_system_prompt)
+                return None, final_prompt_str, estimated_tokens
+
+            logger.debug(f"Calling LLM to generate {k_variants} INTERACTION variants (raw JSON strings).")
+            llm_raw_json_variants = await llm_client.generate_variants(prompt=final_prompt_str, k=k_variants)
+
+            if llm_raw_json_variants:
+                interactions_output = []
+                for i, raw_json_interaction_str in enumerate(llm_raw_json_variants):
+                    try:
+                        interaction_obj = self.interaction_service.parse_llm_output_to_interaction(raw_json_interaction_str)
+                        if interaction_obj:
+                            # Titre temporaire, pourrait être amélioré ou généré par le LLM
+                            interaction_obj.title = f"Generated Interaction {i+1} (ID: ...{str(interaction_obj.interaction_id)[-6:]})"
+                            interactions_output.append(interaction_obj)
+                        else:
+                            logger.warning(f"Failed to parse LLM output to Interaction for variant {i+1}. Output: {raw_json_interaction_str[:150]}...")
+                    except Exception as parse_err:
+                        logger.error(f"Error parsing LLM variant {i+1} into Interaction: {parse_err}. Raw: {raw_json_interaction_str[:250]}...")
+                logger.info(f"LLM generated and parsed {len(interactions_output)} INTERACTION objects from {len(llm_raw_json_variants)} raw outputs.")
+            else:
+                logger.warning("LLM returned no INTERACTION variants (raw JSON strings).")
+                interactions_output = []
+
+            self._restore_prompt_on_error(original_system_prompt) # Restore even on success
+            return interactions_output, final_prompt_str, estimated_tokens
+
+        except Exception as e:
+            logger.exception("Error during INTERACTION generation in DialogueGenerationService:")
+            self._restore_prompt_on_error(original_system_prompt)
+            return None, final_prompt_str if final_prompt_str else "Error during INTERACTION generation.", estimated_tokens
+
+    def _build_context_summary(self, context_selections: Dict[str, Any], user_instructions: str, max_tokens: int) -> str:
+        # Cette méthode encapsule la logique de construction du résumé du contexte.
+        # Elle utilise context_selections qui devrait contenir _scene_protagonists et _scene_location si applicables.
+        # user_instructions est passé à build_context comme scene_instruction.
+        
+        # Note: La construction de `scene_instruction` à partir de `_scene_protagonists` et `_scene_location`
+        # a été retirée d'ici car `GenerationPanel` prépare déjà `context_selections` avec ces informations.
+        # Le `ContextBuilder.build_context` doit utiliser `scene_instruction` (qui est `user_instructions` ici)
+        # et les `selected_elements` (qui est `context_selections` ici) pour former le contexte.
+        
+        context_summary_text = self.context_builder.build_context(
+            selected_elements=context_selections, 
+            scene_instruction=user_instructions, 
+            max_tokens=max_tokens,
+        )
+        logger.debug(f"Context summary built by service: {len(context_summary_text)} chars, first 100: {context_summary_text[:100]}")
+        return context_summary_text
+
+    def _restore_prompt_on_error(self, original_system_prompt: Optional[str]):
+        if original_system_prompt is not None:
+            if hasattr(self.prompt_engine, 'system_prompt_template') and self.prompt_engine.system_prompt_template != original_system_prompt:
+                self.prompt_engine.system_prompt_template = original_system_prompt
+                logger.info("Original system prompt restored after operation or error.")
+            elif not hasattr(self.prompt_engine, 'system_prompt_template'):
+                 logger.warning("PromptEngine does not have system_prompt_template attribute during error recovery.")
+        # else: logger.debug("No original system prompt to restore or no override was made.")
+
     def _extract_json_from_text(self, text: str) -> Optional[str]:
         """Extracts a JSON string from a text that might contain markdown code blocks.
 
