@@ -216,9 +216,14 @@ class LeftSelectionPanel(QWidget):
         logger.info(f"Yarn file selected: {item_text}")
         # The item_text here will be the relative path of the yarn file.
         # We need the full path to read it.
-        dialogues_base_path = config_manager.get_unity_dialogues_path()
-        if dialogues_base_path:
-            full_path = dialogues_base_path / item_text
+        main_window = self.parent()
+        if not main_window or not hasattr(main_window, 'config_service'):
+            logger.error("Cannot access ConfigurationService from LeftSelectionPanel's parent (MainWindow).")
+            return
+
+        dialogues_path = main_window.config_service.get_unity_dialogues_path()
+        if dialogues_path:
+            full_path = dialogues_path / item_text
             # Emit a signal or call a method on MainWindow/DetailsPanel to show content
             # For now, let's just emit item_clicked_for_details with special handling
             # The 'category_data' for yarn files will be the full path string
@@ -227,7 +232,7 @@ class LeftSelectionPanel(QWidget):
                 self.tab_widget.setCurrentWidget(self.details_panel_instance)
                 logger.debug(f"Onglet 'Détails' activé après clic sur fichier Yarn '{item_text}'.")
         else:
-            logger.warning("Unity dialogues path not configured, cannot get full path for yarn file.")
+            logger.warning("Unity dialogues path not configured via ConfigurationService, cannot get full path for yarn file.")
 
     def populate_all_lists(self):
         logger.info("Populating all GDD lists in LeftSelectionPanel...")
@@ -308,13 +313,25 @@ class LeftSelectionPanel(QWidget):
             logger.error("Yarn files list widget not found.")
             return
 
-        dialogues_path = config_manager.get_unity_dialogues_path()
-        if not dialogues_path:
-            logger.warning("Unity dialogues path not configured. Cannot list Yarn files.")
+        # MODIFIÉ: Accéder à config_service via le parent (MainWindow)
+        main_window = self.parent()
+        if not main_window or not hasattr(main_window, 'config_service'):
+            logger.error("Cannot access ConfigurationService from LeftSelectionPanel's parent (MainWindow).")
             list_widget.clear()
-            list_widget.addItem(QListWidgetItem("Unity dialogues path not configured."))
+            list_widget.addItem(QListWidgetItem("(Erreur: ConfigurationService inaccessible)"))
             return
 
+        dialogues_path = main_window.config_service.get_unity_dialogues_path()
+        if not dialogues_path:
+            logger.warning("Unity dialogues path not configured via ConfigurationService. Cannot list Yarn files.")
+            list_widget.clear()
+            # Proposer de configurer ?
+            config_msg_item = QListWidgetItem("Chemin des dialogues Unity non configuré.")
+            # Pourrait être un QListWidgetItem cliquable qui ouvre la config, mais pour l'instant simple message.
+            list_widget.addItem(config_msg_item)
+            return
+
+        # config_manager.list_yarn_files est OK car c'est une fonction utilitaire qui prend un chemin.
         yarn_files = config_manager.list_yarn_files(dialogues_path, recursive=True)
         self.category_data_map[self.yarn_files_category_key] = yarn_files # Store Path objects
 

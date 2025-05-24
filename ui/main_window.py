@@ -25,7 +25,7 @@ from .utils import get_icon_path # Assurez-vous que utils.py et get_icon_path ex
 from ..context_builder import ContextBuilder 
 from ..llm_client import OpenAIClient, DummyLLMClient, ILLMClient 
 from ..prompt_engine import PromptEngine 
-from .. import config_manager 
+from ..services.configuration_service import ConfigurationService # MODIFIÉ: Ajouter ConfigurationService
 from ..services.linked_selector import LinkedSelectorService # Example if needed elsewhere
 from ..services.interaction_service import InteractionService # Importation ajoutée
 from ..services.repositories import FileInteractionRepository # Pour l'InteractionService
@@ -36,9 +36,10 @@ DIALOGUE_GENERATOR_DIR = Path(__file__).resolve().parent.parent
 # Définir le chemin de stockage par défaut pour les interactions
 DEFAULT_INTERACTIONS_STORAGE_DIR = DIALOGUE_GENERATOR_DIR / "data" / "interactions"
 
-UI_SETTINGS_FILE = DIALOGUE_GENERATOR_DIR / "ui_settings.json" # File to save UI settings
-CONTEXT_CONFIG_FILE_PATH = DIALOGUE_GENERATOR_DIR / "context_config.json" # Path to context_config.json
-LLM_CONFIG_FILE_PATH = DIALOGUE_GENERATOR_DIR / "llm_config.json" # Ajout pour la config LLM
+# MODIFIÉ: Supprimer les constantes de chemin de configuration, elles sont dans ConfigurationService
+# UI_SETTINGS_FILE = DIALOGUE_GENERATOR_DIR / "ui_settings.json" 
+# CONTEXT_CONFIG_FILE_PATH = DIALOGUE_GENERATOR_DIR / "context_config.json"
+# LLM_CONFIG_FILE_PATH = DIALOGUE_GENERATOR_DIR / "llm_config.json" 
 
 # Ensure the parent directory of DialogueGenerator (project root) is in PYTHONPATH
 PROJECT_ROOT = DIALOGUE_GENERATOR_DIR.parent
@@ -71,54 +72,44 @@ class MainWindow(QMainWindow):
         """
         super().__init__()
         self.context_builder = context_builder
-        self.current_selected_gdd_item_id: Optional[str] = None # Store ID of selected item
-        self.current_selected_gdd_category: Optional[str] = None
-        self.current_gdd_item_data: Optional[dict] = None # To store full data of selected GDD item
+        self.config_service = ConfigurationService()
 
-        self.app_settings: dict = { # Initialisation avec des valeurs par défaut robustes
-            "max_context_tokens": 1500,
-            "restore_selections_on_startup": True,
-            "window_geometry": None,
-            "main_splitter_sizes": None,
-            "generation_panel_splitter_sizes": None,
-            "current_llm_model_identifier": None
-        }
+        self.current_selected_gdd_item_id: Optional[str] = None 
+        self.current_selected_gdd_category: Optional[str] = None
+        self.current_gdd_item_data: Optional[dict] = None 
+
+        # MODIFIÉ: Supprimer self.app_settings, les valeurs sont gérées via config_service
+        # ou directement avec QSettings pour la géométrie/splitters.
+        
         self.llm_client: Optional[ILLMClient] = None
         self.prompt_engine: Optional[PromptEngine] = None
-        self.llm_config: dict = {} # Pour stocker la config LLM chargée
-        self.available_llm_models: List[dict] = [] # Pour stocker les modèles dispo
+        # self.llm_config et self.available_llm_models sont initialisés par _load_llm_configuration
         
-        # Initialisation de l'InteractionService
-        # Utilisation de FileInteractionRepository par défaut, comme dans InteractionService lui-même
-        # Le chemin du repository sera celui par défaut défini dans FileInteractionRepository
         interactions_repo = FileInteractionRepository(storage_dir=str(DEFAULT_INTERACTIONS_STORAGE_DIR)) 
         self.interaction_service = InteractionService(repository=interactions_repo)
         logger.info(f"InteractionService initialisé avec {type(interactions_repo).__name__} sur {DEFAULT_INTERACTIONS_STORAGE_DIR}.")
         
-        self._load_llm_configuration() # Charger la configuration LLM
+        self._load_llm_configuration() 
 
-        # Initialize PromptEngine first, as it might be needed by GenerationPanel's init or early methods
         self.prompt_engine = PromptEngine()
 
         try:
-            # Utiliser les valeurs de la config chargée
-            default_model = self.llm_config.get("default_model_identifier", "gpt-4o-mini") # Fallback si non défini
+            # MODIFIÉ: Utiliser self.llm_config qui est maintenant rempli par _load_llm_configuration() depuis le service
+            default_model_identifier = self.llm_config.get("default_model_identifier", "gpt-4o-mini")
             api_key_var = self.llm_config.get("api_key_env_var", "OPENAI_API_KEY")
             api_key = os.getenv(api_key_var)
             
-            # Préparer la configuration pour OpenAIClient en incluant le modèle
-            client_config = self.llm_config.copy()
-            client_config["model_name"] = default_model
+            client_config_from_service = self.llm_config.copy() # Utiliser la config chargée
+            client_config_from_service["model_name"] = default_model_identifier 
             
-            self.llm_client = OpenAIClient(api_key=api_key, config=client_config)
-            logger.info(f"LLM Client initialized with {type(self.llm_client).__name__} using model '{default_model}'.")
+            self.llm_client = OpenAIClient(api_key=api_key, config=client_config_from_service)
+            logger.info(f"LLM Client initialized with {type(self.llm_client).__name__} using model '{default_model_identifier}'.")
         except Exception as e:
             logger.error(f"Failed to initialize LLM client: {e}")
             QMessageBox.critical(self, "LLM Error", f"Could not initialize LLM client: {e}")
-            self.llm_client = DummyLLMClient() # Fallback to dummy
+            self.llm_client = DummyLLMClient() 
             logger.info(f"Fell back to DummyLLMClient due to error.")
-            # S'assurer que available_llm_models est initialisé même en cas d'erreur pour éviter crash UI
-            if not self.available_llm_models:
+            if not self.available_llm_models: # Assurer que available_llm_models est initialisé
                  self.available_llm_models = [{"display_name": "Dummy Client", "api_identifier": "dummy", "notes": "Fallback client"}]
 
 
@@ -133,12 +124,19 @@ class MainWindow(QMainWindow):
                                            interaction_service=self.interaction_service, # Passer le service
                                            parent=self)
         self.details_panel = DetailsPanel(parent=self) # Instantiate DetailsPanel
+        
+        # MODIFIÉ: Récupérer current_llm_model_identifier depuis config_service pour GenerationPanel
+        initial_llm_model_id = self.config_service.get_ui_setting(
+            "current_llm_model_identifier", 
+            self.llm_config.get("default_model_identifier", "dummy") # Fallback sur le défaut LLM si non dans UI settings
+        )
+
         self.generation_panel = GenerationPanel(
             context_builder=self.context_builder, 
             prompt_engine=self.prompt_engine, 
             llm_client=self.llm_client, # L'instance initiale est passée
             available_llm_models=self.available_llm_models, # Passer la liste des modèles
-            current_llm_model_identifier=self.llm_client.model if self.llm_client and hasattr(self.llm_client, 'model') else self.llm_config.get("default_model_identifier", "dummy"), # Passer l'identifiant du modèle actuel
+            current_llm_model_identifier=initial_llm_model_id, # Utiliser la valeur du service
             main_window_ref=self,
             parent=self
         )
@@ -174,8 +172,10 @@ class MainWindow(QMainWindow):
         """Creates actions for the menus."""
         self.restore_selections_action = QAction("Restore selections on startup", self)
         self.restore_selections_action.setCheckable(True)
-        self.restore_selections_action.setChecked(True) # Default
-        # Logic for saving/loading this state will be in _save/_load_ui_settings
+        # MODIFIÉ: Charger la valeur depuis config_service
+        self.restore_selections_action.setChecked(
+            self.config_service.get_ui_setting("restore_selections_on_startup", True)
+        )
 
         self.edit_context_config_action = QAction("&Edit Context Configuration...", self)
         self.edit_context_config_action.triggered.connect(self._open_context_config_file)
@@ -203,38 +203,45 @@ class MainWindow(QMainWindow):
         """Opens the context configuration file (context_config.json)
         in the system's default editor.
         """
-        if CONTEXT_CONFIG_FILE_PATH.exists():
+        # MODIFIÉ: Utiliser la méthode du service pour obtenir le chemin
+        context_file_to_open = self.config_service.get_context_config_file_path()
+
+        if context_file_to_open.exists():
             try:
-                webbrowser.open(os.path.realpath(CONTEXT_CONFIG_FILE_PATH))
-                logger.info(f"Attempting to open {CONTEXT_CONFIG_FILE_PATH}")
+                webbrowser.open(os.path.realpath(context_file_to_open))
+                logger.info(f"Attempting to open {context_file_to_open}")
             except Exception as e:
-                logger.error(f"Could not open {CONTEXT_CONFIG_FILE_PATH}: {e}")
+                logger.error(f"Could not open {context_file_to_open}: {e}")
                 self.statusBar().showMessage(f"Error: Could not open configuration file: {e}")
         else:
-            logger.warning(f"Configuration file {CONTEXT_CONFIG_FILE_PATH} does not exist.")
+            logger.warning(f"Configuration file {context_file_to_open} does not exist.")
             self.statusBar().showMessage("Error: Context configuration file not found.")
 
     def _configure_unity_dialogues_path(self):
         """Ouvre une boîte de dialogue pour configurer le chemin des dialogues Unity."""
-        current_path = config_manager.get_unity_dialogues_path()
+        # MODIFIÉ: Utiliser ConfigurationService
+        current_path = self.config_service.get_unity_dialogues_path()
         current_path_str = str(current_path) if current_path else ""
         
-        new_path = QFileDialog.getExistingDirectory(
+        new_path_str = QFileDialog.getExistingDirectory(
             self,
             "Sélectionner le dossier des dialogues Unity",
             current_path_str
         )
         
-        if new_path:  # L'utilisateur n'a pas annulé
-            if config_manager.set_unity_dialogues_path(new_path):
-                logger.info(f"Chemin des dialogues Unity configuré: {new_path}")
-                self.statusBar().showMessage(f"Chemin des dialogues Unity configuré: {new_path}", 5000)
+        if new_path_str:  
+            if self.config_service.set_unity_dialogues_path(new_path_str): # MODIFIÉ
+                logger.info(f"Chemin des dialogues Unity configuré: {new_path_str}")
+                self.statusBar().showMessage(f"Chemin des dialogues Unity configuré: {new_path_str}", 5000)
                 
-                # Mettre à jour l'interface pour refléter le nouveau chemin
                 if hasattr(self.left_panel, 'populate_yarn_files_list'):
-                    self.left_panel.populate_yarn_files_list()
+                    self.left_panel.populate_yarn_files_list() # Ceci devra utiliser le service aussi
             else:
-                logger.error(f"Échec de la configuration du chemin des dialogues Unity: {new_path}")
+                logger.error(f"Échec de la configuration du chemin des dialogues Unity: {new_path_str}")
+                # Afficher une QMessageBox pour plus de visibilité
+                QMessageBox.warning(self, "Erreur Configuration", 
+                                    f"Le chemin '{new_path_str}' n'a pas pu être configuré. "
+                                    "Vérifiez les permissions et que le chemin est valide.")
                 self.statusBar().showMessage("Échec de la configuration du chemin des dialogues Unity", 5000)
 
     def setup_ui(self):
@@ -366,7 +373,7 @@ class MainWindow(QMainWindow):
             context_string = self.context_builder.build_context(
                 selected_elements,
                 user_instructions, 
-                max_tokens=self.app_settings.get("max_context_tokens", 1500), # Utiliser app_settings
+                max_tokens=self.config_service.get_ui_setting("max_context_tokens", 1500), # Utiliser config_service
                 include_dialogue_type=include_dialogue_type_flag
             )
             context_token_count = self.context_builder._count_tokens(context_string)
@@ -431,105 +438,126 @@ class MainWindow(QMainWindow):
         # self._update_token_estimation_and_prompt_display() # This is called via QTimer.singleShot in __init__ after load
 
     def _load_ui_settings(self):
-        """Charge les paramètres UI sauvegardés (taille fenêtre, position, état splitter, sélections, etc.)."""
-        logger.info(f"Chargement des paramètres UI depuis {UI_SETTINGS_FILE}")
-        if not UI_SETTINGS_FILE.exists():
-            logger.info(f"Aucun fichier de paramètres UI trouvé à {UI_SETTINGS_FILE}. Utilisation des valeurs par défaut déjà dans self.app_settings.")
-            # Les valeurs par défaut sont déjà dans self.app_settings lors de l'initialisation
-            # Charger les settings par défaut pour les panneaux aussi, ou laisser les panneaux gérer leurs défauts.
-            self.generation_panel.load_settings({}) # Permet à GenerationPanel de charger ses propres défauts
-            self.left_panel.load_settings({}) # Idem pour LeftSelectionPanel
-            return
+        """Charge les paramètres UI sauvegardés en utilisant ConfigurationService et QSettings."""
+        logger.info(f"Chargement des paramètres UI via ConfigurationService.")
+        
+        # Charger tous les paramètres gérés par ConfigurationService (hors QSettings directs)
+        loaded_app_settings = self.config_service.get_all_ui_settings()
 
-        all_settings = {}
-        try:
-            with open(UI_SETTINGS_FILE, 'r', encoding='utf-8') as f:
-                all_settings = json.load(f)
-        except json.JSONDecodeError as e:
-            logger.error(f"Erreur de décodage JSON dans {UI_SETTINGS_FILE}: {e}. Utilisation des valeurs par défaut.")
-            # Conserver les valeurs par défaut de self.app_settings
-        except Exception as e:
-            logger.error(f"Erreur inattendue lors de la lecture de {UI_SETTINGS_FILE}: {e}. Utilisation des valeurs par défaut.")
-            # Conserver les valeurs par défaut de self.app_settings
-
-        # Mettre à jour self.app_settings avec les valeurs chargées, en gardant les défauts si clés manquantes
-        self.app_settings["window_geometry"] = all_settings.get("window_geometry", self.app_settings["window_geometry"])
-        self.app_settings["main_splitter_sizes"] = all_settings.get("main_splitter_sizes", self.app_settings["main_splitter_sizes"])
-        self.app_settings["generation_panel_splitter_sizes"] = all_settings.get("generation_panel_splitter_sizes", self.app_settings["generation_panel_splitter_sizes"])
-        self.app_settings["restore_selections_on_startup"] = all_settings.get("restore_selections_on_startup", self.app_settings["restore_selections_on_startup"])
-        self.app_settings["max_context_tokens"] = all_settings.get("max_context_tokens", self.app_settings["max_context_tokens"])
-        self.app_settings["current_llm_model_identifier"] = all_settings.get("current_llm_model_identifier", self.app_settings["current_llm_model_identifier"])
-
-        logger.info(f"Paramètres de l'application chargés: max_context_tokens={self.app_settings['max_context_tokens']}")
-
-        if self.app_settings.get("window_geometry"):
+        # 1. Restaurer les paramètres gérés par QSettings (géométrie, splitters)
+        # Ces valeurs sont lues depuis le fichier par ConfigurationService, puis appliquées ici.
+        window_geometry_hex = loaded_app_settings.get("window_geometry")
+        if window_geometry_hex:
             try:
-                self.restoreGeometry(QByteArray.fromHex(self.app_settings["window_geometry"].encode()))
+                self.restoreGeometry(QByteArray.fromHex(window_geometry_hex.encode()))
                 logger.info("Géométrie de la fenêtre restaurée.")
             except Exception as e:
                 logger.warning(f"Impossible de restaurer la géométrie de la fenêtre: {e}")
 
-        if self.app_settings.get("main_splitter_sizes"):
-            self.main_splitter.setSizes(self.app_settings["main_splitter_sizes"])
+        main_splitter_sizes = loaded_app_settings.get("main_splitter_sizes")
+        if main_splitter_sizes:
+            self.main_splitter.setSizes(main_splitter_sizes)
             logger.info("Tailles du splitter principal restaurées.")
-
-        self.restore_selections_action.setChecked(self.app_settings["restore_selections_on_startup"])
         
-        generation_panel_settings = all_settings.get("generation_panel", {})
-        self.generation_panel.load_settings(generation_panel_settings)
+        # generation_panel_splitter_sizes est généralement dans les settings du panel lui-même.
+        # Si GenerationPanel a son propre splitter, il le restaurera via son load_settings.
+
+        # 2. Restaurer les autres paramètres applicatifs
+        restore_selections = loaded_app_settings.get("restore_selections_on_startup", True)
+        self.restore_selections_action.setChecked(restore_selections)
+        
+        # max_context_tokens est utilisé par ContextBuilder, généralement pas directement par MainWindow UI
+        # Il est chargé par ConfigurationService et accessible via config_service.get_ui_setting("max_context_tokens")
+        # si un composant en a besoin.
+        # logger.info(f"Paramètre 'max_context_tokens' chargé: {self.config_service.get_ui_setting('max_context_tokens')}")
+
+        # 3. Charger les paramètres des panneaux enfants
+        generation_panel_settings_loaded = loaded_app_settings.get("generation_panel", {})
+        self.generation_panel.load_settings(generation_panel_settings_loaded)
         logger.info("Paramètres du GenerationPanel chargés.")
 
-        if self.app_settings["restore_selections_on_startup"]:
-            left_panel_settings = all_settings.get("left_selection_panel", {})
-            self.left_panel.load_settings(left_panel_settings)
-            logger.info("Paramètres du LeftSelectionPanel chargés.")
+        if restore_selections:
+            left_panel_settings_loaded = loaded_app_settings.get("left_selection_panel", {})
+            self.left_panel.load_settings(left_panel_settings_loaded)
+            logger.info("Paramètres du LeftSelectionPanel chargés (restauration active).")
         else:
-            logger.info("Restauration des sélections du LeftSelectionPanel désactivée. Effacement des sélections précédentes.")
-            self.left_panel.load_settings({}) # Charge un dictionnaire vide pour effacer les sélections
+            self.left_panel.load_settings({}) # Effacer les sélections
+            logger.info("Restauration des sélections du LeftSelectionPanel désactivée.")
 
-        saved_llm_model_id_ui = generation_panel_settings.get("llm_model", self.app_settings["current_llm_model_identifier"]) # Utilise celui de app_settings comme fallback
-        config_default_llm_model_id = self.llm_config.get("default_model_identifier", "dummy")
-        final_model_to_set = saved_llm_model_id_ui or config_default_llm_model_id
+        # 4. Synchroniser le modèle LLM
+        # current_llm_model_identifier est prioritaire depuis les settings du generation_panel, sinon ui_settings global, sinon défaut config LLM
+        current_llm_id_from_gen_panel = generation_panel_settings_loaded.get("llm_model")
+        current_llm_id_global = loaded_app_settings.get("current_llm_model_identifier")
+        config_default_llm_id = self.llm_config.get("default_model_identifier", "dummy")
+        
+        final_model_to_set = current_llm_id_from_gen_panel or current_llm_id_global or config_default_llm_id
 
-        if final_model_to_set != (self.llm_client.model_identifier if self.llm_client and hasattr(self.llm_client, 'model_identifier') else None):
-            logger.info(f"Synchronisation du client LLM avec le modèle: {final_model_to_set} après chargement des settings.")
+        # Comparer avec le modèle actuel du client LLM
+        current_client_model_id = None
+        if self.llm_client:
+            if hasattr(self.llm_client, 'model_identifier') and self.llm_client.model_identifier:
+                current_client_model_id = self.llm_client.model_identifier
+            elif hasattr(self.llm_client, 'model') and self.llm_client.model:
+                current_client_model_id = self.llm_client.model
+
+        if final_model_to_set != current_client_model_id:
+            logger.info(f"Synchronisation du client LLM avec le modèle: '{final_model_to_set}' après chargement des settings.")
             self._on_llm_model_selected_from_panel(final_model_to_set, from_load_settings=True)
-        else:
+        elif self.generation_panel.llm_model_combo.currentData() != final_model_to_set: # S'assurer que la combobox est aussi à jour
             self.generation_panel.select_model_in_combo(final_model_to_set)
+            logger.info(f"Combobox LLM synchronisée sur '{final_model_to_set}'.")
 
-        logger.info("Paramètres UI chargés.")
+        logger.info("Tous les paramètres UI pertinents ont été chargés et appliqués.")
 
     def _save_ui_settings(self, source: str):
-        """Sauvegarde les paramètres UI courants."""
-        # Utiliser les valeurs de self.app_settings et les mettre à jour si nécessaire avant de sauvegarder
-        self.app_settings["window_geometry"] = self.saveGeometry().toHex().data().decode()
-        self.app_settings["main_splitter_sizes"] = self.main_splitter.sizes()
-        self.app_settings["generation_panel_splitter_sizes"] = self.generation_panel.main_splitter.sizes() if hasattr(self.generation_panel, 'main_splitter') else []
-        self.app_settings["restore_selections_on_startup"] = self.restore_selections_action.isChecked()
-        # max_context_tokens est déjà dans self.app_settings, il sera sauvegardé.
-        # current_llm_model_identifier est aussi dans self.app_settings, mis à jour par _on_llm_model_selected_from_panel
+        """Sauvegarde les paramètres UI courants en utilisant ConfigurationService."""
+        logger.debug(f"Début de _save_ui_settings (source: {source})")
 
-        settings_to_save = {
-            "window_geometry": self.app_settings["window_geometry"],
-            "main_splitter_sizes": self.app_settings["main_splitter_sizes"],
-            "generation_panel_splitter_sizes": self.app_settings["generation_panel_splitter_sizes"],
-            "restore_selections_on_startup": self.app_settings["restore_selections_on_startup"],
-            "max_context_tokens": self.app_settings.get("max_context_tokens", 1500), # Assurer une valeur par défaut
-            "current_llm_model_identifier": self.app_settings.get("current_llm_model_identifier"),
-            "generation_panel": self.generation_panel.get_settings(),
-            "left_selection_panel": self.left_panel.get_settings()
-        }
+        # 1. Mettre à jour les valeurs dans ConfigurationService avant de sauvegarder
+        # Paramètres gérés par QSettings (directement ou indirectement)
+        self.config_service.update_ui_setting("window_geometry", self.saveGeometry().toHex().data().decode())
+        self.config_service.update_ui_setting("main_splitter_sizes", self.main_splitter.sizes())
         
-        try:
-            with open(UI_SETTINGS_FILE, 'w', encoding='utf-8') as f:
-                json.dump(settings_to_save, f, indent=4)
-            logger.info(f"Paramètres UI sauvegardés dans {UI_SETTINGS_FILE} (source: {source}).")
-        except Exception as e:
-            logger.error(f"Erreur lors de la sauvegarde des paramètres UI dans {UI_SETTINGS_FILE}: {e}")
-            self.statusBar().showMessage(f"Erreur de sauvegarde des paramètres: {e}")
+        # Paramètres applicatifs globaux
+        self.config_service.update_ui_setting("restore_selections_on_startup", self.restore_selections_action.isChecked())
+        
+        # current_llm_model_identifier est mis à jour dans _on_llm_model_selected_from_panel
+        # Si GenerationPanel a son propre mécanisme pour stocker le modèle sélectionné (get_settings),
+        # il sera pris en compte ci-dessous. Sinon, s'assurer qu'il est bien dans config_service.
+        # Par sécurité, on peut le remettre ici depuis une source fiable si ce n'est pas déjà fait par un signal.
+        if self.generation_panel and hasattr(self.generation_panel, 'get_current_selected_model_identifier'):
+             current_model_id_for_save = self.generation_panel.get_current_selected_model_identifier()
+             if current_model_id_for_save:
+                 self.config_service.update_ui_setting("current_llm_model_identifier", current_model_id_for_save)
+
+        # Paramètres des panneaux enfants
+        if hasattr(self.generation_panel, 'get_settings'):
+            self.config_service.update_ui_setting("generation_panel", self.generation_panel.get_settings())
+        else:
+            logger.warning("GenerationPanel n'a pas de méthode get_settings pour sauvegarder ses paramètres.")
+            # On pourrait vouloir sauvegarder le splitter du generation_panel s'il est géré ici
+            if hasattr(self.generation_panel, 'main_splitter'): 
+                 self.config_service.update_ui_setting("generation_panel_splitter_sizes", self.generation_panel.main_splitter.sizes())
+
+        if hasattr(self.left_panel, 'get_settings'):
+            self.config_service.update_ui_setting("left_selection_panel", self.left_panel.get_settings())
+        else:
+            logger.warning("LeftSelectionPanel n'a pas de méthode get_settings.")
+
+        # max_context_tokens: Si modifiable par l'UI (par exemple dans GenerationPanel),
+        # il faudrait le récupérer ici. Sinon, il est juste lu depuis config.
+        # Exemple: max_tokens = self.generation_panel.get_max_tokens_setting()
+        # self.config_service.update_ui_setting("max_context_tokens", max_tokens)
+
+        # 2. Sauvegarder tous les paramètres via le service
+        if self.config_service.save_ui_settings():
+            logger.info(f"Paramètres UI sauvegardés avec succès via ConfigurationService (source: {source}).")
+        else:
+            logger.error(f"Échec de la sauvegarde des paramètres UI via ConfigurationService (source: {source}).")
+            self.statusBar().showMessage("Erreur de sauvegarde des paramètres UI.")
 
     def _perform_actual_save_ui_settings(self):
-        self._save_ui_settings(source="timer_or_event")
+        self._save_ui_settings(source="timer_or_event_ended") # Clarifier la source
 
     def _schedule_save_ui_settings(self):
         # Démarre ou redémarre le timer pour sauvegarder les paramètres après un délai.
@@ -611,26 +639,36 @@ class MainWindow(QMainWindow):
         super().closeEvent(close_event)
 
     def _load_llm_configuration(self):
-        """Charge la configuration LLM depuis le fichier JSON."""
-        if LLM_CONFIG_FILE_PATH.exists():
-            try:
-                with open(LLM_CONFIG_FILE_PATH, 'r', encoding='utf-8') as f:
-                    self.llm_config = json.load(f)
-                self.available_llm_models = self.llm_config.get("available_models", [])
-                if not self.available_llm_models:
-                    logger.warning(f"Aucun modèle LLM trouvé dans {LLM_CONFIG_FILE_PATH}. L'application pourrait ne pas fonctionner correctement.")
-                    # Fournir une option par défaut minimale pour éviter les crashs
-                    self.available_llm_models = [{"display_name": "Erreur Config Modèle", "api_identifier": "error", "notes": "Vérifier llm_config.json"}]
-                logger.info(f"LLM configuration loaded from {LLM_CONFIG_FILE_PATH}.")
-            except json.JSONDecodeError:
-                logger.error(f"Erreur de décodage JSON dans {LLM_CONFIG_FILE_PATH}.")
-                self._provide_default_llm_config_for_ui()
-            except Exception as e:
-                logger.error(f"Erreur inattendue lors du chargement de {LLM_CONFIG_FILE_PATH}: {e}")
-                self._provide_default_llm_config_for_ui()
+        """Loads LLM configuration using ConfigurationService."""
+        # MODIFIÉ: Utiliser ConfigurationService
+        self.llm_config = self.config_service.get_llm_config()
+        self.available_llm_models = self.config_service.get_available_llm_models()
+
+        if not self.llm_config or not self.available_llm_models:
+            logger.warning("LLM configuration is empty or no models found via ConfigurationService. Providing defaults for UI.")
+            # _provide_default_llm_config_for_ui() pourrait être adapté ou ses valeurs par défaut intégrées ici
+            # Pour l'instant, on s'assure que les variables membres existent pour éviter des crashs UI.
+            if not self.llm_config: # Si c'est vide après le service
+                self.llm_config = {
+                    "api_key_env_var": "OPENAI_API_KEY",
+                    "default_model_identifier": "dummy",
+                    "request_timeout": 60,
+                    "temperature": 0.7,
+                    "max_tokens": 1000
+                }
+                logger.info("Provided minimal default LLM config dictionary.")
+            if not self.available_llm_models:
+                 self.available_llm_models = [{"display_name": "Dummy Client (Default)", "api_identifier": "dummy", "notes": "Fallback/Default client"}]
+                 logger.info("Provided minimal default available_llm_models list.")
+            # Optionnel: Sauvegarder ces défauts si le fichier n'existait pas
+            # if not self.config_service.get_llm_config(): # Vérifier si c'était vraiment vide à l'origine
+            #    self.config_service.save_llm_config(self.llm_config) # Sauvegarder les défauts minimaux
         else:
-            logger.warning(f"Fichier de configuration LLM {LLM_CONFIG_FILE_PATH} introuvable. Utilisation de valeurs par défaut.")
-            self._provide_default_llm_config_for_ui()
+            logger.info(f"LLM configuration loaded via ConfigurationService. {len(self.available_llm_models)} models available.")
+            # Vérifier si le modèle par défaut de la config est dans la liste des modèles disponibles
+            default_model_id = self.llm_config.get("default_model_identifier")
+            if default_model_id and not any(model['api_identifier'] == default_model_id for model in self.available_llm_models):
+                logger.warning(f"Default LLM model '{default_model_id}' from config not in available models list. Consider updating llm_config.json.")
 
     def _provide_default_llm_config_for_ui(self):
         """Fournit une configuration LLM par défaut minimale pour l'UI en cas d'échec du chargement."""
@@ -641,57 +679,70 @@ class MainWindow(QMainWindow):
         }
         self.available_llm_models = self.llm_config["available_models"]
 
-    @Slot(str) # Ajout du décorateur Slot
+    @Slot(str) 
     def _on_llm_model_selected_from_panel(self, new_model_identifier: str, from_load_settings: bool = False):
-        logger.info(f"LLM model selection changed from panel to: {new_model_identifier}")
-        
-        if self.llm_client and hasattr(self.llm_client, 'model') and self.llm_client.model == new_model_identifier and not from_load_settings:
-            logger.debug(f"LLM model unchanged (already {new_model_identifier}), skipping client recreation.")
+        """Slot appelé lorsque le modèle LLM est changé depuis GenerationPanel.
+        Recrée le client LLM avec le nouveau modèle.
+        """
+        logger.info(f"Modèle LLM sélectionné: {new_model_identifier} (Depuis chargement settings: {from_load_settings})")
+
+        if not new_model_identifier:
+            logger.warning("Aucun identifiant de modèle LLM fourni. Sélection annulée.")
+            # Optionnel: remettre à un modèle par défaut ou afficher une erreur?
             return
 
-        # Mise à jour de l'app_settings avant de recharger le client
-        self.app_settings["current_llm_model_identifier"] = new_model_identifier
+        # Vérifier si le client doit réellement être recréé
+        current_client_model_id = None
+        if self.llm_client:
+            if hasattr(self.llm_client, 'model_identifier') and self.llm_client.model_identifier:
+                current_client_model_id = self.llm_client.model_identifier
+            elif hasattr(self.llm_client, 'model') and self.llm_client.model:
+                current_client_model_id = self.llm_client.model
         
-        # Attempt to initialize the client with the new model
+        if current_client_model_id == new_model_identifier and not from_load_settings:
+            logger.info(f"Le modèle '{new_model_identifier}' est déjà actif. Pas de changement de client LLM.")
+            # S'assurer que la combobox de generation_panel est à jour si ce n'est pas la source du signal
+            if hasattr(self.generation_panel, 'select_model_in_combo'):
+                self.generation_panel.select_model_in_combo(new_model_identifier)
+            return
+
         try:
-            # Get API key env var from config
+            # Utiliser self.llm_config chargé depuis ConfigurationService
             api_key_var = self.llm_config.get("api_key_env_var", "OPENAI_API_KEY")
             api_key = os.getenv(api_key_var)
             
-            # Préparer la configuration pour OpenAIClient avec le nouveau modèle
-            client_config = self.llm_config.copy()
-            client_config["model_name"] = new_model_identifier
+            # Créer une nouvelle configuration client basée sur self.llm_config mais avec le nouveau modèle
+            client_reconfig = self.llm_config.copy()
+            client_reconfig["model_name"] = new_model_identifier
             
-            # Create a new client with the selected model
-            new_client = OpenAIClient(api_key=api_key, config=client_config)
+            # TODO: Gérer différents types de clients si nécessaire (OpenAI, Dummy, autres)
+            # Pour l'instant, on suppose OpenAI ou Dummy
+            if new_model_identifier.lower() == "dummy":
+                self.llm_client = DummyLLMClient()
+            else:
+                self.llm_client = OpenAIClient(api_key=api_key, config=client_reconfig)
             
-            # If successful, update our reference and inform GP
-            self.llm_client = new_client
-            self.generation_panel.set_llm_client(new_client)
-            logger.info(f"LLM Client updated with model: {new_model_identifier}")
+            logger.info(f"Client LLM recréé/mis à jour pour le modèle: {new_model_identifier} ({type(self.llm_client).__name__})")
             
-            if not from_load_settings: # Avoid feedback loop on startup
-                self._save_ui_settings("llm_model_change") 
-                
-        except Exception as e:
-            logger.error(f"Failed to initialize LLM client with model {new_model_identifier}: {e}")
-            QMessageBox.critical(self, "LLM Error", f"Could not initialize LLM client with model {new_model_identifier}: {e}")
-            # We don't fall back to dummy here since we already have a working client.
-            # Just notify the user and keep using the current client.
-            # Optionally reset the UI selection to match the current client.
-            if self.llm_client and hasattr(self.llm_client, 'model'):
-                self.generation_panel.select_model_in_combo(self.llm_client.model)
-
-    def get_unity_dialogues_path(self) -> Optional[Path]:
-        """
-        Retourne le chemin des dialogues Unity.
-        Utilise config_manager.get_unity_dialogues_path() pour récupérer le chemin.
+            # Mettre à jour GenerationPanel avec le nouveau client et le modèle
+            self.generation_panel.set_llm_client(self.llm_client)
+            
+            # MODIFIÉ: Sauvegarder le nouveau modèle sélectionné dans ConfigurationService
+            self.config_service.update_ui_setting("current_llm_model_identifier", new_model_identifier)
+            if not from_load_settings: # Ne pas sauvegarder si c'est juste un chargement initial
+                self._schedule_save_ui_settings()
         
-        Returns:
-            Optional[Path]: Le chemin des dialogues Unity, ou None si non configuré ou invalide.
-        """
-        logger.debug("MainWindow.get_unity_dialogues_path appelé")
-        return config_manager.get_unity_dialogues_path()
+        except Exception as e:
+            logger.error(f"Erreur lors du changement de modèle LLM vers '{new_model_identifier}': {e}")
+            QMessageBox.critical(self, "Erreur LLM", f"Impossible de changer le modèle LLM vers '{new_model_identifier}': {e}")
+            # Optionnel: Revenir au client précédent ou à un DummyClient
+            if not isinstance(self.llm_client, DummyLLMClient):
+                self.llm_client = DummyLLMClient()
+                logger.info("Retour à DummyLLMClient après erreur de changement de modèle.")
+                self.generation_panel.set_llm_client(self.llm_client)
+                self.config_service.update_ui_setting("current_llm_model_identifier", "dummy")
+                if not from_load_settings:
+                    self._schedule_save_ui_settings()
 
 # For testing, if you run main_window.py directly (requires some adjustments)
 if __name__ == '__main__':

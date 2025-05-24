@@ -437,30 +437,37 @@ class GenerationPanel(QWidget):
         prompt_tokens = 0
 
         try:
+            # MODIFIÉ: Utiliser config_service depuis main_window_ref
+            max_tokens_val = self.main_window_ref.config_service.get_ui_setting("max_context_tokens", 1500)
+            
             # Assurer que le prompt_engine a le system_prompt à jour de l'UI pour une estimation correcte
             self._update_prompt_engine_system_prompt()
 
-            # Similaire à _on_generate_dialogue_button_clicked_local
+            # Construire le résumé du contexte d'abord
             context_summary_text_for_estimation = self.context_builder.build_context(
                 selected_elements=selected_context_items,
-                scene_instruction=user_specific_goal, # L'objectif utilisateur sert d'instruction de scène pour ContextBuilder
-                max_tokens=self.main_window_ref.app_settings.get("max_context_tokens", 1500) # Utilise app_settings de MainWindow
+                scene_instruction=user_specific_goal, 
+                max_tokens=max_tokens_val 
+                # include_dialogue_type n'est pas utilisé par context_builder.build_context directement
             )
-            
+            context_tokens = self.prompt_engine._count_tokens(context_summary_text_for_estimation) if context_summary_text_for_estimation else 0
+
+            # Utiliser build_prompt pour obtenir le prompt complet et son nombre total de tokens
             full_prompt_for_estimation, prompt_tokens = self.prompt_engine.build_prompt(
                 user_specific_goal=user_specific_goal,
                 scene_protagonists=scene_protagonists_dict if scene_protagonists_dict else None,
                 scene_location=scene_location_dict if scene_location_dict else None,
                 context_summary=context_summary_text_for_estimation,
-                generation_params=None # Pas besoin de params spécifiques pour l'estimation ici, ils n'affectent que le contenu pas la structure comptée
+                generation_params={ # Passer les paramètres qui pourraient affecter la structure du prompt pour l'estimation
+                    "dialogue_structure_narrative": self.dialogue_structure_widget.get_structure_description() 
+                }
             )
-            # Pour context_tokens, on ne compte que ce qui vient de context_builder
-            # car le system_prompt, les persos/lieux et l'objectif sont fixes en termes de structure.
-            # Ou, plus simplement, on recompte juste la partie context_summary_text_for_estimation.
-            context_tokens = self.prompt_engine._count_tokens(context_summary_text_for_estimation) if context_summary_text_for_estimation else 0
+            
+            # current_prompt n'est plus retourné par une méthode séparée, c'est full_prompt_for_estimation
+            # context_str est context_summary_text_for_estimation
 
-            logger.debug(f"[GenerationPanel.update_token_estimation_ui] Context summary for estimation (first 300 chars): {context_summary_text_for_estimation[:300] if context_summary_text_for_estimation else 'None'}") # LOG AJOUTÉ
-            logger.debug(f"[GenerationPanel.update_token_estimation_ui] Full prompt for estimation (first 300 chars): {full_prompt_for_estimation[:300] if full_prompt_for_estimation else 'None'}") # LOG AJOUTÉ
+            logger.debug(f"[GenerationPanel.update_token_estimation_ui] Context summary for estimation (first 300 chars): {context_summary_text_for_estimation[:300] if context_summary_text_for_estimation else 'None'}")
+            logger.debug(f"[GenerationPanel.update_token_estimation_ui] Full prompt for estimation (first 300 chars): {full_prompt_for_estimation[:300] if full_prompt_for_estimation else 'None'}")
 
         except Exception as e:
             logger.error(f"Erreur pendant la construction du prompt dans update_token_estimation_ui: {e}", exc_info=True)
@@ -535,8 +542,8 @@ class GenerationPanel(QWidget):
             # Pour l'instant, on passe les items sélectionnés et ContextBuilder.build_context s'attend à une "scene_instruction" qui peut être l'objectif utilisateur.
             context_summary_text = self.context_builder.build_context(
                 selected_elements=selected_context_items,
-                scene_instruction=user_instructions, # L'objectif utilisateur sert d'instruction de scène pour ContextBuilder
-                max_tokens=self.main_window_ref.app_settings.get("max_context_tokens", 1500) # Utilise app_settings de MainWindow
+                scene_instruction=user_instructions, 
+                max_tokens=self.main_window_ref.config_service.get_ui_setting("max_context_tokens", 1500) # Assurer que c'est bien config_service ici
             )
 
             # Construction du prompt via PromptEngine avec la nouvelle structure
