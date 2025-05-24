@@ -542,7 +542,7 @@ class DialogueGenerationService:
             # Cela suppose que la structure de `data` correspond au modèle Interaction Pydantic
             # y compris la gestion des `elements` par discrimination.
             return Interaction.model_validate(data)
-
+            
         except json.JSONDecodeError as e:
             logger.error(f"Erreur de décodage JSON dans parse_interaction_response: {str(e)}. Réponse: {raw_response[:200]}...")
             return None

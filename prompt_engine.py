@@ -45,26 +45,11 @@ class PromptEngine:
         return \
 """
 Tu es un assistant expert en écriture de dialogues pour jeux de rôle (RPG).
-Ta tâche est de générer un dialogue au format Yarn Spinner.
-Le dialogue doit être cohérent avec le contexte fourni (personnages, lieu, quête).
-Le dialogue doit suivre l'instruction utilisateur concernant l'objectif de la scène.
-
-Format Yarn Spinner de base :
----
-title: NomDuNoeud
-tags: tag1 tag2
----
-PersonnageA: Bonjour ! Ceci est une ligne de dialogue.
-PersonnageB: Et ceci est une réponse.
-    -> Option 1 [[NomDuNoeudSuivantOption1]]
-        PersonnageA: Vous avez choisi l'option 1.
-    -> Option 2
-        PersonnageA: Vous avez choisi l'option 2.
-<<jump NomDuNoeudDeFin>>
-===
+Ta tâche est de générer un dialogue cohérent avec le contexte fourni et l'instruction utilisateur.
+Si une structure de dialogue spécifique est demandée (ex: PNJ suivi d'un choix PJ), respecte cette structure.
 """
 
-    def _get_interaction_system_prompt(self) -> str:
+    def _get_interaction_system_prompt_reference(self) -> str:
         """
         Retourne un system prompt spécifique à la génération d'Interactions structurées.
         
@@ -124,7 +109,7 @@ RÈGLES À SUIVRE:
 3. Ne fournis que la structure JSON, sans explication ni commentaire
 4. Utilise un ID d'interaction unique et descriptif (par exemple: "rencontre_tavernier_initial")
 5. Pour les choix du joueur, invente des ID logiques pour les interactions suivantes (par exemple: "rencontre_tavernier_accepte_quete")
-6. Les éléments peuvent être répétés (plusieurs lignes de dialogue, plusieurs commandes, etc.)
+6. Chaque phase doit correspondre à UN SEUL élément dans la liste "elements" de l'Interaction.
 7. Utilise les personnages mentionnés dans le contexte comme "speaker" des lignes de dialogue
 """
 
@@ -157,9 +142,9 @@ RÈGLES À SUIVRE:
     def build_prompt(
         self,
         user_specific_goal: str,
-        scene_protagonists: Optional[Dict[str, str]] = None, # Format: {"personnage_a": "Nom A", "personnage_b": "Nom B"}
-        scene_location: Optional[Dict[str, str]] = None, # Format: {"lieu": "Nom Lieu", "sous_lieu": "Nom Sous-Lieu"}
-        context_summary: Optional[str] = None, # Le reste du contexte général
+        scene_protagonists: Optional[Dict[str, str]] = None,
+        scene_location: Optional[Dict[str, str]] = None,
+        context_summary: Optional[str] = None,
         generation_params: Optional[Dict[str, Any]] = None
     ) -> Tuple[str, int]:
         """
@@ -179,14 +164,12 @@ RÈGLES À SUIVRE:
         if generation_params is None:
             generation_params = {}
 
-        # Déterminer quel prompt système utiliser
-        generate_interaction = generation_params.get("generate_interaction", False)
-        dialogue_structure = generation_params.get("dialogue_structure", None)
-        current_system_prompt = self._get_interaction_system_prompt() if generate_interaction else self.system_prompt_template
+        # Utiliser le system_prompt de base. Si le client LLM (comme OpenAIClient)
+        # reçoit un response_model, il utilisera son propre system_prompt pour le function calling.
+        current_system_prompt = self.system_prompt_template
         
         prompt_parts = [current_system_prompt]
 
-        # Section dédiée pour les protagonistes et le lieu
         if scene_protagonists or scene_location:
             prompt_parts.append("\n--- CADRE DE LA SCÈNE ---")
             if scene_protagonists:
@@ -205,40 +188,27 @@ RÈGLES À SUIVRE:
             prompt_parts.append("\n--- CONTEXTE GÉNÉRAL DE LA SCÈNE ---")
             prompt_parts.append(context_summary)
             
-        # Ajouter la structure de dialogue si définie (pour les interactions structurées)
-        if generate_interaction and dialogue_structure:
-            prompt_parts.append("\n--- STRUCTURE DE DIALOGUE REQUISE ---")
-            prompt_parts.append(dialogue_structure)
-            prompt_parts.append("")
-            prompt_parts.append("RÈGLES SPÉCIFIQUES À LA STRUCTURE:")
-            prompt_parts.append("• Respecte EXACTEMENT l'ordre et le type d'éléments définis")
-            prompt_parts.append("• Personnage A = Joueur (ne parle QUE par les choix, jamais en dialogue direct)")
-            prompt_parts.append("• Personnage B = PNJ (parle UNIQUEMENT en dialogue direct, jamais par choix)")
-            prompt_parts.append("• 'PNJ' = élément 'dialogue_line' avec Personnage B comme speaker")
-            prompt_parts.append("• 'PJ' = élément 'player_choices_block' avec les options du joueur")
-            prompt_parts.append("• 'Stop' = fin de l'interaction, aucun élément après")
+        # La gestion de la structure est déléguée au function calling si response_model est utilisé.
+        # On peut garder une instruction narrative simple pour la structure.
+        dialogue_structure_narrative = generation_params.get("dialogue_structure_narrative", None)
+        if dialogue_structure_narrative: # Ex: "Un PNJ parle, puis le joueur fait un choix."
+            prompt_parts.append("\n--- SÉQUENCE NARRATIVE ATTENDUE ---")
+            prompt_parts.append(dialogue_structure_narrative)
         
         prompt_parts.append("\n--- OBJECTIF DE LA SCÈNE (Instruction Utilisateur) ---")
         prompt_parts.append(user_specific_goal)
         
-        # Exemple d'utilisation de generation_params (peut être étendu)
         if "tone" in generation_params:
             prompt_parts.append("\n--- TON ATTENDU ---")
             prompt_parts.append(str(generation_params["tone"]))
             
-        # Si on génère une interaction, ajouter un rappel sur le format JSON attendu
-        if generate_interaction:
-            prompt_parts.append("\n--- RAPPEL FORMAT JSON ---")
-            prompt_parts.append("Génère uniquement la structure JSON demandée, sans texte d'introduction ni de conclusion.")
-            prompt_parts.append("Respecte strictement le format d'Interaction spécifié dans les instructions.")
+        # Plus besoin de rappels sur le format JSON si on utilise le function calling.
+        # Le client LLM s'en charge via la définition de l'outil.
 
         full_prompt = "\n".join(prompt_parts)
-        
-        # Utiliser la nouvelle méthode _count_tokens
         num_tokens = self._count_tokens(full_prompt) 
         
-        logger.info(f"Prompt construit. Longueur approximative: {num_tokens} tokens.")
-        # logger.debug(f"Prompt complet:\n{full_prompt}") # Peut être très verbeux
+        logger.info(f"Prompt construit pour le LLM. Longueur estimée: {num_tokens} tokens.")
         return full_prompt, num_tokens
 
 # Pour des tests rapides
@@ -259,22 +229,23 @@ Lieu: Une vieille bibliothèque en ruines, remplie de parchemins et de dangers.
 Quête actuelle: Trouver le Grimoire des Ombres.
 """
     dummy_user_goal = "Elara doit convaincre Gorok de la laisser explorer une section particulièrement dangereuse de la bibliothèque. Gorok est réticent."
-    dummy_params: Dict[str, Any] = {"tone": "Tendu, avec une pointe d'humour"}
+    dummy_params: Dict[str, Any] = {
+        "tone": "Tendu", 
+        "dialogue_structure_narrative": "Un PNJ (Gorok) exprime une réticence, puis un autre PNJ (Elara) tente de le persuader."
+        }
 
     # Mise à jour de l'appel pour refléter les nouveaux paramètres
     final_prompt, tokens_count = engine.build_prompt(
         user_specific_goal=dummy_user_goal,
-        scene_protagonists={"personnage_a": "Elara", "personnage_b": "Gorok"},
-        scene_location={"lieu": "Vieille bibliothèque en ruines", "sous_lieu": "Section des grimoires interdits"},
-        context_summary=dummy_context, # Pour l'exemple, on garde le contexte général ici
+        scene_protagonists={"personnage_a": "Elara (Joueur)", "personnage_b": "Gorok (PNJ)"},
+        scene_location={"lieu": "Vieille bibliothèque"},
+        context_summary=dummy_context, 
         generation_params=dummy_params
     )
     
-    print("\n--- SYSTEM PROMPT UTILISÉ ---")
-    print(engine.system_prompt_template)
-    print("\n--- PROMPT FINAL GÉNÉRÉ POUR TEST ---")
+    print("\n--- PROMPT FINAL GÉNÉRÉ (EXEMPLE SIMPLIFIÉ) ---")
     print(final_prompt)
-    print(f"\n(Estim. tokens: {tokens_count})")
+    print(f"(Estim. tokens: {tokens_count})")
 
     # Test avec un system prompt personnalisé
     custom_system_prompt = "Tu es un barde facétieux. Raconte une histoire drôle."

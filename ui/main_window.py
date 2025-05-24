@@ -104,8 +104,13 @@ class MainWindow(QMainWindow):
             # Utiliser les valeurs de la config chargée
             default_model = self.llm_config.get("default_model_identifier", "gpt-4o-mini") # Fallback si non défini
             api_key_var = self.llm_config.get("api_key_env_var", "OPENAI_API_KEY")
+            api_key = os.getenv(api_key_var)
             
-            self.llm_client = OpenAIClient(model_identifier=default_model, api_key_env_var=api_key_var)
+            # Préparer la configuration pour OpenAIClient en incluant le modèle
+            client_config = self.llm_config.copy()
+            client_config["model_name"] = default_model
+            
+            self.llm_client = OpenAIClient(api_key=api_key, config=client_config)
             logger.info(f"LLM Client initialized with {type(self.llm_client).__name__} using model '{default_model}'.")
         except Exception as e:
             logger.error(f"Failed to initialize LLM client: {e}")
@@ -651,9 +656,14 @@ class MainWindow(QMainWindow):
         try:
             # Get API key env var from config
             api_key_var = self.llm_config.get("api_key_env_var", "OPENAI_API_KEY")
+            api_key = os.getenv(api_key_var)
+            
+            # Préparer la configuration pour OpenAIClient avec le nouveau modèle
+            client_config = self.llm_config.copy()
+            client_config["model_name"] = new_model_identifier
             
             # Create a new client with the selected model
-            new_client = OpenAIClient(model_identifier=new_model_identifier, api_key_env_var=api_key_var)
+            new_client = OpenAIClient(api_key=api_key, config=client_config)
             
             # If successful, update our reference and inform GP
             self.llm_client = new_client

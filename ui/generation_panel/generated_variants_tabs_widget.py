@@ -85,64 +85,54 @@ class GeneratedVariantsTabsWidget(QTabWidget):
         tab_layout = QVBoxLayout(tab)
         
         content_area = QTextEdit()
-        content_area.setPlainText(content)
-        content_area.setReadOnly(True)
-        
-        # Stocker le contenu
-        self.stored_contents[tab_name] = content
-        
-        tab_layout.addWidget(content_area)
-        
-        # Si données structurées, tenter de créer une Interaction
+        # --- Amélioration UX ---
+        # Si structured_data est fourni et peut être converti en Interaction, on affiche joliment
         if structured_data:
             try:
-                interaction = Interaction.from_dict(structured_data)
+                interaction = Interaction.model_validate(structured_data)
                 self.stored_interactions[tab_name] = interaction
-                logger.info(f"Interaction créée pour l'onglet '{tab_name}'")
-                
-                # Ajout d'un bouton de validation de l'interaction en bas de l'onglet
-                validate_button = QPushButton("Valider cette interaction")
-                validate_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton))
-                def on_validate():
-                    print(f"[DEBUG] Bouton 'Valider cette interaction' cliqué pour tab_name={tab_name}, id={interaction.interaction_id}, widget={self} @ {id(self)}")
-                    logger.info(f"[DEBUG] Bouton 'Valider cette interaction' cliqué pour tab_name={tab_name}, id={interaction.interaction_id}")
-                    print(f"[DEBUG] Emission du signal validate_interaction_requested pour tab_name={tab_name}, id={interaction.interaction_id}, widget={self} @ {id(self)}")
-                    self.validate_interaction_requested.emit(tab_name, interaction)
-                validate_button.clicked.connect(on_validate)
-                tab_layout.addWidget(validate_button)
+                logger.info(f"Interaction créée pour l'onglet '{tab_name}' (affichage formaté)")
+                formatted_text = self._format_interaction_for_display(interaction)
+                content_area.setPlainText(formatted_text)
             except Exception as e:
                 logger.error(f"Erreur lors de la conversion des données en Interaction: {str(e)}")
-        
+                # Fallback: affichage JSON
+                content_area.setPlainText(json.dumps(structured_data, indent=2, ensure_ascii=False))
+        else:
+            # Si pas de données structurées, on affiche le texte brut
+            content_area.setPlainText(content)
+        content_area.setReadOnly(True)
+        tab_layout.addWidget(content_area)
+        # Stocker le contenu
+        self.stored_contents[tab_name] = content
+        # Ajout d'un bouton de validation si Interaction
+        if tab_name in self.stored_interactions:
+            validate_button = QPushButton("Valider cette interaction")
+            validate_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton))
+            def on_validate(tab_name=tab_name):
+                self.validate_interaction_requested.emit(tab_name, self.stored_interactions[tab_name])
+            validate_button.clicked.connect(on_validate)
+            tab_layout.addWidget(validate_button)
         self.addTab(tab, tab_name)
         self.setCurrentWidget(tab)
 
     def add_interaction_tab(self, tab_name: str, interaction: Interaction):
-        """Ajoute un nouvel onglet pour une interaction structurée."""
+        """Ajoute un nouvel onglet pour une interaction structurée (affichage lisible)."""
         tab = QWidget()
         tab_layout = QVBoxLayout(tab)
-        
-        # Afficher l'interaction en JSON formaté
+        # Affichage formaté lisible au lieu du JSON brut
         content_area = QTextEdit()
-        try:
-            interaction_dict = interaction.model_dump(mode='python')
-            formatted_json = json.dumps(interaction_dict, indent=2, ensure_ascii=False)
-            content_area.setPlainText(formatted_json)
-        except Exception as e:
-            content_area.setPlainText(f"Erreur lors de l'affichage de l'interaction: {str(e)}")
-            logger.error(f"Erreur lors de la sérialisation JSON de l'interaction '{tab_name}': {str(e)}", exc_info=True)
-            
+        formatted_text = self._format_interaction_for_display(interaction)
+        content_area.setPlainText(formatted_text)
         content_area.setReadOnly(True)
         tab_layout.addWidget(content_area)
-        
         # Stocker l'interaction
         self.stored_interactions[tab_name] = interaction
-        
         # Ajout d'un bouton de validation en bas de l'onglet
         validate_button = QPushButton("Valider cette interaction")
         validate_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton))
         validate_button.clicked.connect(lambda: self.validate_interaction_requested.emit(tab_name, interaction))
         tab_layout.addWidget(validate_button)
-        
         self.addTab(tab, tab_name)
         self.setCurrentWidget(tab)
         
@@ -317,9 +307,28 @@ class GeneratedVariantsTabsWidget(QTabWidget):
                 lines.append(f"Tags: {', '.join(interaction.header_tags)}")
                 lines.append("")
             
-            # Parcourir les éléments
-            if hasattr(interaction, 'elements') and interaction.elements:
-                for i, element in enumerate(interaction.elements):
+            # 1) Parcourir via attribut 'elements' si présent (ancien schéma)
+            elements_iterable = None
+            if hasattr(interaction, 'elements') and getattr(interaction, 'elements'):
+                elements_iterable = getattr(interaction, 'elements')
+
+            # 2) Sinon, tenter de détecter les champs phase_X dynamiques
+            if elements_iterable is None:
+                phases = []
+                idx = 1
+                while True:
+                    field_name = f"phase_{idx}"
+                    if hasattr(interaction, field_name):
+                        phases.append(getattr(interaction, field_name))
+                        idx += 1
+                    else:
+                        break
+                if phases:
+                    elements_iterable = phases
+
+            # Affichage des éléments (qu'ils proviennent de 'elements' ou des phases dynamiques)
+            if elements_iterable:
+                for i, element in enumerate(elements_iterable):
                     element_type = getattr(element, 'element_type', 'unknown')
                     
                     if element_type == 'dialogue_line':

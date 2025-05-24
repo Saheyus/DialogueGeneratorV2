@@ -16,6 +16,7 @@ import os
 from DialogueGenerator.models.dialogue_structure.interaction import Interaction
 from DialogueGenerator.services.interaction_service import InteractionService
 from DialogueGenerator.services.repositories.file_repository import FileInteractionRepository
+from DialogueGenerator.models.dialogue_structure.dynamic_interaction_schema import build_interaction_model_from_structure, validate_interaction_elements_order
 
 # Import local de la fonction utilitaire
 from .utils import get_icon_path
@@ -28,6 +29,7 @@ from .generation_panel.token_estimation_actions_widget import TokenEstimationAct
 from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTabsWidget
 from .generation_panel.interaction_sequence_widget import InteractionSequenceWidget
 from .generation_panel.interaction_editor_widget import InteractionEditorWidget
+from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
 
 # New service import
 try:
@@ -130,28 +132,6 @@ class GenerationPanel(QWidget):
         central_tabs = QTabWidget()
         left_column_layout.addWidget(central_tabs)
         
-        # --- Onglet 1 : Interactions ---
-        interactions_tab = QWidget()
-        interactions_tab_layout = QVBoxLayout(interactions_tab)
-        interactions_tab_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        
-        # Initialisation du widget avec le service
-        self.interaction_sequence_widget = InteractionSequenceWidget(
-            interaction_service=self.interaction_service
-        )
-        interactions_tab_layout.addWidget(self.interaction_sequence_widget)
-        self.interaction_sequence_widget.interaction_selected.connect(self._on_interaction_selected)
-        self.interaction_sequence_widget.sequence_changed.connect(self._on_sequence_changed)
-        self.interaction_sequence_widget.interaction_selected.connect(self._on_edit_interaction_requested)
-        
-        # Initialisation de l'éditeur d'interaction
-        self.interaction_editor_widget = InteractionEditorWidget(self.interaction_service)
-        self.interaction_editor_widget.interaction_changed.connect(self._on_interaction_changed)
-        interactions_tab_layout.addWidget(self.interaction_editor_widget)
-        
-        interactions_tab_layout.addStretch(1)
-        central_tabs.addTab(interactions_tab, "Interactions")
-        
         # --- Onglet 2 : Génération ---
         generation_tab = QWidget()
         generation_tab_layout = QVBoxLayout(generation_tab)
@@ -184,6 +164,11 @@ class GenerationPanel(QWidget):
         self.generation_params_widget.max_context_tokens_changed.connect(self._on_max_context_tokens_changed)
         self.generation_params_widget.structured_output_changed.connect(self._schedule_settings_save)
 
+        # --- Section Structure du Dialogue (PNJ/PJ/Stop) ---
+        self.dialogue_structure_widget = DialogueStructureWidget()
+        generation_tab_layout.addWidget(self.dialogue_structure_widget)
+        self.dialogue_structure_widget.structure_changed.connect(self._schedule_settings_save_and_token_update)
+
         # --- Section Instructions Utilisateur (modifiée en QTabWidget) ---
         self.instructions_widget = InstructionsWidget()
         generation_tab_layout.addWidget(self.instructions_widget)
@@ -199,6 +184,28 @@ class GenerationPanel(QWidget):
 
         generation_tab_layout.addStretch(1)
         central_tabs.addTab(generation_tab, "Génération")
+
+        # --- Onglet 1 : Interactions ---
+        interactions_tab = QWidget()
+        interactions_tab_layout = QVBoxLayout(interactions_tab)
+        interactions_tab_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        # Initialisation du widget avec le service
+        self.interaction_sequence_widget = InteractionSequenceWidget(
+            interaction_service=self.interaction_service
+        )
+        interactions_tab_layout.addWidget(self.interaction_sequence_widget)
+        self.interaction_sequence_widget.interaction_selected.connect(self._on_interaction_selected)
+        self.interaction_sequence_widget.sequence_changed.connect(self._on_sequence_changed)
+        self.interaction_sequence_widget.interaction_selected.connect(self._on_edit_interaction_requested)
+        
+        # Initialisation de l'éditeur d'interaction
+        self.interaction_editor_widget = InteractionEditorWidget(self.interaction_service)
+        self.interaction_editor_widget.interaction_changed.connect(self._on_interaction_changed)
+        interactions_tab_layout.addWidget(self.interaction_editor_widget)
+        
+        interactions_tab_layout.addStretch(1)
+        central_tabs.addTab(interactions_tab, "Interactions")
 
         # --- Colonne de Droite: Affichage des Variantes ---
         right_column_widget = QWidget()
@@ -489,10 +496,12 @@ class GenerationPanel(QWidget):
         self.generation_progress_bar.setVisible(True)
         self.generate_dialogue_button.setEnabled(False)
 
+        generation_succeeded = True
+
         try:
             k_variants = int(self.k_variants_combo.currentText())
             user_instructions = self.instructions_widget.get_user_instructions_text()
-            
+
             selected_context_items = self.main_window_ref._get_current_context_selections() # Récupère les items cochés
             
             char_a_name = self.scene_selection_widget.character_a_combo.currentText()
@@ -537,7 +546,8 @@ class GenerationPanel(QWidget):
                 context_summary=context_summary_text, # Le reste du contexte
                 generation_params={ # TODO: Exposer ces paramètres dans l'UI si nécessaire
                     "tone": "Neutre", 
-                    "model_identifier": self.current_llm_model_identifier
+                    "model_identifier": self.current_llm_model_identifier,
+                    "dialogue_structure": self.dialogue_structure_widget.get_structure_description()
                 }
             )
             # Affichage des tokens en milliers (k)
@@ -564,10 +574,10 @@ class GenerationPanel(QWidget):
                 logger.info(f"[LOG_DEBUG_STRUCT]   type(self.llm_client): {type(self.llm_client).__name__}")
 
             if self.structured_output_checkbox.isChecked() and isinstance(self.llm_client, OpenAIClient):
-                logger.info("Sortie structurée demandée, utilisation du modèle Interaction.")
-                # Assurez-vous que Interaction est importé au début du fichier
-                # from DialogueGenerator.models.dialogue_structure.interaction import Interaction
-                target_response_model = Interaction
+                # Utilisation du modèle dynamique selon la structure choisie
+                structure = self.dialogue_structure_widget.get_structure()
+                target_response_model = build_interaction_model_from_structure(structure)
+                logger.info(f"[LOG_DEBUG_STRUCT] Modèle Pydantic dynamique utilisé pour la structure: {structure}")
             else:
                 logger.info("[LOG_DEBUG_STRUCT] Conditions non remplies pour la sortie structurée (target_response_model restera None).")
 
@@ -581,7 +591,7 @@ class GenerationPanel(QWidget):
             logger.debug(f"Valeur de 'variants' reçue du LLM Client: Type={type(variants)}, Nombre={len(variants) if variants else 0}")
             if variants:
                 logger.debug(f"Type du premier élément dans variants: {type(variants[0])}")
-
+            
                 self.variants_display_widget.blockSignals(True)
                 num_tabs_to_keep = 0
                 if self.variants_display_widget.count() > 0 and self.variants_display_widget.tabText(0) == "Prompt Estimé":
@@ -592,17 +602,23 @@ class GenerationPanel(QWidget):
                 
                 if variants:
                     for i, variant_data in enumerate(variants):
-                        if isinstance(variant_data, Interaction):
-                            try:
-                                self.variants_display_widget.add_interaction_tab(f"Variante {i+1}", variant_data)
-                                logger.info(f"[LOG_DEBUG] Variante {i+1} (Interaction) ajoutée via add_interaction_tab.")
-                            except Exception as e_add_tab:
-                                logger.error(f"Erreur lors de l'ajout de l'onglet d'interaction: {e_add_tab}")
-                                # Fallback simple si add_interaction_tab échoue
-                                text_edit = QTextEdit(f"// Erreur d'affichage de l'objet Interaction: {e_add_tab}")
+                        if isinstance(variant_data, Interaction) or (hasattr(variant_data, '__class__') and 'DynamicInteraction' in str(type(variant_data))):
+                            # Validation stricte de la structure
+                            structure = self.dialogue_structure_widget.get_structure()
+                            is_valid = validate_interaction_elements_order(variant_data, structure)
+                            if not is_valid:
+                                logger.error(f"[VALIDATION STRUCTURE] La variante générée ne respecte pas la structure imposée : {structure}")
+                                error_text = ("// Erreur : La variante générée ne respecte pas la structure imposée :\n"
+                                              f"Structure attendue : {structure}\n"
+                                              f"Types reçus : {[type(e).__name__ for e in getattr(variant_data, 'elements', [])]}\n"
+                                              "Corrigez le prompt ou relancez la génération.")
+                                text_edit = QTextEdit(error_text)
                                 text_edit.setReadOnly(True)
-                                self.variants_display_widget.addTab(text_edit, f"Variante {i+1} (Erreur)")
-
+                                self.variants_display_widget.addTab(text_edit, f"Variante {i+1} (Erreur Structure)")
+                                continue
+                            logger.info(f"[VALIDATION STRUCTURE] Variante {i+1} conforme à la structure imposée.")
+                            self.variants_display_widget.add_interaction_tab(f"Variante {i+1}", variant_data)
+                            logger.info(f"[LOG_DEBUG] Variante {i+1} (Interaction) ajoutée via add_interaction_tab.")
                         elif isinstance(variant_data, str):
                             self.variants_display_widget.add_variant_tab(f"Variante {i+1}", variant_data)
                             logger.info(f"[LOG_DEBUG] Variante {i+1} (str) ajoutée via add_variant_tab: {variant_data[:100]}...")
@@ -807,7 +823,8 @@ class GenerationPanel(QWidget):
             "llm_model": self.llm_model_combo.currentData(), # Sauvegarde l'identifiant du modèle
             "structured_output": self.structured_output_checkbox.isChecked(),
             "system_prompt": self.instructions_widget.get_system_prompt_text(),
-            "max_context_tokens": self.max_context_tokens_spinbox.value()
+            "max_context_tokens": self.max_context_tokens_spinbox.value(),
+            "dialogue_structure": self.dialogue_structure_widget.get_structure()
         }
         logger.debug(f"Récupération des paramètres du GenerationPanel: {settings}")
         return settings
@@ -844,7 +861,7 @@ class GenerationPanel(QWidget):
         # else:
         #     self._restore_default_system_prompt()
         # sont maintenant gérées par self.instructions_widget.load_settings()
-
+        
         model_identifier = settings.get("llm_model")
         if model_identifier:
             # MODIFIÉ: Délégué à GenerationParamsWidget
@@ -867,6 +884,9 @@ class GenerationPanel(QWidget):
         # Assurer la synchro avec prompt_engine après le chargement des settings de InstructionsWidget
         self._update_prompt_engine_system_prompt() 
 
+        if "dialogue_structure" in settings:
+            self.dialogue_structure_widget.set_structure(settings["dialogue_structure"])
+        
         self._is_loading_settings = False
         self.update_token_estimation_signal.emit()
         logger.info("Paramètres du GenerationPanel chargés.")
