@@ -42,4 +42,7 @@ logs/
 *.swp
 
 # User interface settings file
-ui_settings.json 
+ui_settings.json
+
+# Données locales et générées
+/data/**/*.json 
