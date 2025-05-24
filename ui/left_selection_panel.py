@@ -8,7 +8,8 @@ from .. import config_manager
 
 # Importation du nouveau widget et du service nécessaire
 from .left_panel.previous_dialogue_selector_widget import PreviousDialogueSelectorWidget
-from ..services.interaction_service import InteractionService # Assurez-vous que le chemin est correct
+from ..services.interaction_service import InteractionService
+from ..services.configuration_service import ConfigurationService
 
 logger = logging.getLogger(__name__)
 

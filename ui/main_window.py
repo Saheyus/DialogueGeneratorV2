@@ -26,7 +26,6 @@ from ..context_builder import ContextBuilder
 from ..llm_client import OpenAIClient, DummyLLMClient, ILLMClient 
 from ..prompt_engine import PromptEngine 
 from ..services.configuration_service import ConfigurationService # MODIFIÉ: Ajouter ConfigurationService
-from ..services.llm_service import LLMService # MODIFIÉ: Ajouter LLMService
 from ..services.linked_selector import LinkedSelectorService # Example if needed elsewhere
 from ..services.interaction_service import InteractionService # Importation ajoutée
 from ..services.repositories import FileInteractionRepository # Pour l'InteractionService
@@ -74,7 +73,6 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.context_builder = context_builder
         self.config_service = ConfigurationService()
-        self.llm_service = LLMService() # MODIFIÉ: Initialiser LLMService
 
         self.current_selected_gdd_item_id: Optional[str] = None 
         self.current_selected_gdd_category: Optional[str] = None
@@ -83,6 +81,7 @@ class MainWindow(QMainWindow):
         # MODIFIÉ: Supprimer self.app_settings, les valeurs sont gérées via config_service
         # ou directement avec QSettings pour la géométrie/splitters.
         
+        self.llm_client: Optional[ILLMClient] = None
         self.prompt_engine: Optional[PromptEngine] = None
         # self.llm_config et self.available_llm_models sont initialisés par _load_llm_configuration
         
@@ -90,9 +89,29 @@ class MainWindow(QMainWindow):
         self.interaction_service = InteractionService(repository=interactions_repo)
         logger.info(f"InteractionService initialisé avec {type(interactions_repo).__name__} sur {DEFAULT_INTERACTIONS_STORAGE_DIR}.")
         
-        self._initialize_llm_system()
+        self._load_llm_configuration() 
 
         self.prompt_engine = PromptEngine()
+
+        try:
+            # MODIFIÉ: Utiliser self.llm_config qui est maintenant rempli par _load_llm_configuration() depuis le service
+            default_model_identifier = self.llm_config.get("default_model_identifier", "gpt-4o-mini")
+            api_key_var = self.llm_config.get("api_key_env_var", "OPENAI_API_KEY")
+            api_key = os.getenv(api_key_var)
+            
+            client_config_from_service = self.llm_config.copy() # Utiliser la config chargée
+            client_config_from_service["model_name"] = default_model_identifier 
+            
+            self.llm_client = OpenAIClient(api_key=api_key, config=client_config_from_service)
+            logger.info(f"LLM Client initialized with {type(self.llm_client).__name__} using model '{default_model_identifier}'.")
+        except Exception as e:
+            logger.error(f"Failed to initialize LLM client: {e}")
+            QMessageBox.critical(self, "LLM Error", f"Could not initialize LLM client: {e}")
+            self.llm_client = DummyLLMClient() 
+            logger.info(f"Fell back to DummyLLMClient due to error.")
+            if not self.available_llm_models: # Assurer que available_llm_models est initialisé
+                 self.available_llm_models = [{"display_name": "Dummy Client", "api_identifier": "dummy", "notes": "Fallback client"}]
+
 
         self.setWindowTitle("DialogueGenerator IA - Context Builder")
         self.setWindowIcon(get_icon_path("icon.png"))
@@ -106,19 +125,18 @@ class MainWindow(QMainWindow):
                                            parent=self)
         self.details_panel = DetailsPanel(parent=self) # Instantiate DetailsPanel
         
-        # MODIFIÉ: Passer le client LLM depuis le service
-        initial_llm_client = self.llm_service.get_current_client()
+        # MODIFIÉ: Récupérer current_llm_model_identifier depuis config_service pour GenerationPanel
         initial_llm_model_id = self.config_service.get_ui_setting(
             "current_llm_model_identifier", 
-            self.llm_service.get_default_model_identifier() # MODIFIÉ: Utiliser llm_service
+            self.llm_config.get("default_model_identifier", "dummy") # Fallback sur le défaut LLM si non dans UI settings
         )
 
         self.generation_panel = GenerationPanel(
             context_builder=self.context_builder, 
             prompt_engine=self.prompt_engine, 
-            llm_client=initial_llm_client, # MODIFIÉ: Passer le client du service
-            available_llm_models=self.llm_service.get_available_models(), # MODIFIÉ: Utiliser llm_service
-            current_llm_model_identifier=initial_llm_model_id, 
+            llm_client=self.llm_client, # L'instance initiale est passée
+            available_llm_models=self.available_llm_models, # Passer la liste des modèles
+            current_llm_model_identifier=initial_llm_model_id, # Utiliser la valeur du service
             main_window_ref=self,
             parent=self
         )
@@ -470,25 +488,22 @@ class MainWindow(QMainWindow):
         # current_llm_model_identifier est prioritaire depuis les settings du generation_panel, sinon ui_settings global, sinon défaut config LLM
         current_llm_id_from_gen_panel = generation_panel_settings_loaded.get("llm_model")
         current_llm_id_global = loaded_app_settings.get("current_llm_model_identifier")
-        # MODIFIÉ: Utiliser llm_service pour le défaut
-        config_default_llm_id = self.llm_service.get_default_model_identifier() 
+        config_default_llm_id = self.llm_config.get("default_model_identifier", "dummy")
         
         final_model_to_set = current_llm_id_from_gen_panel or current_llm_id_global or config_default_llm_id
 
-        # Comparer avec le modèle actuel du client LLM du service
+        # Comparer avec le modèle actuel du client LLM
         current_client_model_id = None
-        # MODIFIÉ: Accéder au client via le service
-        service_client = self.llm_service.get_current_client()
-        if service_client:
-            if hasattr(service_client, 'model_identifier') and service_client.model_identifier:
-                current_client_model_id = service_client.model_identifier
-            elif hasattr(service_client, 'model') and service_client.model: # Ancien attribut possible
-                current_client_model_id = service_client.model
+        if self.llm_client:
+            if hasattr(self.llm_client, 'model_identifier') and self.llm_client.model_identifier:
+                current_client_model_id = self.llm_client.model_identifier
+            elif hasattr(self.llm_client, 'model') and self.llm_client.model:
+                current_client_model_id = self.llm_client.model
 
         if final_model_to_set != current_client_model_id:
-            logger.info(f"Synchronisation du client LLM (via service) avec le modèle: '{final_model_to_set}' après chargement des settings.")
+            logger.info(f"Synchronisation du client LLM avec le modèle: '{final_model_to_set}' après chargement des settings.")
             self._on_llm_model_selected_from_panel(final_model_to_set, from_load_settings=True)
-        elif self.generation_panel.llm_model_combo.currentData() != final_model_to_set: 
+        elif self.generation_panel.llm_model_combo.currentData() != final_model_to_set: # S'assurer que la combobox est aussi à jour
             self.generation_panel.select_model_in_combo(final_model_to_set)
             logger.info(f"Combobox LLM synchronisée sur '{final_model_to_set}'.")
 
@@ -591,37 +606,27 @@ class MainWindow(QMainWindow):
         self._trigger_context_changed_token_update()
 
     def get_current_llm_model_properties(self) -> Optional[dict]:
-        """Renvoie les propriétés du modèle LLM actuellement sélectionné via LLMService."""
-        # MODIFIÉ: Utiliser llm_service
-        current_client = self.llm_service.get_current_client()
-        if not current_client:
-            logger.warning("LLMService n'a pas de client actuel.")
-            return None
-
+        """Renvoie les propriétés du modèle LLM actuellement sélectionné."""
         current_model_identifier = None
-        if hasattr(current_client, 'model_identifier') and current_client.model_identifier:
-            current_model_identifier = current_client.model_identifier
-        elif hasattr(current_client, 'model') and current_client.model: # Ancien attribut possible
-             current_model_identifier = current_client.model
-        
-        if not current_model_identifier:
-            # Fallback si le client n'a pas l'info directement, essayer la config du service
-            current_model_identifier = self.llm_service.get_llm_setting("default_model_identifier")
-            # Ou celui sélectionné dans le panneau de génération s'il est différent
-            if self.generation_panel and self.generation_panel.llm_model_combo.currentData():
-                current_model_identifier = self.generation_panel.llm_model_combo.currentData()
+        if self.llm_client and hasattr(self.llm_client, 'model_identifier') and self.llm_client.model_identifier:
+            current_model_identifier = self.llm_client.model_identifier
+        elif self.llm_client and hasattr(self.llm_client, 'model') and self.llm_client.model: # Ancien attribut possible
+             current_model_identifier = self.llm_client.model
+        else: # Fallback sur ce qui est dans la config si le client n'a pas l'info directement
+            current_model_identifier = self.generation_panel.llm_model_combo.currentData()
+            if not current_model_identifier and self.available_llm_models: # Si rien dans combo, prendre le premier dispo
+                current_model_identifier = self.available_llm_models[0].get("api_identifier")
 
         if not current_model_identifier:
-            logger.warning("Impossible de déterminer l'identifiant du modèle LLM actuel pour récupérer ses propriétés via LLMService.")
+            logger.warning("Impossible de déterminer l'identifiant du modèle LLM actuel pour récupérer ses propriétés.")
             return None
 
-        # MODIFIÉ: Utiliser llm_service
-        for model_props in self.llm_service.get_available_models():
+        for model_props in self.available_llm_models:
             if model_props.get("api_identifier") == current_model_identifier:
                 logger.debug(f"Propriétés trouvées pour le modèle LLM '{current_model_identifier}': {model_props}")
                 return model_props
         
-        logger.warning(f"Aucune propriété trouvée pour le modèle LLM '{current_model_identifier}' dans LLMService.available_models.")
+        logger.warning(f"Aucune propriété trouvée pour le modèle LLM '{current_model_identifier}' dans available_llm_models.")
         return None
 
     def closeEvent(self, close_event: QCloseEvent):
@@ -633,64 +638,111 @@ class MainWindow(QMainWindow):
         self._save_ui_settings(source="event")
         super().closeEvent(close_event)
 
-    def _initialize_llm_system(self):
-        """Initializes the LLM client and related attributes using LLMService."""
-        # LLMService est déjà initialisé dans __init__
-        # La configuration LLM (self.llm_config, self.available_llm_models) est chargée par LLMService
-        # lors de son initialisation.
-        
-        # Récupérer le client LLM initial (probablement le modèle par défaut ou le dernier sauvegardé si géré par le service)
-        # Si `get_current_client` crée le client s'il n'existe pas, c'est parfait.
-        self.llm_client = self.llm_service.get_current_client()
-        
-        if not self.llm_client:
-            # Ce cas ne devrait pas arriver si LLMService._ensure_config_defaults et get_current_client fonctionnent
-            logger.critical("LLMService failed to provide an initial LLM client! Application might not function correctly.")
-            QMessageBox.critical(self, "LLM Critical Error", "LLM Service could not initialize a client.")
-            # Fallback très basique si tout a échoué, bien que LLMService devrait déjà faire un fallback sur Dummy
-            self.llm_client = DummyLLMClient()
-            self.llm_service.current_client = self.llm_client # Assurer la cohérence
-        else:
-            logger.info(f"Initial LLM client obtained from LLMService: {type(self.llm_client).__name__}")
+    def _load_llm_configuration(self):
+        """Loads LLM configuration using ConfigurationService."""
+        # MODIFIÉ: Utiliser ConfigurationService
+        self.llm_config = self.config_service.get_llm_config()
+        self.available_llm_models = self.config_service.get_available_llm_models()
 
-        # self.llm_config et self.available_llm_models sont maintenant des propriétés de llm_service
-        # On ne les stocke plus directement dans MainWindow.
-        # Si des parties du code y accèdent encore directement, elles devront passer par self.llm_service.get_llm_config() ou get_available_models()
+        if not self.llm_config or not self.available_llm_models:
+            logger.warning("LLM configuration is empty or no models found via ConfigurationService. Providing defaults for UI.")
+            # _provide_default_llm_config_for_ui() pourrait être adapté ou ses valeurs par défaut intégrées ici
+            # Pour l'instant, on s'assure que les variables membres existent pour éviter des crashs UI.
+            if not self.llm_config: # Si c'est vide après le service
+                self.llm_config = {
+                    "api_key_env_var": "OPENAI_API_KEY",
+                    "default_model_identifier": "dummy",
+                    "request_timeout": 60,
+                    "temperature": 0.7,
+                    "max_tokens": 1000
+                }
+                logger.info("Provided minimal default LLM config dictionary.")
+            if not self.available_llm_models:
+                 self.available_llm_models = [{"display_name": "Dummy Client (Default)", "api_identifier": "dummy", "notes": "Fallback/Default client"}]
+                 logger.info("Provided minimal default available_llm_models list.")
+            # Optionnel: Sauvegarder ces défauts si le fichier n'existait pas
+            # if not self.config_service.get_llm_config(): # Vérifier si c'était vraiment vide à l'origine
+            #    self.config_service.save_llm_config(self.llm_config) # Sauvegarder les défauts minimaux
+        else:
+            logger.info(f"LLM configuration loaded via ConfigurationService. {len(self.available_llm_models)} models available.")
+            # Vérifier si le modèle par défaut de la config est dans la liste des modèles disponibles
+            default_model_id = self.llm_config.get("default_model_identifier")
+            if default_model_id and not any(model['api_identifier'] == default_model_id for model in self.available_llm_models):
+                logger.warning(f"Default LLM model '{default_model_id}' from config not in available models list. Consider updating llm_config.json.")
+
+    def _provide_default_llm_config_for_ui(self):
+        """Fournit une configuration LLM par défaut minimale pour l'UI en cas d'échec du chargement."""
+        self.llm_config = {
+            "available_models": [{"display_name": "Dummy (Config manquante)", "api_identifier": "dummy", "notes": "Fichier llm_config.json non trouvé ou invalide."}],
+            "default_model_identifier": "dummy",
+            "api_key_env_var": "OPENAI_API_KEY"
+        }
+        self.available_llm_models = self.llm_config["available_models"]
 
     @Slot(str) 
     def _on_llm_model_selected_from_panel(self, new_model_identifier: str, from_load_settings: bool = False):
         """Slot appelé lorsque le modèle LLM est changé depuis GenerationPanel.
-        Utilise LLMService pour changer de client.
+        Recrée le client LLM avec le nouveau modèle.
         """
         logger.info(f"Modèle LLM sélectionné: {new_model_identifier} (Depuis chargement settings: {from_load_settings})")
 
         if not new_model_identifier:
             logger.warning("Aucun identifiant de modèle LLM fourni. Sélection annulée.")
+            # Optionnel: remettre à un modèle par défaut ou afficher une erreur?
             return
 
-        # MODIFIÉ: Utiliser llm_service pour changer de modèle et obtenir le client
-        new_client = self.llm_service.switch_model(new_model_identifier)
+        # Vérifier si le client doit réellement être recréé
+        current_client_model_id = None
+        if self.llm_client:
+            if hasattr(self.llm_client, 'model_identifier') and self.llm_client.model_identifier:
+                current_client_model_id = self.llm_client.model_identifier
+            elif hasattr(self.llm_client, 'model') and self.llm_client.model:
+                current_client_model_id = self.llm_client.model
         
-        if new_client:
-            self.llm_client = new_client # Mettre à jour la référence locale de MainWindow
-            logger.info(f"Client LLM actif mis à jour dans MainWindow: {type(self.llm_client).__name__} pour modèle '{new_model_identifier}'.")
+        if current_client_model_id == new_model_identifier and not from_load_settings:
+            logger.info(f"Le modèle '{new_model_identifier}' est déjà actif. Pas de changement de client LLM.")
+            # S'assurer que la combobox de generation_panel est à jour si ce n'est pas la source du signal
+            if hasattr(self.generation_panel, 'select_model_in_combo'):
+                self.generation_panel.select_model_in_combo(new_model_identifier)
+            return
+
+        try:
+            # Utiliser self.llm_config chargé depuis ConfigurationService
+            api_key_var = self.llm_config.get("api_key_env_var", "OPENAI_API_KEY")
+            api_key = os.getenv(api_key_var)
+            
+            # Créer une nouvelle configuration client basée sur self.llm_config mais avec le nouveau modèle
+            client_reconfig = self.llm_config.copy()
+            client_reconfig["model_name"] = new_model_identifier
+            
+            # TODO: Gérer différents types de clients si nécessaire (OpenAI, Dummy, autres)
+            # Pour l'instant, on suppose OpenAI ou Dummy
+            if new_model_identifier.lower() == "dummy":
+                self.llm_client = DummyLLMClient()
+            else:
+                self.llm_client = OpenAIClient(api_key=api_key, config=client_reconfig)
+            
+            logger.info(f"Client LLM recréé/mis à jour pour le modèle: {new_model_identifier} ({type(self.llm_client).__name__})")
+            
+            # Mettre à jour GenerationPanel avec le nouveau client et le modèle
             self.generation_panel.set_llm_client(self.llm_client)
             
-            # Sauvegarder l'identifiant du modèle dans les paramètres UI via ConfigurationService
+            # MODIFIÉ: Sauvegarder le nouveau modèle sélectionné dans ConfigurationService
             self.config_service.update_ui_setting("current_llm_model_identifier", new_model_identifier)
-            if not from_load_settings: 
+            if not from_load_settings: # Ne pas sauvegarder si c'est juste un chargement initial
                 self._schedule_save_ui_settings()
-        else:
-            # LLMService.switch_model gère déjà les erreurs et le fallback vers Dummy si nécessaire.
-            # Il devrait retourner le client Dummy dans ce cas.
-            # Si new_client est None, c'est un cas inattendu.
-            logger.error(f"LLMService.switch_model n'a pas retourné de client pour '{new_model_identifier}'. Utilisation du client existant ou Dummy.")
-            # S'assurer que generation_panel a un client valide (au pire, le précédent ou un nouveau Dummy)
-            if not self.llm_service.get_current_client(): # Si le service n'a plus de client
-                self.llm_service.create_client() # Forcer la création d'un (dummy par défaut)
-            self.llm_client = self.llm_service.get_current_client()
-            self.generation_panel.set_llm_client(self.llm_client)
-            QMessageBox.warning(self, "Erreur LLM", f"Impossible de basculer vers le modèle LLM '{new_model_identifier}'. Vérifiez la configuration.")
+        
+        except Exception as e:
+            logger.error(f"Erreur lors du changement de modèle LLM vers '{new_model_identifier}': {e}")
+            QMessageBox.critical(self, "Erreur LLM", f"Impossible de changer le modèle LLM vers '{new_model_identifier}': {e}")
+            # Optionnel: Revenir au client précédent ou à un DummyClient
+            if not isinstance(self.llm_client, DummyLLMClient):
+                self.llm_client = DummyLLMClient()
+                logger.info("Retour à DummyLLMClient après erreur de changement de modèle.")
+                self.generation_panel.set_llm_client(self.llm_client)
+                self.config_service.update_ui_setting("current_llm_model_identifier", "dummy")
+                if not from_load_settings:
+                    self._schedule_save_ui_settings()
 
 # For testing, if you run main_window.py directly (requires some adjustments)
 if __name__ == '__main__':

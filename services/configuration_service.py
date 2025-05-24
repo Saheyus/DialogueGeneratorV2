@@ -93,6 +93,24 @@ class ConfigurationService:
         """Saves current UI settings to the file."""
         return self._save_json_file(UI_SETTINGS_FILE, self.ui_settings)
 
+    # --- LLM Config specific methods ---
+    def get_llm_config(self) -> Dict[str, Any]:
+        """Gets the LLM configuration."""
+        return self.llm_config.copy()
+    
+    def get_llm_setting(self, key: str, default: Any = None) -> Any:
+        """Gets a specific LLM setting."""
+        return self.llm_config.get(key, default)
+
+    def save_llm_config(self, config: Dict[str, Any]) -> bool: # Added if LLM config can be modified
+        """Saves LLM configuration to the file."""
+        self.llm_config = config.copy()
+        return self._save_json_file(LLM_CONFIG_FILE_PATH, self.llm_config)
+
+    def get_available_llm_models(self) -> List[Dict[str, Any]]:
+        """Retrieves the list of available LLM models from the LLM config."""
+        return self.llm_config.get("available_models", [])
+
     # --- Context Config specific methods ---
     def get_context_config(self) -> Dict[str, Any]:
         """Gets the context configuration."""
