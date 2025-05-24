@@ -123,7 +123,7 @@ class InteractionService:
 
     def set_repository(self, repository: IInteractionRepository) -> None:
         """Change dynamiquement le backend de persistance."""
-        self._repo = repository
+        self._repo = repository 
 
     def generate_interaction_id(self, prefix: Optional[str] = None, use_readable_format: bool = False) -> str:
         """Génère un ID d'interaction unique.

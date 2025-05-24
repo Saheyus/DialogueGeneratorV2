@@ -41,7 +41,7 @@ class GeneratedVariantsTabsWidget(QTabWidget):
         # Menu contextuel
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_tab_context_menu)
-        
+
         # Actions communes
         self.save_all_action = QAction("Sauvegarder toutes les variantes", self)
         self.save_all_action.triggered.connect(self._on_save_all_triggered)
@@ -52,7 +52,7 @@ class GeneratedVariantsTabsWidget(QTabWidget):
             return
             
         tab_name = self.tabText(tab_index)
-        
+
         menu = QMenu(self)
         
         # Actions pour cet onglet spécifique
@@ -115,7 +115,7 @@ class GeneratedVariantsTabsWidget(QTabWidget):
         
         self.addTab(tab, tab_name)
         self.setCurrentWidget(tab)
-        
+
     def add_interaction_tab(self, tab_name: str, interaction: Interaction):
         """Ajoute un nouvel onglet pour une interaction structurée."""
         tab = QWidget()
@@ -230,7 +230,7 @@ class GeneratedVariantsTabsWidget(QTabWidget):
                 if isinstance(widget, QScrollArea) and isinstance(widget.widget(), QPlainTextEdit):
                     return widget.widget().toPlainText()
         return None
-        
+
     def remove_variant_tabs(self):
         indices_to_remove = []
         for i in range(self.count()):
@@ -291,7 +291,7 @@ class GeneratedVariantsTabsWidget(QTabWidget):
                     content = variant
                 self.update_or_add_tab(title, content, set_current=(i==0 and prompt is None))
         else:
-            logger.info("Aucune variante à afficher dans display_variants.")
+            logger.info("Aucune variante à afficher dans display_variants.") 
             
     def _format_interaction_for_display(self, interaction: Interaction) -> str:
         """Convertit une interaction en texte lisible pour l'affichage utilisateur.

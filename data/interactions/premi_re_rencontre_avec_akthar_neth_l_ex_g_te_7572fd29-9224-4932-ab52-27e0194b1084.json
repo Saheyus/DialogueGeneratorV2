@@ -1,0 +1,44 @@
+{
+  "interaction_id": "7572fd29-9224-4932-ab52-27e0194b1084",
+  "elements": [
+    {
+      "element_type": "dialogue_line",
+      "speaker": "Akthar-Neth Amatru, l’Exégète",
+      "text": "Ah, Seigneuresse Uresaïr, enfin vous voici. Le Léviathan pétrifié a murmuré votre retour, et les veines de ce lieu vibrent d'une énergie oubliée. Que cherchez-vous en ce sanctuaire de souvenirs ?",
+      "tags": [],
+      "pre_line_commands": [],
+      "post_line_commands": []
+    },
+    {
+      "element_type": "command",
+      "command_string": "wait(2)"
+    },
+    {
+      "element_type": "player_choices_block",
+      "choices": [
+        {
+          "text": "Je suis ici pour comprendre la nature de mes visions.",
+          "next_interaction_id": "quest_visions_akthar",
+          "condition": null,
+          "actions": [],
+          "tags": []
+        },
+        {
+          "text": "J'ai besoin de réponses sur le Culte de l'Anentropie.",
+          "next_interaction_id": "quest_culte_akthar",
+          "condition": null,
+          "actions": [],
+          "tags": []
+        }
+      ]
+    }
+  ],
+  "header_commands": [],
+  "header_tags": [
+    "rencontre",
+    "dialogue",
+    "Akthar-Neth"
+  ],
+  "next_interaction_id_if_no_choices": null,
+  "title": "Première rencontre avec Akthar-Neth l'Exégète"
+}

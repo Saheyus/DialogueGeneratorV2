@@ -4,11 +4,16 @@ from pathlib import Path
 import logging
 import re
 import os
+from typing import List, Optional, Dict
+import traceback
 
 try:
     import tiktoken
 except ImportError:
     tiktoken = None
+
+from DialogueGenerator.models.dialogue_structure.interaction import Interaction
+from DialogueGenerator.models.dialogue_structure.dialogue_elements import DialogueLineElement, PlayerChoicesBlockElement, PlayerChoiceOption
 
 logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s') # Déjà configuré dans main_app
@@ -32,6 +37,7 @@ class ContextBuilder:
         self.vision_data = None
         self.quests = []
         self.context_config = self._load_context_config(config_file_path)
+        self.previous_dialogue_context: Optional[List[Interaction]] = None
 
         if tiktoken:
             self.tokenizer = tiktoken.get_encoding("cl100k_base")
@@ -216,6 +222,79 @@ class ContextBuilder:
         if not hasattr(self, 'quests'): return None
         return self._get_element_details_by_name(name, self.quests)
 
+    def set_previous_dialogue_context(self, path_interactions: Optional[List[Interaction]]) -> None:
+        """Définit le contexte du dialogue précédent à utiliser pour la prochaine génération."""
+        if path_interactions:
+            logger.info(f"[LOG DEBUG] ContextBuilder: Contexte de dialogue précédent défini avec {len(path_interactions)} interaction(s). Stack: {''.join(traceback.format_stack(limit=5))}")
+            self.previous_dialogue_context = path_interactions
+        else:
+            logger.info(f"[LOG DEBUG] ContextBuilder: Contexte de dialogue précédent réinitialisé (None). Stack: {''.join(traceback.format_stack(limit=5))}")
+            self.previous_dialogue_context = None
+
+    def _format_previous_dialogue_for_context(self, max_tokens_for_history: int) -> str:
+        """Formate le dialogue précédent stocké pour l'inclure dans le contexte LLM."""
+        logger.info(f"[LOG DEBUG] Appel à _format_previous_dialogue_for_context. previous_dialogue_context présent: {self.previous_dialogue_context is not None} (len={len(self.previous_dialogue_context) if self.previous_dialogue_context else 0})")
+        if not self.previous_dialogue_context:
+            return ""
+
+        history_accumulator = []  # Utiliser un accumulateur temporaire
+        current_tokens_content = 0  # Tokens pour le contenu réel de l'historique
+
+        delimiter_start = "--- DIALOGUES PRECEDENTS ---"
+        delimiter_end = "--- FIN DES DIALOGUES PRECEDENTS ---"
+        
+        tokens_for_delimiters_structure = self._count_tokens(delimiter_start) + self._count_tokens(delimiter_end) + self._count_tokens("\n") * 2
+        available_tokens_for_content = max_tokens_for_history - tokens_for_delimiters_structure
+        
+        if available_tokens_for_content <= 0:
+            logger.warning(f"ContextBuilder: Pas assez de tokens ({max_tokens_for_history}) alloués pour l'historique.")
+            return ""
+
+        interactions_to_include = self.previous_dialogue_context[-3:]
+
+        for i, interaction in enumerate(interactions_to_include):
+            interaction_parts = []
+            interaction_title = interaction.title or f"Interaction ID: {interaction.interaction_id[:8]}..."
+            # En-tête plus concis
+            interaction_header = f"  Précédent ({i + 1}/{len(interactions_to_include)}): {interaction_title!r}"
+            interaction_parts.append(interaction_header)
+            
+            for element in interaction.elements:
+                if isinstance(element, DialogueLineElement):
+                    char_name = element.speaker or "Narrateur"
+                    # Indentation pour les lignes de dialogue
+                    line = f"    {char_name}: {element.text}"
+                    interaction_parts.append(line)
+                elif isinstance(element, PlayerChoicesBlockElement):
+                    # Indentation pour le bloc de choix
+                    interaction_parts.append("    Joueur (Choix):")
+                    for choice_idx, choice_option in enumerate(element.choices):
+                        # Indentation pour chaque choix
+                        choice_line = f"      - Choix {choice_idx + 1}: {choice_option.text} (-> {choice_option.next_interaction_id or 'N/A'})"
+                        interaction_parts.append(choice_line)
+            
+            interaction_str = "\n".join(interaction_parts)
+            
+            tokens_for_current_interaction_segment = self._count_tokens(interaction_str)
+            if history_accumulator:  
+                tokens_for_current_interaction_segment += self._count_tokens("\n") # Pour le saut de ligne entre interactions
+
+            if current_tokens_content + tokens_for_current_interaction_segment <= available_tokens_for_content:
+                history_accumulator.append(interaction_str)
+                current_tokens_content += tokens_for_current_interaction_segment
+            else:
+                logger.warning(f"ContextBuilder: Limite de tokens ({available_tokens_for_content} pour contenu) atteinte. Interaction {interaction_title!r} et suivantes non incluses.")
+                break
+        
+        if not history_accumulator:
+            logger.info("ContextBuilder: Aucun contenu d'historique de dialogue n'a pu être formaté.")
+            return ""
+        
+        # Un seul saut de ligne entre les interactions dans l'accumulateur
+        final_history_content_str = "\n".join(history_accumulator) 
+        # Sauts de ligne clairs autour des délimiteurs
+        return f"{delimiter_start}\n\n{final_history_content_str}\n\n{delimiter_end}"
+
     def _format_list(self, data_list, max_items=5) -> str:
         if not isinstance(data_list, list):
             if isinstance(data_list, str):
@@ -305,14 +384,35 @@ class ContextBuilder:
         current_tokens = 0
         logger.debug(f"[ContextBuilder.build_context] Received selected_elements: {selected_elements}")
 
+        # 1. Instruction de scène / CADRE DE LA SCENE (toujours incluse si fournie)
+        #    Ceci correspond à votre "--- CADRE DE LA SCÈNE ---" implicitement
         if scene_instruction:
-            instruction_tokens = self._count_tokens(scene_instruction)
+            instruction_str = f"### Instruction de Scène\n{scene_instruction}\n"
+            instruction_tokens = self._count_tokens(instruction_str)
             if current_tokens + instruction_tokens <= max_tokens:
-                context_parts.append(f"### Instruction de Scène\n{scene_instruction}\n")
+                context_parts.append(instruction_str)
                 current_tokens += instruction_tokens
             else:
                 logger.warning("L'instruction de scène est trop longue pour être incluse avec le budget de tokens actuel.")
         
+        # 2. Ajouter l'historique du dialogue précédent si disponible
+        max_tokens_for_history = int(max_tokens * 0.25) # Conserve la même logique d'allocation
+        # Le reste des tokens disponibles après l'instruction de scène
+        remaining_tokens_for_history = max_tokens - current_tokens 
+        actual_max_tokens_for_history = min(max_tokens_for_history, remaining_tokens_for_history)
+
+        previous_dialogue_str = self._format_previous_dialogue_for_context(actual_max_tokens_for_history)
+        if previous_dialogue_str:
+            tokens_previous_dialogue = self._count_tokens(previous_dialogue_str)
+            # Vérifier à nouveau car _format_previous_dialogue_for_context a sa propre logique de token
+            if current_tokens + tokens_previous_dialogue <= max_tokens:
+                context_parts.append(previous_dialogue_str)
+                current_tokens += tokens_previous_dialogue
+                logger.info(f"Contexte du dialogue précédent ajouté ({tokens_previous_dialogue} tokens).")
+            else:
+                logger.warning(f"Pas assez de tokens pour ajouter l'historique du dialogue précédent ({tokens_previous_dialogue} tokens vs {max_tokens - current_tokens} restants), même après allocation ajustée.")
+
+        # 3. Ajouter les éléments GDD sélectionnés
         element_order = ["characters", "locations", "items", "species", "communities", "quests", "dialogues_examples"]
 
         for element_type in element_order:

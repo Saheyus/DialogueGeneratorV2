@@ -1,3 +1,4 @@
+import pathlib
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QGroupBox, QGridLayout, 
                                QLabel, QComboBox, QTextEdit, QPushButton, 
                                QTabWidget, QLineEdit, QCheckBox, QHBoxLayout, QApplication, QSizePolicy, QProgressBar, QScrollArea, QSplitter, QFrame, QPlainTextEdit, QMessageBox, QSpacerItem, QMenu, QStyle, QSpinBox, QDoubleSpinBox)
@@ -12,15 +13,19 @@ import uuid
 import sys
 import os
 
+from DialogueGenerator.models.dialogue_structure.interaction import Interaction
+from DialogueGenerator.services.interaction_service import InteractionService
+from DialogueGenerator.services.repositories.file_repository import FileInteractionRepository
+
 # Import local de la fonction utilitaire
 from .utils import get_icon_path
 # Ajout de l'import du nouveau widget extrait
 from .generation_panel.scene_selection_widget import SceneSelectionWidget
 from .generation_panel.context_actions_widget import ContextActionsWidget
 from .generation_panel.generation_params_widget import GenerationParamsWidget
-from .generation_panel.instructions_tabs_widget import InstructionsTabsWidget
-from .generation_panel.token_and_generate_widget import TokenAndGenerateWidget
-from .generation_panel.variants_display_widget import VariantsDisplayWidget
+from .generation_panel.instructions_widget import InstructionsWidget
+from .generation_panel.token_estimation_actions_widget import TokenAndGenerateWidget
+from .generation_panel.generated_variants_tabs_widget import VariantsDisplayWidget
 from .generation_panel.interaction_sequence_widget import InteractionSequenceWidget
 from .generation_panel.interaction_editor_widget import InteractionEditorWidget
 
@@ -178,11 +183,11 @@ class GenerationPanel(QWidget):
         self.generation_params_widget.structured_output_changed.connect(self._schedule_settings_save)
 
         # --- Section Instructions Utilisateur (modifiée en QTabWidget) ---
-        self.instructions_tabs_widget = InstructionsTabsWidget()
-        generation_tab_layout.addWidget(self.instructions_tabs_widget)
-        self.instructions_tabs_widget.user_instructions_changed.connect(self._schedule_settings_save_and_token_update)
-        self.instructions_tabs_widget.system_prompt_changed.connect(self._on_system_prompt_changed)
-        self.instructions_tabs_widget.restore_default_system_prompt_clicked.connect(self._restore_default_system_prompt)
+        self.instructions_widget = InstructionsWidget()
+        generation_tab_layout.addWidget(self.instructions_widget)
+        self.instructions_widget.user_instructions_changed.connect(self._schedule_settings_save_and_token_update)
+        self.instructions_widget.system_prompt_changed.connect(self._on_system_prompt_changed)
+        self.instructions_widget.restore_default_system_prompt_clicked.connect(self._restore_default_system_prompt)
 
         # --- Section Estimation Tokens et Bouton Générer ---
         self.token_and_generate_widget = TokenAndGenerateWidget()

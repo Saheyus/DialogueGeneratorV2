@@ -454,24 +454,24 @@ class GenerationPanel(QWidget):
             else:
                 # Mode de génération classique (texte brut)
                 logger.info("Utilisation du mode de génération de texte classique")
-                variants, full_prompt, estimated_tokens = await self.dialogue_generation_service.generate_dialogue_variants(
-                    llm_client=self.llm_client,
-                    k_variants=k_variants,
-                    max_context_tokens_for_context_builder=max_context_tokens_for_builder,
-                    structured_output=structured_output,
-                    user_instructions=user_instructions,
-                    system_prompt_override=system_prompt_override,
-                    context_selections=context_selections_dict,
-                    current_llm_model_identifier=current_llm_model_identifier
-                )
+            variants, full_prompt, estimated_tokens = await self.dialogue_generation_service.generate_dialogue_variants(
+                llm_client=self.llm_client,
+                k_variants=k_variants,
+                max_context_tokens_for_context_builder=max_context_tokens_for_builder,
+                structured_output=structured_output,
+                user_instructions=user_instructions,
+                system_prompt_override=system_prompt_override,
+                context_selections=context_selections_dict,
+                current_llm_model_identifier=current_llm_model_identifier
+            )
 
-                self.token_actions_widget.set_token_estimation_text(f"Tokens prompt final: {(estimated_tokens or 0) / 1000:.1f}k")
-                self.generated_variants_tabs.display_variants(variants or [], full_prompt)
-                if full_prompt is not None:
-                    generation_succeeded = True if variants is not None else False
-                else:
-                    QMessageBox.warning(self, "Erreur de Prompt", "Impossible de construire le prompt. Vérifiez les logs.")
-                    generation_succeeded = False
+            self.token_actions_widget.set_token_estimation_text(f"Tokens prompt final: {(estimated_tokens or 0) / 1000:.1f}k")
+            self.generated_variants_tabs.display_variants(variants or [], full_prompt)
+            if full_prompt is not None:
+                generation_succeeded = True if variants is not None else False
+            else:
+                QMessageBox.warning(self, "Erreur de Prompt", "Impossible de construire le prompt. Vérifiez les logs.")
+                generation_succeeded = False
                     
         except Exception as e:
             logger.exception("Erreur majeure dans GenerationPanelBase._on_generate_dialogue_button_clicked_local")

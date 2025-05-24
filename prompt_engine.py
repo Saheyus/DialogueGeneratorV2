@@ -81,6 +81,8 @@ Ta tâche est de générer une interaction structurée au format JSON.
 L'interaction doit être cohérente avec le contexte fourni (personnages, lieu, quête).
 L'interaction doit suivre l'instruction utilisateur concernant l'objectif de la scène.
 
+SI UN HISTORIQUE DE DIALOGUE PRÉCÉDENT EST FOURNI DANS LE CONTEXTE, ASSURE-TOI QUE LA NOUVELLE INTERACTION EN SOIT LA SUITE LOGIQUE.
+
 FORMAT JSON À RESPECTER STRICTEMENT:
 
 ```json
@@ -176,7 +178,7 @@ RÈGLES À SUIVRE:
         """
         if generation_params is None:
             generation_params = {}
-            
+
         # Déterminer quel prompt système utiliser
         generate_interaction = generation_params.get("generate_interaction", False)
         dialogue_structure = generation_params.get("dialogue_structure", None)

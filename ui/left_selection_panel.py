@@ -6,6 +6,10 @@ from functools import partial
 from pathlib import Path
 from .. import config_manager
 
+# Importation du nouveau widget et du service nécessaire
+from .left_panel.previous_dialogue_selector_widget import PreviousDialogueSelectorWidget
+from ..services.interaction_service import InteractionService # Assurez-vous que le chemin est correct
+
 logger = logging.getLogger(__name__)
 
 class LeftSelectionPanel(QWidget):
@@ -17,18 +21,22 @@ class LeftSelectionPanel(QWidget):
     # Emits: category_key (str), item_text (str), category_data (list), category_singular_name (str)
     item_clicked_for_details: Signal = Signal(str, str, list, str) 
     context_selection_changed: Signal = Signal() # Émis lorsque l'état coché d'un item change
+    # Nouveau signal pour relayer la sélection du contexte de dialogue précédent
+    previous_interaction_context_selected = Signal(str, list)
     # selection_changed: Signal = Signal(list) # List of selected item names - Redondant avec context_selection_changed si ce dernier est bien utilisé
     # item_focused: Signal = Signal(str, str) # item_name, category_key - Semble non utilisé, à vérifier
 
-    def __init__(self, context_builder, parent=None):
+    def __init__(self, context_builder, interaction_service: InteractionService, parent=None):
         """Initializes the LeftSelectionPanel.
 
         Args:
             context_builder: Instance of ContextBuilder to access GDD data.
+            interaction_service: Instance of InteractionService for dialogue history.
             parent: The parent widget.
         """
         super().__init__(parent)
         self.context_builder = context_builder
+        self.interaction_service = interaction_service # Stocker l'instance du service
         self.filters = {}
         self.lists = {}
         self.filter_edits = {}
@@ -64,11 +72,14 @@ class LeftSelectionPanel(QWidget):
         # Placeholder for Yarn files data (will be paths)
         self.category_data_map[self.yarn_files_category_key] = [] 
 
+        # Référence pour le nouveau widget
+        self.previous_dialogue_selector_widget: Optional[PreviousDialogueSelectorWidget] = None
+
     def _setup_ui_elements(self):
         self.tab_widget = QTabWidget()
         self.main_layout.addWidget(self.tab_widget, 1)
 
-        # --- Onglet de Sélection ---
+        # --- Onglet de Sélection (GDD) ---
         selection_tab_widget = QWidget()
         self.selection_layout = QVBoxLayout(selection_tab_widget) # Renommé pour clarté
         self.selection_layout.setContentsMargins(5, 5, 5, 5)
@@ -106,13 +117,26 @@ class LeftSelectionPanel(QWidget):
 
         self.selection_layout.addStretch(1) # Add stretch to push everything up
         
-        self.tab_widget.addTab(selection_tab_widget, "Sélection")
+        self.tab_widget.addTab(selection_tab_widget, "Sélection GDD")
+
+        # --- Onglet Continuité (Dialogue Précédent) ---
+        if self.interaction_service:
+            self.previous_dialogue_selector_widget = PreviousDialogueSelectorWidget(self.interaction_service, self.context_builder)
+            self.tab_widget.addTab(self.previous_dialogue_selector_widget, "Continuité")
+            # Connecter le signal du widget enfant au signal de ce panel
+            self.previous_dialogue_selector_widget.previous_interaction_context_selected.connect(
+                self.previous_interaction_context_selected # Relayer directement
+            )
+            logger.info("PreviousDialogueSelectorWidget ajouté à l'onglet 'Continuité'.")
+        else:
+            logger.warning("InteractionService non fourni, l'onglet 'Continuité' ne sera pas créé.")
 
     def add_details_panel_as_tab(self, details_panel: QWidget):
-        """Ajoute le panneau de détails comme un onglet."""
+        """Ajoute le panneau de détails comme un onglet. Sera toujours le dernier onglet."""
         if hasattr(self, 'tab_widget'):
+            # S'assurer que cet onglet est ajouté après les autres (ou à un index spécifique si nécessaire)
             self.tab_widget.addTab(details_panel, "Détails")
-            self.details_panel_instance = details_panel # Stocker la référence
+            self.details_panel_instance = details_panel 
             logger.info("DetailsPanel ajouté comme onglet dans LeftSelectionPanel.")
         else:
             logger.error("tab_widget non trouvé dans LeftSelectionPanel, impossible d'ajouter l'onglet Détails.")
@@ -208,6 +232,11 @@ class LeftSelectionPanel(QWidget):
     def populate_all_lists(self):
         logger.info("Populating all GDD lists in LeftSelectionPanel...")
         self.gdd_data_loaded = False # Reset flag at the beginning
+
+        # Rafraîchir aussi la liste des dialogues précédents si le widget existe
+        if self.previous_dialogue_selector_widget:
+            self.previous_dialogue_selector_widget.refresh_list()
+            logger.info("Liste des dialogues précédents rafraîchie.")
 
         if not self.context_builder:
             logger.warning("LeftSelectionPanel: self.context_builder is None. Cannot populate GDD lists.")
@@ -356,52 +385,53 @@ class LeftSelectionPanel(QWidget):
                 )
     
     def _filter_gdd_list(self, list_widget_to_filter: QListWidget, category_key: str, filter_text: str):
-        """Filters the GDD items in the specified list widget based on filter_text."""
-        items_data = self.category_data_map.get(category_key, [])
+        """Filters items in a GDD QListWidget based on text, using CheckableListItemWidget.
+
+        Args:
+            list_widget_to_filter: The QListWidget to filter.
+            category_key: The key of the category being filtered (e.g., 'characters').
+            filter_text: The text to filter by.
+        """
+        # logger.debug(f"Filtering GDD list for category '{category_key}' with text: '{filter_text}'")
+        filter_text_lower = filter_text.lower()
         name_keys = self.category_item_name_keys.get(category_key, ["Nom"])
-        display_items = []
-        # This logic is similar to initial population but without checkboxes for filtering only strings
-        if isinstance(items_data, list):
-            for item_dict in items_data:
-                if isinstance(item_dict, dict):
-                    item_display_name = "Unknown Item"
-                    for name_key in name_keys:
-                        if name_key in item_dict and item_dict[name_key]:
-                            item_display_name = str(item_dict[name_key])
-                            break
-                    if filter_text.lower() in item_display_name.lower():
-                        display_items.append(item_display_name)
-                elif isinstance(item_dict, str):
-                    if filter_text.lower() in item_dict.lower():
-                        display_items.append(item_dict)
-        
-        # Temporarily disconnect stateChanged to avoid mass signals during repopulation
-        for i in range(list_widget_to_filter.count()):
-            item = list_widget_to_filter.item(i)
-            widget = list_widget_to_filter.itemWidget(item)
-            if widget and hasattr(widget, 'checkbox'):
-                try:
-                    # Tenter de déconnecter un slot spécifique si possible, sinon ignorer.
-                    # Ceci est plus sûr que disconnect() seul.
-                    widget.checkbox.stateChanged.disconnect(self.context_selection_changed.emit)
-                except (TypeError, RuntimeError): 
-                    pass 
-        
-        list_widget_to_filter.clear()
-        if not display_items:
-            list_widget_to_filter.addItem(QListWidgetItem("(No matching items)"))
-        else:
-            for item_text in display_items:
-                item_widget = CheckableListItemWidget(item_text, parent=list_widget_to_filter)
-                item_widget.checkbox.stateChanged.connect(lambda: self.context_selection_changed.emit())
-                q_list_item = QListWidgetItem(list_widget_to_filter)
-                q_list_item.setSizeHint(item_widget.sizeHint())
-                list_widget_to_filter.addItem(q_list_item)
-                list_widget_to_filter.setItemWidget(q_list_item, item_widget)
-        self.context_selection_changed.emit() # Emit once after filtering
+        original_data = self.category_data_map.get(category_key, [])
+
+        # Récupérer les états cochés actuels avant de filtrer
+        # checked_items_before_filter = self._get_checked_items_from_list(list_widget_to_filter)
+        # Optimisation : get_all_checked_items() le fait déjà de manière centralisée
+        # logger.debug(f"Checked items before filter for {category_key}: {checked_items_before_filter}")
+
+        list_widget_to_filter.clear() # Effacer la liste avant de la repeupler avec les items filtrés
+
+        for item_dict in original_data:
+            item_display_name = "Unknown Item"
+            if isinstance(item_dict, dict):
+                for name_key in name_keys:
+                    if name_key in item_dict and item_dict[name_key] is not None and str(item_dict[name_key]).strip() != "":
+                        item_display_name = str(item_dict[name_key])
+                        break
+            elif isinstance(item_dict, str): # Pour les listes simples de chaînes (si jamais utilisé)
+                item_display_name = item_dict
+            else:
+                continue # Ignorer les types non supportés
+
+            if filter_text_lower in item_display_name.lower():
+                # Créer un CheckableListItemWidget pour chaque item filtré
+                # logger.debug(f"Adding item to {category_key} list: {item_display_name}")
+                checkable_item_widget = CheckableListItemWidget(item_display_name, list_widget_to_filter)
+                list_item = QListWidgetItem(list_widget_to_filter)
+                list_item.setSizeHint(checkable_item_widget.sizeHint())
+                list_widget_to_filter.addItem(list_item)
+                list_widget_to_filter.setItemWidget(list_item, checkable_item_widget)
+
+                # Restaurer l'état coché SI l'item était coché avant et correspond toujours au filtre
+                # if item_display_name in checked_items_before_filter:
+                #     checkable_item_widget.checkbox.setChecked(True)
+                # Ceci est maintenant géré globalement par get_settings / load_settings
 
     def _filter_yarn_list(self, list_widget_to_filter: QListWidget, category_key: str, filter_text: str):
-        """Filters the Yarn file list (simple string list) based on filter_text."""
+        """Filters items in the Yarn files QListWidget based on text."""
         yarn_paths = self.category_data_map.get(category_key, []) # List of Path objects
         dialogues_base_path = config_manager.get_unity_dialogues_path() # For making paths relative
 

@@ -26,9 +26,15 @@ from ..llm_client import OpenAIClient, DummyLLMClient, ILLMClient
 from ..prompt_engine import PromptEngine 
 from .. import config_manager 
 from ..services.linked_selector import LinkedSelectorService # Example if needed elsewhere
+from ..services.interaction_service import InteractionService # Importation ajoutée
+from ..services.repositories import FileInteractionRepository # Pour l'InteractionService
+from ..models.dialogue_structure.interaction import Interaction # Importation pour le type hint
 
 # Path to the DialogueGenerator directory
 DIALOGUE_GENERATOR_DIR = Path(__file__).resolve().parent.parent
+# Définir le chemin de stockage par défaut pour les interactions
+DEFAULT_INTERACTIONS_STORAGE_DIR = DIALOGUE_GENERATOR_DIR / "data" / "interactions"
+
 UI_SETTINGS_FILE = DIALOGUE_GENERATOR_DIR / "ui_settings.json" # File to save UI settings
 CONTEXT_CONFIG_FILE_PATH = DIALOGUE_GENERATOR_DIR / "context_config.json" # Path to context_config.json
 LLM_CONFIG_FILE_PATH = DIALOGUE_GENERATOR_DIR / "llm_config.json" # Ajout pour la config LLM
@@ -81,6 +87,13 @@ class MainWindow(QMainWindow):
         self.llm_config: dict = {} # Pour stocker la config LLM chargée
         self.available_llm_models: List[dict] = [] # Pour stocker les modèles dispo
         
+        # Initialisation de l'InteractionService
+        # Utilisation de FileInteractionRepository par défaut, comme dans InteractionService lui-même
+        # Le chemin du repository sera celui par défaut défini dans FileInteractionRepository
+        interactions_repo = FileInteractionRepository(storage_dir=str(DEFAULT_INTERACTIONS_STORAGE_DIR)) 
+        self.interaction_service = InteractionService(repository=interactions_repo)
+        logger.info(f"InteractionService initialisé avec {type(interactions_repo).__name__} sur {DEFAULT_INTERACTIONS_STORAGE_DIR}.")
+        
         self._load_llm_configuration() # Charger la configuration LLM
 
         # Initialize PromptEngine first, as it might be needed by GenerationPanel's init or early methods
@@ -110,7 +123,9 @@ class MainWindow(QMainWindow):
         self._create_actions()
         self._create_menu_bar()
 
-        self.left_panel = LeftSelectionPanel(context_builder=self.context_builder, parent=self)
+        self.left_panel = LeftSelectionPanel(context_builder=self.context_builder, 
+                                           interaction_service=self.interaction_service, # Passer le service
+                                           parent=self)
         self.details_panel = DetailsPanel(parent=self) # Instantiate DetailsPanel
         self.generation_panel = GenerationPanel(
             context_builder=self.context_builder, 
@@ -145,6 +160,9 @@ class MainWindow(QMainWindow):
         self.save_settings_timer.setSingleShot(True)
         self.save_settings_timer.timeout.connect(self._perform_actual_save_ui_settings)
         self.save_settings_delay_ms = 1500
+
+        # Connexion du signal pour la sélection du dialogue précédent
+        self.left_panel.previous_interaction_context_selected.connect(self._on_previous_interaction_selected)
 
     def _create_actions(self):
         """Creates actions for the menus."""
@@ -355,6 +373,15 @@ class MainWindow(QMainWindow):
                 generation_params=generation_parameters
             )
             
+            # Mettre à jour l'affichage du prompt estimé dans le GenerationPanel
+            if estimated_full_prompt_text and hasattr(self.generation_panel, '_display_prompt_in_tab'):
+                self.generation_panel._display_prompt_in_tab(estimated_full_prompt_text)
+                logger.debug("Prompt estimé mis à jour dans GenerationPanel.")
+            
+            # Mettre à jour l'affichage des tokens si la méthode existe
+            if hasattr(self.generation_panel, 'update_token_counts_display'):
+                self.generation_panel.update_token_counts_display(context_token_count, estimated_total_token_count)
+            
             return context_string, context_token_count, estimated_full_prompt_text, estimated_total_token_count
         except Exception as e:
             logger.error(f"Error in _update_token_estimation_and_prompt_display: {e}", exc_info=True)
@@ -514,13 +541,38 @@ class MainWindow(QMainWindow):
         logger.info("Signaux connectés pour la sauvegarde automatique des paramètres UI.")
     
     def _trigger_context_changed_token_update(self):
-        """Déclenche la mise à jour de l'estimation des tokens quand le contexte change."""
-        # Légère pause pour laisser le temps aux widgets de se mettre à jour
-        QTimer.singleShot(50, self.generation_panel._trigger_token_update)
-        logger.debug("Mise à jour des tokens programmée suite à changement de contexte.")
+        # Relance le timer à chaque changement de contexte pertinent.
+        self.token_update_timer.start(500) # Délai de 500ms pour regrouper les changements rapides
+
+    @Slot(str, list)
+    def _on_previous_interaction_selected(self, interaction_id: str, path_interactions: List[Interaction]):
+        """Slot appelé lorsque l'utilisateur sélectionne une interaction précédente pour le contexte."""
+        logger.info(f"MainWindow: Contexte de dialogue précédent sélectionné - ID: {interaction_id}")
+        # logger.info(f"Chemin de dialogue ({len(path_interactions)} interactions):")
+        # for i, inter in enumerate(path_interactions):
+        #     logger.info(f"  {i+1}. {inter.title or '(Sans titre)'} (ID: {inter.interaction_id})")
+        
+        # Passer l'information au ContextBuilder
+        if self.context_builder:
+            self.context_builder.set_previous_dialogue_context(path_interactions)
+            logger.info(f"ContextBuilder informé du contexte de dialogue précédent ({len(path_interactions)} interaction(s)).")
+        else:
+            logger.warning("ContextBuilder non disponible, impossible de définir le contexte de dialogue précédent.")
+        
+        # Afficher un message dans la barre de statut
+        if path_interactions:
+            final_title = path_interactions[-1].title or "(Sans titre)"
+            self.statusBar().showMessage(f"Contexte de continuité: '{final_title}' (ID: {interaction_id[:8]}...) sélectionné.", 10000)
+        else: # Si path_interactions est vide ou None (ne devrait pas arriver si interaction_id est valide)
+            self.statusBar().showMessage(f"Contexte de continuité: Réinitialisé.", 5000)
+            if self.context_builder: # S'assurer de réinitialiser aussi dans ce cas
+                 self.context_builder.set_previous_dialogue_context(None)
+        
+        # Mettre à jour l'estimation des tokens car le contexte a changé
+        self._trigger_context_changed_token_update()
 
     def get_current_llm_model_properties(self) -> Optional[dict]:
-        """Récupère les propriétés du modèle LLM actuellement sélectionné."""
+        """Renvoie les propriétés du modèle LLM actuellement sélectionné."""
         current_model_identifier = None
         if self.llm_client and hasattr(self.llm_client, 'model_identifier') and self.llm_client.model_identifier:
             current_model_identifier = self.llm_client.model_identifier
