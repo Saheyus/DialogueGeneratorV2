@@ -749,21 +749,29 @@ class MainWindow(QMainWindow):
 
 # For testing, if you run main_window.py directly (requires some adjustments)
 if __name__ == '__main__':
+    import logging
     logging.basicConfig(level=logging.INFO, 
                         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                         handlers=[logging.StreamHandler()]) 
 
-    logger.info("Starting DialogueGenerator application...") # Translated
+    logger.info("Starting DialogueGenerator application...")
+    import sys
+    from PySide6.QtWidgets import QApplication
+    from qasync import QEventLoop
+    import asyncio
     app = QApplication(sys.argv)
+    loop = QEventLoop(app)
+    asyncio.set_event_loop(loop)
 
-    logger.info("Initializing ContextBuilder...") # Translated
-    context_builder_instance = ContextBuilder() # Renamed
+    logger.info("Initializing ContextBuilder...")
+    context_builder_instance = ContextBuilder()
     context_builder_instance.load_gdd_files()
-    logger.info("ContextBuilder initialized.") # Translated
+    logger.info("ContextBuilder initialized.")
 
-    logger.info("Initializing MainWindow...") # Translated
-    main_application_window = MainWindow(context_builder_instance) # Renamed
+    logger.info("Initializing MainWindow...")
+    main_application_window = MainWindow(context_builder_instance)
     main_application_window.show()
-    logger.info("MainWindow displayed.") # Translated
 
-    sys.exit(app.exec()) 
+    logger.info("MainWindow displayed.")
+    with loop:
+        loop.run_forever() 

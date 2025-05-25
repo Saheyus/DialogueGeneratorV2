@@ -5,6 +5,10 @@ from llm_client import DummyLLMClient # Nouvel import direct
 
 logger = logging.getLogger(__name__)
 
+class AlwaysTrueCheckbox:
+    def isChecked(self):
+        return True
+
 class GenerationParamsWidget(QWidget):
     llm_model_selection_changed = Signal(str) # identifier
     k_variants_changed = Signal(str)
@@ -17,6 +21,7 @@ class GenerationParamsWidget(QWidget):
         self.available_llm_models = available_llm_models if available_llm_models else []
         self.current_llm_model_identifier = current_llm_model_identifier
         self._is_loading_settings = False
+        self.structured_output_checkbox = AlwaysTrueCheckbox()
         self._init_ui()
         self.populate_llm_model_combo()
 
@@ -55,11 +60,11 @@ class GenerationParamsWidget(QWidget):
         layout.addWidget(self.max_context_tokens_spinbox, row, 1)
         row += 1
 
-        self.structured_output_checkbox = QCheckBox("Utiliser Sortie Structurée (JSON)")
-        self.structured_output_checkbox.setToolTip("Si coché, demande au LLM de formater la sortie en JSON.")
-        self.structured_output_checkbox.setChecked(True)
-        self.structured_output_checkbox.stateChanged.connect(self._on_structured_output_changed)
-        layout.addWidget(self.structured_output_checkbox, row, 0, 1, 2)
+        # self.structured_output_checkbox = QCheckBox("Utiliser Sortie Structurée (JSON)")
+        # self.structured_output_checkbox.setToolTip("Si coché, demande au LLM de formater la sortie en JSON.")
+        # self.structured_output_checkbox.setChecked(True)
+        # self.structured_output_checkbox.stateChanged.connect(self._on_structured_output_changed)
+        # layout.addWidget(self.structured_output_checkbox, row, 0, 1, 2)
         
         self.main_layout.addLayout(layout)
 

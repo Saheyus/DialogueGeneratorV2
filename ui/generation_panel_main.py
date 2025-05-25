@@ -250,33 +250,8 @@ class GenerationPanel(QWidget):
             logger.error("generation_params_widget non initialisé lors de l'appel à populate_llm_model_combo.")
 
     def _update_structured_output_checkbox_state(self):
-        # Si le client LLM est un DummyLLMClient, désactiver et décocher la case
-        # car le dummy ne gère pas la sortie structurée.
-        # Aussi, la rendre non-cochée par défaut si c'est un Dummy.
-        is_dummy = isinstance(self.llm_client, DummyLLMClient)
-        
-        if is_dummy:
-            # Garder une trace de l'état précédent si ce n'est pas un dummy
-            if not hasattr(self, '_was_structured_output_checked_before_dummy'):
-                self._was_structured_output_checked_before_dummy = self.structured_output_checkbox.isChecked()
-            self.structured_output_checkbox.setChecked(False)
-            self.structured_output_checkbox.setEnabled(False)
-            self.structured_output_checkbox.setToolTip("La sortie structurée n'est pas applicable avec DummyLLMClient.")
-        else:
-            self.structured_output_checkbox.setEnabled(True)
-            # Restaurer l'état précédent si on revient d'un dummy
-            if hasattr(self, '_was_structured_output_checked_before_dummy'):
-                self.structured_output_checkbox.setChecked(self._was_structured_output_checked_before_dummy)
-                del self._was_structured_output_checked_before_dummy # Nettoyer l'attribut
-            
-            # Mise à jour du tooltip en fonction du modèle actuel (si besoin de plus de logique)
-            current_model_props = self.main_window_ref.get_current_llm_model_properties()
-            if current_model_props and current_model_props.get("supports_json_mode", False):
-                self.structured_output_checkbox.setToolTip("Si coché, demande au LLM de formater la sortie en JSON (modèle compatible). Peut améliorer la fiabilité du format Yarn.")
-            else:
-                # Si le modèle ne supporte pas le mode JSON, on peut choisir de désactiver la case ou juste d'informer.
-                # Pour l'instant, on informe et on laisse cocher, car le support peut être implicite.
-                self.structured_output_checkbox.setToolTip("Si coché, demande au LLM de formater la sortie en JSON. La compatibilité du modèle actuel avec le mode JSON forcé n'est pas garantie.")
+        # Plus rien à faire, la checkbox n'existe plus dans l'UI
+        pass
 
     def _restore_default_system_prompt(self):
         default_prompt = self.prompt_engine._get_default_system_prompt()
