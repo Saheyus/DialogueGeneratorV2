@@ -53,6 +53,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from constants import UIText, FilePaths, Defaults
+from factories.llm_factory import LLMClientFactory
 
 class MainWindow(QMainWindow):
     """Main window of the DialogueGenerator application.
@@ -96,26 +97,6 @@ class MainWindow(QMainWindow):
         self._load_llm_configuration() 
 
         self.prompt_engine = PromptEngine()
-
-        try:
-            # MODIFIÉ: Utiliser self.llm_config qui est maintenant rempli par _load_llm_configuration() depuis le service
-            default_model_identifier = self.llm_config.get("default_model_identifier", Defaults.MODEL_ID)
-            api_key_var = self.llm_config.get("api_key_env_var", "OPENAI_API_KEY")
-            api_key = os.getenv(api_key_var)
-            
-            client_config_from_service = self.llm_config.copy() # Utiliser la config chargée
-            client_config_from_service["model_name"] = default_model_identifier 
-            
-            self.llm_client = OpenAIClient(api_key=api_key, config=client_config_from_service)
-            logger.info(f"LLM Client initialized with {type(self.llm_client).__name__} using model '{default_model_identifier}'.")
-        except Exception as e:
-            logger.error(f"Failed to initialize LLM client: {e}")
-            QMessageBox.critical(self, "LLM Error", f"Could not initialize LLM client: {e}")
-            self.llm_client = DummyLLMClient() 
-            logger.info(f"Fell back to DummyLLMClient due to error.")
-            if not self.available_llm_models: # Assurer que available_llm_models est initialisé
-                 self.available_llm_models = [{"display_name": "Dummy Client", "api_identifier": "dummy", "notes": "Fallback client"}]
-
 
         self.setWindowTitle("DialogueGenerator IA - Context Builder")
         self.setWindowIcon(get_icon_path("icon.png"))
