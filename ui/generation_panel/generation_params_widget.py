@@ -2,6 +2,7 @@ from PySide6.QtWidgets import (QWidget, QGroupBox, QGridLayout, QLabel, QComboBo
 from PySide6.QtCore import Signal, Qt
 import logging
 from llm_client import DummyLLMClient # Nouvel import direct
+from constants import UIText, FilePaths, Defaults
 
 logger = logging.getLogger(__name__)
 
@@ -78,8 +79,8 @@ class GenerationParamsWidget(QWidget):
         found_current_model = False
 
         if not self.available_llm_models:
-            logger.warning("Aucun modèle LLM disponible à afficher dans le ComboBox.")
-            self.llm_model_combo.addItem("Aucun modèle configuré", userData="dummy_error")
+            logger.warning(UIText.NO_MODEL_CONFIGURED)
+            self.llm_model_combo.addItem(UIText.NO_MODEL_CONFIGURED, userData="dummy_error")
             self.llm_model_combo.setEnabled(False)
             self.llm_model_combo.blockSignals(False)
             return
