@@ -17,6 +17,7 @@ from models.dialogue_structure.interaction import Interaction
 from services.interaction_service import InteractionService
 from services.repositories.file_repository import FileInteractionRepository
 from models.dialogue_structure.dynamic_interaction_schema import build_interaction_model_from_structure, validate_interaction_elements_order, convert_dynamic_to_standard_interaction
+from constants import UIText, FilePaths, Defaults
 
 # Import local de la fonction utilitaire
 from .utils import get_icon_path
@@ -306,8 +307,8 @@ class GenerationPanel(QWidget):
         self.scene_selection_widget.character_b_combo.blockSignals(True)
         self.scene_selection_widget.character_a_combo.clear()
         self.scene_selection_widget.character_b_combo.clear()
-        self.scene_selection_widget.character_a_combo.addItems(["(Aucun)"] + characters)
-        self.scene_selection_widget.character_b_combo.addItems(["(Aucun)"] + characters)
+        self.scene_selection_widget.character_a_combo.addItems([UIText.NONE] + characters)
+        self.scene_selection_widget.character_b_combo.addItems([UIText.NONE] + characters)
         self.scene_selection_widget.character_a_combo.blockSignals(False)
         self.scene_selection_widget.character_b_combo.blockSignals(False)
         logger.debug("Character combos populated.")
@@ -317,32 +318,32 @@ class GenerationPanel(QWidget):
         self.scene_selection_widget.scene_region_combo.blockSignals(True)
         self.scene_selection_widget.scene_sub_location_combo.blockSignals(True)
         self.scene_selection_widget.scene_region_combo.clear()
-        self.scene_selection_widget.scene_region_combo.addItem("(Aucune)") 
+        self.scene_selection_widget.scene_region_combo.addItem(UIText.NONE_FEM)
         self.scene_selection_widget.scene_region_combo.addItems(regions)
         self.scene_selection_widget.scene_region_combo.blockSignals(False)
         self.scene_selection_widget.scene_sub_location_combo.blockSignals(False)
-        self._on_scene_region_changed(self.scene_selection_widget.scene_region_combo.currentText() or "(Aucune)")
+        self._on_scene_region_changed(self.scene_selection_widget.scene_region_combo.currentText() or UIText.NONE_FEM)
         logger.debug("Scene region combo populated.")
 
     @Slot(str)
     def _on_scene_region_changed(self, region_name: str):
         self.scene_selection_widget.scene_sub_location_combo.clear()
-        if region_name and region_name != "(Aucun)" and region_name != "(Sélectionner une région)":
+        if region_name and region_name != UIText.NONE and region_name != UIText.NO_SELECTION:
             try:
                 # sub_locations = sorted(self.context_builder.get_sub_locations_for_region(region_name))
                 sub_locations = sorted(self.context_builder.get_sub_locations(region_name))
                 if not sub_locations:
                     logger.info(f"Aucun sous-lieu trouvé pour la région : {region_name}")
-                    self.scene_selection_widget.scene_sub_location_combo.addItem("(Aucun sous-lieu)")
+                    self.scene_selection_widget.scene_sub_location_combo.addItem(UIText.NONE_SUBLOCATION)
                 else:
-                    self.scene_selection_widget.scene_sub_location_combo.addItems(["(Tous / Non spécifié)"] + sub_locations)
+                    self.scene_selection_widget.scene_sub_location_combo.addItems([UIText.ALL] + sub_locations)
                     self.scene_selection_widget.scene_sub_location_combo.setEnabled(True)
             except Exception as e:
                 logger.error(f"Erreur lors de la récupération des sous-lieux pour la région {region_name}: {e}", exc_info=True)
-                self.scene_selection_widget.scene_sub_location_combo.addItem("(Erreur de chargement des sous-lieux)")
+                self.scene_selection_widget.scene_sub_location_combo.addItem(UIText.ERROR_PREFIX + "Erreur de chargement des sous-lieux")
                 self.scene_selection_widget.scene_sub_location_combo.setEnabled(False)
         else:
-            self.scene_selection_widget.scene_sub_location_combo.addItem("(Sélectionner une région d'abord)")
+            self.scene_selection_widget.scene_sub_location_combo.addItem(UIText.NO_SELECTION)
             self.scene_selection_widget.scene_sub_location_combo.setEnabled(False)
         self._schedule_settings_save_and_token_update()
         logger.debug(f"Sub-location combo updated for region: {region_name}")
@@ -389,10 +390,10 @@ class GenerationPanel(QWidget):
         scene_region_name = self.scene_selection_widget.scene_region_combo.currentText()
         scene_sub_location_name = self.scene_selection_widget.scene_sub_location_combo.currentText()
 
-        char_a_name = char_a_name if char_a_name and char_a_name != "(Aucun)" else None
-        char_b_name = char_b_name if char_b_name and char_b_name != "(Aucun)" else None
-        scene_region_name = scene_region_name if scene_region_name and scene_region_name != "(Aucune)" else None
-        scene_sub_location_name = scene_sub_location_name if scene_sub_location_name and scene_sub_location_name != "(Tous / Non spécifié)" and scene_sub_location_name != "(Aucun sous-lieu)" and scene_sub_location_name != "(Sélectionner une région d\'abord)" else None
+        char_a_name = char_a_name if char_a_name and char_a_name != UIText.NONE else None
+        char_b_name = char_b_name if char_b_name and char_b_name != UIText.NONE else None
+        scene_region_name = scene_region_name if scene_region_name and scene_region_name != UIText.NONE_FEM else None
+        scene_sub_location_name = scene_sub_location_name if scene_sub_location_name and scene_sub_location_name != UIText.ALL and scene_sub_location_name != UIText.NONE_SUBLOCATION and scene_sub_location_name != UIText.NO_SELECTION else None
 
         scene_protagonists_dict = {}
         if char_a_name: scene_protagonists_dict["personnage_a"] = char_a_name
@@ -408,7 +409,7 @@ class GenerationPanel(QWidget):
 
         try:
             # MODIFIÉ: Utiliser config_service depuis main_window_ref
-            max_tokens_val = self.main_window_ref.config_service.get_ui_setting("max_context_tokens", 1500)
+            max_tokens_val = self.main_window_ref.config_service.get_ui_setting("max_context_tokens", Defaults.CONTEXT_TOKENS)
             
             # Assurer que le prompt_engine a le system_prompt à jour de l'UI pour une estimation correcte
             self._update_prompt_engine_system_prompt()
@@ -487,11 +488,11 @@ class GenerationPanel(QWidget):
             scene_region_name = self.scene_selection_widget.scene_region_combo.currentText()
             scene_sub_location_name = self.scene_selection_widget.scene_sub_location_combo.currentText()
 
-            # Nettoyage des noms pour éviter de passer "(Aucun)" ou des chaînes vides si non pertinents
-            char_a_name = char_a_name if char_a_name and char_a_name != "(Aucun)" else None
-            char_b_name = char_b_name if char_b_name and char_b_name != "(Aucun)" else None
-            scene_region_name = scene_region_name if scene_region_name and scene_region_name != "(Aucune)" else None
-            scene_sub_location_name = scene_sub_location_name if scene_sub_location_name and scene_sub_location_name != "(Tous / Non spécifié)" else None
+            # Nettoyage des noms pour éviter de passer UIText.NONE ou des chaînes vides si non pertinents
+            char_a_name = char_a_name if char_a_name and char_a_name != UIText.NONE else None
+            char_b_name = char_b_name if char_b_name and char_b_name != UIText.NONE else None
+            scene_region_name = scene_region_name if scene_region_name and scene_region_name != UIText.NONE_FEM else None
+            scene_sub_location_name = scene_sub_location_name if scene_sub_location_name and scene_sub_location_name != UIText.ALL and scene_sub_location_name != UIText.NONE_SUBLOCATION and scene_sub_location_name != UIText.NO_SELECTION else None
 
             scene_protagonists_dict = {}
             if char_a_name: scene_protagonists_dict["personnage_a"] = char_a_name
@@ -513,7 +514,7 @@ class GenerationPanel(QWidget):
             context_summary_text = self.context_builder.build_context(
                 selected_elements=selected_context_items,
                 scene_instruction=user_instructions, 
-                max_tokens=self.main_window_ref.config_service.get_ui_setting("max_context_tokens", 1500) # Assurer que c'est bien config_service ici
+                max_tokens=self.main_window_ref.config_service.get_ui_setting("max_context_tokens", Defaults.CONTEXT_TOKENS) # Assurer que c'est bien config_service ici
             )
 
             # Construction du prompt via PromptEngine avec la nouvelle structure
@@ -613,8 +614,7 @@ class GenerationPanel(QWidget):
                     logger.info(f"{len(variants)} variantes affichées.")
                 else:
                     logger.warning("Aucune variante reçue du LLM ou variants est None/vide.")
-                    error_tab = QTextEdit("Aucune variante n'a été générée par le LLM ou une erreur s'est produite.")
-                    error_tab.setReadOnly(True)
+                    error_tab = QTextEdit(UIText.NO_VARIANT)
                     self.variants_display_widget.addTab(error_tab, "Erreur Génération")
                 
                 self.variants_display_widget.blockSignals(False)
@@ -726,7 +726,7 @@ class GenerationPanel(QWidget):
         scene_region_raw = self.scene_selection_widget.scene_region_combo.currentText()
         scene_sub_location_raw = self.scene_selection_widget.scene_sub_location_combo.currentText()
 
-        placeholders = ["(Aucun)", "(Aucune)", "(Tous / Non spécifié)", "(Aucun sous-lieu)", "(Sélectionner une région d'abord)"]
+        placeholders = [UIText.NONE, UIText.NONE_FEM, UIText.ALL, UIText.NONE_SUBLOCATION, UIText.NO_SELECTION]
 
         char_a = None if char_a_raw in placeholders or not char_a_raw.strip() else char_a_raw
         char_b = None if char_b_raw in placeholders or not char_b_raw.strip() else char_b_raw
@@ -770,7 +770,7 @@ class GenerationPanel(QWidget):
         scene_region_raw = self.scene_selection_widget.scene_region_combo.currentText()
         scene_sub_location_raw = self.scene_selection_widget.scene_sub_location_combo.currentText()
 
-        placeholders = ["(Aucun)", "(Aucune)", "(Tous / Non spécifié)", "(Aucun sous-lieu)", "(Sélectionner une région d'abord)"]
+        placeholders = [UIText.NONE, UIText.NONE_FEM, UIText.ALL, UIText.NONE_SUBLOCATION, UIText.NO_SELECTION]
 
         char_a = None if char_a_raw in placeholders or not char_a_raw.strip() else char_a_raw
         char_b = None if char_b_raw in placeholders or not char_b_raw.strip() else char_b_raw
@@ -815,11 +815,11 @@ class GenerationPanel(QWidget):
         if hasattr(self.main_window_ref, 'left_panel') and hasattr(self.main_window_ref.left_panel, 'uncheck_all_items'):
             self.main_window_ref.left_panel.uncheck_all_items()
             logger.info("Tous les éléments ont été décochés dans LeftSelectionPanel.")
-            self.main_window_ref.statusBar().showMessage("Tous les éléments ont été décochés.", 3000)
+            self.main_window_ref.statusBar().showMessage(UIText.ERROR_PREFIX + "Impossible de tout décocher.", 3000)
             # QApplication.instance().beep() # Optionnel, si le son est gênant
         else:
             logger.warning("Impossible de tout décocher: left_panel ou méthode uncheck_all_items non trouvée.")
-            self.main_window_ref.statusBar().showMessage("Erreur: Impossible de tout décocher.", 3000)
+            self.main_window_ref.statusBar().showMessage(UIText.ERROR_PREFIX + "Impossible de tout décocher.", 3000)
 
     def get_settings(self) -> dict:
         # Récupère les paramètres actuels du panneau pour la sauvegarde.
@@ -911,11 +911,11 @@ class GenerationPanel(QWidget):
                 self.interaction_editor_widget.set_interaction(interaction)
             else:
                 logger.warning(f"Interaction {interaction_id} non trouvée par le service.")
-                self.main_window_ref.statusBar().showMessage(f"Erreur: Interaction {interaction_id} non trouvée.", 3000)
+                self.main_window_ref.statusBar().showMessage(UIText.ERROR_PREFIX + f"Interaction {interaction_id} non trouvée.", 3000)
                 self.interaction_editor_widget.set_interaction(None)
         else:
             logger.info("Aucune interaction sélectionnée.")
-            self.main_window_ref.statusBar().showMessage("Sélection d'interaction effacée.", 3000)
+            self.main_window_ref.statusBar().showMessage(UIText.NO_INTERACTION_FOUND, 3000)
             self.interaction_editor_widget.set_interaction(None)
 
     @Slot()
