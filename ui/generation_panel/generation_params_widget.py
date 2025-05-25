@@ -41,7 +41,7 @@ class GenerationParamsWidget(QWidget):
         layout.addWidget(QLabel("Nombre de Variantes (k):"), row, 0)
         self.k_variants_combo = QComboBox()
         self.k_variants_combo.addItems([str(i) for i in range(1, 6)])
-        self.k_variants_combo.setCurrentText("2")
+        self.k_variants_combo.setCurrentText("1")
         self.k_variants_combo.setToolTip("Nombre de dialogues alternatifs à générer.")
         self.k_variants_combo.currentTextChanged.connect(self._on_k_variants_changed)
         layout.addWidget(self.k_variants_combo, row, 1)
@@ -52,7 +52,7 @@ class GenerationParamsWidget(QWidget):
         self.max_context_tokens_spinbox.setMinimum(0.5)
         self.max_context_tokens_spinbox.setMaximum(1000)
         self.max_context_tokens_spinbox.setSingleStep(0.5)
-        self.max_context_tokens_spinbox.setValue(1.5)
+        self.max_context_tokens_spinbox.setValue(5.0)
         self.max_context_tokens_spinbox.setSuffix("k")
         self.max_context_tokens_spinbox.setDecimals(1)
         self.max_context_tokens_spinbox.setToolTip("Nombre maximum de tokens à utiliser pour le contexte GDD en milliers (k).")
@@ -158,7 +158,7 @@ class GenerationParamsWidget(QWidget):
             "structured_output": self.structured_output_checkbox.isChecked()
         }
 
-    def load_settings(self, settings: dict, default_k_variants="2", default_max_context_tokens_k=1.5, default_structured_output=True):
+    def load_settings(self, settings: dict, default_k_variants="1", default_max_context_tokens_k=5.0, default_structured_output=True):
         self._is_loading_settings = True
         
         model_identifier = settings.get("llm_model")
