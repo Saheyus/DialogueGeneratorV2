@@ -7,6 +7,7 @@ from datetime import datetime
 # from PySide6.QtWidgets import QApplication # Remplacé par QAsyncApplication
 from PySide6.QtWidgets import QApplication
 from qasync import QEventLoop
+from constants import UIText, FilePaths, Defaults
 
 # -------------------------------------------------------------
 # Gestion des imports selon le mode d'exécution

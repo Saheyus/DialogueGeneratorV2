@@ -12,6 +12,13 @@ class UIText:
     NO_PATH_FOUND = "Aucun chemin trouvé pour l'interaction {interaction_id}."
     NO_VARIANT = "Aucune variante n'a été générée par le LLM ou une erreur s'est produite."
     NO_MODEL_CONFIGURED = "Aucun modèle configuré"
+    CONTEXT_BUILDER_NOT_AVAILABLE = "(ContextBuilder non disponible)"
+    UNKNOWN_ITEM_ERROR = "(Erreur - Nom d'item inconnu)"
+    UNITY_DIALOGUES_PATH_NOT_CONFIGURED = "Chemin des dialogues Unity non configuré."
+    NO_YARN_FILES_FOUND = "(Aucun fichier .yarn trouvé)"
+    NO_ITEMS_CATEGORY_OR_FILTER = "(Aucun item pour cette catégorie ou filtre)"
+    NO_MATCHING_YARN_FILES = "(Aucun fichier .yarn correspondant)"
+    NO_ITEMS = "(Aucun item)"
 
 class FilePaths:
     CONFIG_DIR = Path("config")
@@ -24,5 +31,12 @@ class Defaults:
     VARIANTS_COUNT = 2
     TEMPERATURE = 0.7
     MODEL_ID = "gpt-4o"
-    SAVE_SETTINGS_DELAY_MS = 1500
-    MAX_TOKENS_FOR_CONTEXT_BUILDING = 32000 
+    MAX_TOKENS_FOR_CONTEXT_BUILDING = 32000
+    SAVE_SETTINGS_DELAY_MS = 1000
+    MAIN_SPLITTER_STRETCH_FACTOR_LEFT_PANEL = 1
+    MAIN_SPLITTER_STRETCH_FACTOR_GENERATION_PANEL = 3
+    MAX_TOKENS_MODEL = 4096
+    INTERACTION_AUTOSAVE_INTERVAL_MS = 300000 # 5 minutes (nouvelle constante)
+
+class ConfigFiles:
+    UI_SETTINGS = "ui_settings.json" 

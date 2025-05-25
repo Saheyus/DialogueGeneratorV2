@@ -99,7 +99,7 @@ class MainWindow(QMainWindow):
 
         try:
             # MODIFIÉ: Utiliser self.llm_config qui est maintenant rempli par _load_llm_configuration() depuis le service
-            default_model_identifier = self.llm_config.get("default_model_identifier", "gpt-4o-mini")
+            default_model_identifier = self.llm_config.get("default_model_identifier", Defaults.MODEL_ID)
             api_key_var = self.llm_config.get("api_key_env_var", "OPENAI_API_KEY")
             api_key = os.getenv(api_key_var)
             
@@ -168,7 +168,7 @@ class MainWindow(QMainWindow):
         self.save_settings_timer = QTimer(self)
         self.save_settings_timer.setSingleShot(True)
         self.save_settings_timer.timeout.connect(self._perform_actual_save_ui_settings)
-        self.save_settings_delay_ms = 1500
+        self.save_settings_delay_ms = Defaults.SAVE_SETTINGS_DELAY_MS
 
         # Connexion du signal pour la sélection du dialogue précédent
         self.left_panel.previous_interaction_context_selected.connect(self._on_previous_interaction_selected)
@@ -265,7 +265,7 @@ class MainWindow(QMainWindow):
         self.main_splitter.addWidget(self.generation_panel)
         
         self.main_splitter.setStretchFactor(0, 1) # LeftPanel (avec onglets Sélection et Détails)
-        self.main_splitter.setStretchFactor(1, 2) # GenerationPanel
+        self.main_splitter.setStretchFactor(1, Defaults.MAIN_SPLITTER_STRETCH_FACTOR_GENERATION_PANEL) # GenerationPanel
 
         main_layout.addWidget(self.main_splitter)
         
@@ -372,13 +372,13 @@ class MainWindow(QMainWindow):
 
         selected_elements = self._get_current_context_selections()
         
-        MAX_TOKENS_FOR_CONTEXT_BUILDING = 32000 
+        MAX_TOKENS_FOR_CONTEXT_BUILDING = Defaults.MAX_TOKENS_FOR_CONTEXT_BUILDING
         
         try:
             context_string = self.context_builder.build_context(
                 selected_elements,
                 user_instructions, 
-                max_tokens=self.config_service.get_ui_setting("max_context_tokens", 1500), # Utiliser config_service
+                max_tokens=self.config_service.get_ui_setting("max_context_tokens", Defaults.CONTEXT_TOKENS), # Utiliser config_service
                 include_dialogue_type=include_dialogue_type_flag
             )
             context_token_count = self.context_builder._count_tokens(context_string)
@@ -658,7 +658,7 @@ class MainWindow(QMainWindow):
                     "api_key_env_var": "OPENAI_API_KEY",
                     "default_model_identifier": "dummy",
                     "request_timeout": 60,
-                    "temperature": 0.7,
+                    "temperature": Defaults.TEMPERATURE,
                     "max_tokens": 1000
                 }
                 logger.info("Provided minimal default LLM config dictionary.")
@@ -673,12 +673,12 @@ class MainWindow(QMainWindow):
             # Vérifier si le modèle par défaut de la config est dans la liste des modèles disponibles
             default_model_id = self.llm_config.get("default_model_identifier")
             if default_model_id and not any(model['api_identifier'] == default_model_id for model in self.available_llm_models):
-                logger.warning(f"Default LLM model '{default_model_id}' from config not in available models list. Consider updating llm_config.json.")
+                logger.warning(f"Default LLM model '{default_model_id}' from config not in available models list. Consider updating {FilePaths.LLM_CONFIG}.")
 
     def _provide_default_llm_config_for_ui(self):
         """Fournit une configuration LLM par défaut minimale pour l'UI en cas d'échec du chargement."""
         self.llm_config = {
-            "available_models": [{"display_name": "Dummy (Config manquante)", "api_identifier": "dummy", "notes": "Fichier llm_config.json non trouvé ou invalide."}],
+            "available_models": [{"display_name": f"{UIText.NO_MODEL_CONFIGURED} (Config manquante)", "api_identifier": "dummy", "notes": f"Fichier {FilePaths.LLM_CONFIG} non trouvé ou invalide."}],
             "default_model_identifier": "dummy",
             "api_key_env_var": "OPENAI_API_KEY"
         }

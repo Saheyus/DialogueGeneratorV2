@@ -6,6 +6,7 @@ from functools import partial
 from pathlib import Path
 from config_manager import list_yarn_files
 from services.configuration_service import ConfigurationService
+from constants import UIText, FilePaths, Defaults
 
 # Importation du nouveau widget et du service nécessaire
 from .left_panel.previous_dialogue_selector_widget import PreviousDialogueSelectorWidget
@@ -249,7 +250,7 @@ class LeftSelectionPanel(QWidget):
                     list_widget = self.lists.get(cat_key)
                     if list_widget:
                         list_widget.clear()
-                        list_widget.addItem(QListWidgetItem("(ContextBuilder not available)"))
+                        list_widget.addItem(QListWidgetItem(UIText.CONTEXT_BUILDER_NOT_AVAILABLE))
             self.populate_yarn_files_list() # Attempt to populate yarn files even if GDD fails
             return
 
@@ -271,7 +272,7 @@ class LeftSelectionPanel(QWidget):
                     logger.info(f"  Category '{cat_key}': Raw items list is empty for attr '{attr_name}'.")
                 for idx, item_dict in enumerate(items_data):
                     if isinstance(item_dict, dict):
-                        item_display_name = "Unknown Item (error in name key)"
+                        item_display_name = UIText.UNKNOWN_ITEM_ERROR
                         for name_key in name_keys:
                             if name_key in item_dict and item_dict[name_key] is not None and str(item_dict[name_key]).strip() != "":
                                 item_display_name = str(item_dict[name_key])
@@ -316,7 +317,7 @@ class LeftSelectionPanel(QWidget):
             logger.warning("Unity dialogues path not configured via ConfigurationService. Cannot list Yarn files.")
             list_widget.clear()
             # Proposer de configurer ?
-            config_msg_item = QListWidgetItem("Chemin des dialogues Unity non configuré.")
+            config_msg_item = QListWidgetItem(UIText.UNITY_DIALOGUES_PATH_NOT_CONFIGURED)
             # Pourrait être un QListWidgetItem cliquable qui ouvre la config, mais pour l'instant simple message.
             list_widget.addItem(config_msg_item)
             return
@@ -340,7 +341,7 @@ class LeftSelectionPanel(QWidget):
         # So, we adapt or do it manually.
         list_widget.clear()
         if not display_items:
-            list_widget.addItem(QListWidgetItem("(No .yarn files found)"))
+            list_widget.addItem(QListWidgetItem(UIText.NO_YARN_FILES_FOUND))
         else:
             for item_text in display_items:
                 q_list_item = QListWidgetItem(item_text)
@@ -356,7 +357,7 @@ class LeftSelectionPanel(QWidget):
         list_widget.clear()
 
         if not items:
-            list_widget.addItem(QListWidgetItem("(No items for this category or filter)"))
+            list_widget.addItem(QListWidgetItem(UIText.NO_ITEMS_CATEGORY_OR_FILTER))
             return
 
         # No restoration logic here. This is handled by load_settings -> _set_checked_list_items
@@ -454,7 +455,7 @@ class LeftSelectionPanel(QWidget):
                 found_match = True
         
         if not found_match:
-            list_widget_to_filter.addItem(QListWidgetItem("(No matching .yarn files)"))
+            list_widget_to_filter.addItem(QListWidgetItem(UIText.NO_MATCHING_YARN_FILES))
 
     def get_settings(self) -> dict:
         """Gets the current settings for the LeftSelectionPanel."""
@@ -689,7 +690,7 @@ class CheckableListItemWidget(QWidget):
                 list_widget_to_populate.addItem(list_item)
             label_to_update.setText(f"{original_label_text_content} ({len(valid_item_names)}/{len(valid_item_names)})")
         else:
-            list_widget_to_populate.addItem(QListWidgetItem("(No items)")) # Changed for clarity
+            list_widget_to_populate.addItem(QListWidgetItem(UIText.NO_ITEMS))
             label_to_update.setText(f"{original_label_text_content} (0/0)")
         
         if list_widget_to_populate.count() > 0:
