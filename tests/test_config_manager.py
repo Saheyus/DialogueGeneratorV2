@@ -10,8 +10,8 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from DialogueGenerator import config_manager
-from DialogueGenerator.config_manager import UI_SETTINGS_FILE, load_ui_settings, save_ui_settings
+import config_manager
+from config_manager import UI_SETTINGS_FILE, load_ui_settings, save_ui_settings
 
 class TestConfigManager(unittest.TestCase):
 

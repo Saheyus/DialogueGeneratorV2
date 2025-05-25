@@ -12,8 +12,8 @@ from pytestqt.exceptions import TimeoutError as QtTimeoutError
 
 # Ajustez les imports en fonction de la structure de votre projet
 try:
-    from DialogueGenerator.ui.left_selection_panel import LeftSelectionPanel, CheckableListItemWidget
-    from DialogueGenerator.context_builder import ContextBuilder # Pour mocker ou dummifier
+    from ui.left_selection_panel import LeftSelectionPanel, CheckableListItemWidget
+    from context_builder import ContextBuilder # Pour mocker ou dummifier
 except ImportError:
     import sys
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -24,8 +24,8 @@ except ImportError:
     if dialogue_generator_dir not in sys.path:
         sys.path.insert(0, dialogue_generator_dir)
     
-    from DialogueGenerator.ui.left_selection_panel import LeftSelectionPanel, CheckableListItemWidget
-    from DialogueGenerator.context_builder import ContextBuilder
+    from ui.left_selection_panel import LeftSelectionPanel, CheckableListItemWidget
+    from context_builder import ContextBuilder
 
 # Mocks / Dummies
 class DummyContextBuilder:

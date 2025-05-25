@@ -13,10 +13,10 @@ import uuid
 import sys
 import os
 
-from DialogueGenerator.models.dialogue_structure.interaction import Interaction
-from DialogueGenerator.services.interaction_service import InteractionService
-from DialogueGenerator.services.repositories.file_repository import FileInteractionRepository
-from DialogueGenerator.models.dialogue_structure.dynamic_interaction_schema import build_interaction_model_from_structure, validate_interaction_elements_order, convert_dynamic_to_standard_interaction
+from models.dialogue_structure.interaction import Interaction
+from services.interaction_service import InteractionService
+from services.repositories.file_repository import FileInteractionRepository
+from models.dialogue_structure.dynamic_interaction_schema import build_interaction_model_from_structure, validate_interaction_elements_order, convert_dynamic_to_standard_interaction
 
 # Import local de la fonction utilitaire
 from .utils import get_icon_path
@@ -33,17 +33,17 @@ from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
 
 # New service import
 try:
-    from ..services.linked_selector import LinkedSelectorService
-    from ..services.yarn_renderer import JinjaYarnRenderer # Corrigé: JinjaYarnRenderer
-    from ..llm_client import OpenAIClient, DummyLLMClient # Ajout OpenAIClient et DummyLLMClient
+    from services.linked_selector import LinkedSelectorService
+    from services.yarn_renderer import JinjaYarnRenderer
+    from llm_client import OpenAIClient, DummyLLMClient
 except ImportError:
     # Support exécution directe
     current_dir = pathlib.Path(__file__).resolve().parent.parent
     if str(current_dir) not in sys.path:
         sys.path.insert(0, str(current_dir))
-    from DialogueGenerator.services.linked_selector import LinkedSelectorService
-    from DialogueGenerator.services.yarn_renderer import JinjaYarnRenderer # Corrigé: JinjaYarnRenderer
-    from DialogueGenerator.llm_client import OpenAIClient, DummyLLMClient # Ajout OpenAIClient et DummyLLMClient
+    from services.linked_selector import LinkedSelectorService
+    from services.yarn_renderer import JinjaYarnRenderer
+    from llm_client import OpenAIClient, DummyLLMClient
 
 logger = logging.getLogger(__name__) # Added logger
 

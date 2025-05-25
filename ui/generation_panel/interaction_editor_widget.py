@@ -13,11 +13,11 @@ from PySide6.QtGui import QCursor
 # --- Gestion des imports robustes ---
 try:
     # Import absolu (cas normal application)
-    from DialogueGenerator.models.dialogue_structure.interaction import Interaction
-    from DialogueGenerator.models.dialogue_structure.dialogue_elements import (
+    from models.dialogue_structure.interaction import Interaction
+    from models.dialogue_structure.dialogue_elements import (
         DialogueLineElement, PlayerChoicesBlockElement, CommandElement, PlayerChoiceOption
     )
-    from DialogueGenerator.services.interaction_service import InteractionService
+    from services.interaction_service import InteractionService
 except ImportError:
     try:
         # Import relatif (cas test ou module)
@@ -34,11 +34,11 @@ except ImportError:
         project_root = current_dir.parent.parent.parent
         if str(project_root) not in sys.path:
             sys.path.insert(0, str(project_root))
-        from DialogueGenerator.models.dialogue_structure.interaction import Interaction
-        from DialogueGenerator.models.dialogue_structure.dialogue_elements import (
+        from models.dialogue_structure.interaction import Interaction
+        from models.dialogue_structure.dialogue_elements import (
             DialogueLineElement, PlayerChoicesBlockElement, CommandElement, PlayerChoiceOption
         )
-        from DialogueGenerator.services.interaction_service import InteractionService
+        from services.interaction_service import InteractionService
 
 # Import du nouveau widget de sélection de personnages
 from .character_selector_widget import CharacterSelectorWidget
@@ -784,7 +784,7 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     
     # Créer un service d'interaction de test
-    from DialogueGenerator.services.repositories import InMemoryInteractionRepository
+    from services.repositories import InMemoryInteractionRepository
     repo = InMemoryInteractionRepository()
     service = InteractionService(repo)
     

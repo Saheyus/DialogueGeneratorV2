@@ -12,9 +12,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from DialogueGenerator.services.interaction_service import InteractionService
-from DialogueGenerator.models.dialogue_structure.interaction import Interaction
-from DialogueGenerator.context_builder import ContextBuilder
+from ...services.interaction_service import InteractionService
+from ...models.dialogue_structure.interaction import Interaction
+from ...context_builder import ContextBuilder
 
 import logging
 logger = logging.getLogger(__name__)
@@ -214,8 +214,8 @@ class PreviousDialogueSelectorWidget(QWidget):
 if __name__ == '__main__':
     # Pour tester ce widget isolément
     from PySide6.QtWidgets import QApplication
-    from DialogueGenerator.services.repositories import InMemoryInteractionRepository
-    from DialogueGenerator.models.dialogue_structure.dialogue_elements import DialogueLineElement, PlayerChoicesBlockElement, PlayerChoiceOption
+    from ...services.repositories import InMemoryInteractionRepository
+    from ...models.dialogue_structure.dialogue_elements import DialogueLineElement, PlayerChoicesBlockElement, PlayerChoiceOption
 
     app = QApplication(sys.argv)
 

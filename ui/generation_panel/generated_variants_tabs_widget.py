@@ -7,7 +7,7 @@ import json
 from typing import List, Dict, Union, Optional, Any
 
 try:
-    from ...models.dialogue_structure.interaction import Interaction
+    from models.dialogue_structure.interaction import Interaction
 except ImportError:
     # Fallback pour le support d'exécution isolée
     import sys

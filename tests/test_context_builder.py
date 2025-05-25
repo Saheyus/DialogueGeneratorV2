@@ -7,7 +7,7 @@ import logging
 # Adjust imports based on your project structure
 # Assuming pytest is run from the project root (Notion_Scrapper)
 # or that DialogueGenerator is in PYTHONPATH.
-from DialogueGenerator.context_builder import ContextBuilder, DEFAULT_CONFIG_FILE
+from context_builder import ContextBuilder, DEFAULT_CONFIG_FILE
 # get_project_root is not in config_manager, it's usually a local helper or part of sys.path setup.
 
 # If the above direct import fails, this block can help if tests are run from other locations
@@ -73,7 +73,7 @@ def mock_project_root_for_context_builder(monkeypatch, temp_test_dir: Path):
     
     # Monkeypatch DEFAULT_CONFIG_FILE specifically for tests related to config loading
     # This ensures ContextBuilder tries to load its config from our controlled dummy file
-    monkeypatch.setattr("DialogueGenerator.context_builder.DEFAULT_CONFIG_FILE", temp_test_dir / "dummy_context_config.json")
+    monkeypatch.setattr("context_builder.DEFAULT_CONFIG_FILE", temp_test_dir / "dummy_context_config.json")
 
     # For GDD loading tests, we will need to mock PROJECT_ROOT_DIR within context_builder.py
     # or pass explicit, controlled base paths to load_gdd_files.
@@ -82,7 +82,7 @@ def mock_project_root_for_context_builder(monkeypatch, temp_test_dir: Path):
 @pytest.fixture
 def mock_gdd_project_root(monkeypatch, temp_test_dir: Path):
     """Mocks context_builder.PROJECT_ROOT_DIR to point to the temp_test_dir."""
-    monkeypatch.setattr("DialogueGenerator.context_builder.PROJECT_ROOT_DIR", temp_test_dir)
+    monkeypatch.setattr("context_builder.PROJECT_ROOT_DIR", temp_test_dir)
     
     # Create dummy GDD directories and files inside temp_test_dir
     (temp_test_dir / "GDD" / "categories").mkdir(parents=True, exist_ok=True)
@@ -121,7 +121,7 @@ class TestContextBuilderInitialization:
     def test_init_with_nonexistent_config_file(self, temp_test_dir: Path, monkeypatch, caplog):
         """Tests ContextBuilder initialization with a non-existent config file."""
         non_existent_config = temp_test_dir / "non_existent_config.json"
-        monkeypatch.setattr("DialogueGenerator.context_builder.DEFAULT_CONFIG_FILE", non_existent_config)
+        monkeypatch.setattr("context_builder.DEFAULT_CONFIG_FILE", non_existent_config)
         
         cb = ContextBuilder(config_file_path=non_existent_config)
         assert cb.context_config == {} # Should default to empty dict
@@ -133,13 +133,13 @@ class TestContextBuilderInitialization:
         with open(malformed_config_file, "w", encoding="utf-8") as f:
             f.write("{malformed_json: ") # Invalid JSON
         
-        monkeypatch.setattr("DialogueGenerator.context_builder.DEFAULT_CONFIG_FILE", malformed_config_file)
+        monkeypatch.setattr("context_builder.DEFAULT_CONFIG_FILE", malformed_config_file)
         
         cb = ContextBuilder(config_file_path=malformed_config_file)
         assert cb.context_config == {} # Should default to empty dict
         assert f"Erreur de décodage JSON pour le fichier de configuration {malformed_config_file}" in caplog.text
 
-    @patch('DialogueGenerator.context_builder.tiktoken', None)
+    @patch('context_builder.tiktoken', None)
     def test_init_without_tiktoken(self, dummy_context_config_file: Path, mock_project_root_for_context_builder, caplog):
         """Tests ContextBuilder initialization when tiktoken is not available."""
         cb = ContextBuilder(config_file_path=dummy_context_config_file)
@@ -230,7 +230,7 @@ class TestContextBuilderGDDLoading:
 
         # Ensure caplog captures INFO level messages for this specific test
         # Must be set BEFORE the code that generates the logs is run.
-        caplog.set_level(logging.INFO, logger="DialogueGenerator.context_builder")
+        caplog.set_level(logging.INFO, logger="context_builder")
 
         cb = ContextBuilder(config_file_path=dummy_context_config_file)
         cb.load_gdd_files()
@@ -793,7 +793,7 @@ class TestContextBuilderLinkedElements:
         assert "Taverne du Rat Crevé" not in linked["locations"]
 
 class TestContextBuilderTokenization:
-    @patch('DialogueGenerator.context_builder.tiktoken')
+    @patch('context_builder.tiktoken')
     def test_count_tokens_with_tiktoken(self, mock_tiktoken, dummy_context_config_file):
         mock_encoder = mock_tiktoken.get_encoding.return_value
         mock_encoder.encode.return_value = [1, 2, 3, 4, 5] # Simulate 5 tokens
@@ -803,7 +803,7 @@ class TestContextBuilderTokenization:
         assert cb._count_tokens("Un texte de test") == 5
         mock_encoder.encode.assert_called_once_with("Un texte de test")
 
-    @patch('DialogueGenerator.context_builder.tiktoken', None)
+    @patch('context_builder.tiktoken', None)
     def test_count_tokens_without_tiktoken(self, dummy_context_config_file):
         cb = ContextBuilder(config_file_path=dummy_context_config_file)
         assert cb.tokenizer is None

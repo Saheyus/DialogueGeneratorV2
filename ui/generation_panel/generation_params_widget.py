@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import (QWidget, QGroupBox, QGridLayout, QLabel, QComboBox, QCheckBox, QDoubleSpinBox, QVBoxLayout)
 from PySide6.QtCore import Signal, Qt
 import logging
+from llm_client import DummyLLMClient # Nouvel import direct
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +124,6 @@ class GenerationParamsWidget(QWidget):
     def update_llm_client_dependent_state(self, llm_client, current_llm_model_properties):
         # Placeholder for logic similar to _update_structured_output_checkbox_state in GenerationPanel
         # This might involve enabling/disabling structured_output_checkbox based on llm_client type or model properties
-        from DialogueGenerator.llm_client import DummyLLMClient # Nouvel import absolu
         is_dummy = isinstance(llm_client, DummyLLMClient)
         
         if is_dummy:

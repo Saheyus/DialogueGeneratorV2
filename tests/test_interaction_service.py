@@ -9,10 +9,10 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from DialogueGenerator.services.interaction_service import InteractionService
-from DialogueGenerator.services.repositories import InMemoryInteractionRepository
-from DialogueGenerator.models.dialogue_structure.interaction import Interaction
-from DialogueGenerator.models.dialogue_structure.dialogue_elements import (
+from services.interaction_service import InteractionService
+from services.repositories import InMemoryInteractionRepository
+from models.dialogue_structure.interaction import Interaction
+from models.dialogue_structure.dialogue_elements import (
     DialogueLineElement, PlayerChoicesBlockElement, PlayerChoiceOption
 )
 

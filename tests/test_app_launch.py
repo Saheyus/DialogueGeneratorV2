@@ -16,15 +16,15 @@ import asyncio # Ajout asyncio
 # Il est possible que vous deviez ajouter DialogueGenerator au PYTHONPATH ou ajuster les imports relatifs
 try:
     # Mode package (python -m DialogueGenerator.main_app)
-    from DialogueGenerator.main_app import MainWindow # main_app n'exporte pas directement MainWindow, mais l'utilise
-    from DialogueGenerator.ui.main_window import MainWindow as ActualMainWindow # On importe la classe directement
-    from DialogueGenerator.context_builder import ContextBuilder
-    from DialogueGenerator.ui.left_selection_panel import LeftSelectionPanel
-    from DialogueGenerator.ui.details_panel import DetailsPanel
+    from main_app import MainWindow # main_app n'exporte pas directement MainWindow, mais l'utilise
+    from ui.main_window import MainWindow as ActualMainWindow # On importe la classe directement
+    from context_builder import ContextBuilder
+    from ui.left_selection_panel import LeftSelectionPanel
+    from ui.details_panel import DetailsPanel
     # from DialogueGenerator.config_manager import ConfigManager # Module, pas une classe à instancier comme ça
-    from DialogueGenerator import config_manager # Importer le module
-    from DialogueGenerator.llm_client import DummyLLMClient, OpenAIClient # Ajout OpenAIClient pour monkeypatch
-    from DialogueGenerator.ui.generation_panel import GenerationPanel # Ajout
+    import config_manager # Importer le module
+    from llm_client import DummyLLMClient, OpenAIClient # Ajout OpenAIClient pour monkeypatch
+    from ui.generation_panel import GenerationPanel # Ajout
 except ImportError:
     # Tentative d'import relatif si exécuté comme partie d'un package non installé
     import sys
@@ -37,13 +37,13 @@ except ImportError:
     if dialogue_generator_dir not in sys.path:
         sys.path.insert(0, dialogue_generator_dir)
 
-    from DialogueGenerator.ui.main_window import MainWindow as ActualMainWindow
-    from DialogueGenerator.context_builder import ContextBuilder
-    from DialogueGenerator.ui.left_selection_panel import LeftSelectionPanel
-    from DialogueGenerator.ui.details_panel import DetailsPanel
-    from DialogueGenerator import config_manager
-    from DialogueGenerator.llm_client import DummyLLMClient, OpenAIClient # Ajout OpenAIClient pour monkeypatch
-    from DialogueGenerator.ui.generation_panel import GenerationPanel # Ajout
+    from ui.main_window import MainWindow as ActualMainWindow
+    from context_builder import ContextBuilder
+    from ui.left_selection_panel import LeftSelectionPanel
+    from ui.details_panel import DetailsPanel
+    import config_manager
+    from llm_client import DummyLLMClient, OpenAIClient # Ajout OpenAIClient pour monkeypatch
+    from ui.generation_panel import GenerationPanel # Ajout
 
 # Forcer anyio à utiliser le backend asyncio pour tous les tests de ce module
 @pytest.fixture
@@ -95,12 +95,12 @@ def app(qtbot: QtBot, monkeypatch, tmp_path):
     def mock_openai_client(*args, **kwargs):
         return DummyLLMClient()
     
-    monkeypatch.setattr("DialogueGenerator.ui.main_window.OpenAIClient", mock_openai_client)
+    monkeypatch.setattr("ui.main_window.OpenAIClient", mock_openai_client)
     # Si MainWindow importe OpenAIClient directement (from ..llm_client import OpenAIClient)
     # et que llm_client est dans le même dossier que main_window, le chemin pourrait être différent.
     # Le chemin actuel suppose que main_window.py fait `from ..llm_client import OpenAIClient`
     # ou `from DialogueGenerator.llm_client import OpenAIClient` et que le système d'import résout cela.
-    # Le chemin "DialogueGenerator.ui.main_window.OpenAIClient" cible l'endroit où MainWindow *utilise* OpenAIClient.
+    # Le chemin "ui.main_window.OpenAIClient" cible l'endroit où MainWindow *utilise* OpenAIClient.
 
     # Créer une instance de DummyLLMClient pour les tests -> N'est plus nécessaire car monkeypatch s'en occupe
     # dummy_llm_client = DummyLLMClient()
@@ -358,7 +358,7 @@ async def test_dialogue_generation_flow(app: ActualMainWindow, qtbot: QtBot):
 # Ajout pour clarifier l'import de ActualMainWindow vs MainWindow de main_app
 # Dans main_app.py, MainWindow est la classe de ui.main_window, pas le module lui-même.
 # Le test doit importer et utiliser la classe directement.
-# from DialogueGenerator.ui.main_window import MainWindow as ActualMainWindow # Déjà fait plus haut.
+# from ui.main_window import MainWindow as ActualMainWindow # Déjà fait plus haut.
 # ... (le reste du fichier est identique)
 # Dans la fixture app :
 # main_window = ActualMainWindow(context_builder=context_builder_instance) # Déjà corrigé plus haut.
@@ -370,7 +370,7 @@ async def test_dialogue_generation_flow(app: ActualMainWindow, qtbot: QtBot):
 # Ajout pour clarifier l'import de ActualMainWindow vs MainWindow de main_app
 # Dans main_app.py, MainWindow est la classe de ui.main_window, pas le module lui-même.
 # Le test doit importer et utiliser la classe directement.
-# from DialogueGenerator.ui.main_window import MainWindow as ActualMainWindow # Déjà fait plus haut.
+# from ui.main_window import MainWindow as ActualMainWindow # Déjà fait plus haut.
 # ... (le reste du fichier est identique)
 # Dans la fixture app :
 # main_window = ActualMainWindow(context_builder=context_builder_instance, llm_client=dummy_llm_client) # Corrigé

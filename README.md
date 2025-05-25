@@ -57,29 +57,73 @@ L'application est en cours de développement actif. Les fonctionnalités suivant
 Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux modules suivants :
 
 *   `main_app.py`: Point d'entrée de l'application. Initialise l'application Qt et la fenêtre principale.
+*   `__main__.py`: Point d'entrée alternatif pour un lancement en tant que module (ex: `python -m DialogueGenerator`), bien que le lancement direct de `main_app.py` soit privilégié.
+*   `config/`: Contient les fichiers de configuration (ex: `llm_config.json`, `context_config.json`, `ui_settings.json`).
+*   `core/`: Logique métier principale, indépendante de l'interface utilisateur ou des frameworks externes.
+    *   `dialogue_system/`: Classes et fonctions liées au système de dialogue.
+*   `data/`: Données persistantes de l'application.
+    *   `interactions/`: Stockage des dialogues générés (fichiers JSON).
+*   `domain/`: Modèles de données et services du domaine de l'application.
+*   `llm_client/`: Clients pour interagir avec les modèles de langage (OpenAI, Dummy).
+*   `models/`: Structures de données Pydantic utilisées dans l'application.
+    *   `dialogue_structure/`: Modèles pour les éléments de dialogue et les interactions.
+*   `services/`: Services applicatifs (ex: gestion des interactions, rendu Yarn).
+    *   `repositories/`: Abstractions pour l'accès aux données (ex: `FileInteractionRepository`).
+    *   `yarn_renderer/`: Logique pour convertir les interactions en format Yarn Spinner.
+*   `tests/`: Tests unitaires et d'intégration.
+*   `ui/`: Code relatif à l'interface utilisateur (PySide6).
+    *   `generation_panel/`: Widgets spécifiques au panneau de génération.
+    *   `left_panel/`: Widgets spécifiques au panneau de sélection de gauche.
 *   `context_builder.py`: Responsable du chargement, du stockage et de l'accès aux données du GDD.
-*   `prompt_engine.py`: Construit les prompts à envoyer aux LLMs en combinant les informations système, le contexte et les instructions utilisateur.
-*   `llm_client.py`: Contient l'interface `IGenerator` pour les clients LLM et les implémentations concrètes (actuellement `DummyLLMClient`).
-*   `ui/main_window.py`: Définit la classe `MainWindow` (héritant de `QMainWindow`) qui construit et gère l'interface utilisateur principale.
-*   `ui/__init__.py`: (Si nécessaire, pour que `ui` soit traité comme un package).
+*   `prompt_engine.py`: Construit les prompts à envoyer aux LLMs.
+*   `config_manager.py`: Gère le chargement et la sauvegarde des configurations.
+*   `yarn_parser.py`: (Potentiellement) Analyseur pour les fichiers Yarn Spinner.
+*   `yarn_renderer.py`: (Potentiellement) Logique de rendu pour Yarn Spinner (peut être fusionné avec `services/yarn_renderer`).
 
 ## Prérequis et Installation
 
 1.  **Python** : Version 3.10 ou ultérieure recommandée.
-2.  **PySide6** : Bibliothèque pour l'interface graphique Qt.
+2.  **Dépendances Python** : Installer les dépendances listées dans `requirements.txt`.
     ```bash
-    pip install PySide6
+    pip install -r requirements.txt
     ```
-3.  **Autres dépendances** : (À compléter au fur et à mesure, par exemple `openai` lorsque `OpenAIClient` sera utilisé).
+    Ce fichier inclut `PySide6`, `openai`, et d'autres bibliothèques nécessaires.
 
 ## Comment Lancer l'Application
 
-1.  Assurez-vous que les fichiers JSON du GDD sont présents dans le dossier `../GDD/categories/` par rapport à la racine du projet `Notion_Scrapper/` (c'est-à-dire que `DialogueGenerator` et `GDD` sont au même niveau hiérarchique).
-2.  Ouvrez un terminal à la racine du dossier `DialogueGenerator/`.
-3.  Exécutez la commande :
-    ```bash
-    python main_app.py
-    ```
+1.  **Positionnement des Données du GDD** :
+    *   Les fichiers JSON du Game Design Document (GDD) doivent être accessibles. Par défaut, l'application s'attend à les trouver dans un dossier `GDD/categories/` et `import/Bible_Narrative/` situés **au même niveau que le dossier `DialogueGenerator`**.
+    *   Exemple de structure attendue :
+        ```
+        Parent_Folder/
+        ├── DialogueGenerator/  <-- Racine du projet de l'application
+        │   ├── main_app.py
+        │   └── ... (autres fichiers et dossiers du projet)
+        ├── GDD/
+        │   └── categories/
+        │       ├── personnages.json
+        │       └── ... (autres fichiers JSON du GDD)
+        └── import/
+            └── Bible_Narrative/
+                └── Vision.json
+        ```
+    *   Le chemin d'accès aux données du GDD est configurable dans `context_config.json`.
+
+2.  **Clé API OpenAI (Optionnel mais recommandé)** :
+    *   Pour utiliser le client OpenAI, assurez-vous que la variable d'environnement `OPENAI_API_KEY` est définie, ou que votre clé est présente dans `config/llm_config.json`.
+    *   Si aucune clé n'est configurée, l'application utilisera `DummyLLMClient` qui simule les réponses.
+
+3.  **Lancement** :
+    *   Ouvrez un terminal à la racine du dossier `DialogueGenerator/`.
+    *   Exécutez la commande :
+        ```bash
+        python main_app.py
+        ```
+    *   Alternativement, si vous êtes dans le dossier parent (`Parent_Folder` dans l'exemple ci-dessus), vous pouvez lancer l'application en tant que module (bien que cela nécessite que les chemins relatifs dans `context_config.json` soient ajustés en conséquence ou que les chemins soient absolus) :
+        ```bash
+        python -m DialogueGenerator
+        ```
+        (Note: Le lancement direct de `main_app.py` depuis le dossier `DialogueGenerator` est la méthode testée et recommandée actuellement.)
 
 ## Prochaines Étapes Prévues
 

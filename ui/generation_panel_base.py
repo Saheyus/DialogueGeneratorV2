@@ -13,7 +13,7 @@ import os
 
 # Import pour Interaction
 try:
-    from ..models.dialogue_structure.interaction import Interaction
+    from models.dialogue_structure.interaction import Interaction
 except ImportError:
     import sys
     from pathlib import Path
@@ -37,11 +37,11 @@ from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
 
 # New service import
 try:
-    from ..services.linked_selector import LinkedSelectorService
-    from ..services.yarn_renderer import JinjaYarnRenderer
-    from ..services.interaction_service import InteractionService
-    from ..llm_client import OpenAIClient, DummyLLMClient
-    from ..services.dialogue_generation_service import DialogueGenerationService
+    from services.linked_selector import LinkedSelectorService
+    from services.yarn_renderer import JinjaYarnRenderer
+    from services.interaction_service import InteractionService
+    from llm_client import OpenAIClient, DummyLLMClient
+    from services.dialogue_generation_service import DialogueGenerationService
 except ImportError:
     # Support exécution directe
     import sys, os, pathlib
@@ -55,7 +55,7 @@ except ImportError:
     from DialogueGenerator.services.dialogue_generation_service import DialogueGenerationService
 
 # Import du repository de fichiers
-from DialogueGenerator.services.repositories.file_repository import FileInteractionRepository
+from services.repositories.file_repository import FileInteractionRepository
 
 logger = logging.getLogger(__name__)
 
