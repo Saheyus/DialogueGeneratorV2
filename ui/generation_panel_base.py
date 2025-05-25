@@ -353,7 +353,7 @@ class GenerationPanel(QWidget):
         
         self.token_actions_widget.set_token_estimation_text(f"Tokens (contexte GDD/prompt total): {context_tokens_k:.1f}k / {prompt_tokens_k:.1f}k")
         logger.debug(f"Token estimation UI updated (via service): Context GDD {context_summary_tokens} ({context_tokens_k:.1f}k), Prompt total {estimated_total_tokens} ({prompt_tokens_k:.1f}k).")
-        self._display_prompt_in_tab(full_prompt_for_display if full_prompt_for_display else "Aucun prompt n'a pu être généré.")
+        self._display_prompt_in_tab(full_prompt_for_display if full_prompt_for_display else UIText.NO_VARIANT)
 
     def _launch_dialogue_generation(self):
         logger.info("Lancement de la génération de dialogue...")
@@ -546,7 +546,7 @@ class GenerationPanel(QWidget):
     def _on_save_all_variants_requested_from_tabs(self, variants_data: list):
         logger.info(f"Sauvegarde de {len(variants_data)} variantes demandée depuis le widget d'onglets.")
         if not variants_data:
-            QMessageBox.information(self, "Sauvegarde", "Aucune variante à sauvegarder.")
+            QMessageBox.information(self, "Sauvegarde", UIText.NO_VARIANT)
             return
         details = "\n".join([f"- {v['title']} ({len(v['content'])} chars)" for v in variants_data])
         QMessageBox.information(self, "Sauvegarder Tout", f"{len(variants_data)} variantes seraient sauvegardées :\n{details}")
@@ -684,10 +684,10 @@ class GenerationPanel(QWidget):
         if hasattr(self.main_window_ref, 'left_panel') and hasattr(self.main_window_ref.left_panel, 'uncheck_all_items'):
             self.main_window_ref.left_panel.uncheck_all_items()
             logger.info("Tous les éléments ont été décochés dans LeftSelectionPanel.")
-            self.main_window_ref.statusBar().showMessage("Tous les éléments ont été décochés.", 3000)
+            self.main_window_ref.statusBar().showMessage(UIText.ERROR_PREFIX + "Tous les éléments ont été décochés.", 3000)
         else:
             logger.warning("Impossible de tout décocher: left_panel ou méthode uncheck_all_items non trouvée.")
-            self.main_window_ref.statusBar().showMessage("Erreur: Impossible de tout décocher.", 3000)
+            self.main_window_ref.statusBar().showMessage(UIText.ERROR_PREFIX + "Impossible de tout décocher.", 3000)
 
     @Slot(object)
     def _on_interaction_selected(self, interaction_id):
@@ -722,7 +722,7 @@ class GenerationPanel(QWidget):
                 print(f"[DEBUG] Interaction {interaction_id} non trouvée par le service")
                 self.interaction_editor_widget.set_interaction(None)
                 logger.warning(f"Interaction {interaction_id} non trouvée par le service.")
-                self.main_window_ref.statusBar().showMessage(f"Erreur: Interaction {interaction_id} non trouvée.", 3000)
+                self.main_window_ref.statusBar().showMessage(UIText.NO_INTERACTION_FOUND, 3000)
         else:
             print(f"[DEBUG] interaction_id est None, effacement de l'éditeur")
             self.interaction_editor_widget.set_interaction(None)
