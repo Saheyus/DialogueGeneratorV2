@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import (QWidget, QGroupBox, QGridLayout, QLabel, QComboBox, QPushButton, QStyle)
 from PySide6.QtCore import Qt, Signal, QSize
 import logging
+from constants import UIText, FilePaths, Defaults
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ class SceneSelectionWidget(QWidget):
         self.character_a_combo.clear()
         self.character_b_combo.clear()
         
-        all_chars_with_none = ["(Aucun)"] + sorted(character_names)
+        all_chars_with_none = [UIText.NONE] + sorted(character_names)
         self.character_a_combo.addItems(all_chars_with_none)
         self.character_b_combo.addItems(all_chars_with_none)
         
@@ -87,7 +88,7 @@ class SceneSelectionWidget(QWidget):
         self.scene_region_combo.blockSignals(True)
         current_region = self.scene_region_combo.currentText()
         self.scene_region_combo.clear()
-        all_regions_with_none = ["(Aucune)"] + sorted(region_names)
+        all_regions_with_none = [UIText.NONE_FEM] + sorted(region_names)
         self.scene_region_combo.addItems(all_regions_with_none)
         if current_region in all_regions_with_none:
             self.scene_region_combo.setCurrentText(current_region)
@@ -105,16 +106,16 @@ class SceneSelectionWidget(QWidget):
         current_sub_location = self.scene_sub_location_combo.currentText()
         self.scene_sub_location_combo.clear()
         
-        sub_locations_with_none = ["(Sélectionner une région d'abord)"]
+        sub_locations_with_none = [UIText.NO_SELECTION]
         
-        if region_name and region_name != "(Aucune)" and region_name != "(Sélectionner une région)":
+        if region_name and region_name != UIText.NONE_FEM and region_name != UIText.NO_SELECTION:
             try:
                 sub_locations = sorted(self.context_builder.get_sub_locations(region_name))
                 if not sub_locations:
                     logger.info(f"Aucun sous-lieu trouvé pour la région : {region_name}")
-                    sub_locations_with_none = ["(Aucun sous-lieu)"]
+                    sub_locations_with_none = [UIText.NONE_SUBLOCATION]
                 else:
-                    sub_locations_with_none = ["(Tous / Non spécifié)"] + sub_locations
+                    sub_locations_with_none = [UIText.ALL] + sub_locations
                 self.scene_sub_location_combo.setEnabled(True)
             except Exception as e:
                 logger.error(f"Erreur lors de la récupération des sous-lieux pour la région {region_name}: {e}", exc_info=True)
@@ -142,15 +143,15 @@ class SceneSelectionWidget(QWidget):
         self.character_b_combo.blockSignals(True)
         self.character_a_combo.clear()
         self.character_b_combo.clear()
-        self.character_a_combo.addItems(["(Aucun)"] + characters)
-        self.character_b_combo.addItems(["(Aucun)"] + characters)
+        self.character_a_combo.addItems([UIText.NONE] + characters)
+        self.character_b_combo.addItems([UIText.NONE] + characters)
         self.character_a_combo.blockSignals(False)
         self.character_b_combo.blockSignals(False)
 
     def set_regions(self, regions):
         self.scene_region_combo.blockSignals(True)
         self.scene_region_combo.clear()
-        self.scene_region_combo.addItem("(Aucune)")
+        self.scene_region_combo.addItem(UIText.NONE_FEM)
         self.scene_region_combo.addItems(regions)
         self.scene_region_combo.blockSignals(False)
 
@@ -158,9 +159,9 @@ class SceneSelectionWidget(QWidget):
         self.scene_sub_location_combo.blockSignals(True)
         self.scene_sub_location_combo.clear()
         if not sub_locations:
-            self.scene_sub_location_combo.addItem("(Aucun sous-lieu)")
+            self.scene_sub_location_combo.addItem(UIText.NONE_SUBLOCATION)
         else:
-            self.scene_sub_location_combo.addItems(["(Tous / Non spécifié)"] + sub_locations)
+            self.scene_sub_location_combo.addItems([UIText.ALL] + sub_locations)
             self.scene_sub_location_combo.setEnabled(True)
         self.scene_sub_location_combo.blockSignals(False)
 
@@ -179,16 +180,16 @@ class SceneSelectionWidget(QWidget):
         self.scene_region_combo.blockSignals(True)
         self.scene_sub_location_combo.blockSignals(True)
 
-        self.character_a_combo.setCurrentText(character_a or "(Aucun)")
-        self.character_b_combo.setCurrentText(character_b or "(Aucun)")
+        self.character_a_combo.setCurrentText(character_a or UIText.NONE)
+        self.character_b_combo.setCurrentText(character_b or UIText.NONE)
         
-        new_region_text = scene_region or "(Aucune)"
+        new_region_text = scene_region or UIText.NONE_FEM
         region_changed = self.scene_region_combo.currentText() != new_region_text
         self.scene_region_combo.setCurrentText(new_region_text)
         if region_changed :
              self._on_scene_region_changed_internal(new_region_text)
         
-        self.scene_sub_location_combo.setCurrentText(scene_sub_location or "(Tous / Non spécifié)")
+        self.scene_sub_location_combo.setCurrentText(scene_sub_location or UIText.ALL)
 
         self.character_a_combo.blockSignals(False)
         self.character_b_combo.blockSignals(False)
