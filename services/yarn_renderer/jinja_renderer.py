@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 import jinja2
 
-from DialogueGenerator.models.dialogue_structure import (
+from models.dialogue_structure import (
     Interaction, 
     AnyDialogueElement,
     DialogueLineElement,
@@ -123,10 +123,9 @@ tags: {{ header_tags|join(', ') }}
 
 {% for element in elements %}
 {% if element.element_type == 'dialogue_line' %}
-{{ element.speaker if element.speaker else 'Narrateur' }}: {{ element.text }}
 {% for cmd in element.pre_line_commands %}<<{{ cmd }}>>
 {% endfor %}
-{% if element.speaker if element.speaker else 'Narrateur' %}: {% endif %}{{ element.text }}
+{{ element.speaker if element.speaker else 'Narrateur' }}: {{ element.text }}
 {% for cmd in element.post_line_commands %}<<{{ cmd }}>>
 {% endfor %}
 {% elif element.element_type == 'player_choices_block' %}

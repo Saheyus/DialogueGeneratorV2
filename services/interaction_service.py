@@ -1,7 +1,7 @@
-from typing import List, Optional, Dict, Tuple
-from DialogueGenerator.models.dialogue_structure import Interaction
-from DialogueGenerator.models.dialogue_structure.dialogue_elements import PlayerChoicesBlockElement
-from DialogueGenerator.services.repositories import (
+from typing import List, Optional, Dict, Tuple, Any
+from models.dialogue_structure import Interaction, DialogueLineElement, PlayerChoicesBlockElement
+from .repositories import IInteractionRepository
+from services.repositories import (
     InMemoryInteractionRepository, FileInteractionRepository, IInteractionRepository
 )
 import logging

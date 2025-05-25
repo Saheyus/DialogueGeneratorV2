@@ -22,14 +22,14 @@ except ImportError:
     current_dir = Path(__file__).resolve().parent.parent
     if str(current_dir) not in sys.path:
         sys.path.insert(0, str(current_dir))
-    from DialogueGenerator.context_builder import ContextBuilder
-    from DialogueGenerator.prompt_engine import PromptEngine
-    from DialogueGenerator.llm_client import ILLMClient
-    from DialogueGenerator.models.dialogue_structure.interaction import Interaction
-    from DialogueGenerator.models.dialogue_structure.dialogue_elements import (
+    from context_builder import ContextBuilder
+    from prompt_engine import PromptEngine
+    from llm_client import ILLMClient
+    from models.dialogue_structure.interaction import Interaction
+    from models.dialogue_structure.dialogue_elements import (
         DialogueLineElement, PlayerChoicesBlockElement, CommandElement, PlayerChoiceOption
     )
-    from DialogueGenerator.services.interaction_service import InteractionService
+    from services.interaction_service import InteractionService
 
 logger = logging.getLogger(__name__)
 

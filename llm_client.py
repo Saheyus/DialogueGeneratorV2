@@ -255,7 +255,7 @@ class OpenAIClient(ILLMClient):
             await self.client.close()
 
 async def main_test():
-    from DialogueGenerator.models.dialogue_structure.dynamic_interaction_schema import build_interaction_model_from_structure, DialogueLineElement, PlayerChoicesBlockElement
+    from models.dialogue_structure.dynamic_interaction_schema import build_interaction_model_from_structure, DialogueLineElement, PlayerChoicesBlockElement
     
     # Configurer le logging pour voir les messages DEBUG de ce module et des modules Pydantic/OpenAI si nécessaire
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -298,7 +298,7 @@ async def main_test():
             if isinstance(v_struct, BaseModel):
                 print(v_struct.model_dump_json(indent=2))
                 # Essayons aussi de valider l'ordre si c'est une instance du modèle attendu
-                from DialogueGenerator.models.dialogue_structure.dynamic_interaction_schema import validate_interaction_elements_order
+                from models.dialogue_structure.dynamic_interaction_schema import validate_interaction_elements_order
                 if validate_interaction_elements_order(v_struct, structure_pnj_pj):
                     print("Validation de l'ordre des éléments réussie.")
                 else:

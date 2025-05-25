@@ -1,7 +1,8 @@
 from typing import Dict, List, Optional
-from DialogueGenerator.models.dialogue_structure import Interaction
+from models.dialogue_structure import Interaction
+from .interfaces import IInteractionRepository
 
-class InMemoryInteractionRepository:
+class InMemoryInteractionRepository(IInteractionRepository):
     """Implémentation en mémoire du repository d'interactions.
     
     Cette implémentation stocke toutes les interactions en mémoire (dans un dictionnaire)

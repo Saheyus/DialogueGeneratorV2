@@ -13,7 +13,7 @@ except ImportError:
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
     
-    from DialogueGenerator.context_builder import ContextBuilder
+    from context_builder import ContextBuilder
 
 logger = logging.getLogger(__name__)
 

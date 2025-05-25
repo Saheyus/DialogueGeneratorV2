@@ -1,5 +1,5 @@
 from typing import Protocol, Dict, Any, Optional
-from DialogueGenerator.models.dialogue_structure import Interaction
+from models.dialogue_structure import Interaction
 
 class IYarnRenderer(Protocol):
     """Interface pour le rendu des interactions en format Yarn Spinner."""

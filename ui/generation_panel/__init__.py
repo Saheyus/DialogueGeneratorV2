@@ -4,4 +4,7 @@
 # from .context_actions_widget import ContextActionsWidget
 # from .generation_params_widget import GenerationParamsWidget
 
-# from ..generation_panel_base import GenerationPanel # Supprimé pour éviter l'import circulaire 
+# MODIFIED: Commenté car causait un cycle d'import et GenerationPanel est maintenant importé directement.
+# from ..generation_panel_main import GenerationPanel
+
+# __all__ = ['GenerationPanel'] 

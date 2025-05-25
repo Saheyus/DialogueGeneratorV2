@@ -4,12 +4,12 @@ from PySide6.QtGui import QPalette, QColor
 import logging
 from functools import partial
 from pathlib import Path
-from .. import config_manager
+from config_manager import list_yarn_files
+from services.configuration_service import ConfigurationService
 
 # Importation du nouveau widget et du service nécessaire
 from .left_panel.previous_dialogue_selector_widget import PreviousDialogueSelectorWidget
-from ..services.interaction_service import InteractionService
-from ..services.configuration_service import ConfigurationService
+from services.interaction_service import InteractionService
 
 logger = logging.getLogger(__name__)
 
@@ -27,17 +27,19 @@ class LeftSelectionPanel(QWidget):
     # selection_changed: Signal = Signal(list) # List of selected item names - Redondant avec context_selection_changed si ce dernier est bien utilisé
     # item_focused: Signal = Signal(str, str) # item_name, category_key - Semble non utilisé, à vérifier
 
-    def __init__(self, context_builder, interaction_service: InteractionService, parent=None):
+    def __init__(self, context_builder, interaction_service: InteractionService, config_service: ConfigurationService, parent=None):
         """Initializes the LeftSelectionPanel.
 
         Args:
             context_builder: Instance of ContextBuilder to access GDD data.
             interaction_service: Instance of InteractionService for dialogue history.
+            config_service: Instance of ConfigurationService for app settings.
             parent: The parent widget.
         """
         super().__init__(parent)
         self.context_builder = context_builder
-        self.interaction_service = interaction_service # Stocker l'instance du service
+        self.interaction_service = interaction_service
+        self.config_service = config_service
         self.filters = {}
         self.lists = {}
         self.filter_edits = {}
@@ -207,22 +209,17 @@ class LeftSelectionPanel(QWidget):
     def _on_yarn_file_item_clicked(self, item_widget_or_list_item: QWidget | QListWidgetItem):
         item_text = ""
         if isinstance(item_widget_or_list_item, QWidget) and hasattr(item_widget_or_list_item, 'text_label'):
-            item_text = item_widget_or_list_item.text_label.text() 
+            item_text = item_widget_or_list_item.text_label.text()
         elif isinstance(item_widget_or_list_item, QListWidgetItem):
             item_text = item_widget_or_list_item.text()
         else:
-            logger.warning("Clicked yarn file item is of an unexpected type.")
+            logger.warning("Clicked Yarn item is of an unexpected type.")
             return
-
+        
         logger.info(f"Yarn file selected: {item_text}")
         # The item_text here will be the relative path of the yarn file.
         # We need the full path to read it.
-        main_window = self.parent()
-        if not main_window or not hasattr(main_window, 'config_service'):
-            logger.error("Cannot access ConfigurationService from LeftSelectionPanel's parent (MainWindow).")
-            return
-
-        dialogues_path = main_window.config_service.get_unity_dialogues_path()
+        dialogues_path = self.config_service.get_unity_dialogues_path()
         if dialogues_path:
             full_path = dialogues_path / item_text
             # Emit a signal or call a method on MainWindow/DetailsPanel to show content
@@ -314,15 +311,7 @@ class LeftSelectionPanel(QWidget):
             logger.error("Yarn files list widget not found.")
             return
 
-        # MODIFIÉ: Accéder à config_service via le parent (MainWindow)
-        main_window = self.parent()
-        if not main_window or not hasattr(main_window, 'config_service'):
-            logger.error("Cannot access ConfigurationService from LeftSelectionPanel's parent (MainWindow).")
-            list_widget.clear()
-            list_widget.addItem(QListWidgetItem("(Erreur: ConfigurationService inaccessible)"))
-            return
-
-        dialogues_path = main_window.config_service.get_unity_dialogues_path()
+        dialogues_path = self.config_service.get_unity_dialogues_path()
         if not dialogues_path:
             logger.warning("Unity dialogues path not configured via ConfigurationService. Cannot list Yarn files.")
             list_widget.clear()
@@ -333,8 +322,8 @@ class LeftSelectionPanel(QWidget):
             return
 
         # config_manager.list_yarn_files est OK car c'est une fonction utilitaire qui prend un chemin.
-        yarn_files = config_manager.list_yarn_files(dialogues_path, recursive=True)
-        self.category_data_map[self.yarn_files_category_key] = yarn_files # Store Path objects
+        yarn_files = list_yarn_files(dialogues_path, recursive=True)
+        self.category_data_map[self.yarn_files_category_key] = sorted([str(Path(f).resolve()) for f in yarn_files])
 
         display_items = []
         for file_path in yarn_files:
@@ -451,7 +440,7 @@ class LeftSelectionPanel(QWidget):
     def _filter_yarn_list(self, list_widget_to_filter: QListWidget, category_key: str, filter_text: str):
         """Filters items in the Yarn files QListWidget based on text."""
         yarn_paths = self.category_data_map.get(category_key, []) # List of Path objects
-        dialogues_base_path = config_manager.get_unity_dialogues_path() # For making paths relative
+        dialogues_base_path = self.config_service.get_unity_dialogues_path() # For making paths relative
 
         list_widget_to_filter.clear()
         

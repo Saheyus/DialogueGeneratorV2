@@ -1,3 +1,22 @@
+import sys
+from pathlib import Path
+
+from ui.generation_panel.context_actions_widget import ContextActionsWidget
+from ui.generation_panel.dialogue_structure_widget import DialogueStructureWidget
+from ui.generation_panel.generated_variants_tabs_widget import GeneratedVariantsTabsWidget
+from ui.generation_panel.generation_params_widget import GenerationParamsWidget
+from ui.generation_panel.instructions_widget import InstructionsWidget
+from ui.generation_panel.interaction_editor_widget import InteractionEditorWidget
+from ui.generation_panel.interaction_sequence_widget import InteractionSequenceWidget
+from ui.generation_panel.scene_selection_widget import SceneSelectionWidget
+from ui.generation_panel.token_estimation_actions_widget import TokenEstimationActionsWidget
+
+# Ajoute le dossier racine du projet au PYTHONPATH si besoin
+CURRENT_FILE = Path(__file__).resolve()
+PROJECT_ROOT = CURRENT_FILE.parents[1]  # DialogueGenerator/
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QGroupBox, QGridLayout, 
                                QLabel, QTextEdit, QPushButton, 
                                QTabWidget, QApplication, QSizePolicy, QScrollArea, QSplitter, QMessageBox, QSpacerItem, QStyle, QHBoxLayout, QCheckBox)
@@ -7,54 +26,17 @@ import logging
 import asyncio
 from typing import Optional, Callable, Any, Dict, List
 import json
-from pathlib import Path
 import uuid
 import os
 
-# Import pour Interaction
-try:
-    from models.dialogue_structure.interaction import Interaction
-except ImportError:
-    import sys
-    from pathlib import Path
-    current_dir = Path(__file__).resolve().parent.parent
-    if str(current_dir) not in sys.path:
-        sys.path.insert(0, str(current_dir))
-    from DialogueGenerator.models.dialogue_structure.interaction import Interaction
-
-# Import local de la fonction utilitaire
-from .utils import get_icon_path
-# Ajout de l'import du nouveau widget extrait
-from .generation_panel.scene_selection_widget import SceneSelectionWidget
-from .generation_panel.context_actions_widget import ContextActionsWidget
-from .generation_panel.generation_params_widget import GenerationParamsWidget
-from .generation_panel.instructions_widget import InstructionsWidget
-from .generation_panel.token_estimation_actions_widget import TokenEstimationActionsWidget
-from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTabsWidget
-from .generation_panel.interaction_sequence_widget import InteractionSequenceWidget
-from .generation_panel.interaction_editor_widget import InteractionEditorWidget
-from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
-
-# New service import
-try:
-    from services.linked_selector import LinkedSelectorService
-    from services.yarn_renderer import JinjaYarnRenderer
-    from services.interaction_service import InteractionService
-    from llm_client import OpenAIClient, DummyLLMClient
-    from services.dialogue_generation_service import DialogueGenerationService
-except ImportError:
-    # Support exécution directe
-    import sys, os, pathlib
-    current_dir = pathlib.Path(__file__).resolve().parent.parent
-    if str(current_dir) not in sys.path:
-        sys.path.insert(0, str(current_dir))
-    from DialogueGenerator.services.linked_selector import LinkedSelectorService
-    from DialogueGenerator.services.yarn_renderer import JinjaYarnRenderer
-    from DialogueGenerator.services.interaction_service import InteractionService
-    from DialogueGenerator.llm_client import OpenAIClient, DummyLLMClient
-    from DialogueGenerator.services.dialogue_generation_service import DialogueGenerationService
-
-# Import du repository de fichiers
+# MODIFIED: Imports absolus
+from models.dialogue_structure.interaction import Interaction
+from services.linked_selector import LinkedSelectorService
+from services.yarn_renderer import JinjaYarnRenderer
+from services.interaction_service import InteractionService
+from llm_client import OpenAIClient, DummyLLMClient
+from services.dialogue_generation_service import DialogueGenerationService
+from services.configuration_service import ConfigurationService
 from services.repositories.file_repository import FileInteractionRepository
 
 logger = logging.getLogger(__name__)

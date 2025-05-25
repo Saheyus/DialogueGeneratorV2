@@ -3,10 +3,10 @@ import pytest
 import tempfile
 from pathlib import Path
 
-from DialogueGenerator.models.dialogue_structure import (
+from models.dialogue_structure import (
     DialogueLineElement, PlayerChoiceOption, PlayerChoicesBlockElement, Interaction
 )
-from DialogueGenerator.services.yarn_renderer import YarnParser, JinjaYarnRenderer
+from services.yarn_renderer import YarnParser, JinjaYarnRenderer
 
 class TestYarnParser:
     @pytest.fixture

@@ -26,7 +26,7 @@ from PySide6.QtGui import QAction, QDropEvent, QDragEnterEvent, QDragMoveEvent
 # --- Correction des imports robustes pour InteractionService et Interaction ---
 try:
     # Import absolu (cas normal application)
-    from DialogueGenerator.services.interaction_service import InteractionService
+    from services.interaction_service import InteractionService
 except ImportError:
     try:
         # Import relatif (cas test ou module)
@@ -40,12 +40,12 @@ except ImportError:
         if str(project_root) not in sys.path:
             sys.path.insert(0, str(project_root))
         try:
-            from DialogueGenerator.services.interaction_service import InteractionService
+            from services.interaction_service import InteractionService
         except ImportError as e:
             raise ImportError("Impossible d'importer InteractionService. Vérifiez l'arborescence des packages et les __init__.py.") from e
 
 # Import absolu unique pour Interaction
-from DialogueGenerator.models.dialogue_structure.interaction import Interaction
+from models.dialogue_structure.interaction import Interaction
 
 class InteractionSequenceWidget(QWidget):
     interaction_selected = Signal(object)  # Émis avec l'ID de l'interaction sélectionnée (UUID ou str)

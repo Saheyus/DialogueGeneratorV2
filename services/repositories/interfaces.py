@@ -1,5 +1,5 @@
 from typing import Protocol, List, Optional
-from DialogueGenerator.models.dialogue_structure import Interaction
+from models.dialogue_structure import Interaction
 
 class IInteractionRepository(Protocol):
     """Interface pour la persistance des Interactions."""

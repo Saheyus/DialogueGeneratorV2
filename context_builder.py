@@ -12,8 +12,8 @@ try:
 except ImportError:
     tiktoken = None
 
-from DialogueGenerator.models.dialogue_structure.interaction import Interaction
-from DialogueGenerator.models.dialogue_structure.dialogue_elements import DialogueLineElement, PlayerChoicesBlockElement, PlayerChoiceOption
+from models.dialogue_structure.interaction import Interaction
+from models.dialogue_structure.dialogue_elements import DialogueLineElement, PlayerChoicesBlockElement, PlayerChoiceOption
 
 logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s') # Déjà configuré dans main_app

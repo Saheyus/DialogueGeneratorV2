@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import re # Ajout de re pour slugify
 import uuid
-from DialogueGenerator.models.dialogue_structure import Interaction
+from models.dialogue_structure import Interaction
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                                QLabel, QComboBox, QTextEdit, QSplitter, 
                                QListWidget, QListWidgetItem, QTreeView, QAbstractItemView, QLineEdit,
                                QGroupBox, QHeaderView, QPushButton, QTabWidget, QApplication, QGridLayout, QCheckBox, QSizePolicy, QMessageBox, QSpacerItem, QFileDialog)
-from PySide6.QtGui import QStandardItemModel, QStandardItem, QPalette, QColor, QAction, QCloseEvent, QGuiApplication
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QPalette, QColor, QAction, QCloseEvent, QGuiApplication, QIcon, QKeySequence, QScreen
 from PySide6.QtCore import Qt, QSize, QTimer, QItemSelectionModel, QSortFilterProxyModel, QRegularExpression, QSettings, Signal, Slot, QByteArray
 import sys
 import os
@@ -21,15 +21,17 @@ from .generation_panel_main import GenerationPanel # MODIFIÉ: Ajout de cet impo
 # from .config_dialog import ConfigDialog  # Assuming ConfigDialog is in ui package -> Fichier manquant, commenté
 from .utils import get_icon_path # Assurez-vous que utils.py et get_icon_path existent
 
-# Imports from the parent 'DialogueGenerator' package
-from ..context_builder import ContextBuilder 
-from ..llm_client import OpenAIClient, DummyLLMClient, ILLMClient 
-from ..prompt_engine import PromptEngine 
-from ..services.configuration_service import ConfigurationService # MODIFIÉ: Ajouter ConfigurationService
-from ..services.linked_selector import LinkedSelectorService # Example if needed elsewhere
-from ..services.interaction_service import InteractionService # Importation ajoutée
-from ..services.repositories import FileInteractionRepository # Pour l'InteractionService
-from ..models.dialogue_structure.interaction import Interaction # Importation pour le type hint
+# MODIFIED: Imports absolus ou relatifs corrigés
+from config_manager import list_yarn_files # Assumant que config_manager est à la racine et expose cela
+from services.configuration_service import ConfigurationService # Service pour gérer la config
+from prompt_engine import PromptEngine
+from llm_client import ILLMClient, OpenAIClient, DummyLLMClient # MODIFIED: AnthropicClient retiré
+from context_builder import ContextBuilder
+from services.interaction_service import InteractionService
+from services.repositories.file_repository import FileInteractionRepository
+
+# MODIFIED: Added import for Interaction
+from models.dialogue_structure.interaction import Interaction
 
 # Path to the DialogueGenerator directory
 DIALOGUE_GENERATOR_DIR = Path(__file__).resolve().parent.parent
@@ -122,6 +124,7 @@ class MainWindow(QMainWindow):
 
         self.left_panel = LeftSelectionPanel(context_builder=self.context_builder, 
                                            interaction_service=self.interaction_service, # Passer le service
+                                           config_service=self.config_service, # MODIFIED: Passer config_service
                                            parent=self)
         self.details_panel = DetailsPanel(parent=self) # Instantiate DetailsPanel
         

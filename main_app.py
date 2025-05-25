@@ -24,19 +24,9 @@ from qasync import QEventLoop
 #     puis fait un import absolu (cas 2)
 # -------------------------------------------------------------
 
-try:
-    # Mode package (python -m DialogueGenerator.main_app)
-    from .context_builder import ContextBuilder
-    from .ui.main_window import MainWindow
-except ImportError:  # Lancement direct du script
-    SCRIPT_DIR = Path(__file__).resolve().parent
-    PROJECT_ROOT = SCRIPT_DIR.parent
-    if str(PROJECT_ROOT) not in sys.path:
-        sys.path.insert(0, str(PROJECT_ROOT))  # Prioritaire
-
-    # Import absolu une fois le path préparé
-    from DialogueGenerator.context_builder import ContextBuilder
-    from DialogueGenerator.ui.main_window import MainWindow
+# Simplification pour imports absolus directs, en supposant que DialogueGenerator est dans PYTHONPATH
+from context_builder import ContextBuilder
+from ui.main_window import MainWindow
 
 # --- Configuration du logging fichier + console ---
 LOGS_DIR = os.path.join(os.path.dirname(__file__), '..', 'logs')

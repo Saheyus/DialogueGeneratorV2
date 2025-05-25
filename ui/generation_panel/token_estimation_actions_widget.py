@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QPushButton, QProgressBar, QStyle, QGroupBox)
 from PySide6.QtCore import Signal, QSize, Qt
-from DialogueGenerator.ui.utils import get_icon_path # Correction de l'import
+from ui.utils import get_icon_path # Correction de l'import
 
 class TokenEstimationActionsWidget(QWidget):
     refresh_token_clicked = Signal()
