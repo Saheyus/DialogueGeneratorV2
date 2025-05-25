@@ -20,6 +20,8 @@ from models.dialogue_structure.interaction import Interaction
 import logging
 logger = logging.getLogger(__name__)
 
+from constants import UIText, FilePaths, Defaults
+
 class PreviousDialogueSelectorWidget(QWidget):
     """Widget pour sélectionner une interaction précédente comme contexte."""
     
@@ -78,7 +80,7 @@ class PreviousDialogueSelectorWidget(QWidget):
         try:
             interactions = self._interaction_service.get_all()
             if not interactions:
-                self.interactions_list_widget.addItem("Aucune interaction trouvée.")
+                self.interactions_list_widget.addItem(UIText.NO_INTERACTION_FOUND)
                 self.interactions_list_widget.setEnabled(False)
                 return
             
@@ -143,7 +145,7 @@ class PreviousDialogueSelectorWidget(QWidget):
                 self.path_display_text_edit.setText("\n".join(path_texts))
                 self.use_context_button.setEnabled(True)
             else:
-                self.path_display_text_edit.setText(f"Aucun chemin trouvé pour l'interaction {interaction_id}.")
+                self.path_display_text_edit.setText(UIText.NO_PATH_FOUND.format(interaction_id=interaction_id))
                 self.use_context_button.setEnabled(False)
             # Met à jour les cases à cocher
             path_ids = [inter.interaction_id for inter in self._current_path_interactions]

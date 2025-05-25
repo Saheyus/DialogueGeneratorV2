@@ -52,6 +52,8 @@ if str(PROJECT_ROOT) not in sys.path:
 import logging
 logger = logging.getLogger(__name__)
 
+from constants import UIText, FilePaths, Defaults
+
 class MainWindow(QMainWindow):
     """Main window of the DialogueGenerator application.
 

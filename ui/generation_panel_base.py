@@ -11,6 +11,8 @@ from ui.generation_panel.interaction_sequence_widget import InteractionSequenceW
 from ui.generation_panel.scene_selection_widget import SceneSelectionWidget
 from ui.generation_panel.token_estimation_actions_widget import TokenEstimationActionsWidget
 
+from constants import UIText, FilePaths, Defaults
+
 # Ajoute le dossier racine du projet au PYTHONPATH si besoin
 CURRENT_FILE = Path(__file__).resolve()
 PROJECT_ROOT = CURRENT_FILE.parents[1]  # DialogueGenerator/
