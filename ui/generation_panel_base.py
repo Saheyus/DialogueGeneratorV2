@@ -282,8 +282,8 @@ class GenerationPanel(QWidget):
 
     def update_token_estimation_ui(self):
         if not self.prompt_engine or not self.context_builder or not self.llm_client or not self.dialogue_generation_service:
-            self.token_actions_widget.set_token_estimation_text("Erreur: Moteurs/Service non initialisés")
-            self._display_prompt_in_tab("Erreur: Les moteurs (prompt, context, llm) ou le service de génération ne sont pas tous initialisés.")
+            self.token_actions_widget.set_token_estimation_text(UIText.ERROR_PREFIX + "Moteurs/Service non initialisés")
+            self._display_prompt_in_tab(UIText.ERROR_PREFIX + "Les moteurs (prompt, context, llm) ou le service de génération ne sont pas tous initialisés.")
             return
 
         user_instructions = self.instructions_widget.get_user_instructions_text()
@@ -314,7 +314,7 @@ class GenerationPanel(QWidget):
         scene_region_name = self.scene_selection_widget.scene_region_combo.currentText()
         scene_sub_location_name = self.scene_selection_widget.scene_sub_location_combo.currentText()
 
-        placeholders = ["(Aucun)", "(Aucune)", "(Tous / Non spécifié)", "(Aucun sous-lieu)", "(Sélectionner une région d'abord)"]
+        placeholders = [UIText.NONE, UIText.NONE_FEM, UIText.ALL, UIText.NONE_SUBLOCATION, UIText.NO_SELECTION]
 
         protagonists = {}
         if char_a_name and char_a_name not in placeholders: protagonists["personnage_a"] = char_a_name
@@ -387,7 +387,7 @@ class GenerationPanel(QWidget):
             scene_region_name = self.scene_selection_widget.scene_region_combo.currentText()
             scene_sub_location_name = self.scene_selection_widget.scene_sub_location_combo.currentText()
 
-            placeholders = ["(Aucun)", "(Aucune)", "(Tous / Non spécifié)", "(Aucun sous-lieu)", "(Sélectionner une région d'abord)"]
+            placeholders = [UIText.NONE, UIText.NONE_FEM, UIText.ALL, UIText.NONE_SUBLOCATION, UIText.NO_SELECTION]
             
             protagonists = {}
             if char_a_name and char_a_name not in placeholders: protagonists["personnage_a"] = char_a_name
@@ -615,7 +615,7 @@ class GenerationPanel(QWidget):
         scene_region_raw = self.scene_selection_widget.scene_region_combo.currentText()
         scene_sub_location_raw = self.scene_selection_widget.scene_sub_location_combo.currentText()
 
-        placeholders = ["(Aucun)", "(Aucune)", "(Tous / Non spécifié)", "(Aucun sous-lieu)", "(Sélectionner une région d'abord)"]
+        placeholders = [UIText.NONE, UIText.NONE_FEM, UIText.ALL, UIText.NONE_SUBLOCATION, UIText.NO_SELECTION]
 
         char_a = None if char_a_raw in placeholders or not char_a_raw.strip() else char_a_raw
         char_b = None if char_b_raw in placeholders or not char_b_raw.strip() else char_b_raw
@@ -647,7 +647,7 @@ class GenerationPanel(QWidget):
         scene_region_raw = self.scene_selection_widget.scene_region_combo.currentText()
         scene_sub_location_raw = self.scene_selection_widget.scene_sub_location_combo.currentText()
 
-        placeholders = ["(Aucun)", "(Aucune)", "(Tous / Non spécifié)", "(Aucun sous-lieu)", "(Sélectionner une région d'abord)"]
+        placeholders = [UIText.NONE, UIText.NONE_FEM, UIText.ALL, UIText.NONE_SUBLOCATION, UIText.NO_SELECTION]
 
         char_a = None if char_a_raw in placeholders or not char_a_raw.strip() else char_a_raw
         char_b = None if char_b_raw in placeholders or not char_b_raw.strip() else char_b_raw
