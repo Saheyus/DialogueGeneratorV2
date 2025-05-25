@@ -101,6 +101,12 @@ class GenerationPanel(QWidget):
         self.linked_selector = LinkedSelectorService(self.context_builder)
         self.yarn_renderer = JinjaYarnRenderer()
         
+        # Initialisation de interaction_service ici pour qu'il soit dispo dans _init_ui
+        interactions_dir = DEFAULT_INTERACTIONS_DIR
+        os.makedirs(interactions_dir, exist_ok=True)
+        self.interaction_repository = FileInteractionRepository(str(interactions_dir))
+        self.interaction_service = InteractionService(repository=self.interaction_repository)
+
         self.available_llm_models = available_llm_models if available_llm_models else []
         self.current_llm_model_identifier = current_llm_model_identifier
 
@@ -121,123 +127,112 @@ class GenerationPanel(QWidget):
         left_column_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         main_splitter.addWidget(left_column_widget)
 
-        # --- Séquence d'Interactions Modulaire ---
-        # Création du repository et du service pour les interactions
-        interactions_dir = DEFAULT_INTERACTIONS_DIR
-        os.makedirs(interactions_dir, exist_ok=True)
-        self.interaction_repository = FileInteractionRepository(str(interactions_dir))
-        self.interaction_service = InteractionService(repository=self.interaction_repository)
-        
-        # Onglets central contenant les interactions et autres fonctionnalités
+        # Onglets central
         central_tabs = QTabWidget()
         left_column_layout.addWidget(central_tabs)
         
-        # --- Onglet 2 : Génération ---
         generation_tab = QWidget()
         generation_tab_layout = QVBoxLayout(generation_tab)
         generation_tab_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # --- Section Sélection Personnages et Scène ---
+        # 1. Initialisation de TOUS les widgets de section
         self.scene_selection_widget = SceneSelectionWidget(self.context_builder)
+        self.context_actions_widget = ContextActionsWidget()
+        self.generation_params_widget = GenerationParamsWidget(
+            self.available_llm_models,
+            self.current_llm_model_identifier
+        )
+        self.dialogue_structure_widget = DialogueStructureWidget()
+        self.instructions_widget = InstructionsWidget()
+        self.token_actions_widget = TokenEstimationActionsWidget()
+        self.variants_display_widget = GeneratedVariantsTabsWidget() # Doit être ici pour l'alias plus bas
+
+        # Ajout des widgets au layout de l'onglet Génération
         generation_tab_layout.addWidget(self.scene_selection_widget)
-        # Connexion des signaux du widget extrait aux méthodes existantes
+        generation_tab_layout.addWidget(self.context_actions_widget)
+        generation_tab_layout.addWidget(self.generation_params_widget)
+        generation_tab_layout.addWidget(self.dialogue_structure_widget)
+        generation_tab_layout.addWidget(self.instructions_widget)
+        generation_tab_layout.addWidget(self.token_actions_widget)
+        generation_tab_layout.addStretch(1)
+        central_tabs.addTab(generation_tab, "Génération")
+
+        # --- Onglet Interactions (initialisation inchangée pour l'instant) ---
+        interactions_tab = QWidget()
+        interactions_tab_layout = QVBoxLayout(interactions_tab)
+        # ... (code de l'onglet interactions inchangé)
+        self.interaction_sequence_widget = InteractionSequenceWidget(
+            interaction_service=self.interaction_service
+        )
+        interactions_tab_layout.addWidget(self.interaction_sequence_widget)
+        self.interaction_editor_widget = InteractionEditorWidget(self.interaction_service)
+        interactions_tab_layout.addWidget(self.interaction_editor_widget)
+        interactions_tab_layout.addStretch(1)
+        central_tabs.addTab(interactions_tab, "Interactions")
+
+        # Colonne de Droite (inchangée, variants_display_widget déjà initialisé)
+        right_column_widget = QWidget()
+        right_column_layout = QVBoxLayout(right_column_widget)
+        right_column_layout.setContentsMargins(0,0,0,0)
+        main_splitter.addWidget(right_column_widget)
+        right_column_layout.addWidget(self.variants_display_widget)
+        
+        # 2. Création de TOUS les alias APRÈS l'initialisation des widgets enfants
+        self.llm_model_combo = self.generation_params_widget.llm_model_combo
+        self.k_variants_combo = self.generation_params_widget.k_variants_combo
+        self.max_context_tokens_spinbox = self.generation_params_widget.max_context_tokens_spinbox
+        self.structured_output_checkbox = self.generation_params_widget.structured_output_checkbox # Même si supprimé logiquement, l'alias peut exister
+        self.token_estimation_label = self.token_actions_widget.token_estimation_label
+        self.generation_progress_bar = self.token_actions_widget.generation_progress_bar
+        self.generate_dialogue_button = self.token_actions_widget.generate_dialogue_button
+        self.refresh_token_button = self.token_actions_widget.refresh_token_button
+        self.variant_display_tabs = self.variants_display_widget # Alias correct
+
+        # 3. Connexion des signaux des widgets et des alias
+        # Signaux des widgets de section
         self.scene_selection_widget.character_a_changed.connect(self._schedule_settings_save_and_token_update)
         self.scene_selection_widget.character_b_changed.connect(self._schedule_settings_save_and_token_update)
         self.scene_selection_widget.scene_region_changed.connect(self._on_scene_region_changed)
         self.scene_selection_widget.scene_sub_location_changed.connect(self._schedule_settings_save_and_token_update)
         self.scene_selection_widget.swap_characters_clicked.connect(self._swap_characters)
 
-        # --- Section Actions sur le Contexte ---
-        self.context_actions_widget = ContextActionsWidget()
-        generation_tab_layout.addWidget(self.context_actions_widget)
         self.context_actions_widget.select_linked_clicked.connect(self._on_select_linked_elements_clicked)
         self.context_actions_widget.unlink_unrelated_clicked.connect(self._on_unlink_unrelated_clicked)
         self.context_actions_widget.uncheck_all_clicked.connect(self._on_uncheck_all_clicked)
 
-        # --- Section Paramètres de Génération ---
-        self.generation_params_widget = GenerationParamsWidget(
-            self.available_llm_models,
-            self.current_llm_model_identifier
-        )
-        generation_tab_layout.addWidget(self.generation_params_widget)
         self.generation_params_widget.k_variants_changed.connect(self._schedule_settings_save)
         self.generation_params_widget.max_context_tokens_changed.connect(self._on_max_context_tokens_changed)
-        self.generation_params_widget.structured_output_changed.connect(self._schedule_settings_save)
+        # self.generation_params_widget.structured_output_changed.connect(self._schedule_settings_save) # Checkbox supprimée
 
-        # --- Section Structure du Dialogue (PNJ/PJ/Stop) ---
-        self.dialogue_structure_widget = DialogueStructureWidget()
-        generation_tab_layout.addWidget(self.dialogue_structure_widget)
         self.dialogue_structure_widget.structure_changed.connect(self._schedule_settings_save_and_token_update)
 
-        # --- Section Instructions Utilisateur (modifiée en QTabWidget) ---
-        self.instructions_widget = InstructionsWidget()
-        generation_tab_layout.addWidget(self.instructions_widget)
         self.instructions_widget.user_instructions_changed.connect(self._schedule_settings_save_and_token_update)
         self.instructions_widget.system_prompt_changed.connect(self._on_system_prompt_changed)
         self.instructions_widget.restore_default_system_prompt_clicked.connect(self._restore_default_system_prompt)
 
-        # --- Section Estimation Tokens et Bouton Générer ---
-        self.token_actions_widget = TokenEstimationActionsWidget()
-        generation_tab_layout.addWidget(self.token_actions_widget)
         self.token_actions_widget.refresh_token_clicked.connect(self._trigger_token_update)
         self.token_actions_widget.generate_dialogue_clicked.connect(self._launch_dialogue_generation)
-
-        generation_tab_layout.addStretch(1)
-        central_tabs.addTab(generation_tab, "Génération")
-
-        # --- Onglet 1 : Interactions ---
-        interactions_tab = QWidget()
-        interactions_tab_layout = QVBoxLayout(interactions_tab)
-        interactions_tab_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         
-        # Initialisation du widget avec le service
-        self.interaction_sequence_widget = InteractionSequenceWidget(
-            interaction_service=self.interaction_service
-        )
-        interactions_tab_layout.addWidget(self.interaction_sequence_widget)
+        self.variants_display_widget.validate_interaction_requested.connect(self._on_validate_interaction_requested_from_tabs)
+
         self.interaction_sequence_widget.interaction_selected.connect(self._on_interaction_selected)
         self.interaction_sequence_widget.sequence_changed.connect(self._on_sequence_changed)
         self.interaction_sequence_widget.interaction_selected.connect(self._on_edit_interaction_requested)
-        
-        # Initialisation de l'éditeur d'interaction
-        self.interaction_editor_widget = InteractionEditorWidget(self.interaction_service)
         self.interaction_editor_widget.interaction_changed.connect(self._on_interaction_changed)
-        interactions_tab_layout.addWidget(self.interaction_editor_widget)
+
+        # Connexion du signal de l'alias (pour la sauvegarde de max_context_tokens)
+        self.max_context_tokens_spinbox.valueChanged.connect(self._schedule_settings_save)
         
-        interactions_tab_layout.addStretch(1)
-        central_tabs.addTab(interactions_tab, "Interactions")
-
-        # --- Colonne de Droite: Affichage des Variantes ---
-        right_column_widget = QWidget()
-        right_column_layout = QVBoxLayout(right_column_widget)
-        right_column_layout.setContentsMargins(0,0,0,0)
-        main_splitter.addWidget(right_column_widget)
-
-        self.variants_display_widget = GeneratedVariantsTabsWidget()
-        right_column_layout.addWidget(self.variants_display_widget)
-        # Connecte la validation d'une interaction générée au nouveau slot de sauvegarde
-        self.variants_display_widget.validate_interaction_requested.connect(self._on_validate_interaction_requested_from_tabs)
-
-        main_splitter.setStretchFactor(0, 1) 
-        main_splitter.setStretchFactor(1, 2) 
-        initial_widths = [self.width() // 3 if self.width() > 0 else 300, 2 * self.width() // 3 if self.width() > 0 else 600] # Safe defaults
-        if all(w > 50 for w in initial_widths): # Ensure some minimal width
+        # Autres configurations UI
+        main_splitter.setStretchFactor(0, 1)
+        main_splitter.setStretchFactor(1, 2)
+        initial_widths = [self.width() // 3 if self.width() > 0 else 300, 2 * self.width() // 3 if self.width() > 0 else 600]
+        if all(w > 50 for w in initial_widths):
             main_splitter.setSizes(initial_widths)
         else:
-            logger.warning("Largeurs initiales calculées pour le splitter principal non valides ou trop petites, utilisation des tailles par défaut du QSplitter.")
+            logger.warning("Largeurs initiales pour QSplitter non valides, utilisation des tailles par défaut.")
         
-        self.update_token_estimation_signal.connect(self.update_token_estimation_ui) 
-
-        # Alias pour compatibilité avec l'ancien code (à refactoriser progressivement)
-        self.llm_model_combo = self.generation_params_widget.llm_model_combo
-        self.k_variants_combo = self.generation_params_widget.k_variants_combo
-        self.max_context_tokens_spinbox = self.generation_params_widget.max_context_tokens_spinbox
-        self.structured_output_checkbox = self.generation_params_widget.structured_output_checkbox
-        self.token_estimation_label = self.token_actions_widget.token_estimation_label
-        self.generation_progress_bar = self.token_actions_widget.generation_progress_bar
-        self.generate_dialogue_button = self.token_actions_widget.generate_dialogue_button
-        self.refresh_token_button = self.token_actions_widget.refresh_token_button
-        self.variant_display_tabs = self.variants_display_widget
+        self.update_token_estimation_signal.connect(self.update_token_estimation_ui)
 
     def finalize_ui_setup(self):
         logger.debug("Finalizing GenerationPanel UI setup...")
@@ -573,23 +568,11 @@ class GenerationPanel(QWidget):
 
             logger.info(f"Appel de llm_client.generate_variants avec k={k_variants}...")
             
-            target_response_model = None
-            # LOGS AJOUTÉS POUR DIAGNOSTIC
-            logger.info(f"[LOG_DEBUG_STRUCT] Vérification pour sortie structurée:")
-            logger.info(f"[LOG_DEBUG_STRUCT]   structured_output_checkbox.isChecked(): {self.structured_output_checkbox.isChecked()}")
-            logger.info(f"[LOG_DEBUG_STRUCT]   isinstance(self.llm_client, OpenAIClient): {isinstance(self.llm_client, OpenAIClient)}")
-            if self.llm_client:
-                logger.info(f"[LOG_DEBUG_STRUCT]   type(self.llm_client): {type(self.llm_client).__name__}")
-
-            if self.structured_output_checkbox.isChecked() and isinstance(self.llm_client, OpenAIClient):
-                # Utilisation du modèle dynamique selon la structure choisie
-                structure = self.dialogue_structure_widget.get_structure()
-                target_response_model = build_interaction_model_from_structure(structure)
-                logger.info(f"[LOG_DEBUG_STRUCT] Modèle Pydantic dynamique utilisé pour la structure: {structure}")
-            else:
-                logger.info("[LOG_DEBUG_STRUCT] Conditions non remplies pour la sortie structurée (target_response_model restera None).")
-
-            # Appel modifié à generate_variants
+            structure = self.dialogue_structure_widget.get_structure()
+            target_response_model = build_interaction_model_from_structure(structure)
+            logger.info(f"[STRUCTURED] Modèle Pydantic dynamique utilisé pour la structure: {structure}")
+            logger.info(f"[STRUCTURED] Prompt envoyé au LLM: {full_prompt[:300]}")
+            logger.info(f"[STRUCTURED] Schéma du modèle: {target_response_model.model_json_schema()}")
             variants = await self.llm_client.generate_variants(
                 prompt=full_prompt, 
                 k=k_variants, 
@@ -873,7 +856,6 @@ class GenerationPanel(QWidget):
             "k_variants": self.k_variants_combo.currentText(),
             "user_instructions": self.instructions_widget.get_user_instructions_text(),
             "llm_model": self.llm_model_combo.currentData(), # Sauvegarde l'identifiant du modèle
-            "structured_output": self.structured_output_checkbox.isChecked(),
             "system_prompt": self.instructions_widget.get_system_prompt_text(),
             "max_context_tokens": self.max_context_tokens_spinbox.value(),
             "dialogue_structure": self.dialogue_structure_widget.get_structure()
@@ -883,7 +865,6 @@ class GenerationPanel(QWidget):
 
     def load_settings(self, settings: dict):
         logger.debug(f"Chargement des paramètres dans GenerationPanel: {settings}")
-        
         self._is_loading_settings = True
         
         self.scene_selection_widget.character_a_combo.setCurrentText(settings.get("character_a", ""))
@@ -905,14 +886,6 @@ class GenerationPanel(QWidget):
             default_user_instructions="", # La valeur est déjà extraite dans instruction_settings_to_load
             default_system_prompt=default_system_prompt_for_iw
         )
-        # Les anciennes lignes :
-        # self.instructions_widget.set_user_instructions_text(settings.get("user_instructions", "")) # ERREUR: méthode inexistante
-        # saved_system_prompt = settings.get("system_prompt")
-        # if saved_system_prompt:
-        #     self.instructions_widget.set_system_prompt_text(saved_system_prompt)
-        # else:
-        #     self._restore_default_system_prompt()
-        # sont maintenant gérées par self.instructions_widget.load_settings()
         
         model_identifier = settings.get("llm_model")
         if model_identifier:
@@ -925,19 +898,12 @@ class GenerationPanel(QWidget):
             if hasattr(self, 'generation_params_widget') and self.generation_params_widget and self.generation_params_widget.llm_model_combo.count() > 0:
                  self.generation_params_widget.llm_model_combo.setCurrentIndex(0)
         
-        self.structured_output_checkbox.setChecked(settings.get("structured_output", True))
-        
-        # Charger max_context_tokens depuis MainWindow si disponible
-        if hasattr(self.main_window_ref, 'app_settings') and "max_context_tokens" in self.main_window_ref.app_settings:
-            tokens_value = self.main_window_ref.app_settings["max_context_tokens"]
-            k_tokens_value = tokens_value / 1000
-            self.max_context_tokens_spinbox.setValue(k_tokens_value)
-        
-        # Assurer la synchro avec prompt_engine après le chargement des settings de InstructionsWidget
-        self._update_prompt_engine_system_prompt() 
-
         if "dialogue_structure" in settings:
             self.dialogue_structure_widget.set_structure(settings["dialogue_structure"])
+        
+        # Restaure la valeur sauvegardée pour max_context_tokens si présente
+        if "max_context_tokens" in settings:
+            self.max_context_tokens_spinbox.setValue(settings["max_context_tokens"])
         
         self._is_loading_settings = False
         self.update_token_estimation_signal.emit()
