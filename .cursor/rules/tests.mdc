@@ -1,0 +1,9 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+- Chaque fois que tu finis une fonctionnalité, lance les tests unitaires avec pytest
+- Chaque fois que tu finis une fonctionnalité, lance un tests d'interface avec "python main_app.py" en avant-plan
+
+- Une fois les tests validés, commit et push
