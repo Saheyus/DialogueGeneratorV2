@@ -1,0 +1,37 @@
+F:\Frameworks\Python\Python310\lib\site-packages\pytest_asyncio\plugin.py:217: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+============================= test session starts =============================
+platform win32 -- Python 3.10.6, pytest-8.3.5, pluggy-1.6.0
+PySide6 6.9.0 -- Qt runtime 6.9.0 -- Qt compiled 6.9.0
+rootdir: F:\Projets\Notion_Scrapper
+configfile: pytest.ini
+plugins: anyio-4.9.0, asyncio-0.26.0, cov-6.1.1, mock-3.14.0, qt-4.4.0
+asyncio: mode=strict, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 94 items
+
+tests\core\dialogue_structure\test_dialogue_elements.py .....            [  5%]
+tests\core\dialogue_structure\test_repositories.py ............          [ 18%]
+tests\core\dialogue_system\models\test_yarn_parser.py ...                [ 21%]
+tests\core\dialogue_system\models\test_yarn_renderer.py ...              [ 24%]
+tests\test_app_launch.py ....                                            [ 28%]
+tests\test_context_builder.py .......................................... [ 73%]
+...                                                                      [ 76%]
+tests\test_interaction_service.py .........                              [ 86%]
+tests\test_left_selection_panel.py .                                     [ 87%]
+tests\test_linked_selector.py ...                                        [ 90%]
+tests\test_yarn_renderer.py .....                                        [ 95%]
+tests\ui\generation_panel\test_scene_selection_widget.py ....            [100%]
+
+============================== warnings summary ===============================
+ui\generation_panel\test_interaction_sequence_widget.py:5
+  F:\Projets\Notion_Scrapper\DialogueGenerator\ui\generation_panel\test_interaction_sequence_widget.py:5: PytestCollectionWarning: cannot collect test class 'TestWindow' because it has a __init__ constructor (from: DialogueGenerator/ui/generation_panel/test_interaction_sequence_widget.py)
+    class TestWindow(QMainWindow):
+
+DialogueGenerator/tests/ui/generation_panel/test_scene_selection_widget.py::test_swap_characters
+  F:\Frameworks\Python\Python310\lib\site-packages\pytestqt\wait_signal.py:741: RuntimeWarning: Failed to disconnect (<bound method _AbstractSignalBlocker._quit_loop_by_timeout of <pytestqt.wait_signal.MultiSignalBlocker object at 0x00000241435E7550>>) from signal "timeout()".
+    signal.disconnect(slot)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 94 passed, 2 warnings in 2.11s ========================

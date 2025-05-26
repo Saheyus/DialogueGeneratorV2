@@ -31,7 +31,7 @@ from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTa
 from .generation_panel.interactions_tab_widget import InteractionsTabWidget
 from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
 from .generation_panel.dialogue_generation_handler import DialogueGenerationHandler # Ajouté
-from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated
+from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all
 
 # New service import
 try:
@@ -204,7 +204,7 @@ class GenerationPanel(QWidget):
 
         self.context_actions_widget.select_linked_clicked.connect(lambda: handle_select_linked_elements(self))
         self.context_actions_widget.unlink_unrelated_clicked.connect(lambda: handle_unlink_unrelated(self))
-        self.context_actions_widget.uncheck_all_clicked.connect(self._on_uncheck_all_clicked)
+        self.context_actions_widget.uncheck_all_clicked.connect(lambda: handle_uncheck_all(self))
 
         self.generation_params_widget.k_variants_changed.connect(self._schedule_settings_save)
         self.generation_params_widget.max_context_tokens_changed.connect(self._on_max_context_tokens_changed)
@@ -624,7 +624,7 @@ class GenerationPanel(QWidget):
             except Exception:
                 pass  # Pas critique si déjà déconnecté
 
-            self.interactions_tab_content_widget.refresh_list(select_id=str(interaction.interaction_id))
+            self.interactions_tab_content_widget.refresh_sequence_list(select_id=str(interaction.interaction_id))
 
             # Affiche l'interaction dans l'éditeur
             self.interactions_tab_content_widget.display_interaction_in_editor(interaction)

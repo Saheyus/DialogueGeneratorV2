@@ -83,4 +83,18 @@ def handle_unlink_unrelated(panel):
         else:
             panel.main_window_ref.statusBar().showMessage("Aucun élément lié à conserver. Tous les éléments secondaires ont été décochés.", 3000)
     else:
-        logger.warning("Référence à left_panel non trouvée pour mettre à jour les coches.") 
+        logger.warning("Référence à left_panel non trouvée pour mettre à jour les coches.")
+
+def handle_uncheck_all(panel):
+    """
+    Slot pour le bouton "Tout Décocher".
+    Décocher tous les éléments dans le LeftSelectionPanel.
+    """
+    from constants import UIText
+    if hasattr(panel.main_window_ref, 'left_panel') and hasattr(panel.main_window_ref.left_panel, 'uncheck_all_items'):
+        panel.main_window_ref.left_panel.uncheck_all_items()
+        logger.info("Tous les éléments ont été décochés dans LeftSelectionPanel.")
+        panel.main_window_ref.statusBar().showMessage(UIText.ERROR_PREFIX + "Impossible de tout décocher.", 3000)
+    else:
+        logger.warning("Impossible de tout décocher: left_panel ou méthode uncheck_all_items non trouvée.")
+        panel.main_window_ref.statusBar().showMessage(UIText.ERROR_PREFIX + "Impossible de tout décocher.", 3000) 
