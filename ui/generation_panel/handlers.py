@@ -131,4 +131,12 @@ def handle_max_context_tokens_changed(panel, new_value):
     """
     tokens_value = int(new_value * 1000)
     logger.info(f"Limite de tokens pour le contexte mise à jour: {tokens_value}")
-    panel._schedule_settings_save_and_token_update() 
+    panel._schedule_settings_save_and_token_update()
+
+def handle_k_variants_changed(panel, value):
+    """
+    Slot pour le changement du nombre de variantes à générer (k_variants).
+    Déclenche la sauvegarde des paramètres.
+    """
+    logger.info(f"Nombre de variantes à générer mis à jour: {value}")
+    panel._schedule_settings_save() 

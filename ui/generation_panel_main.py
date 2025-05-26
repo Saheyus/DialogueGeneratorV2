@@ -31,7 +31,7 @@ from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTa
 from .generation_panel.interactions_tab_widget import InteractionsTabWidget
 from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
 from .generation_panel.dialogue_generation_handler import DialogueGenerationHandler # Ajouté
-from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt, handle_max_context_tokens_changed
+from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt, handle_max_context_tokens_changed, handle_k_variants_changed
 
 # New service import
 try:
@@ -206,7 +206,7 @@ class GenerationPanel(QWidget):
         self.context_actions_widget.unlink_unrelated_clicked.connect(lambda: handle_unlink_unrelated(self))
         self.context_actions_widget.uncheck_all_clicked.connect(lambda: handle_uncheck_all(self))
 
-        self.generation_params_widget.k_variants_changed.connect(self._schedule_settings_save)
+        self.generation_params_widget.k_variants_changed.connect(lambda value: handle_k_variants_changed(self, value))
         self.generation_params_widget.max_context_tokens_changed.connect(lambda value: handle_max_context_tokens_changed(self, value))
         # self.generation_params_widget.structured_output_changed.connect(self._schedule_settings_save) # Checkbox supprimée
 
