@@ -31,7 +31,7 @@ from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTa
 from .generation_panel.interactions_tab_widget import InteractionsTabWidget
 from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
 from .generation_panel.dialogue_generation_handler import DialogueGenerationHandler # Ajouté
-from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt, handle_max_context_tokens_changed, handle_k_variants_changed, handle_structure_changed, handle_user_instructions_changed
+from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt, handle_max_context_tokens_changed, handle_k_variants_changed, handle_structure_changed, handle_user_instructions_changed, handle_refresh_token, handle_generate_dialogue
 
 # New service import
 try:
@@ -216,8 +216,8 @@ class GenerationPanel(QWidget):
         self.instructions_widget.system_prompt_changed.connect(lambda: handle_system_prompt_changed(self))
         self.instructions_widget.restore_default_system_prompt_clicked.connect(lambda: handle_restore_default_system_prompt(self))
 
-        self.token_actions_widget.refresh_token_clicked.connect(self._trigger_token_update)
-        self.token_actions_widget.generate_dialogue_clicked.connect(self._launch_dialogue_generation)
+        self.token_actions_widget.refresh_token_clicked.connect(lambda: handle_refresh_token(self))
+        self.token_actions_widget.generate_dialogue_clicked.connect(lambda: handle_generate_dialogue(self))
         
         self.variants_display_widget.validate_interaction_requested.connect(self._on_validate_interaction_requested_from_tabs)
 
@@ -256,7 +256,7 @@ class GenerationPanel(QWidget):
         self.scene_selection_widget.populate_scene_combos(region_names)
         
         self.generation_params_widget.populate_llm_model_combo()
-        self._trigger_token_update() 
+        self.update_token_estimation_ui() 
         logger.debug("GenerationPanel UI setup finalized.")
 
     def populate_llm_model_combo(self):
@@ -299,7 +299,7 @@ class GenerationPanel(QWidget):
             else:
                 logger.warning("Nouveau client LLM n'a pas d'attribut 'model_identifier' ou 'model', l'identifiant actuel pourrait être incorrect.")
 
-        self._trigger_token_update()
+        self.update_token_estimation_ui()
         self._update_structured_output_checkbox_state()
 
     @Slot()

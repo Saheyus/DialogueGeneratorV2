@@ -155,4 +155,20 @@ def handle_user_instructions_changed(panel):
     Déclenche la sauvegarde des paramètres et la mise à jour de l'estimation des tokens.
     """
     logger.info("Instructions utilisateur modifiées.")
-    panel._schedule_settings_save_and_token_update() 
+    panel._schedule_settings_save_and_token_update()
+
+def handle_refresh_token(panel):
+    """
+    Slot pour le bouton de rafraîchissement de l'estimation des tokens.
+    Rafraîchit l'estimation du prompt et le nombre de tokens affichés.
+    """
+    logger.info("Rafraîchissement manuel de l'estimation des tokens demandé.")
+    panel.update_token_estimation_ui()
+
+def handle_generate_dialogue(panel):
+    """
+    Slot pour le bouton de génération de dialogue.
+    Déclenche la génération de dialogue via le handler asynchrone.
+    """
+    logger.info("Lancement de la génération de dialogue (via handler extrait).")
+    panel._launch_dialogue_generation() 
