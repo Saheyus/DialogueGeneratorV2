@@ -1,27 +1,23 @@
-import pathlib
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QGroupBox, QGridLayout, 
-                               QLabel, QComboBox, QTextEdit, QPushButton, 
-                               QTabWidget, QLineEdit, QCheckBox, QHBoxLayout, QApplication, QSizePolicy, QProgressBar, QScrollArea, QSplitter, QFrame, QPlainTextEdit, QMessageBox, QSpacerItem, QMenu, QStyle, QSpinBox, QDoubleSpinBox)
-from PySide6.QtCore import Qt, Signal, Slot, QSize
-from PySide6.QtGui import QPalette, QColor, QFont, QIcon, QAction
-import logging # Added for logging
-import asyncio # Added for asynchronous tasks
-from typing import Optional, Callable, Any, List # Added List
-import json # Ajout pour charger la config LLM potentiellement ici aussi si besoin
-from pathlib import Path
-import uuid
-import sys
+# --- Imports standard ---
 import os
+import sys
+import uuid
+import pathlib
+from pathlib import Path
+import logging
+import asyncio
+from typing import Optional
 
-from models.dialogue_structure.interaction import Interaction
+# --- Imports PySide6 ---
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QLabel, QComboBox, QTextEdit, QPushButton, QProgressBar, QApplication, QMessageBox, QSplitter
+from PySide6.QtCore import Qt, Signal, Slot
+
+# --- Imports internes (services, modèles, constantes) ---
 from services.interaction_service import InteractionService
 from services.repositories.file_repository import FileInteractionRepository
-from constants import UIText, FilePaths, Defaults
-from services.dialogue_generation_service import DialogueGenerationService
+from constants import UIText, Defaults
 
-# Import local de la fonction utilitaire
-from .utils import get_icon_path
-# Ajout de l'import du nouveau widget extrait
+# --- Imports locaux (widgets et handlers du panneau de génération) ---
 from .generation_panel.scene_selection_widget import SceneSelectionWidget
 from .generation_panel.context_actions_widget import ContextActionsWidget
 from .generation_panel.generation_params_widget import GenerationParamsWidget
@@ -30,16 +26,17 @@ from .generation_panel.token_estimation_actions_widget import TokenEstimationAct
 from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTabsWidget
 from .generation_panel.interactions_tab_widget import InteractionsTabWidget
 from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
-from .generation_panel.dialogue_generation_handler import DialogueGenerationHandler # Ajouté
-from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt, handle_max_context_tokens_changed, handle_k_variants_changed, handle_structure_changed, handle_user_instructions_changed, handle_refresh_token, handle_generate_dialogue, handle_validate_interaction_requested_from_tabs, handle_interaction_selected, handle_sequence_changed, handle_edit_interaction_requested, handle_interaction_changed, get_generation_panel_settings, load_generation_panel_settings, handle_update_structured_output_checkbox_state, handle_generation_task_started, handle_generation_task_succeeded, handle_generation_task_failed, handle_prompt_preview_ready_for_display
+from .generation_panel.dialogue_generation_handler import DialogueGenerationHandler
+from .generation_panel.handlers import (
+    handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt, handle_max_context_tokens_changed, handle_k_variants_changed, handle_structure_changed, handle_user_instructions_changed, handle_refresh_token, handle_generate_dialogue, handle_validate_interaction_requested_from_tabs, handle_interaction_selected, handle_sequence_changed, handle_edit_interaction_requested, handle_interaction_changed, get_generation_panel_settings, load_generation_panel_settings, handle_update_structured_output_checkbox_state, handle_generation_task_started, handle_generation_task_succeeded, handle_generation_task_failed, handle_prompt_preview_ready_for_display
+)
 
-# New service import
+# --- Imports pour compatibilité exécution directe (try/except) ---
 try:
     from services.linked_selector import LinkedSelectorService
     from services.yarn_renderer import JinjaYarnRenderer
     from llm_client import OpenAIClient, DummyLLMClient
 except ImportError:
-    # Support exécution directe
     current_dir = pathlib.Path(__file__).resolve().parent.parent
     if str(current_dir) not in sys.path:
         sys.path.insert(0, str(current_dir))
@@ -47,14 +44,16 @@ except ImportError:
     from services.yarn_renderer import JinjaYarnRenderer
     from llm_client import OpenAIClient, DummyLLMClient
 
-logger = logging.getLogger(__name__) # Added logger
+logger = logging.getLogger(__name__)
 
-# Chemin vers le fichier de configuration LLM, au cas où GenerationPanel aurait besoin de le lire directement
-# Bien que la liste des modèles soit passée par MainWindow, cela pourrait servir pour d'autres settings.
+# Chemins et constantes
 DIALOGUE_GENERATOR_DIR = Path(__file__).resolve().parent.parent
 LLM_CONFIG_FILE_PATH = DIALOGUE_GENERATOR_DIR / "llm_config.json"
-# Dossier par défaut pour stocker les interactions
 DEFAULT_INTERACTIONS_DIR = DIALOGUE_GENERATOR_DIR / "data" / "interactions"
+
+# =============================
+#   Classe principale du panel
+# =============================
 
 class GenerationPanel(QWidget):
     """Manages UI elements for dialogue generation parameters, context selection, and results display.
@@ -131,6 +130,7 @@ class GenerationPanel(QWidget):
         self._init_ui()
         # finalize_ui_setup() est appelé par MainWindow
 
+    # --- Initialisation UI et connexion des signaux ---
     def _init_ui(self):
         main_layout = QHBoxLayout(self)
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -515,51 +515,8 @@ class GenerationPanel(QWidget):
         
         self.variants_display_widget.blockSignals(False)
 
-    @Slot()
-    def _on_uncheck_all_clicked(self):
-        """Slot pour le bouton "Tout Décocher".
-        """
-        if hasattr(self.main_window_ref, 'left_panel') and hasattr(self.main_window_ref.left_panel, 'uncheck_all_items'):
-            self.main_window_ref.left_panel.uncheck_all_items()
-            logger.info("Tous les éléments ont été décochés dans LeftSelectionPanel.")
-            self.main_window_ref.statusBar().showMessage(UIText.ERROR_PREFIX + "Impossible de tout décocher.", 3000)
-            # QApplication.instance().beep() # Optionnel, si le son est gênant
-        else:
-            logger.warning("Impossible de tout décocher: left_panel ou méthode uncheck_all_items non trouvée.")
-            self.main_window_ref.statusBar().showMessage(UIText.ERROR_PREFIX + "Impossible de tout décocher.", 3000)
-
     def get_settings(self) -> dict:
         return get_generation_panel_settings(self)
 
     def load_settings(self, settings: dict):
         load_generation_panel_settings(self, settings)
-
-    @Slot(uuid.UUID)
-    def _on_interaction_selected(self, interaction_id: uuid.UUID):
-        """Gère la sélection d'une interaction dans la liste.
-        
-        Args:
-            interaction_id: L'identifiant de l'interaction sélectionnée ou None si aucune.
-        """
-        if interaction_id:
-            logger.info(f"Interaction sélectionnée : {interaction_id}")
-            interaction = self.interaction_service.get_by_id(str(interaction_id))
-            if interaction:
-                title_display = getattr(interaction, 'title', str(interaction_id)[:8])
-                self.main_window_ref.statusBar().showMessage(f"Interaction '{title_display}' sélectionnée.", 3000)
-                
-                # Afficher l'interaction dans l'éditeur - Géré par InteractionsTabWidget
-                # self.interaction_editor_widget.set_interaction(interaction)
-            else:
-                logger.warning(f"Interaction {interaction_id} non trouvée par le service.")
-                self.main_window_ref.statusBar().showMessage(UIText.ERROR_PREFIX + f"Interaction {interaction_id} non trouvée.", 3000)
-                # La sélection dans la liste devrait déjà avoir mis à jour l'éditeur via la logique interne de InteractionsTabWidget
-                # Si on veut forcer l'affichage d'une interaction spécifique NON sélectionnée dans la liste:
-                self.interactions_tab_content_widget.display_interaction_in_editor(interaction)
-
-            title_display = getattr(interaction, 'title', str(interaction_id)[:8])
-            self.main_window_ref.statusBar().showMessage(f"Édition de l'interaction '{title_display}'", 3000)
-        else:
-            logger.info("Aucune interaction sélectionnée.")
-            self.main_window_ref.statusBar().showMessage(UIText.NO_INTERACTION_FOUND, 3000)
-            self.interactions_tab_content_widget.display_interaction_in_editor(None)
