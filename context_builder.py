@@ -419,6 +419,10 @@ class ContextBuilder:
             context_parts.append(previous_dialogue_formatted)
             logger.info(f"Historique du dialogue précédent ajouté au contexte.")
         
+        # Ajouter l'objectif de la scène juste après l'historique
+        if scene_instruction and scene_instruction.strip():
+            context_parts.append("\n--- OBJECTIF DE LA SCÈNE (Instruction Utilisateur) ---\n" + scene_instruction.strip())
+        
         # Informations sur le GDD (personnages, lieux, etc.)
         element_categories_order = ["characters", "species", "communities", "locations", "items", "quests"]
         prioritized_elements_for_context = {}
@@ -461,7 +465,19 @@ class ContextBuilder:
         final_tokens = self._count_tokens(context_summary)
         logger.info(f"Résumé du contexte construit. Total tokens (après assemblage GDD et historique): {final_tokens}")
         if final_tokens > max_tokens:
-            logger.warning(f"ATTENTION : Le contexte final ({final_tokens} tokens) dépasse la limite max_tokens ({max_tokens}). Le contenu n'est PAS tronqué.")
+            logger.warning(f"ATTENTION : Le contexte final ({final_tokens} tokens) dépasse la limite max_tokens ({max_tokens}). Le contenu sera tronqué.")
+            # Troncature effective : découper le texte pour ne garder que max_tokens tokens
+            # Utilise tiktoken si dispo, sinon découpe naïve sur les mots
+            try:
+                enc = tiktoken.get_encoding("cl100k_base")
+                tokens = enc.encode(context_summary)
+                truncated_tokens = tokens[:max_tokens]
+                truncated_text = enc.decode(truncated_tokens)
+            except Exception:
+                # Fallback naïf : découpe sur les mots
+                words = context_summary.split()
+                truncated_text = " ".join(words[:max_tokens])
+            context_summary = truncated_text + "\n... (contexte tronqué)"
         return context_summary
 
     def get_regions(self) -> list[str]:
