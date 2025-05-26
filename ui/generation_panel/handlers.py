@@ -261,3 +261,68 @@ def handle_interaction_changed(panel, interaction):
     logger.info(f"Interaction modifiée : {interaction.interaction_id}")
     title_display = getattr(interaction, 'title', str(interaction.interaction_id)[:8])
     panel.main_window_ref.statusBar().showMessage(f"Interaction '{title_display}' mise à jour.", 3000) 
+
+def get_generation_panel_settings(panel):
+    """
+    Récupère les paramètres actuels du GenerationPanel pour la sauvegarde.
+    """
+    scene_settings = panel.scene_selection_widget.get_selected_scene_info()
+    settings = {
+        "character_a": scene_settings.get("character_a"),
+        "character_b": scene_settings.get("character_b"),
+        "scene_region": scene_settings.get("scene_region"),
+        "scene_sub_location": scene_settings.get("scene_sub_location"),
+        "k_variants": panel.k_variants_combo.currentText(),
+        "user_instructions": panel.instructions_widget.get_user_instructions_text(),
+        "llm_model": panel.llm_model_combo.currentData(),
+        "system_prompt": panel.instructions_widget.get_system_prompt_text(),
+        "max_context_tokens": panel.max_context_tokens_spinbox.value(),
+        "dialogue_structure": panel.dialogue_structure_widget.get_structure()
+    }
+    logger.debug(f"Récupération des paramètres du GenerationPanel: {settings}")
+    return settings 
+
+def load_generation_panel_settings(panel, settings):
+    """
+    Charge les paramètres dans le GenerationPanel à partir d'un dictionnaire.
+    """
+    logger.debug(f"Chargement des paramètres dans GenerationPanel: {settings}")
+    panel._is_loading_settings = True
+    scene_info_to_load = {
+        "character_a": settings.get("character_a"),
+        "character_b": settings.get("character_b"),
+        "scene_region": settings.get("scene_region"),
+        "scene_sub_location": settings.get("scene_sub_location")
+    }
+    panel.scene_selection_widget.load_selection(scene_info_to_load)
+    panel.k_variants_combo.setCurrentText(settings.get("k_variants", "3"))
+    instruction_settings_to_load = {
+        "user_instructions": settings.get("user_instructions", ""),
+        "system_prompt": settings.get("system_prompt")
+    }
+    default_system_prompt_for_iw = panel.prompt_engine._get_default_system_prompt() if panel.prompt_engine else ""
+    panel.instructions_widget.load_settings(
+        instruction_settings_to_load,
+        default_user_instructions="",
+        default_system_prompt=default_system_prompt_for_iw
+    )
+    model_identifier = settings.get("llm_model")
+    if model_identifier:
+        if hasattr(panel, 'generation_params_widget') and panel.generation_params_widget:
+            panel.generation_params_widget.select_model_in_combo(model_identifier)
+    else:
+        if hasattr(panel, 'generation_params_widget') and panel.generation_params_widget and panel.generation_params_widget.llm_model_combo.count() > 0:
+            panel.generation_params_widget.llm_model_combo.setCurrentIndex(0)
+    if "dialogue_structure" in settings:
+        panel.dialogue_structure_widget.set_structure(settings["dialogue_structure"])
+    if "max_context_tokens" in settings:
+        panel.max_context_tokens_spinbox.setValue(settings["max_context_tokens"])
+    panel._is_loading_settings = False
+    panel.update_token_estimation_signal.emit()
+    logger.info("Paramètres du GenerationPanel chargés.") 
+
+def handle_update_structured_output_checkbox_state(panel):
+    """
+    Slot pour la mise à jour de l'état de la checkbox structured_output (même si la logique est vide).
+    """
+    pass 

@@ -31,7 +31,7 @@ from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTa
 from .generation_panel.interactions_tab_widget import InteractionsTabWidget
 from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
 from .generation_panel.dialogue_generation_handler import DialogueGenerationHandler # Ajouté
-from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt, handle_max_context_tokens_changed, handle_k_variants_changed, handle_structure_changed, handle_user_instructions_changed, handle_refresh_token, handle_generate_dialogue, handle_validate_interaction_requested_from_tabs, handle_interaction_selected, handle_sequence_changed, handle_edit_interaction_requested, handle_interaction_changed
+from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt, handle_max_context_tokens_changed, handle_k_variants_changed, handle_structure_changed, handle_user_instructions_changed, handle_refresh_token, handle_generate_dialogue, handle_validate_interaction_requested_from_tabs, handle_interaction_selected, handle_sequence_changed, handle_edit_interaction_requested, handle_interaction_changed, get_generation_panel_settings, load_generation_panel_settings, handle_update_structured_output_checkbox_state
 
 # New service import
 try:
@@ -267,8 +267,7 @@ class GenerationPanel(QWidget):
             logger.error("generation_params_widget non initialisé lors de l'appel à populate_llm_model_combo.")
 
     def _update_structured_output_checkbox_state(self):
-        # Plus rien à faire, la checkbox n'existe plus dans l'UI
-        pass
+        handle_update_structured_output_checkbox_state(self)
 
     def set_llm_client(self, new_llm_client):
         logger.info(f"GenerationPanel: Réception d'un nouveau client LLM: {type(new_llm_client).__name__}")
@@ -592,69 +591,10 @@ class GenerationPanel(QWidget):
             self.main_window_ref.statusBar().showMessage(UIText.ERROR_PREFIX + "Impossible de tout décocher.", 3000)
 
     def get_settings(self) -> dict:
-        # Récupère les paramètres actuels du panneau pour la sauvegarde.
-        scene_settings = self.scene_selection_widget.get_selected_scene_info()
-        settings = {
-            # Utiliser les clés de scene_settings directement
-            "character_a": scene_settings.get("character_a"),
-            "character_b": scene_settings.get("character_b"),
-            "scene_region": scene_settings.get("scene_region"),
-            "scene_sub_location": scene_settings.get("scene_sub_location"),
-            "k_variants": self.k_variants_combo.currentText(),
-            "user_instructions": self.instructions_widget.get_user_instructions_text(),
-            "llm_model": self.llm_model_combo.currentData(), 
-            "system_prompt": self.instructions_widget.get_system_prompt_text(),
-            "max_context_tokens": self.max_context_tokens_spinbox.value(),
-            "dialogue_structure": self.dialogue_structure_widget.get_structure()
-        }
-        logger.debug(f"Récupération des paramètres du GenerationPanel: {settings}")
-        return settings
+        return get_generation_panel_settings(self)
 
     def load_settings(self, settings: dict):
-        logger.debug(f"Chargement des paramètres dans GenerationPanel: {settings}")
-        self._is_loading_settings = True
-        
-        # Charger les paramètres de scène via le widget
-        scene_info_to_load = {
-            "character_a": settings.get("character_a"),
-            "character_b": settings.get("character_b"),
-            "scene_region": settings.get("scene_region"),
-            "scene_sub_location": settings.get("scene_sub_location")
-        }
-        self.scene_selection_widget.load_selection(scene_info_to_load)
-        # Les signaux émis par load_selection (via _is_populating=False à la fin)
-        # vont déclencher _schedule_settings_save_and_token_update.
-        
-        self.k_variants_combo.setCurrentText(settings.get("k_variants", "3"))
-        
-        instruction_settings_to_load = {
-            "user_instructions": settings.get("user_instructions", ""),
-            "system_prompt": settings.get("system_prompt") 
-        }
-        default_system_prompt_for_iw = self.prompt_engine._get_default_system_prompt() if self.prompt_engine else ""
-        self.instructions_widget.load_settings(
-            instruction_settings_to_load, 
-            default_user_instructions="", 
-            default_system_prompt=default_system_prompt_for_iw
-        )
-        
-        model_identifier = settings.get("llm_model")
-        if model_identifier:
-            if hasattr(self, 'generation_params_widget') and self.generation_params_widget:
-                self.generation_params_widget.select_model_in_combo(model_identifier)
-        else:
-            if hasattr(self, 'generation_params_widget') and self.generation_params_widget and self.generation_params_widget.llm_model_combo.count() > 0:
-                 self.generation_params_widget.llm_model_combo.setCurrentIndex(0)
-        
-        if "dialogue_structure" in settings:
-            self.dialogue_structure_widget.set_structure(settings["dialogue_structure"])
-        
-        if "max_context_tokens" in settings:
-            self.max_context_tokens_spinbox.setValue(settings["max_context_tokens"])
-        
-        self._is_loading_settings = False
-        self.update_token_estimation_signal.emit() # Assurer un rafraîchissement global à la fin du chargement
-        logger.info("Paramètres du GenerationPanel chargés.")
+        load_generation_panel_settings(self, settings)
 
     @Slot(uuid.UUID)
     def _on_interaction_selected(self, interaction_id: uuid.UUID):
