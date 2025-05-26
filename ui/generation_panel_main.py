@@ -31,7 +31,7 @@ from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTa
 from .generation_panel.interactions_tab_widget import InteractionsTabWidget
 from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
 from .generation_panel.dialogue_generation_handler import DialogueGenerationHandler # Ajouté
-from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all
+from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed
 
 # New service import
 try:
@@ -213,7 +213,7 @@ class GenerationPanel(QWidget):
         self.dialogue_structure_widget.structure_changed.connect(self._schedule_settings_save_and_token_update)
 
         self.instructions_widget.user_instructions_changed.connect(self._schedule_settings_save_and_token_update)
-        self.instructions_widget.system_prompt_changed.connect(self._on_system_prompt_changed)
+        self.instructions_widget.system_prompt_changed.connect(lambda: handle_system_prompt_changed(self))
         self.instructions_widget.restore_default_system_prompt_clicked.connect(self._restore_default_system_prompt)
 
         self.token_actions_widget.refresh_token_clicked.connect(self._trigger_token_update)
@@ -276,11 +276,6 @@ class GenerationPanel(QWidget):
         self._update_prompt_engine_system_prompt()
         self.update_token_estimation_signal.emit()
         QMessageBox.information(self, "Prompt Restauré", "Le prompt système par défaut a été restauré.")
-
-
-    def _on_system_prompt_changed(self):
-        self._update_prompt_engine_system_prompt()
-        self._schedule_settings_save_and_token_update()
 
     def _update_prompt_engine_system_prompt(self):
         new_system_prompt = self.instructions_widget.get_system_prompt_text()

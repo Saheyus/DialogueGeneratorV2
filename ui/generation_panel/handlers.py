@@ -97,4 +97,12 @@ def handle_uncheck_all(panel):
         panel.main_window_ref.statusBar().showMessage(UIText.ERROR_PREFIX + "Impossible de tout décocher.", 3000)
     else:
         logger.warning("Impossible de tout décocher: left_panel ou méthode uncheck_all_items non trouvée.")
-        panel.main_window_ref.statusBar().showMessage(UIText.ERROR_PREFIX + "Impossible de tout décocher.", 3000) 
+        panel.main_window_ref.statusBar().showMessage(UIText.ERROR_PREFIX + "Impossible de tout décocher.", 3000)
+
+def handle_system_prompt_changed(panel):
+    """
+    Slot pour la modification du prompt système (InstructionsWidget).
+    Met à jour le prompt système dans le PromptEngine et déclenche la sauvegarde + estimation des tokens.
+    """
+    panel._update_prompt_engine_system_prompt()
+    panel._schedule_settings_save_and_token_update() 
