@@ -392,9 +392,9 @@ class GenerationPanel(QWidget):
 
     @Slot()
     def update_token_estimation_ui(self):
-        if not self.prompt_engine or not self.context_builder or not self.llm_client:
-            self.token_estimation_label.setText("Erreur: Moteurs non initialisés")
-            self._display_prompt_in_tab("Erreur: Les moteurs (prompt, context, llm) ne sont pas tous initialisés.")
+        if not self.dialogue_generation_service or not self.llm_client: # MODIFIÉ: Vérifier dialogue_generation_service
+            self.token_estimation_label.setText("Erreur: Services non initialisés")
+            self._display_prompt_in_tab("Erreur: Le service de génération ou le client LLM ne sont pas initialisés.")
             return
 
         user_specific_goal = self.instructions_widget.get_user_instructions_text()
@@ -418,53 +418,53 @@ class GenerationPanel(QWidget):
         if scene_region_name: scene_location_dict["lieu"] = scene_region_name
         if scene_sub_location_name: scene_location_dict["sous_lieu"] = scene_sub_location_name
         
-        full_prompt_for_estimation = "Erreur lors de la construction du prompt pour estimation." # Message par défaut
-        context_tokens = 0
+        # Préparer context_selections pour le service
+        context_selections_for_service = selected_context_items.copy()
+        context_selections_for_service["_scene_protagonists"] = scene_protagonists_dict
+        context_selections_for_service["_scene_location"] = scene_location_dict
+        # La structure et la description de la structure ne sont pas directement utilisées par prepare_generation_preview,
+        # mais structured_output l'est.
+        # dialogue_structure_description = self.dialogue_structure_widget.get_structure_description()
+        context_selections_for_service["generate_interaction"] = True # Par défaut pour l'estimation du pire cas (structuré)
+
+        full_prompt_for_estimation = "Erreur lors de la construction du prompt pour estimation."
         prompt_tokens = 0
+        # context_tokens n'est plus directement retourné par prepare_generation_preview, 
+        # mais le service s'en occupe en interne pour construire le prompt.
+        # Le label affichera uniquement les tokens du prompt total.
 
         try:
-            # MODIFIÉ: Utiliser config_service depuis main_window_ref
             max_tokens_val = self.main_window_ref.config_service.get_ui_setting("max_context_tokens", Defaults.CONTEXT_TOKENS)
-            
-            # Assurer que le prompt_engine a le system_prompt à jour de l'UI pour une estimation correcte
-            self._update_prompt_engine_system_prompt()
+            system_prompt_override = self.instructions_widget.get_system_prompt_text()
 
-            # Construire le résumé du contexte d'abord
-            context_summary_text_for_estimation = self.context_builder.build_context(
-                selected_elements=selected_context_items,
-                scene_instruction=user_specific_goal, 
-                max_tokens=max_tokens_val 
-                # include_dialogue_type n'est pas utilisé par context_builder.build_context directement
-            )
-            context_tokens = self.prompt_engine._count_tokens(context_summary_text_for_estimation) if context_summary_text_for_estimation else 0
-
-            # Utiliser build_prompt pour obtenir le prompt complet et son nombre total de tokens
-            full_prompt_for_estimation, prompt_tokens = self.prompt_engine.build_prompt(
-                user_specific_goal=user_specific_goal,
-                scene_protagonists=scene_protagonists_dict if scene_protagonists_dict else None,
-                scene_location=scene_location_dict if scene_location_dict else None,
-                context_summary=context_summary_text_for_estimation,
-                generation_params={ # Passer les paramètres qui pourraient affecter la structure du prompt pour l'estimation
-                    "dialogue_structure_narrative": self.dialogue_structure_widget.get_structure_description() 
-                }
+            # Appel à la méthode du service
+            # structured_output=True car l'estimation doit refléter le cas le plus coûteux (génération structurée)
+            # si c'est ce que l'utilisateur a configuré ou pourrait configurer.
+            # Pour une estimation générique, on peut supposer True.
+            # Note: La méthode du service gère elle-même le system_prompt_override.
+            full_prompt_for_estimation, prompt_tokens, _ = self.dialogue_generation_service.prepare_generation_preview(
+                user_instructions=user_specific_goal,
+                system_prompt_override=system_prompt_override,
+                context_selections=context_selections_for_service,
+                max_context_tokens=max_tokens_val,
+                structured_output=True # On estime pour un output structuré par défaut
             )
             
-            # current_prompt n'est plus retourné par une méthode séparée, c'est full_prompt_for_estimation
-            # context_str est context_summary_text_for_estimation
+            if not full_prompt_for_estimation:
+                 full_prompt_for_estimation = "Erreur: Le service n'a pas pu construire le prompt pour l'estimation."
 
-            logger.debug(f"[GenerationPanel.update_token_estimation_ui] Context summary for estimation (first 300 chars): {context_summary_text_for_estimation[:300] if context_summary_text_for_estimation else 'None'}")
-            logger.debug(f"[GenerationPanel.update_token_estimation_ui] Full prompt for estimation (first 300 chars): {full_prompt_for_estimation[:300] if full_prompt_for_estimation else 'None'}")
+
+            logger.debug(f"[GenerationPanel.update_token_estimation_ui via Service] Full prompt for estimation (first 300 chars): {full_prompt_for_estimation[:300] if full_prompt_for_estimation else 'None'}")
 
         except Exception as e:
-            logger.error(f"Erreur pendant la construction du prompt dans update_token_estimation_ui: {e}", exc_info=True)
-            full_prompt_for_estimation = f"Erreur lors de la génération du prompt estimé:\\n{type(e).__name__}: {e}"
-            # Les tokens resteront à 0 ou à leur dernière valeur valide avant l'erreur
+            logger.error(f"Erreur pendant l'appel à prepare_generation_preview du service: {e}", exc_info=True)
+            full_prompt_for_estimation = f"Erreur lors de la préparation de la prévisualisation via le service:\n{type(e).__name__}: {e}"
+            prompt_tokens = 0
 
-        # Affichage des tokens en milliers (k)
-        context_tokens_k = context_tokens / 1000
+        # Affichage des tokens en milliers (k) - Uniquement le total prompt
         prompt_tokens_k = prompt_tokens / 1000
-        self.token_estimation_label.setText(f"Tokens (contexte GDD/prompt total): {context_tokens_k:.1f}k / {prompt_tokens_k:.1f}k")
-        logger.debug(f"Token estimation UI updated: Context GDD {context_tokens} ({context_tokens_k:.1f}k), Prompt total {prompt_tokens} ({prompt_tokens_k:.1f}k).")
+        self.token_estimation_label.setText(f"Tokens prompt (estimé): {prompt_tokens_k:.1f}k")
+        logger.debug(f"Token estimation UI updated (via Service): Prompt total {prompt_tokens} ({prompt_tokens_k:.1f}k).")
         
         self._display_prompt_in_tab(full_prompt_for_estimation)
 
