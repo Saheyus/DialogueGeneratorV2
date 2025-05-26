@@ -147,4 +147,12 @@ def handle_structure_changed(panel):
     Déclenche la sauvegarde des paramètres et la mise à jour de l'estimation des tokens.
     """
     logger.info("Structure de dialogue modifiée.")
+    panel._schedule_settings_save_and_token_update()
+
+def handle_user_instructions_changed(panel):
+    """
+    Slot pour la modification des instructions utilisateur (InstructionsWidget).
+    Déclenche la sauvegarde des paramètres et la mise à jour de l'estimation des tokens.
+    """
+    logger.info("Instructions utilisateur modifiées.")
     panel._schedule_settings_save_and_token_update() 

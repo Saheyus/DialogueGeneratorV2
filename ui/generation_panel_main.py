@@ -31,7 +31,7 @@ from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTa
 from .generation_panel.interactions_tab_widget import InteractionsTabWidget
 from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
 from .generation_panel.dialogue_generation_handler import DialogueGenerationHandler # Ajouté
-from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt, handle_max_context_tokens_changed, handle_k_variants_changed, handle_structure_changed
+from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt, handle_max_context_tokens_changed, handle_k_variants_changed, handle_structure_changed, handle_user_instructions_changed
 
 # New service import
 try:
@@ -212,7 +212,7 @@ class GenerationPanel(QWidget):
 
         self.dialogue_structure_widget.structure_changed.connect(lambda: handle_structure_changed(self))
 
-        self.instructions_widget.user_instructions_changed.connect(self._schedule_settings_save_and_token_update)
+        self.instructions_widget.user_instructions_changed.connect(lambda: handle_user_instructions_changed(self))
         self.instructions_widget.system_prompt_changed.connect(lambda: handle_system_prompt_changed(self))
         self.instructions_widget.restore_default_system_prompt_clicked.connect(lambda: handle_restore_default_system_prompt(self))
 
