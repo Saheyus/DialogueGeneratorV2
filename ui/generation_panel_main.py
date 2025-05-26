@@ -31,6 +31,7 @@ from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTa
 from .generation_panel.interactions_tab_widget import InteractionsTabWidget
 from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
 from .generation_panel.dialogue_generation_handler import DialogueGenerationHandler # Ajouté
+from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated
 
 # New service import
 try:
@@ -201,8 +202,8 @@ class GenerationPanel(QWidget):
         # swap_characters_clicked n'est plus directement connecté ici,
         # car _perform_swap_and_emit dans le widget émettra character_a/b_changed.
 
-        self.context_actions_widget.select_linked_clicked.connect(self._on_select_linked_elements_clicked)
-        self.context_actions_widget.unlink_unrelated_clicked.connect(self._on_unlink_unrelated_clicked)
+        self.context_actions_widget.select_linked_clicked.connect(lambda: handle_select_linked_elements(self))
+        self.context_actions_widget.unlink_unrelated_clicked.connect(lambda: handle_unlink_unrelated(self))
         self.context_actions_widget.uncheck_all_clicked.connect(self._on_uncheck_all_clicked)
 
         self.generation_params_widget.k_variants_changed.connect(self._schedule_settings_save)
@@ -647,102 +648,6 @@ class GenerationPanel(QWidget):
     def _on_validate_interaction_clicked(self, variant_index: int):
         logger.warning("_on_validate_interaction_clicked est obsolète. Utilisation du nouveau slot de validation d'interaction.")
         QMessageBox.information(self, "Validation", "Ce mécanisme de validation est obsolète.")
-
-    @Slot()
-    def _on_select_linked_elements_clicked(self) -> None:
-        """
-        Slot pour le bouton "Lier Éléments Connexes".
-        Récupère les personnages A/B et la scène, puis demande au LeftSelectionPanel
-        de cocher tous les éléments du GDD qui leur sont liés.
-        """
-        scene_info = self.scene_selection_widget.get_selected_scene_info()
-        char_a_raw = scene_info.get("character_a")
-        char_b_raw = scene_info.get("character_b")
-        scene_region_raw = scene_info.get("scene_region")
-        scene_sub_location_raw = scene_info.get("scene_sub_location")
-
-        placeholders = [UIText.NONE, UIText.NONE_FEM, UIText.ALL, UIText.NONE_SUBLOCATION, UIText.NO_SELECTION]
-
-        char_a = None if char_a_raw in placeholders or not char_a_raw.strip() else char_a_raw
-        char_b = None if char_b_raw in placeholders or not char_b_raw.strip() else char_b_raw
-        scene_region = None if scene_region_raw in placeholders or not scene_region_raw.strip() else scene_region_raw
-        scene_sub_location = None if scene_sub_location_raw in placeholders or not scene_sub_location_raw.strip() else scene_sub_location_raw
-
-        # Utilise la méthode existante du LinkedSelectorService
-        elements_to_select_set = self.linked_selector.get_elements_to_select(
-            char_a, char_b, scene_region, scene_sub_location
-        )
-        elements_to_select_list = list(elements_to_select_set)
-
-
-        if hasattr(self.main_window_ref, 'left_panel'):
-            if elements_to_select_list:
-                # La règle 'linkedelements' indique d'utiliser set_checked_items_by_name
-                # Cette méthode coche les items de la liste et décoche les autres.
-                # Si le but est d'AJOUTER à la sélection existante, il faut d'abord lire les existants.
-                current_checked_items = self.main_window_ref.left_panel.get_all_selected_item_names()
-                combined_items_to_check = list(set(current_checked_items + elements_to_select_list))
-                self.main_window_ref.left_panel.set_checked_items_by_name(combined_items_to_check)
-                
-                logger.info(f"Éléments liés ({len(elements_to_select_list)}) ajoutés à la sélection existante. Total coché: {len(combined_items_to_check)}")
-                self.main_window_ref.statusBar().showMessage(f"{len(elements_to_select_list)} éléments liés ajoutés à la sélection.", 3000)
-            else:
-                logger.info("Aucun élément supplémentaire à lier trouvé pour le contexte principal.")
-                self.main_window_ref.statusBar().showMessage("Aucun nouvel élément lié trouvé.", 3000)
-        else:
-            logger.warning("Référence à left_panel non trouvée dans main_window_ref.")
-
-
-    @Slot()
-    def _on_unlink_unrelated_clicked(self) -> None:
-        """
-        Slot pour le bouton "Décocher Non-Connexes".
-        Récupère les personnages A/B et la scène, puis demande au LeftSelectionPanel
-        de ne garder cochés QUE les éléments du GDD qui leur sont liés.
-        """
-        scene_info = self.scene_selection_widget.get_selected_scene_info()
-        char_a_raw = scene_info.get("character_a")
-        char_b_raw = scene_info.get("character_b")
-        scene_region_raw = scene_info.get("scene_region")
-        scene_sub_location_raw = scene_info.get("scene_sub_location")
-
-        placeholders = [UIText.NONE, UIText.NONE_FEM, UIText.ALL, UIText.NONE_SUBLOCATION, UIText.NO_SELECTION]
-
-        char_a = None if char_a_raw in placeholders or not char_a_raw.strip() else char_a_raw
-        char_b = None if char_b_raw in placeholders or not char_b_raw.strip() else char_b_raw
-        scene_region = None if scene_region_raw in placeholders or not scene_region_raw.strip() else scene_region_raw
-        scene_sub_location = None if scene_sub_location_raw in placeholders or not scene_sub_location_raw.strip() else scene_sub_location_raw
-
-        currently_checked_set = set()
-        if hasattr(self.main_window_ref, 'left_panel'):
-            # Utiliser la méthode publique pour obtenir les noms des items cochés
-            currently_checked_list = self.main_window_ref.left_panel.get_all_selected_item_names()
-            currently_checked_set = set(currently_checked_list)
-        else:
-            logger.warning("Référence à left_panel non trouvée lors de la récupération des items cochés.")
-
-
-        # Utilise la méthode existante du LinkedSelectorService
-        items_to_keep_checked = self.linked_selector.compute_items_to_keep_checked(
-            currently_checked_set,
-            char_a, 
-            char_b, 
-            scene_region, 
-            scene_sub_location
-        )
-
-        if hasattr(self.main_window_ref, 'left_panel'):
-            # set_checked_items_by_name cochera les items de la liste et décochera les autres.
-            # Si items_to_keep_checked est vide, cela décochera tout.
-            self.main_window_ref.left_panel.set_checked_items_by_name(items_to_keep_checked)
-            
-            logger.info(f"Conservation des éléments liés : {items_to_keep_checked}, autres décochés.")
-            if items_to_keep_checked:
-                self.main_window_ref.statusBar().showMessage(f"Seuls les {len(items_to_keep_checked)} éléments liés sont conservés.", 3000)
-            else:
-                self.main_window_ref.statusBar().showMessage("Aucun élément lié à conserver. Tous les éléments secondaires ont été décochés.", 3000)
-        else:
-            logger.warning("Référence à left_panel non trouvée pour mettre à jour les coches.")
 
     @Slot()
     def _on_uncheck_all_clicked(self):
