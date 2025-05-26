@@ -12,6 +12,7 @@ import os
 from pathlib import Path # Added for path management
 import webbrowser # Added to open the configuration file
 from typing import Optional, List
+import time
 
 # Local imports from the same 'ui' package
 from .left_selection_panel import LeftSelectionPanel # Added import
@@ -70,6 +71,15 @@ class MainWindow(QMainWindow):
     It also handles UI settings persistence (loading/saving window state,
     splitter sizes, and delegating panel-specific settings).
     """
+    _last_info_log_time = {}
+    _info_log_interval = 5.0
+    def _throttled_info_log(self, log_key: str, message: str):
+        now = time.time()
+        last_time = MainWindow._last_info_log_time.get(log_key, 0)
+        if now - last_time > MainWindow._info_log_interval:
+            logger.info(message)
+            MainWindow._last_info_log_time[log_key] = now
+
     def __init__(self, context_builder: ContextBuilder):
         """Initializes the MainWindow.
 
@@ -93,7 +103,7 @@ class MainWindow(QMainWindow):
         
         interactions_repo = FileInteractionRepository(storage_dir=str(DEFAULT_INTERACTIONS_STORAGE_DIR)) 
         self.interaction_service = InteractionService(repository=interactions_repo)
-        logger.info(f"InteractionService initialisé avec {type(interactions_repo).__name__} sur {DEFAULT_INTERACTIONS_STORAGE_DIR}.")
+        logger.debug(f"InteractionService initialisé avec {type(interactions_repo).__name__} sur {DEFAULT_INTERACTIONS_STORAGE_DIR}.")
         
         self._load_llm_configuration() 
 
@@ -205,7 +215,7 @@ class MainWindow(QMainWindow):
         if context_file_to_open.exists():
             try:
                 webbrowser.open(os.path.realpath(context_file_to_open))
-                logger.info(f"Attempting to open {context_file_to_open}")
+                logger.debug(f"Attempting to open {context_file_to_open}")
             except Exception as e:
                 logger.error(f"Could not open {context_file_to_open}: {e}")
                 self.statusBar().showMessage(f"Error: Could not open configuration file: {e}")
@@ -227,7 +237,7 @@ class MainWindow(QMainWindow):
         
         if new_path_str:  
             if self.config_service.set_unity_dialogues_path(new_path_str): # MODIFIÉ
-                logger.info(f"Chemin des dialogues Unity configuré: {new_path_str}")
+                logger.debug(f"Chemin des dialogues Unity configuré: {new_path_str}")
                 self.statusBar().showMessage(f"Chemin des dialogues Unity configuré: {new_path_str}", 5000)
                 
                 if hasattr(self.left_panel, 'populate_yarn_files_list'):
@@ -433,7 +443,7 @@ class MainWindow(QMainWindow):
         if self.context_builder:
             self.left_panel.populate_all_lists()
             # GenerationPanel's combos are populated via its finalize_ui_setup or internal logic
-            logger.info("Initial data loaded into LeftSelectionPanel.")
+            self._throttled_info_log("initial_data_loaded", "Initial data loaded into LeftSelectionPanel.")
         else:
             logger.warning("ContextBuilder not available. Cannot load initial data.")
         self.statusBar().showMessage("GDD data loaded.", 3000)
@@ -441,7 +451,8 @@ class MainWindow(QMainWindow):
 
     def _load_ui_settings(self):
         """Charge les paramètres UI sauvegardés en utilisant ConfigurationService et QSettings."""
-        logger.info(f"Chargement des paramètres UI via ConfigurationService.")
+        self._is_loading_settings = True # Empêche la sauvegarde pendant le chargement
+        logger.debug("Chargement des paramètres UI via ConfigurationService.")
         
         # Charger tous les paramètres gérés par ConfigurationService (hors QSettings directs)
         loaded_app_settings = self.config_service.get_all_ui_settings()
@@ -452,14 +463,14 @@ class MainWindow(QMainWindow):
         if window_geometry_hex:
             try:
                 self.restoreGeometry(QByteArray.fromHex(window_geometry_hex.encode()))
-                logger.info("Géométrie de la fenêtre restaurée.")
+                logger.debug("Géométrie de la fenêtre restaurée.")
             except Exception as e:
                 logger.warning(f"Impossible de restaurer la géométrie de la fenêtre: {e}")
 
         main_splitter_sizes = loaded_app_settings.get("main_splitter_sizes")
         if main_splitter_sizes:
             self.main_splitter.setSizes(main_splitter_sizes)
-            logger.info("Tailles du splitter principal restaurées.")
+            logger.debug("Tailles du splitter principal restaurées.")
         
         # generation_panel_splitter_sizes est généralement dans les settings du panel lui-même.
         # Si GenerationPanel a son propre splitter, il le restaurera via son load_settings.
@@ -476,15 +487,15 @@ class MainWindow(QMainWindow):
         # 3. Charger les paramètres des panneaux enfants
         generation_panel_settings_loaded = loaded_app_settings.get("generation_panel", {})
         self.generation_panel.load_settings(generation_panel_settings_loaded)
-        logger.info("Paramètres du GenerationPanel chargés.")
+        logger.debug("Paramètres du GenerationPanel chargés.")
 
         if restore_selections:
             left_panel_settings_loaded = loaded_app_settings.get("left_selection_panel", {})
             self.left_panel.load_settings(left_panel_settings_loaded)
-            logger.info("Paramètres du LeftSelectionPanel chargés (restauration active).")
+            logger.debug("Paramètres du LeftSelectionPanel chargés (restauration active).")
         else:
             self.left_panel.load_settings({}) # Effacer les sélections
-            logger.info("Restauration des sélections du LeftSelectionPanel désactivée.")
+            logger.debug("Restauration des sélections du LeftSelectionPanel désactivée.")
 
         # 4. Synchroniser le modèle LLM
         # current_llm_model_identifier est prioritaire depuis les settings du generation_panel, sinon ui_settings global, sinon défaut config LLM
@@ -503,13 +514,14 @@ class MainWindow(QMainWindow):
                 current_client_model_id = self.llm_client.model
 
         if final_model_to_set != current_client_model_id:
-            logger.info(f"Synchronisation du client LLM avec le modèle: '{final_model_to_set}' après chargement des settings.")
+            self._throttled_info_log("llm_sync_after_load", f"Synchronisation du client LLM avec le modèle: '{final_model_to_set}' après chargement des settings.")
             self._on_llm_model_selected_from_panel(final_model_to_set, from_load_settings=True)
         elif self.generation_panel.llm_model_combo.currentData() != final_model_to_set: # S'assurer que la combobox est aussi à jour
             self.generation_panel.select_model_in_combo(final_model_to_set)
-            logger.info(f"Combobox LLM synchronisée sur '{final_model_to_set}'.")
+            logger.debug(f"Combobox LLM synchronisée sur '{final_model_to_set}'.")
 
-        logger.info("Tous les paramètres UI pertinents ont été chargés et appliqués.")
+        self._is_loading_settings = False # Fin du chargement
+        logger.debug("Tous les paramètres UI pertinents ont été chargés et appliqués.")
 
     def _save_ui_settings(self, source: str):
         """Sauvegarde les paramètres UI courants en utilisant ConfigurationService."""
@@ -553,7 +565,7 @@ class MainWindow(QMainWindow):
 
         # 2. Sauvegarder tous les paramètres via le service
         if self.config_service.save_ui_settings():
-            logger.info(f"Paramètres UI sauvegardés avec succès via ConfigurationService (source: {source}).")
+            self._throttled_info_log("ui_settings_saved", f"Paramètres UI sauvegardés avec succès via ConfigurationService (source: {source}).")
         else:
             logger.error(f"Échec de la sauvegarde des paramètres UI via ConfigurationService (source: {source}).")
             self.statusBar().showMessage("Erreur de sauvegarde des paramètres UI.")
@@ -574,7 +586,7 @@ class MainWindow(QMainWindow):
         self.left_panel.context_selection_changed.connect(self._trigger_context_changed_token_update)
         
         # Ajouter d'autres signaux si nécessaire, par ex. de ConfigDialog si les paramètres LLM sont modifiés.
-        logger.info("Signaux connectés pour la sauvegarde automatique des paramètres UI.")
+        self._throttled_info_log("signals_autosave_connected", "Signaux connectés pour la sauvegarde automatique des paramètres UI.")
     
     def _trigger_context_changed_token_update(self):
         # Relance le timer à chaque changement de contexte pertinent.

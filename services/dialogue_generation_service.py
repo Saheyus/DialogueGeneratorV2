@@ -260,24 +260,14 @@ class DialogueGenerationService(IDialogueGenerationService):
             self._restore_prompt_on_error(original_system_prompt)
             return None, final_prompt_str if final_prompt_str else "Error during INTERACTION generation.", estimated_tokens
 
-    def _build_context_summary(self, context_selections: Dict[str, Any], user_instructions: str, max_tokens: int) -> str:
-        # Cette méthode encapsule la logique de construction du résumé du contexte.
-        # Elle utilise context_selections qui devrait contenir _scene_protagonists et _scene_location si applicables,
-        # mais ces derniers sont extraits par les méthodes appelantes pour être passés explicitement à build_prompt.
-        # Donc ici, context_selections est principalement pour les selected_elements GDD.
-        
-        # Note: La construction de `scene_instruction` à partir de `_scene_protagonists` et `_scene_location`
-        # a été retirée d'ici car `GenerationPanel` prépare déjà `context_selections` avec ces informations.
-        # Le `ContextBuilder.build_context` doit utiliser `scene_instruction` (qui est `user_instructions` ici)
-        # et les `selected_elements` (qui est `context_selections` ici) pour former le contexte.
-        
-        context_summary_text = self.context_builder.build_context(
-            selected_elements=context_selections, 
-            scene_instruction=user_instructions, 
-            max_tokens=max_tokens,
-        )
-        logger.debug(f"Context summary built by service: {len(context_summary_text)} chars, first 100: {context_summary_text[:100]}")
-        return context_summary_text
+    def _build_context_summary(self, context_selections: Dict[str, Any], user_instructions: str, max_tokens: int, no_limit: bool = False) -> str:
+        """
+        Construit le résumé contextuel à partir des sélections et instructions utilisateur.
+        Si no_limit est True, max_tokens est ignoré (valeur très haute transmise).
+        """
+        if no_limit:
+            max_tokens = 999999
+        return self.context_builder.build_context(context_selections, user_instructions, max_tokens=max_tokens)
 
     def _restore_prompt_on_error(self, original_system_prompt: Optional[str]):
         if original_system_prompt is not None:

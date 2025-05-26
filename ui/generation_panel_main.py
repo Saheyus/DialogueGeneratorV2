@@ -7,6 +7,7 @@ from pathlib import Path
 import logging
 import asyncio
 from typing import Optional
+import time
 
 # --- Imports PySide6 ---
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QLabel, QComboBox, QTextEdit, QPushButton, QProgressBar, QApplication, QMessageBox, QSplitter
@@ -77,6 +78,10 @@ class GenerationPanel(QWidget):
     update_token_estimation_signal: Signal = Signal()
     generation_finished = Signal(bool) # True pour succès (variantes ajoutées), False en cas d'erreur majeure avant ajout
     llm_model_selection_changed = Signal(str) # Émis lorsque l'utilisateur sélectionne un nouveau modèle LLM
+    _last_token_estimation_log_time: float = 0.0  # Ajout d'un timestamp statique pour le throttling des logs
+    _token_estimation_log_interval: float = 5.0   # Intervalle en secondes
+    _last_info_log_time = {}
+    _info_log_interval = 5.0
 
     def __init__(self, context_builder, prompt_engine, llm_client, available_llm_models, current_llm_model_identifier, main_window_ref, dialogue_generation_service, parent=None):
         """Initializes the GenerationPanel.
@@ -217,6 +222,7 @@ class GenerationPanel(QWidget):
 
         self.generation_params_widget.k_variants_changed.connect(lambda value: handle_k_variants_changed(self, value))
         self.generation_params_widget.max_context_tokens_changed.connect(lambda value: handle_max_context_tokens_changed(self, value))
+        self.generation_params_widget.no_limit_changed.connect(self._on_no_limit_changed)
         # self.generation_params_widget.structured_output_changed.connect(self._schedule_settings_save) # Checkbox supprimée
 
         self.dialogue_structure_widget.structure_changed.connect(lambda: handle_structure_changed(self))
@@ -333,12 +339,7 @@ class GenerationPanel(QWidget):
     def update_token_estimation_ui(self):
         """
         Updates the token estimation label and the prompt preview tab.
-
-        This method retrieves all necessary information (user instructions, GDD selections,
-        scene context, max token limit) and calls the DialogueGenerationService
-        to prepare a preview of the prompt. The estimated token count and the
-        prompt itself are then displayed in the UI.
-        The max_tokens_val passed to the service is in absolute number of tokens.
+        Cette méthode limite la fréquence des logs détaillés à une fois toutes les 5 secondes.
         """
         if not self.dialogue_generation_service or not self.llm_client: # MODIFIÉ: Vérifier dialogue_generation_service
             self.token_estimation_label.setText("Erreur: Services non initialisés")
@@ -347,8 +348,15 @@ class GenerationPanel(QWidget):
 
         user_specific_goal = self.instructions_widget.get_user_instructions_text()
         selected_context_items = self.main_window_ref._get_current_context_selections() if hasattr(self.main_window_ref, '_get_current_context_selections') else {}
-        logger.info(f"[update_token_estimation_ui] selected_context_items (récupéré depuis main_window_ref): {selected_context_items}")
-        logger.info(f"[update_token_estimation_ui] Type de selected_context_items: {type(selected_context_items)}")
+        now = time.time()
+        do_log = False
+        if now - GenerationPanel._last_token_estimation_log_time > GenerationPanel._token_estimation_log_interval:
+            do_log = True
+            GenerationPanel._last_token_estimation_log_time = now
+
+        if do_log:
+            logger.info(f"[update_token_estimation_ui] selected_context_items (récupéré depuis main_window_ref): {selected_context_items}")
+            logger.info(f"[update_token_estimation_ui] Type de selected_context_items: {type(selected_context_items)}")
 
         if not isinstance(selected_context_items, dict):
             logger.error(f"CRITICAL: selected_context_items récupéré N'EST PAS UN DICTIONNAIRE. C'est un {type(selected_context_items)}. Le contexte GDD ne sera pas correctement traité. Valeur: {selected_context_items}")
@@ -388,13 +396,21 @@ class GenerationPanel(QWidget):
         # dialogue_structure_description = self.dialogue_structure_widget.get_structure_description()
         context_selections_for_service["generate_interaction"] = True # Par défaut pour l'estimation du pire cas (structuré)
 
-        logger.info(f"[update_token_estimation_ui] context_selections_for_service transmis à prepare_generation_preview: {context_selections_for_service}")
+        if do_log:
+            logger.info(f"[update_token_estimation_ui] context_selections_for_service transmis à prepare_generation_preview: {context_selections_for_service}")
         try:
-            # max_tokens_val = self.main_window_ref.config_service.get_ui_setting("max_context_tokens", Defaults.CONTEXT_TOKENS)
-            # Utiliser la valeur de l'attribut mis à jour par le handler
-            max_tokens_val_k = self.current_max_context_tokens_k
-            max_tokens_val = int(max_tokens_val_k * 1000) # Convertir k_tokens en nombre absolu de tokens
-            logger.info(f"[update_token_estimation_ui] Utilisation de max_tokens_val = {max_tokens_val} (provenant de self.current_max_context_tokens_k: {max_tokens_val_k}k)")
+            # Récupérer la valeur no_limit
+            params_settings = self.generation_params_widget.get_settings()
+            no_limit = params_settings.get("no_limit", False)
+            if no_limit:
+                max_tokens_val = 999999
+                max_tokens_val_k = 999.0
+            else:
+                max_tokens_val_k = self.generation_params_widget.max_context_tokens_spinbox.value()
+                max_tokens_val = int(max_tokens_val_k * 1000)
+            self.current_max_context_tokens_k = max_tokens_val_k
+            if do_log:
+                logger.info(f"[update_token_estimation_ui] Utilisation de max_tokens_val = {max_tokens_val} (no_limit={no_limit}, k={max_tokens_val_k})")
             
             system_prompt_override = self.instructions_widget.get_system_prompt_text()
 
@@ -406,8 +422,9 @@ class GenerationPanel(QWidget):
                 max_context_tokens=max_tokens_val,
                 structured_output=True
             )
-            logger.info(f"[update_token_estimation_ui] prompt généré (début): {full_prompt_for_estimation[:300] if full_prompt_for_estimation else 'None'}")
-            logger.info(f"[update_token_estimation_ui] prompt_tokens retourné: {prompt_tokens}, longueur prompt: {len(full_prompt_for_estimation)} chars, {len(full_prompt_for_estimation.split())} mots. Affiché: {prompt_tokens/1000:.1f}k tokens.")
+            if do_log:
+                logger.info(f"[update_token_estimation_ui] prompt généré (début): {full_prompt_for_estimation[:300] if full_prompt_for_estimation else 'None'}")
+                logger.info(f"[update_token_estimation_ui] prompt_tokens retourné: {prompt_tokens}, longueur prompt: {len(full_prompt_for_estimation)} chars, {len(full_prompt_for_estimation.split())} mots. Affiché: {prompt_tokens/1000:.1f}k tokens.")
             
             if not full_prompt_for_estimation:
                  full_prompt_for_estimation = "Erreur: Le service n'a pas pu construire le prompt pour l'estimation."
@@ -423,10 +440,10 @@ class GenerationPanel(QWidget):
         # Affichage des tokens en milliers (k) - Uniquement le total prompt
         prompt_tokens_k = prompt_tokens / 1000
         self.token_estimation_label.setText(f"Tokens prompt (estimé): {prompt_tokens_k:.1f}k")
-        logger.info(f"[update_token_estimation_ui] Label UI mis à jour: Tokens prompt (estimé): {prompt_tokens_k:.1f}k")
+        if do_log:
+            logger.info(f"[update_token_estimation_ui] Label UI mis à jour: Tokens prompt (estimé): {prompt_tokens_k:.1f}k")
         
         self._display_prompt_in_tab(full_prompt_for_estimation)
-
 
     def _launch_dialogue_generation(self):
         logger.info("Lancement de la génération de dialogue...")
@@ -524,7 +541,7 @@ class GenerationPanel(QWidget):
             logger.debug("GenerationPanel: État UI finalisé après génération.")
 
     def _display_prompt_in_tab(self, prompt_text: str):
-        logger.info(f"_display_prompt_in_tab: Entrée avec prompt_text de longueur {len(prompt_text if prompt_text else 0)} chars.") # Ajout d'une vérification pour prompt_text None
+        self._throttled_info_log('display_prompt', f"_display_prompt_in_tab: Entrée avec prompt_text de longueur {len(prompt_text) if prompt_text else 0} chars.")
         self.variants_display_widget.blockSignals(True)
         
         prompt_tab_index = -1
@@ -534,7 +551,7 @@ class GenerationPanel(QWidget):
                 break
         
         if prompt_tab_index != -1:
-            logger.info(f"_display_prompt_in_tab: Onglet 'Prompt Estimé' trouvé à l'index {prompt_tab_index}. Mise à jour du contenu.")
+            logger.debug(f"_display_prompt_in_tab: Onglet 'Prompt Estimé' trouvé à l'index {prompt_tab_index}. Mise à jour du contenu.")
             self.variants_display_widget.update_or_add_tab("Prompt Estimé", prompt_text, set_current=True)
         else:
             logger.info("_display_prompt_in_tab: Onglet 'Prompt Estimé' non trouvé. Création d'un nouvel onglet via update_or_add_tab.")
@@ -555,7 +572,8 @@ class GenerationPanel(QWidget):
             "user_instructions": self.instructions_widget.get_user_instructions_text(),
             "system_prompt": self.instructions_widget.get_system_prompt_text(),
             "dialogue_structure": self.dialogue_structure_widget.get_structure(),
-            "structured_output": self.generation_params_widget.get_settings().get("structured_output") # Délégué
+            "structured_output": self.generation_params_widget.get_settings().get("structured_output"), # Délégué
+            "no_limit": self.generation_params_widget.get_settings().get("no_limit", False)
         }
         logger.debug(f"Récupération des paramètres du panneau de génération: {settings}")
         return settings
@@ -584,7 +602,8 @@ class GenerationPanel(QWidget):
             "llm_model": settings.get("llm_model"),
             "k_variants": settings.get("k_variants"),
             "max_context_tokens": settings.get("max_context_tokens"), # Passe la valeur k_tokens
-            "structured_output": settings.get("structured_output")
+            "structured_output": settings.get("structured_output"),
+            "no_limit": settings.get("no_limit", False)
         }
         self.generation_params_widget.load_settings(llm_params_settings)
         
@@ -600,3 +619,18 @@ class GenerationPanel(QWidget):
         self.update_token_estimation_ui() # Mettre à jour l'estimation après le chargement
         # Pas besoin d'émettre settings_changed ici car c'est un chargement
         logger.debug("Paramètres du panneau de génération chargés.")
+
+    @Slot()
+    def _on_no_limit_changed(self, checked: bool):
+        if checked:
+            self.current_max_context_tokens_k = 999.0 # Valeur fictive très haute
+        else:
+            self.current_max_context_tokens_k = self.generation_params_widget.max_context_tokens_spinbox.value()
+        self.update_token_estimation_ui()
+
+    def _throttled_info_log(self, log_key: str, message: str):
+        now = time.time()
+        last_time = GenerationPanel._last_info_log_time.get(log_key, 0)
+        if now - last_time > GenerationPanel._info_log_interval:
+            logger.info(message)
+            GenerationPanel._last_info_log_time[log_key] = now

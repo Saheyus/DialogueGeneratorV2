@@ -6,6 +6,7 @@ import re
 import os
 from typing import List, Optional, Dict
 import traceback
+import time
 
 try:
     import tiktoken
@@ -23,6 +24,11 @@ PROJECT_ROOT_DIR = CONTEXT_BUILDER_DIR.parent
 DEFAULT_CONFIG_FILE = CONTEXT_BUILDER_DIR / "context_config.json"
 
 class ContextBuilder:
+    _last_no_config_log_time: dict = {}
+    _no_config_log_interval: float = 5.0
+    _last_info_log_time: dict = {}
+    _info_log_interval: float = 5.0
+
     def __init__(self, config_file_path: Path = DEFAULT_CONFIG_FILE):
         self.gdd_data = {}
         self.characters = []
@@ -233,7 +239,7 @@ class ContextBuilder:
 
     def _format_previous_dialogue_for_context(self, max_tokens_for_history: int) -> str:
         """Formate le dialogue précédent stocké pour l'inclure dans le contexte LLM."""
-        logger.info(f"[LOG DEBUG] Appel à _format_previous_dialogue_for_context. previous_dialogue_context présent: {self.previous_dialogue_context is not None} (len={len(self.previous_dialogue_context) if self.previous_dialogue_context else 0})")
+        self._throttled_info_log('format_prev_dialogue', f"[LOG DEBUG] Appel à _format_previous_dialogue_for_context. previous_dialogue_context présent: {self.previous_dialogue_context is not None} (len={len(self.previous_dialogue_context) if self.previous_dialogue_context else 0})")
         if not self.previous_dialogue_context:
             return ""
 
@@ -332,7 +338,12 @@ class ContextBuilder:
             fields_to_extract.extend(config_for_type.get(str(l), []))
 
         if not fields_to_extract and element_data: # Si la config est vide pour ce type/level, mais qu'on a des données
-            logger.info(f"Aucune configuration de champ pour {element_type} au niveau {level}, tentative de formatage direct des données.")
+            now = time.time()
+            log_key = (element_type, level)
+            last_time = ContextBuilder._last_no_config_log_time.get(log_key, 0)
+            if now - last_time > ContextBuilder._no_config_log_interval:
+                logger.info(f"Aucune configuration de champ pour {element_type} au niveau {level}, tentative de formatage direct des données.")
+                ContextBuilder._last_no_config_log_time[log_key] = now
             for key, value in element_data.items():
                 if isinstance(value, list):
                     formatted_list = ", ".join(map(str, value))
@@ -401,13 +412,20 @@ class ContextBuilder:
 
         return "\n".join(details)
 
+    def _throttled_info_log(self, log_key: str, message: str):
+        now = time.time()
+        last_time = ContextBuilder._last_info_log_time.get(log_key, 0)
+        if now - last_time > ContextBuilder._info_log_interval:
+            logger.info(message)
+            ContextBuilder._last_info_log_time[log_key] = now
+
     def build_context(self, selected_elements: dict[str, list[str]], scene_instruction: str, max_tokens: int = 70000, include_dialogue_type: bool = True) -> str:
         """
         Construit un résumé contextuel basé sur les éléments sélectionnés et une instruction de scène,
         en ignorant toute limite de tokens (plus de troncature ni de refus d'ajout).
         """
-        logger.info(f"Début de la construction du contexte avec max_tokens={max_tokens}.")
-        logger.info(f"Éléments sélectionnés: {selected_elements}")
+        self._throttled_info_log('start_build', f"Début de la construction du contexte avec max_tokens={max_tokens}.")
+        self._throttled_info_log('selected_elements', f"Éléments sélectionnés: {selected_elements}")
         
         context_parts = []
         # total_tokens = 0  # Plus utilisé
@@ -463,7 +481,7 @@ class ContextBuilder:
         # Construction finale du résumé
         context_summary = "\n".join(context_parts).strip()
         final_tokens = self._count_tokens(context_summary)
-        logger.info(f"Résumé du contexte construit. Total tokens (après assemblage GDD et historique): {final_tokens}")
+        self._throttled_info_log('context_summary', f"Résumé du contexte construit. Total tokens (après assemblage GDD et historique): {final_tokens}")
         if final_tokens > max_tokens:
             logger.warning(f"ATTENTION : Le contexte final ({final_tokens} tokens) dépasse la limite max_tokens ({max_tokens}). Le contenu sera tronqué.")
             # Troncature effective : découper le texte pour ne garder que max_tokens tokens

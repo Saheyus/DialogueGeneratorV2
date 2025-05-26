@@ -53,6 +53,7 @@ class GenerationParamsWidget(QWidget):
     max_context_tokens_changed = Signal(float) # Émet la valeur en k_tokens (float)
     structured_output_changed = Signal(bool)
     settings_changed = Signal() # Generic signal for any setting change
+    no_limit_changed = Signal(bool)
 
     def __init__(self, available_llm_models, current_llm_model_identifier, parent=None):
         super().__init__(parent)
@@ -96,6 +97,11 @@ class GenerationParamsWidget(QWidget):
         self.max_context_tokens_spinbox.setToolTip("Nombre maximum de tokens à utiliser pour le contexte GDD en milliers (k).")
         self.max_context_tokens_spinbox.valueChanged.connect(self._on_max_context_tokens_spinbox_changed)
         layout.addWidget(self.max_context_tokens_spinbox, row, 1)
+        # Ajout de la case à cocher No limit
+        self.no_limit_checkbox = QCheckBox("No limit")
+        self.no_limit_checkbox.setToolTip("Si coché, aucune limite de tokens ne sera appliquée au contexte.")
+        self.no_limit_checkbox.stateChanged.connect(self._on_no_limit_checkbox_changed)
+        layout.addWidget(self.no_limit_checkbox, row, 2)
         row += 1
 
         # self.structured_output_checkbox = QCheckBox("Utiliser Sortie Structurée (JSON)")
@@ -166,6 +172,12 @@ class GenerationParamsWidget(QWidget):
         self.structured_output_changed.emit(is_checked)
         if not self._is_loading_settings: self.settings_changed.emit()
 
+    def _on_no_limit_checkbox_changed(self, state: int):
+        is_checked = (state == Qt.CheckState.Checked.value)
+        self.max_context_tokens_spinbox.setEnabled(not is_checked)
+        self.no_limit_changed.emit(is_checked)
+        if not self._is_loading_settings: self.settings_changed.emit()
+
     def update_llm_client_dependent_state(self, llm_client, current_llm_model_properties):
         # Placeholder for logic similar to _update_structured_output_checkbox_state in GenerationPanel
         # This might involve enabling/disabling structured_output_checkbox based on llm_client type or model properties
@@ -194,7 +206,8 @@ class GenerationParamsWidget(QWidget):
         return {
             "llm_model": self.llm_model_combo.currentData(),
             "k_variants": self.k_variants_combo.currentText(),
-            "max_context_tokens": self.max_context_tokens_spinbox.value(), # k_tokens
+            "max_context_tokens": None if self.no_limit_checkbox.isChecked() else self.max_context_tokens_spinbox.value(),
+            "no_limit": self.no_limit_checkbox.isChecked(),
             "structured_output": self.structured_output_checkbox.isChecked()
         }
 

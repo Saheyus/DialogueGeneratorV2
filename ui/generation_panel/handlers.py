@@ -162,14 +162,21 @@ def handle_refresh_token(panel):
     Slot pour le bouton de rafraîchissement de l'estimation des tokens.
     Rafraîchit l'estimation du prompt et le nombre de tokens affichés.
     """
+    settings = panel.get_settings()
+    no_limit = settings.get("no_limit", False)
     logger.info("Rafraîchissement manuel de l'estimation des tokens demandé.")
     panel.update_token_estimation_ui()
+    panel.dialogue_generation_service.refresh_token(
+        no_limit=no_limit
+    )
 
 def handle_generate_dialogue(panel):
     """
     Slot pour le bouton de génération de dialogue.
     Déclenche la génération de dialogue via le handler asynchrone.
     """
+    settings = panel.get_settings()
+    no_limit = settings.get("no_limit", False)
     logger.info("Lancement de la génération de dialogue (via handler extrait).")
     panel._launch_dialogue_generation()
 

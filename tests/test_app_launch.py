@@ -81,6 +81,18 @@ def app(qtbot: QtBot, monkeypatch, tmp_path):
     # monkeypatch.setattr(config_manager, 'get_config_file_path', lambda: project_root_path / 'config.txt')
 
 
+    # Mocker ConfigurationService pour ne pas sauvegarder sur disque
+    def mock_save_settings(self, *args, **kwargs): # Ajout de *args, **kwargs pour flexibilité
+        # logger.debug("(Mocked) ConfigurationService.save_ui_settings called, no actual save.")
+        return True
+    monkeypatch.setattr("services.configuration_service.ConfigurationService.save_ui_settings", mock_save_settings)
+    # Assurer que le mock est appliqué à la bonne classe si elle est importée différemment ailleurs.
+    # Si ConfigurationService est importé directement dans ui.main_window, il faudrait aussi le patcher là:
+    # monkeypatch.setattr("ui.main_window.ConfigurationService.save_ui_settings", mock_save_settings)
+    # Cependant, MainWindow obtient son instance de ConfigurationService via `self.config_service = ConfigurationService()`,
+    # donc patcher la classe originale `services.configuration_service.ConfigurationService` devrait suffire.
+
+
     # Assurez-vous que les fichiers de configuration référencés par context_config.json sont disponibles
     # et que context_config.json lui-même est au bon endroit.
     # Par défaut: DialogueGenerator/context_config.json
