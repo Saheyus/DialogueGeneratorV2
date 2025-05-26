@@ -104,5 +104,22 @@ def handle_system_prompt_changed(panel):
     Slot pour la modification du prompt système (InstructionsWidget).
     Met à jour le prompt système dans le PromptEngine et déclenche la sauvegarde + estimation des tokens.
     """
-    panel._update_prompt_engine_system_prompt()
-    panel._schedule_settings_save_and_token_update() 
+    new_system_prompt = panel.instructions_widget.get_system_prompt_text()
+    if panel.prompt_engine.system_prompt_template != new_system_prompt:
+        panel.prompt_engine.system_prompt_template = new_system_prompt
+        logger.info("PromptEngine system_prompt_template mis à jour.")
+    panel._schedule_settings_save_and_token_update()
+
+def handle_restore_default_system_prompt(panel):
+    """
+    Slot pour le bouton "Restaurer Défaut" du prompt système.
+    Restaure le prompt système par défaut dans le PromptEngine, met à jour l'UI et relance l'estimation des tokens.
+    """
+    default_prompt = panel.prompt_engine._get_default_system_prompt()
+    panel.instructions_widget.set_system_prompt_text(default_prompt)
+    if panel.prompt_engine.system_prompt_template != default_prompt:
+        panel.prompt_engine.system_prompt_template = default_prompt
+        logger.info("PromptEngine system_prompt_template restauré par défaut.")
+    panel.update_token_estimation_signal.emit()
+    from PySide6.QtWidgets import QMessageBox
+    QMessageBox.information(panel, "Prompt Restauré", "Le prompt système par défaut a été restauré.") 

@@ -31,7 +31,7 @@ from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTa
 from .generation_panel.interactions_tab_widget import InteractionsTabWidget
 from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
 from .generation_panel.dialogue_generation_handler import DialogueGenerationHandler # Ajouté
-from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed
+from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt
 
 # New service import
 try:
@@ -214,7 +214,7 @@ class GenerationPanel(QWidget):
 
         self.instructions_widget.user_instructions_changed.connect(self._schedule_settings_save_and_token_update)
         self.instructions_widget.system_prompt_changed.connect(lambda: handle_system_prompt_changed(self))
-        self.instructions_widget.restore_default_system_prompt_clicked.connect(self._restore_default_system_prompt)
+        self.instructions_widget.restore_default_system_prompt_clicked.connect(lambda: handle_restore_default_system_prompt(self))
 
         self.token_actions_widget.refresh_token_clicked.connect(self._trigger_token_update)
         self.token_actions_widget.generate_dialogue_clicked.connect(self._launch_dialogue_generation)
@@ -269,22 +269,6 @@ class GenerationPanel(QWidget):
     def _update_structured_output_checkbox_state(self):
         # Plus rien à faire, la checkbox n'existe plus dans l'UI
         pass
-
-    def _restore_default_system_prompt(self):
-        default_prompt = self.prompt_engine._get_default_system_prompt()
-        self.instructions_widget.set_system_prompt_text(default_prompt)
-        self._update_prompt_engine_system_prompt()
-        self.update_token_estimation_signal.emit()
-        QMessageBox.information(self, "Prompt Restauré", "Le prompt système par défaut a été restauré.")
-
-    def _update_prompt_engine_system_prompt(self):
-        new_system_prompt = self.instructions_widget.get_system_prompt_text()
-        if self.prompt_engine.system_prompt_template != new_system_prompt:
-            self.prompt_engine.system_prompt_template = new_system_prompt
-            logger.info("PromptEngine system_prompt_template mis à jour.")
-            # La mise à jour des tokens est gérée par _schedule_settings_save_and_token_update
-            # ou explicitement par _restore_default_system_prompt
-
 
     def set_llm_client(self, new_llm_client):
         logger.info(f"GenerationPanel: Réception d'un nouveau client LLM: {type(new_llm_client).__name__}")
