@@ -326,3 +326,94 @@ def handle_update_structured_output_checkbox_state(panel):
     Slot pour la mise à jour de l'état de la checkbox structured_output (même si la logique est vide).
     """
     pass 
+
+def handle_generation_task_started(panel):
+    """
+    Slot appelé quand la tâche de génération démarre (signal du handler).
+    Met à jour l'UI pour indiquer que la génération est en cours.
+    """
+    import PySide6.QtWidgets as QtWidgets
+    panel.generation_progress_bar.setRange(0, 0) # Indeterminate
+    panel.generation_progress_bar.setVisible(True)
+    panel.generate_dialogue_button.setEnabled(False)
+    QtWidgets.QApplication.processEvents() 
+
+def handle_generation_task_succeeded(panel, processed_variants, full_prompt, estimated_tokens):
+    """
+    Slot appelé quand la génération de dialogue réussit.
+    Met à jour l'UI avec les variantes générées et le prompt.
+    """
+    import PySide6.QtWidgets as QtWidgets
+    from constants import UIText
+    logger.info(f"GenerationPanel: Tâche de génération réussie. {len(processed_variants)} variantes traitées reçues.")
+    if full_prompt:
+        estimated_tokens_k = estimated_tokens / 1000 if estimated_tokens else 0
+        panel.token_estimation_label.setText(f"Tokens prompt final: {estimated_tokens_k:.1f}k")
+        panel._display_prompt_in_tab(full_prompt)
+    else:
+        panel.token_estimation_label.setText("Tokens prompt final: Erreur")
+        panel._display_prompt_in_tab("Erreur: Le prompt n'a pas pu être construit par le service/handler.")
+    panel.variants_display_widget.blockSignals(True)
+    num_tabs_to_keep = 0
+    if panel.variants_display_widget.count() > 0 and panel.variants_display_widget.tabText(0) == "Prompt Estimé":
+        num_tabs_to_keep = 1
+    while panel.variants_display_widget.count() > num_tabs_to_keep:
+        panel.variants_display_widget.removeTab(num_tabs_to_keep)
+    if processed_variants:
+        for i, interaction_obj in enumerate(processed_variants):
+            if interaction_obj.interaction_id.startswith("error_"):
+                error_text = interaction_obj.elements[0].get('text', 'Erreur inconnue dans la variante') if interaction_obj.elements else 'Erreur inconnue'
+                text_edit = QtWidgets.QTextEdit(f"// {interaction_obj.title}\n{error_text}")
+                text_edit.setReadOnly(True)
+                panel.variants_display_widget.addTab(text_edit, f"Variante {i+1} (Erreur)")
+            else:
+                panel.variants_display_widget.add_interaction_tab(f"Variante {i+1}", interaction_obj)
+                logger.info(f"[GP] Variante {i+1} (Interaction) ajoutée via add_interaction_tab. ID: {interaction_obj.interaction_id}")
+        logger.info(f"{len(processed_variants)} variantes affichées depuis le handler.")
+    else:
+        logger.warning("Aucune variante valide reçue du handler (liste vide).")
+        error_tab = QtWidgets.QTextEdit(UIText.NO_VARIANT + " (via Handler)")
+        panel.variants_display_widget.addTab(error_tab, "Aucune Variante (Handler)")
+    panel.variants_display_widget.blockSignals(False)
+    panel.generation_finished.emit(True if processed_variants else False)
+    panel._finalize_generation_ui_state()
+
+def handle_generation_task_failed(panel, error_message, full_prompt):
+    """
+    Slot appelé quand la génération de dialogue échoue.
+    Met à jour l'UI avec le message d'erreur et le prompt si disponible.
+    """
+    import PySide6.QtWidgets as QtWidgets
+    from constants import UIText
+    logger.error(f"GenerationPanel: Tâche de génération échouée: {error_message}")
+    if full_prompt and full_prompt != "Erreur: Le prompt n'a pas pu être construit.":
+        panel._display_prompt_in_tab(full_prompt)
+    else:
+        panel._display_prompt_in_tab(f"Erreur critique avant ou pendant la construction du prompt: {error_message}")
+    panel.variants_display_widget.blockSignals(True)
+    num_tabs_to_keep_err = 0
+    if panel.variants_display_widget.count() > 0 and panel.variants_display_widget.tabText(0) == "Prompt Estimé":
+        num_tabs_to_keep_err = 1
+    while panel.variants_display_widget.count() > num_tabs_to_keep_err:
+        panel.variants_display_widget.removeTab(num_tabs_to_keep_err)
+    error_tab_content = QtWidgets.QTextEdit()
+    error_tab_content.setPlainText(f"Une erreur majeure est survenue lors de la génération (via Handler):\n\n{error_message}")
+    error_tab_content.setReadOnly(True)
+    panel.variants_display_widget.addTab(error_tab_content, "Erreur Critique (Handler)")
+    panel.variants_display_widget.blockSignals(False)
+    panel.generation_finished.emit(False)
+    panel._finalize_generation_ui_state() 
+
+def handle_prompt_preview_ready_for_display(panel, prompt_text, estimated_tokens):
+    """
+    Slot appelé quand la prévisualisation du prompt est prête.
+    Met à jour l'UI avec le prompt et l'estimation des tokens.
+    """
+    logger.debug(f"GenerationPanel: Prévisualisation du prompt prête (via Handler). Tokens: {estimated_tokens}")
+    if prompt_text:
+        estimated_tokens_k = estimated_tokens / 1000 if estimated_tokens else 0
+        panel.token_estimation_label.setText(f"Tokens prompt (en cours): {estimated_tokens_k:.1f}k")
+        panel._display_prompt_in_tab(prompt_text)
+    else:
+        panel.token_estimation_label.setText("Tokens prompt (en cours): Erreur")
+        panel._display_prompt_in_tab("Erreur: Le prompt n'a pas pu être construit par le service/handler pour la prévisualisation.") 

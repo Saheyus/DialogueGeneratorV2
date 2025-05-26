@@ -31,7 +31,7 @@ from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTa
 from .generation_panel.interactions_tab_widget import InteractionsTabWidget
 from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
 from .generation_panel.dialogue_generation_handler import DialogueGenerationHandler # Ajouté
-from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt, handle_max_context_tokens_changed, handle_k_variants_changed, handle_structure_changed, handle_user_instructions_changed, handle_refresh_token, handle_generate_dialogue, handle_validate_interaction_requested_from_tabs, handle_interaction_selected, handle_sequence_changed, handle_edit_interaction_requested, handle_interaction_changed, get_generation_panel_settings, load_generation_panel_settings, handle_update_structured_output_checkbox_state
+from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt, handle_max_context_tokens_changed, handle_k_variants_changed, handle_structure_changed, handle_user_instructions_changed, handle_refresh_token, handle_generate_dialogue, handle_validate_interaction_requested_from_tabs, handle_interaction_selected, handle_sequence_changed, handle_edit_interaction_requested, handle_interaction_changed, get_generation_panel_settings, load_generation_panel_settings, handle_update_structured_output_checkbox_state, handle_generation_task_started, handle_generation_task_succeeded, handle_generation_task_failed, handle_prompt_preview_ready_for_display
 
 # New service import
 try:
@@ -227,10 +227,10 @@ class GenerationPanel(QWidget):
         self.interactions_tab_content_widget.interaction_changed_in_tab.connect(lambda interaction: handle_interaction_changed(self, interaction))
 
         # Connexion des signaux du DialogueGenerationHandler
-        self.generation_handler.generation_started.connect(self._on_generation_task_started)
-        self.generation_handler.generation_succeeded.connect(self._on_generation_task_succeeded)
+        self.generation_handler.generation_started.connect(lambda: handle_generation_task_started(self))
+        self.generation_handler.generation_succeeded.connect(lambda processed_variants, full_prompt, estimated_tokens: handle_generation_task_succeeded(self, processed_variants, full_prompt, estimated_tokens))
         self.generation_handler.generation_failed.connect(self._on_generation_task_failed)
-        self.generation_handler.prompt_preview_ready.connect(self._on_prompt_preview_ready_for_display)
+        self.generation_handler.prompt_preview_ready.connect(lambda prompt_text, estimated_tokens: handle_prompt_preview_ready_for_display(self, prompt_text, estimated_tokens))
 
         # Connexion du signal de l'alias (pour la sauvegarde de max_context_tokens)
         self.max_context_tokens_spinbox.valueChanged.connect(self._schedule_settings_save)
@@ -463,57 +463,6 @@ class GenerationPanel(QWidget):
             self.generation_progress_bar.setVisible(False)
             self.generate_dialogue_button.setEnabled(True)
 
-    @Slot()
-    def _on_generation_task_started(self):
-        logger.info("GenerationPanel: Tâche de génération démarrée (via signal du handler).")
-        self.generation_progress_bar.setRange(0, 0) # Indeterminate
-        self.generation_progress_bar.setVisible(True)
-        self.generate_dialogue_button.setEnabled(False)
-        QApplication.processEvents() 
-
-    @Slot(list, str, int) # variants_objects, full_prompt_for_display, estimated_tokens_for_display
-    def _on_generation_task_succeeded(self, processed_variants: List[Interaction], full_prompt: str, estimated_tokens: int):
-        logger.info(f"GenerationPanel: Tâche de génération réussie. {len(processed_variants)} variantes traitées reçues.")
-        
-        if full_prompt:
-            estimated_tokens_k = estimated_tokens / 1000 if estimated_tokens else 0
-            self.token_estimation_label.setText(f"Tokens prompt final: {estimated_tokens_k:.1f}k")
-            self._display_prompt_in_tab(full_prompt)
-        else:
-            self.token_estimation_label.setText("Tokens prompt final: Erreur")
-            self._display_prompt_in_tab("Erreur: Le prompt n'a pas pu être construit par le service/handler.")
-
-        self.variants_display_widget.blockSignals(True)
-        num_tabs_to_keep = 0
-        if self.variants_display_widget.count() > 0 and self.variants_display_widget.tabText(0) == "Prompt Estimé":
-            num_tabs_to_keep = 1
-        
-        while self.variants_display_widget.count() > num_tabs_to_keep:
-            self.variants_display_widget.removeTab(num_tabs_to_keep)
-        
-        if processed_variants:
-            for i, interaction_obj in enumerate(processed_variants):
-                # Les objets sont déjà des Interactions (ou des Interactions d'erreur)
-                if interaction_obj.interaction_id.startswith("error_"):
-                     # C'est un placeholder d'erreur créé par le handler
-                    error_text = interaction_obj.elements[0].get('text', 'Erreur inconnue dans la variante') if interaction_obj.elements else 'Erreur inconnue'
-                    text_edit = QTextEdit(f"// {interaction_obj.title}\n{error_text}")
-                    text_edit.setReadOnly(True)
-                    self.variants_display_widget.addTab(text_edit, f"Variante {i+1} (Erreur)")
-                else:
-                    self.variants_display_widget.add_interaction_tab(f"Variante {i+1}", interaction_obj)
-                    logger.info(f"[GP] Variante {i+1} (Interaction) ajoutée via add_interaction_tab. ID: {interaction_obj.interaction_id}")
-            
-            logger.info(f"{len(processed_variants)} variantes affichées depuis le handler.")
-        else:
-            logger.warning("Aucune variante valide reçue du handler (liste vide).")
-            error_tab = QTextEdit(UIText.NO_VARIANT + " (via Handler)")
-            self.variants_display_widget.addTab(error_tab, "Aucune Variante (Handler)")
-        
-        self.variants_display_widget.blockSignals(False)
-        self.generation_finished.emit(True if processed_variants else False)
-        self._finalize_generation_ui_state()
-
     @Slot(str, str) # error_message, full_prompt_for_display
     def _on_generation_task_failed(self, error_message: str, full_prompt: Optional[str]):
         logger.error(f"GenerationPanel: Tâche de génération échouée: {error_message}")
@@ -538,17 +487,6 @@ class GenerationPanel(QWidget):
         
         self.generation_finished.emit(False)
         self._finalize_generation_ui_state()
-
-    @Slot(str, int) # prompt_text, estimated_tokens
-    def _on_prompt_preview_ready_for_display(self, prompt_text: str, estimated_tokens: int):
-        logger.debug(f"GenerationPanel: Prévisualisation du prompt prête (via Handler). Tokens: {estimated_tokens}")
-        if prompt_text:
-            estimated_tokens_k = estimated_tokens / 1000 if estimated_tokens else 0
-            self.token_estimation_label.setText(f"Tokens prompt (en cours): {estimated_tokens_k:.1f}k")
-            self._display_prompt_in_tab(prompt_text)
-        else:
-            self.token_estimation_label.setText("Tokens prompt (en cours): Erreur")
-            self._display_prompt_in_tab("Erreur: Le prompt n'a pas pu être construit par le service/handler pour la prévisualisation.")
 
     def _finalize_generation_ui_state(self):
         current_task = asyncio.current_task() # Peut être None si la boucle d'event n'est pas gérée par asyncio ici
