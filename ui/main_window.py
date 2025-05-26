@@ -390,6 +390,9 @@ class MainWindow(QMainWindow):
             # Mettre à jour l'affichage des tokens si la méthode existe
             if hasattr(self.generation_panel, 'update_token_counts_display'):
                 self.generation_panel.update_token_counts_display(context_token_count, estimated_total_token_count)
+            # Correction : forcer la mise à jour du label de tokens
+            if hasattr(self.generation_panel, 'update_token_estimation_ui'):
+                self.generation_panel.update_token_estimation_ui()
             
             return context_string, context_token_count, estimated_full_prompt_text, estimated_total_token_count
         except Exception as e:

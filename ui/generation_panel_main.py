@@ -329,6 +329,16 @@ class GenerationPanel(QWidget):
 
         user_specific_goal = self.instructions_widget.get_user_instructions_text()
         selected_context_items = self.main_window_ref._get_current_context_selections() if hasattr(self.main_window_ref, '_get_current_context_selections') else {}
+        logger.info(f"[update_token_estimation_ui] selected_context_items (avant build_context): {selected_context_items}")
+        # Option d'aplatissement si besoin
+        flat_selected_items = []
+        if isinstance(selected_context_items, dict):
+            for v in selected_context_items.values():
+                if isinstance(v, list):
+                    flat_selected_items.extend(v)
+                elif v:
+                    flat_selected_items.append(v)
+        # logger.debug(f"[update_token_estimation_ui] flat_selected_items: {flat_selected_items}")
 
         # Récupérer les sélections de scène depuis le widget
         scene_info = self.scene_selection_widget.get_selected_scene_info()
@@ -359,28 +369,21 @@ class GenerationPanel(QWidget):
         # dialogue_structure_description = self.dialogue_structure_widget.get_structure_description()
         context_selections_for_service["generate_interaction"] = True # Par défaut pour l'estimation du pire cas (structuré)
 
-        full_prompt_for_estimation = "Erreur lors de la construction du prompt pour estimation."
-        prompt_tokens = 0
-        # context_tokens n'est plus directement retourné par prepare_generation_preview, 
-        # mais le service s'en occupe en interne pour construire le prompt.
-        # Le label affichera uniquement les tokens du prompt total.
-
+        logger.info(f"[update_token_estimation_ui] context_selections_for_service transmis à prepare_generation_preview: {context_selections_for_service}")
         try:
             max_tokens_val = self.main_window_ref.config_service.get_ui_setting("max_context_tokens", Defaults.CONTEXT_TOKENS)
             system_prompt_override = self.instructions_widget.get_system_prompt_text()
 
             # Appel à la méthode du service
-            # structured_output=True car l'estimation doit refléter le cas le plus coûteux (génération structurée)
-            # si c'est ce que l'utilisateur a configuré ou pourrait configurer.
-            # Pour une estimation générique, on peut supposer True.
-            # Note: La méthode du service gère elle-même le system_prompt_override.
             full_prompt_for_estimation, prompt_tokens, _ = self.dialogue_generation_service.prepare_generation_preview(
                 user_instructions=user_specific_goal,
                 system_prompt_override=system_prompt_override,
                 context_selections=context_selections_for_service,
                 max_context_tokens=max_tokens_val,
-                structured_output=True # On estime pour un output structuré par défaut
+                structured_output=True
             )
+            logger.info(f"[update_token_estimation_ui] prompt généré (début): {full_prompt_for_estimation[:300] if full_prompt_for_estimation else 'None'}")
+            logger.info(f"[update_token_estimation_ui] prompt_tokens retourné: {prompt_tokens}, longueur prompt: {len(full_prompt_for_estimation)} chars, {len(full_prompt_for_estimation.split())} mots. Affiché: {prompt_tokens/1000:.1f}k tokens.")
             
             if not full_prompt_for_estimation:
                  full_prompt_for_estimation = "Erreur: Le service n'a pas pu construire le prompt pour l'estimation."
@@ -396,7 +399,7 @@ class GenerationPanel(QWidget):
         # Affichage des tokens en milliers (k) - Uniquement le total prompt
         prompt_tokens_k = prompt_tokens / 1000
         self.token_estimation_label.setText(f"Tokens prompt (estimé): {prompt_tokens_k:.1f}k")
-        logger.debug(f"Token estimation UI updated (via Service): Prompt total {prompt_tokens} ({prompt_tokens_k:.1f}k).")
+        logger.info(f"[update_token_estimation_ui] Label UI mis à jour: Tokens prompt (estimé): {prompt_tokens_k:.1f}k")
         
         self._display_prompt_in_tab(full_prompt_for_estimation)
 
