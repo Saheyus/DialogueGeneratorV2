@@ -29,8 +29,7 @@ from .generation_panel.generation_params_widget import GenerationParamsWidget
 from .generation_panel.instructions_widget import InstructionsWidget
 from .generation_panel.token_estimation_actions_widget import TokenEstimationActionsWidget
 from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTabsWidget
-from .generation_panel.interaction_sequence_widget import InteractionSequenceWidget
-from .generation_panel.interaction_editor_widget import InteractionEditorWidget
+from .generation_panel.interactions_tab_widget import InteractionsTabWidget
 from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
 
 # New service import
@@ -174,17 +173,8 @@ class GenerationPanel(QWidget):
         central_tabs.addTab(generation_tab, "Génération")
 
         # --- Onglet Interactions (initialisation inchangée pour l'instant) ---
-        interactions_tab = QWidget()
-        interactions_tab_layout = QVBoxLayout(interactions_tab)
-        # ... (code de l'onglet interactions inchangé)
-        self.interaction_sequence_widget = InteractionSequenceWidget(
-            interaction_service=self.interaction_service
-        )
-        interactions_tab_layout.addWidget(self.interaction_sequence_widget)
-        self.interaction_editor_widget = InteractionEditorWidget(self.interaction_service)
-        interactions_tab_layout.addWidget(self.interaction_editor_widget)
-        interactions_tab_layout.addStretch(1)
-        central_tabs.addTab(interactions_tab, "Interactions")
+        self.interactions_tab_content_widget = InteractionsTabWidget(self.interaction_service)
+        central_tabs.addTab(self.interactions_tab_content_widget, "Interactions")
 
         # Colonne de Droite (inchangée, variants_display_widget déjà initialisé)
         right_column_widget = QWidget()
@@ -232,10 +222,10 @@ class GenerationPanel(QWidget):
         
         self.variants_display_widget.validate_interaction_requested.connect(self._on_validate_interaction_requested_from_tabs)
 
-        self.interaction_sequence_widget.interaction_selected.connect(self._on_interaction_selected)
-        self.interaction_sequence_widget.sequence_changed.connect(self._on_sequence_changed)
-        self.interaction_sequence_widget.interaction_selected.connect(self._on_edit_interaction_requested)
-        self.interaction_editor_widget.interaction_changed.connect(self._on_interaction_changed)
+        self.interactions_tab_content_widget.interaction_selected_in_tab.connect(self._on_interaction_selected)
+        self.interactions_tab_content_widget.sequence_changed_in_tab.connect(self._on_sequence_changed)
+        self.interactions_tab_content_widget.edit_interaction_requested_in_tab.connect(self._on_edit_interaction_requested)
+        self.interactions_tab_content_widget.interaction_changed_in_tab.connect(self._on_interaction_changed)
 
         # Connexion du signal de l'alias (pour la sauvegarde de max_context_tokens)
         self.max_context_tokens_spinbox.valueChanged.connect(self._schedule_settings_save)
@@ -664,18 +654,18 @@ class GenerationPanel(QWidget):
             # 3) Rafraîchir la liste des interactions et sélectionner la nouvelle
             try:
                 # Déconnecte temporairement pour éviter les effets de bord pendant la mise à jour
-                self.interaction_sequence_widget.interaction_selected.disconnect(self._on_interaction_selected)
+                self.interactions_tab_content_widget.interaction_selected_in_tab.disconnect(self._on_interaction_selected)
             except Exception:
                 pass  # Pas critique si déjà déconnecté
 
-            self.interaction_sequence_widget.refresh_list(select_id=str(interaction.interaction_id))
+            self.interactions_tab_content_widget.refresh_list(select_id=str(interaction.interaction_id))
 
             # Affiche l'interaction dans l'éditeur
-            self.interaction_editor_widget.set_interaction(interaction)
+            self.interactions_tab_content_widget.display_interaction_in_editor(interaction)
 
             # Reconnecte le signal
             try:
-                self.interaction_sequence_widget.interaction_selected.connect(self._on_interaction_selected)
+                self.interactions_tab_content_widget.interaction_selected_in_tab.connect(self._on_interaction_selected)
             except Exception:
                 pass
 
@@ -890,16 +880,21 @@ class GenerationPanel(QWidget):
                 title_display = getattr(interaction, 'title', str(interaction_id)[:8])
                 self.main_window_ref.statusBar().showMessage(f"Interaction '{title_display}' sélectionnée.", 3000)
                 
-                # Afficher l'interaction dans l'éditeur
-                self.interaction_editor_widget.set_interaction(interaction)
+                # Afficher l'interaction dans l'éditeur - Géré par InteractionsTabWidget
+                # self.interaction_editor_widget.set_interaction(interaction)
             else:
                 logger.warning(f"Interaction {interaction_id} non trouvée par le service.")
                 self.main_window_ref.statusBar().showMessage(UIText.ERROR_PREFIX + f"Interaction {interaction_id} non trouvée.", 3000)
-                self.interaction_editor_widget.set_interaction(None)
+                # La sélection dans la liste devrait déjà avoir mis à jour l'éditeur via la logique interne de InteractionsTabWidget
+                # Si on veut forcer l'affichage d'une interaction spécifique NON sélectionnée dans la liste:
+                self.interactions_tab_content_widget.display_interaction_in_editor(interaction)
+
+            title_display = getattr(interaction, 'title', str(interaction_id)[:8])
+            self.main_window_ref.statusBar().showMessage(f"Édition de l'interaction '{title_display}'", 3000)
         else:
             logger.info("Aucune interaction sélectionnée.")
             self.main_window_ref.statusBar().showMessage(UIText.NO_INTERACTION_FOUND, 3000)
-            self.interaction_editor_widget.set_interaction(None)
+            self.interactions_tab_content_widget.display_interaction_in_editor(None)
 
     @Slot()
     def _on_sequence_changed(self):
@@ -920,12 +915,12 @@ class GenerationPanel(QWidget):
             # Sélectionner l'onglet Interactions s'il ne l'est pas déjà
             tabs = self.findChild(QTabWidget)
             if tabs:
-                interactions_tab_index = tabs.indexOf(self.interaction_sequence_widget.parent())
+                interactions_tab_index = tabs.indexOf(self.interactions_tab_content_widget.parent())
                 if interactions_tab_index >= 0 and tabs.currentIndex() != interactions_tab_index:
                     tabs.setCurrentIndex(interactions_tab_index)
             
             # Afficher l'interaction dans l'éditeur
-            self.interaction_editor_widget.set_interaction(interaction)
+            self.interactions_tab_content_widget.display_interaction_in_editor(interaction)
             title_display = getattr(interaction, 'title', str(interaction_id)[:8])
             self.main_window_ref.statusBar().showMessage(f"Édition de l'interaction '{title_display}'", 3000)
         else:
@@ -941,7 +936,8 @@ class GenerationPanel(QWidget):
         logger.info(f"Interaction modifiée : {interaction.interaction_id}")
         
         # Mettre à jour l'affichage de la séquence
-        self.interaction_sequence_widget.refresh_list()
+        # self.interaction_sequence_widget.refresh_list()
+        # La liste est rafraîchie en interne par InteractionsTabWidget après un changement dans l'éditeur
         
         title_display = getattr(interaction, 'title', str(interaction.interaction_id)[:8])
         self.main_window_ref.statusBar().showMessage(f"Interaction '{title_display}' mise à jour.", 3000)
