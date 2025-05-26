@@ -30,8 +30,8 @@ ui\generation_panel\test_interaction_sequence_widget.py:5
     class TestWindow(QMainWindow):
 
 DialogueGenerator/tests/ui/generation_panel/test_scene_selection_widget.py::test_swap_characters
-  F:\Frameworks\Python\Python310\lib\site-packages\pytestqt\wait_signal.py:741: RuntimeWarning: Failed to disconnect (<bound method _AbstractSignalBlocker._quit_loop_by_timeout of <pytestqt.wait_signal.MultiSignalBlocker object at 0x000001DF20C0C580>>) from signal "timeout()".
+  F:\Frameworks\Python\Python310\lib\site-packages\pytestqt\wait_signal.py:741: RuntimeWarning: Failed to disconnect (<bound method _AbstractSignalBlocker._quit_loop_by_timeout of <pytestqt.wait_signal.MultiSignalBlocker object at 0x00000159FDCA0640>>) from signal "timeout()".
     signal.disconnect(slot)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-======================= 94 passed, 2 warnings in 2.13s ========================
+======================= 94 passed, 2 warnings in 2.00s ========================

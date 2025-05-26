@@ -139,4 +139,12 @@ def handle_k_variants_changed(panel, value):
     Déclenche la sauvegarde des paramètres.
     """
     logger.info(f"Nombre de variantes à générer mis à jour: {value}")
-    panel._schedule_settings_save() 
+    panel._schedule_settings_save()
+
+def handle_structure_changed(panel):
+    """
+    Slot pour la modification de la structure de dialogue (DialogueStructureWidget).
+    Déclenche la sauvegarde des paramètres et la mise à jour de l'estimation des tokens.
+    """
+    logger.info("Structure de dialogue modifiée.")
+    panel._schedule_settings_save_and_token_update() 

@@ -31,7 +31,7 @@ from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTa
 from .generation_panel.interactions_tab_widget import InteractionsTabWidget
 from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
 from .generation_panel.dialogue_generation_handler import DialogueGenerationHandler # Ajouté
-from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt, handle_max_context_tokens_changed, handle_k_variants_changed
+from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt, handle_max_context_tokens_changed, handle_k_variants_changed, handle_structure_changed
 
 # New service import
 try:
@@ -210,7 +210,7 @@ class GenerationPanel(QWidget):
         self.generation_params_widget.max_context_tokens_changed.connect(lambda value: handle_max_context_tokens_changed(self, value))
         # self.generation_params_widget.structured_output_changed.connect(self._schedule_settings_save) # Checkbox supprimée
 
-        self.dialogue_structure_widget.structure_changed.connect(self._schedule_settings_save_and_token_update)
+        self.dialogue_structure_widget.structure_changed.connect(lambda: handle_structure_changed(self))
 
         self.instructions_widget.user_instructions_changed.connect(self._schedule_settings_save_and_token_update)
         self.instructions_widget.system_prompt_changed.connect(lambda: handle_system_prompt_changed(self))
