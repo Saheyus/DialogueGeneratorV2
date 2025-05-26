@@ -7,10 +7,23 @@ from constants import UIText, FilePaths, Defaults
 logger = logging.getLogger(__name__)
 
 class AlwaysTrueCheckbox:
+    """
+    A mock checkbox class that always reports its state as True (checked).
+    Its primary purpose is to maintain the logical state of "structured output always enabled"
+    while still integrating with the QCheckBox API for UI settings persistence (load/save)
+    if the actual QCheckBox widget is removed or replaced but its setting needs to be preserved.
+    Methods like setChecked, setEnabled, etc., are implemented for API compatibility
+    but do not alter the functional "always True" state.
+    """
     def isChecked(self):
+        """Always returns True, indicating the checkbox is logically checked."""
         return True
 
     def setChecked(self, value):
+        """
+        API compatibility method. Does not change the logical state.
+        Logs an attempt if trying to set to False.
+        """
         # This checkbox is always considered true for logic purposes,
         # but we need a setChecked method for compatibility with QCheckBox API
         # during settings load, etc.
@@ -20,21 +33,24 @@ class AlwaysTrueCheckbox:
         pass # Or log an attempt to set it
 
     def setEnabled(self, enabled):
+        """API compatibility method. Does not affect enabled state."""
         # For compatibility with QCheckBox API
         pass
 
     def setToolTip(self, tooltip):
+        """API compatibility method. Tooltip might not be visible if not a real widget."""
         # For compatibility with QCheckBox API
         pass
 
     def isEnabled(self):
+        """API compatibility method. Always considered enabled for logic."""
         # For compatibility with QCheckBox API
         return True # Or a more appropriate fixed value
 
 class GenerationParamsWidget(QWidget):
     llm_model_selection_changed = Signal(str) # identifier
     k_variants_changed = Signal(str)
-    max_context_tokens_changed = Signal(float) # k_tokens
+    max_context_tokens_changed = Signal(float) # Émet la valeur en k_tokens (float)
     structured_output_changed = Signal(bool)
     settings_changed = Signal() # Generic signal for any setting change
 
@@ -183,6 +199,10 @@ class GenerationParamsWidget(QWidget):
         }
 
     def load_settings(self, settings: dict, default_k_variants="1", default_max_context_tokens_k=50.0, default_structured_output=True):
+        """
+        Charge les paramètres UI de ce widget.
+        'max_context_tokens' dans le dictionnaire settings est attendu en k_tokens (float).
+        """
         self._is_loading_settings = True
         
         model_identifier = settings.get("llm_model")

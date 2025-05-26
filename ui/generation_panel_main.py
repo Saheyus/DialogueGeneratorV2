@@ -82,17 +82,21 @@ class GenerationPanel(QWidget):
         """Initializes the GenerationPanel.
 
         Args:
-            context_builder: Instance of ContextBuilder to access GDD data (e.g., character names,
-                             location names, linked elements) and to build context strings.
-            prompt_engine: Instance of PromptEngine to construct the final prompt for the LLM.
-            llm_client: Instance of an LLMClient (e.g., OpenAIClient or DummyLLMClient) to generate text.
+            context_builder: Instance of ContextBuilder to access GDD data.
+            prompt_engine: Instance of PromptEngine to construct the final prompt.
+            llm_client: Instance of an LLMClient.
             available_llm_models: List of available LLM models.
             current_llm_model_identifier: Identifier of the current LLM model.
-            main_window_ref: Reference to the MainWindow, used for accessing shared functionalities
-                             like the status bar, or methods like _get_current_context_selections and
-                             _update_token_estimation_and_prompt_display.
+            main_window_ref: Reference to the MainWindow.
             dialogue_generation_service: Instance of DialogueGenerationService.
             parent: The parent widget.
+
+        Attributes:
+            current_max_context_tokens_k (float): Stores the user-defined maximum number of tokens
+                                                  for GDD context, in k_tokens (thousands of tokens).
+                                                  This value is synchronized with the spinbox in
+                                                  GenerationParamsWidget and used to calculate the
+                                                  absolute token limit for ContextBuilder.
         """
         super().__init__(parent)
         
@@ -130,7 +134,7 @@ class GenerationPanel(QWidget):
         # Initialiser current_max_context_tokens_k avec une valeur par défaut.
         # Elle sera correctement mise à jour par load_settings() après _init_ui()
         # ou par le handler si la valeur du spinbox change manuellement.
-        self.current_max_context_tokens_k = Defaults.CONTEXT_TOKENS / 1000 # en k_tokens
+        self.current_max_context_tokens_k = Defaults.CONTEXT_TOKENS / 1000 # en k_tokens (float)
 
         self._init_ui()
         # finalize_ui_setup() est appelé par MainWindow
@@ -327,6 +331,15 @@ class GenerationPanel(QWidget):
 
     @Slot()
     def update_token_estimation_ui(self):
+        """
+        Updates the token estimation label and the prompt preview tab.
+
+        This method retrieves all necessary information (user instructions, GDD selections,
+        scene context, max token limit) and calls the DialogueGenerationService
+        to prepare a preview of the prompt. The estimated token count and the
+        prompt itself are then displayed in the UI.
+        The max_tokens_val passed to the service is in absolute number of tokens.
+        """
         if not self.dialogue_generation_service or not self.llm_client: # MODIFIÉ: Vérifier dialogue_generation_service
             self.token_estimation_label.setText("Erreur: Services non initialisés")
             self._display_prompt_in_tab("Erreur: Le service de génération ou le client LLM ne sont pas initialisés.")
@@ -380,7 +393,7 @@ class GenerationPanel(QWidget):
             # max_tokens_val = self.main_window_ref.config_service.get_ui_setting("max_context_tokens", Defaults.CONTEXT_TOKENS)
             # Utiliser la valeur de l'attribut mis à jour par le handler
             max_tokens_val_k = self.current_max_context_tokens_k
-            max_tokens_val = int(max_tokens_val_k * 1000) # Convertir k_tokens en tokens
+            max_tokens_val = int(max_tokens_val_k * 1000) # Convertir k_tokens en nombre absolu de tokens
             logger.info(f"[update_token_estimation_ui] Utilisation de max_tokens_val = {max_tokens_val} (provenant de self.current_max_context_tokens_k: {max_tokens_val_k}k)")
             
             system_prompt_override = self.instructions_widget.get_system_prompt_text()
@@ -548,7 +561,10 @@ class GenerationPanel(QWidget):
         return settings
 
     def load_settings(self, settings: dict):
-        """Charge les paramètres sauvegardés dans l'UI."""
+        """
+        Charge les paramètres sauvegardés dans l'UI.
+        'max_context_tokens' dans le dictionnaire settings est attendu en k_tokens (float).
+        """
         self._is_loading_settings = True
         logger.debug(f"Chargement des paramètres dans GenerationPanel: {settings}")
 
