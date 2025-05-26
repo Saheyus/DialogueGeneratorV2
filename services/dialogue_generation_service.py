@@ -1,7 +1,8 @@
 import logging
 import json
 import re
-from typing import Optional, Any, Tuple, List, Dict, Union
+from typing import Optional, Any, Tuple, List, Dict, Union, Type
+from pydantic import BaseModel
 import uuid
 from abc import ABC, abstractmethod
 import asyncio

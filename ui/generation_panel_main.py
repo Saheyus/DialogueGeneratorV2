@@ -79,7 +79,7 @@ class GenerationPanel(QWidget):
     generation_finished = Signal(bool) # True pour succès (variantes ajoutées), False en cas d'erreur majeure avant ajout
     llm_model_selection_changed = Signal(str) # Émis lorsque l'utilisateur sélectionne un nouveau modèle LLM
 
-    def __init__(self, context_builder, prompt_engine, llm_client, available_llm_models, current_llm_model_identifier, main_window_ref, parent=None):
+    def __init__(self, context_builder, prompt_engine, llm_client, available_llm_models, current_llm_model_identifier, main_window_ref, dialogue_generation_service, parent=None):
         """Initializes the GenerationPanel.
 
         Args:
@@ -92,6 +92,7 @@ class GenerationPanel(QWidget):
             main_window_ref: Reference to the MainWindow, used for accessing shared functionalities
                              like the status bar, or methods like _get_current_context_selections and
                              _update_token_estimation_and_prompt_display.
+            dialogue_generation_service: Instance of DialogueGenerationService.
             parent: The parent widget.
         """
         super().__init__(parent)
@@ -109,13 +110,18 @@ class GenerationPanel(QWidget):
         self.interaction_repository = FileInteractionRepository(str(interactions_dir))
         self.interaction_service = InteractionService(repository=self.interaction_repository)
 
-        # === AJOUT : Injection ou création du DialogueGenerationService ===
-        self.dialogue_generation_service = DialogueGenerationService(
-            context_builder=self.context_builder, 
-            prompt_engine=self.prompt_engine, 
-            interaction_service=self.interaction_service
-        )
-        # === FIN AJOUT ===
+        # === MODIFIÉ : Utilisation du service injecté ===
+        self.dialogue_generation_service = dialogue_generation_service
+        if not self.dialogue_generation_service:
+            # Fallback ou erreur si non fourni, bien que MainWindow devrait le fournir.
+            logger.error("DialogueGenerationService non fourni à GenerationPanel!")
+            # Optionnellement, créer une instance par défaut ici, mais l'injection est préférable.
+            # self.dialogue_generation_service = DialogueGenerationService(
+            # context_builder=self.context_builder, 
+            # prompt_engine=self.prompt_engine, 
+            # interaction_service=self.interaction_service
+            # )
+        # === FIN MODIFICATION ===
 
         self.available_llm_models = available_llm_models if available_llm_models else []
         self.current_llm_model_identifier = current_llm_model_identifier

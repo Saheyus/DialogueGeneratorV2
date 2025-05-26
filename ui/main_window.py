@@ -29,6 +29,7 @@ from llm_client import ILLMClient, OpenAIClient, DummyLLMClient # MODIFIED: Anth
 from context_builder import ContextBuilder
 from services.interaction_service import InteractionService
 from services.repositories.file_repository import FileInteractionRepository
+from services.dialogue_generation_service import DialogueGenerationService # AJOUT DE L'IMPORT
 
 # MODIFIED: Added import for Interaction
 from models.dialogue_structure.interaction import Interaction
@@ -98,6 +99,14 @@ class MainWindow(QMainWindow):
 
         self.prompt_engine = PromptEngine()
 
+        # === AJOUT : Instanciation de DialogueGenerationService ===
+        self.dialogue_generation_service = DialogueGenerationService(
+            context_builder=self.context_builder,
+            prompt_engine=self.prompt_engine,
+            interaction_service=self.interaction_service
+        )
+        # === FIN AJOUT ===
+
         self.setWindowTitle("DialogueGenerator IA - Context Builder")
         self.setWindowIcon(get_icon_path("icon.png"))
         self.setGeometry(100, 100, 1600, 900) # Default size
@@ -124,6 +133,7 @@ class MainWindow(QMainWindow):
             available_llm_models=self.available_llm_models, # Passer la liste des modèles
             current_llm_model_identifier=initial_llm_model_id, # Utiliser la valeur du service
             main_window_ref=self,
+            dialogue_generation_service=self.dialogue_generation_service, # MODIFIÉ: Passer le service injecté
             parent=self
         )
 
