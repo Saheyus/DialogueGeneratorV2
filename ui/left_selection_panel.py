@@ -478,6 +478,10 @@ class LeftSelectionPanel(QWidget):
         
         filters_text = {cat_key: edit.text() for cat_key, edit in self.filter_edits.items()}
         
+        # LOG: Afficher le contenu des checked_items pour diagnostic
+        logger.info(f"[DEBUG] get_settings - checked_items: {checked_items}")
+        logger.info(f"[DEBUG] get_settings - filters: {filters_text}")
+        
         return {
             "filters": filters_text,
             "checked_items": checked_items
@@ -551,6 +555,8 @@ class LeftSelectionPanel(QWidget):
                     selected.append(item_widget.text_label.text())
                 elif q_item and q_item.checkState() == Qt.Checked:
                     selected.append(q_item.text())
+        # LOG: Afficher la liste plate des items sélectionnés
+        logger.info(f"[DEBUG] get_all_selected_item_names - selected: {selected}")
         return selected
 
     # Utility method to be part of the class

@@ -318,6 +318,9 @@ class MainWindow(QMainWindow):
                     seen_items.add(item_name)
             selections[category_key] = valid_items
         
+        # LOG: Afficher le dictionnaire final des sélections
+        logger.info(f"[DEBUG] _get_current_context_selections - selections: {selections}")
+        
         return selections
 
     def _trigger_generation_panel_token_ui_update(self) -> None:
