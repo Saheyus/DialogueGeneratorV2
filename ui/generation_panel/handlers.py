@@ -171,4 +171,93 @@ def handle_generate_dialogue(panel):
     Déclenche la génération de dialogue via le handler asynchrone.
     """
     logger.info("Lancement de la génération de dialogue (via handler extrait).")
-    panel._launch_dialogue_generation() 
+    panel._launch_dialogue_generation()
+
+def handle_validate_interaction_requested_from_tabs(panel, tab_name, interaction):
+    """
+    Slot pour la validation d'une interaction générée depuis les tabs.
+    Sauvegarde l'interaction et met à jour l'UI.
+    """
+    logger.info(f"[VALIDATE] Demande de validation depuis l'onglet '{tab_name}' pour l'interaction ID={interaction.interaction_id}")
+    try:
+        panel.interaction_service.save(interaction)
+        title_display = interaction.title if getattr(interaction, 'title', None) else str(interaction.interaction_id)[:8]
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.information(panel, "Interaction Validée", f"L'interaction '{title_display}' a été sauvegardée.")
+        try:
+            panel.interactions_tab_content_widget.interaction_selected_in_tab.disconnect(panel._on_interaction_selected)
+        except Exception:
+            pass
+        panel.interactions_tab_content_widget.refresh_sequence_list(select_id=str(interaction.interaction_id))
+        panel.interactions_tab_content_widget.display_interaction_in_editor(interaction)
+        try:
+            panel.interactions_tab_content_widget.interaction_selected_in_tab.connect(panel._on_interaction_selected)
+        except Exception:
+            pass
+        if hasattr(panel.main_window_ref, 'statusBar'):
+            panel.main_window_ref.statusBar().showMessage(f"Interaction '{title_display}' sauvegardée.", 3000)
+    except Exception as e:
+        logger.exception("Erreur lors de la validation/sauvegarde de l'interaction.")
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.critical(panel, "Erreur", f"Impossible de sauvegarder l'interaction : {e}")
+
+def handle_interaction_selected(panel, interaction_id):
+    """
+    Slot pour la sélection d'une interaction dans la liste.
+    Met à jour l'éditeur et la barre de statut.
+    """
+    if interaction_id:
+        logger.info(f"Interaction sélectionnée : {interaction_id}")
+        interaction = panel.interaction_service.get_by_id(str(interaction_id))
+        if interaction:
+            title_display = getattr(interaction, 'title', str(interaction_id)[:8])
+            panel.main_window_ref.statusBar().showMessage(f"Interaction '{title_display}' sélectionnée.", 3000)
+        else:
+            logger.warning(f"Interaction {interaction_id} non trouvée par le service.")
+            from constants import UIText
+            panel.main_window_ref.statusBar().showMessage(UIText.ERROR_PREFIX + f"Interaction {interaction_id} non trouvée.", 3000)
+            panel.interactions_tab_content_widget.display_interaction_in_editor(interaction)
+        title_display = getattr(interaction, 'title', str(interaction_id)[:8])
+        panel.main_window_ref.statusBar().showMessage(f"Édition de l'interaction '{title_display}'", 3000)
+    else:
+        logger.info("Aucune interaction sélectionnée.")
+        from constants import UIText
+        panel.main_window_ref.statusBar().showMessage(UIText.NO_INTERACTION_FOUND, 3000)
+        panel.interactions_tab_content_widget.display_interaction_in_editor(None)
+
+def handle_sequence_changed(panel):
+    """
+    Slot pour le changement dans la séquence d'interactions (ajout, suppression, réorganisation).
+    Met à jour la barre de statut.
+    """
+    logger.info("La séquence d'interactions a changé (ajout, suppression, réorganisation).")
+    panel.main_window_ref.statusBar().showMessage("Séquence d'interactions modifiée.", 3000)
+
+def handle_edit_interaction_requested(panel, interaction_id):
+    """
+    Slot pour la demande d'édition d'une interaction.
+    Affiche l'interaction dans l'éditeur et sélectionne l'onglet si besoin.
+    """
+    logger.info(f"Demande d'édition pour l'interaction : {interaction_id}")
+    interaction = panel.interaction_service.get_by_id(str(interaction_id))
+    from PySide6.QtWidgets import QTabWidget, QMessageBox
+    if interaction:
+        tabs = panel.findChild(QTabWidget)
+        if tabs:
+            interactions_tab_index = tabs.indexOf(panel.interactions_tab_content_widget.parent())
+            if interactions_tab_index >= 0 and tabs.currentIndex() != interactions_tab_index:
+                tabs.setCurrentIndex(interactions_tab_index)
+        panel.interactions_tab_content_widget.display_interaction_in_editor(interaction)
+        title_display = getattr(interaction, 'title', str(interaction_id)[:8])
+        panel.main_window_ref.statusBar().showMessage(f"Édition de l'interaction '{title_display}'", 3000)
+    else:
+        QMessageBox.warning(panel, "Erreur", f"Impossible de trouver l'interaction {str(interaction_id)} pour l'édition.") 
+
+def handle_interaction_changed(panel, interaction):
+    """
+    Slot pour le changement d'une interaction après édition.
+    Met à jour la barre de statut.
+    """
+    logger.info(f"Interaction modifiée : {interaction.interaction_id}")
+    title_display = getattr(interaction, 'title', str(interaction.interaction_id)[:8])
+    panel.main_window_ref.statusBar().showMessage(f"Interaction '{title_display}' mise à jour.", 3000) 

@@ -31,7 +31,7 @@ from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTa
 from .generation_panel.interactions_tab_widget import InteractionsTabWidget
 from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
 from .generation_panel.dialogue_generation_handler import DialogueGenerationHandler # Ajouté
-from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt, handle_max_context_tokens_changed, handle_k_variants_changed, handle_structure_changed, handle_user_instructions_changed, handle_refresh_token, handle_generate_dialogue
+from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt, handle_max_context_tokens_changed, handle_k_variants_changed, handle_structure_changed, handle_user_instructions_changed, handle_refresh_token, handle_generate_dialogue, handle_validate_interaction_requested_from_tabs, handle_interaction_selected, handle_sequence_changed, handle_edit_interaction_requested, handle_interaction_changed
 
 # New service import
 try:
@@ -219,12 +219,12 @@ class GenerationPanel(QWidget):
         self.token_actions_widget.refresh_token_clicked.connect(lambda: handle_refresh_token(self))
         self.token_actions_widget.generate_dialogue_clicked.connect(lambda: handle_generate_dialogue(self))
         
-        self.variants_display_widget.validate_interaction_requested.connect(self._on_validate_interaction_requested_from_tabs)
+        self.variants_display_widget.validate_interaction_requested.connect(lambda tab_name, interaction: handle_validate_interaction_requested_from_tabs(self, tab_name, interaction))
 
-        self.interactions_tab_content_widget.interaction_selected_in_tab.connect(self._on_interaction_selected)
-        self.interactions_tab_content_widget.sequence_changed_in_tab.connect(self._on_sequence_changed)
-        self.interactions_tab_content_widget.edit_interaction_requested_in_tab.connect(self._on_edit_interaction_requested)
-        self.interactions_tab_content_widget.interaction_changed_in_tab.connect(self._on_interaction_changed)
+        self.interactions_tab_content_widget.interaction_selected_in_tab.connect(lambda interaction_id: handle_interaction_selected(self, interaction_id))
+        self.interactions_tab_content_widget.sequence_changed_in_tab.connect(lambda: handle_sequence_changed(self))
+        self.interactions_tab_content_widget.edit_interaction_requested_in_tab.connect(lambda interaction_id: handle_edit_interaction_requested(self, interaction_id))
+        self.interactions_tab_content_widget.interaction_changed_in_tab.connect(lambda interaction: handle_interaction_changed(self, interaction))
 
         # Connexion des signaux du DialogueGenerationHandler
         self.generation_handler.generation_started.connect(self._on_generation_task_started)
@@ -578,56 +578,6 @@ class GenerationPanel(QWidget):
         
         self.variants_display_widget.blockSignals(False)
 
-    # --- Validation et sauvegarde d'une Interaction générée ---
-    @Slot(str, Interaction)
-    def _on_validate_interaction_requested_from_tabs(self, tab_name: str, interaction: Interaction):
-        """Sauvegarde l'interaction validée et met à jour l'UI.
-
-        Args:
-            tab_name: Nom de l'onglet source (non utilisé pour l'instant mais conservé pour compatibilité).
-            interaction: L'objet Interaction à sauvegarder.
-        """
-        logger.info(f"[VALIDATE] Demande de validation depuis l'onglet '{tab_name}' pour l'interaction ID={interaction.interaction_id}")
-        try:
-            # 1) Sauvegarde via le service → JSON sur disque
-            self.interaction_service.save(interaction)
-
-            # 2) Feedback utilisateur
-            title_display = interaction.title if getattr(interaction, 'title', None) else str(interaction.interaction_id)[:8]
-            QMessageBox.information(self, "Interaction Validée", f"L'interaction '{title_display}' a été sauvegardée.")
-
-            # 3) Rafraîchir la liste des interactions et sélectionner la nouvelle
-            try:
-                # Déconnecte temporairement pour éviter les effets de bord pendant la mise à jour
-                self.interactions_tab_content_widget.interaction_selected_in_tab.disconnect(self._on_interaction_selected)
-            except Exception:
-                pass  # Pas critique si déjà déconnecté
-
-            self.interactions_tab_content_widget.refresh_sequence_list(select_id=str(interaction.interaction_id))
-
-            # Affiche l'interaction dans l'éditeur
-            self.interactions_tab_content_widget.display_interaction_in_editor(interaction)
-
-            # Reconnecte le signal
-            try:
-                self.interactions_tab_content_widget.interaction_selected_in_tab.connect(self._on_interaction_selected)
-            except Exception:
-                pass
-
-            # Message de statut dans la barre inférieure si disponible
-            if hasattr(self.main_window_ref, 'statusBar'):
-                self.main_window_ref.statusBar().showMessage(f"Interaction '{title_display}' sauvegardée.", 3000)
-
-        except Exception as e:
-            logger.exception("Erreur lors de la validation/sauvegarde de l'interaction.")
-            QMessageBox.critical(self, "Erreur", f"Impossible de sauvegarder l'interaction : {e}")
-
-    # Ancien slot conservé (désormais inutilisé)
-    @Slot(int)
-    def _on_validate_interaction_clicked(self, variant_index: int):
-        logger.warning("_on_validate_interaction_clicked est obsolète. Utilisation du nouveau slot de validation d'interaction.")
-        QMessageBox.information(self, "Validation", "Ce mécanisme de validation est obsolète.")
-
     @Slot()
     def _on_uncheck_all_clicked(self):
         """Slot pour le bouton "Tout Décocher".
@@ -735,49 +685,3 @@ class GenerationPanel(QWidget):
             logger.info("Aucune interaction sélectionnée.")
             self.main_window_ref.statusBar().showMessage(UIText.NO_INTERACTION_FOUND, 3000)
             self.interactions_tab_content_widget.display_interaction_in_editor(None)
-
-    @Slot()
-    def _on_sequence_changed(self):
-        """Gère le changement dans la séquence d'interactions (ajout, suppression, réorganisation)."""
-        logger.info("La séquence d'interactions a changé (ajout, suppression, réorganisation).")
-        self.main_window_ref.statusBar().showMessage("Séquence d'interactions modifiée.", 3000)
-    
-    @Slot(uuid.UUID)
-    def _on_edit_interaction_requested(self, interaction_id: uuid.UUID):
-        """Gère la demande d'édition d'une interaction.
-        
-        Args:
-            interaction_id: L'identifiant de l'interaction à éditer.
-        """
-        logger.info(f"Demande d'édition pour l'interaction : {interaction_id}")
-        interaction = self.interaction_service.get_by_id(str(interaction_id))
-        if interaction:
-            # Sélectionner l'onglet Interactions s'il ne l'est pas déjà
-            tabs = self.findChild(QTabWidget)
-            if tabs:
-                interactions_tab_index = tabs.indexOf(self.interactions_tab_content_widget.parent())
-                if interactions_tab_index >= 0 and tabs.currentIndex() != interactions_tab_index:
-                    tabs.setCurrentIndex(interactions_tab_index)
-            
-            # Afficher l'interaction dans l'éditeur
-            self.interactions_tab_content_widget.display_interaction_in_editor(interaction)
-            title_display = getattr(interaction, 'title', str(interaction_id)[:8])
-            self.main_window_ref.statusBar().showMessage(f"Édition de l'interaction '{title_display}'", 3000)
-        else:
-            QMessageBox.warning(self, "Erreur", f"Impossible de trouver l'interaction {str(interaction_id)} pour l'édition.")
-    
-    @Slot(Interaction)
-    def _on_interaction_changed(self, interaction: Interaction):
-        """Gère le changement d'une interaction après édition.
-        
-        Args:
-            interaction: L'interaction modifiée.
-        """
-        logger.info(f"Interaction modifiée : {interaction.interaction_id}")
-        
-        # Mettre à jour l'affichage de la séquence
-        # self.interaction_sequence_widget.refresh_list()
-        # La liste est rafraîchie en interne par InteractionsTabWidget après un changement dans l'éditeur
-        
-        title_display = getattr(interaction, 'title', str(interaction.interaction_id)[:8])
-        self.main_window_ref.statusBar().showMessage(f"Interaction '{title_display}' mise à jour.", 3000)
