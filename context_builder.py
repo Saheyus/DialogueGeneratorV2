@@ -416,17 +416,21 @@ class ContextBuilder:
         element_order = ["characters", "locations", "items", "species", "communities", "quests", "dialogues_examples"]
 
         for element_type in element_order:
+            logger.info(f"[CTX-DEBUG] Début traitement type: {element_type}. Tokens actuels: {current_tokens}")
             if element_type in selected_elements:
                 if not selected_elements[element_type]:
+                    logger.info(f"[CTX-DEBUG] Aucun élément sélectionné pour {element_type}.")
                     continue
 
                 type_header = f"### {element_type.capitalize()}\n"
                 type_header_tokens = self._count_tokens(type_header)
                 if current_tokens + type_header_tokens > max_tokens:
+                    logger.warning(f"[CTX-DEBUG] BREAK: Plus assez de tokens pour ajouter l'en-tête {element_type} (nécessite {type_header_tokens}, restants {max_tokens - current_tokens})")
                     break 
                 
                 context_parts.append(type_header)
                 current_tokens += type_header_tokens
+                logger.info(f"[CTX-DEBUG] Ajout en-tête {element_type}. Tokens après: {current_tokens}")
 
                 for name in selected_elements[element_type]:
                     details = None
@@ -439,29 +443,36 @@ class ContextBuilder:
                     elif element_type == "quests": details = self.get_quest_details_by_name(name)
                     elif element_type == "dialogues_examples": details = self.get_dialogue_example_details_by_title(name)
                     
-                    logger.debug(f"[ContextBuilder.build_context] Processing {element_type}: '{name}'. Details found: {'Yes' if details else 'No'}")
+                    logger.info(f"[CTX-DEBUG] Traitement {element_type}: '{name}'. Details trouvés: {'Oui' if details else 'Non'}")
 
                     if details:
                         for level in [1, 2, 3]:
                             singular_type = element_type[:-1] if element_type.endswith("s") and element_type != "species" else element_type
                             if element_type == "dialogues_examples": singular_type = "dialogue_example"
                             
-                            # Passer les indicateurs conditionnels à _get_prioritized_info
                             conditional_flags = {"include_dialogue_type": include_dialogue_type}
                             info_str = self._get_prioritized_info(details, singular_type, level, **conditional_flags)
-                            logger.debug(f"[ContextBuilder.build_context] For '{name}' (type: {singular_type}, level: {level}), _get_prioritized_info returned: '{info_str[:100]}...'")
+                            logger.info(f"[CTX-DEBUG] {element_type} '{name}' niveau {level}: info_str length={len(info_str)}")
                             
                             if not info_str: continue
                             info_tokens = self._count_tokens(info_str)
+                            logger.info(f"[CTX-DEBUG] {element_type} '{name}' niveau {level}: info_tokens={info_tokens}, tokens restants={max_tokens - current_tokens}")
                             
                             if current_tokens + info_tokens <= max_tokens:
                                 context_parts.append(info_str)
                                 current_tokens += info_tokens
+                                logger.info(f"[CTX-DEBUG] Ajout {element_type} '{name}' niveau {level}. Tokens après: {current_tokens}")
                             else:
-                                logger.info(f"Token limit reached for {element_type} '{name}' at priority level {level}. Skipping further details for this item.")
+                                logger.warning(f"[CTX-DEBUG] BREAK: Token limit reached for {element_type} '{name}' at priority level {level}. (nécessite {info_tokens}, restants {max_tokens - current_tokens})")
                                 break 
-                    if current_tokens >= max_tokens: break 
-            if current_tokens >= max_tokens: break 
+                    else:
+                        logger.warning(f"[CTX-DEBUG] Pas de détails trouvés pour {element_type} '{name}'.")
+                    if current_tokens >= max_tokens:
+                        logger.warning(f"[CTX-DEBUG] BREAK: Limite de tokens atteinte après {element_type} '{name}'.")
+                        break 
+            if current_tokens >= max_tokens:
+                logger.warning(f"[CTX-DEBUG] BREAK: Limite de tokens atteinte après type {element_type}.")
+                break 
 
         if self.vision_data and (current_tokens + self._count_tokens("### Vision du Monde\n") < max_tokens):
             # Utiliser la config pour extraire la vision si elle est définie, sinon fallback

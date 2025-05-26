@@ -10,6 +10,27 @@ class AlwaysTrueCheckbox:
     def isChecked(self):
         return True
 
+    def setChecked(self, value):
+        # This checkbox is always considered true for logic purposes,
+        # but we need a setChecked method for compatibility with QCheckBox API
+        # during settings load, etc.
+        # We can log if someone tries to set it to False, but functionally it remains true.
+        if not value:
+            logger.debug("Attempted to set AlwaysTrueCheckbox to False. It remains functionally True.")
+        pass # Or log an attempt to set it
+
+    def setEnabled(self, enabled):
+        # For compatibility with QCheckBox API
+        pass
+
+    def setToolTip(self, tooltip):
+        # For compatibility with QCheckBox API
+        pass
+
+    def isEnabled(self):
+        # For compatibility with QCheckBox API
+        return True # Or a more appropriate fixed value
+
 class GenerationParamsWidget(QWidget):
     llm_model_selection_changed = Signal(str) # identifier
     k_variants_changed = Signal(str)
@@ -53,7 +74,7 @@ class GenerationParamsWidget(QWidget):
         self.max_context_tokens_spinbox.setMinimum(0.5)
         self.max_context_tokens_spinbox.setMaximum(1000)
         self.max_context_tokens_spinbox.setSingleStep(0.5)
-        self.max_context_tokens_spinbox.setValue(5.0)
+        self.max_context_tokens_spinbox.setValue(50.0)
         self.max_context_tokens_spinbox.setSuffix("k")
         self.max_context_tokens_spinbox.setDecimals(1)
         self.max_context_tokens_spinbox.setToolTip("Nombre maximum de tokens à utiliser pour le contexte GDD en milliers (k).")
@@ -120,6 +141,8 @@ class GenerationParamsWidget(QWidget):
 
     def _on_max_context_tokens_spinbox_changed(self, value: float):
         self.max_context_tokens_changed.emit(value)
+        if hasattr(self.parent(), '_schedule_settings_save_and_token_update'):
+            self.parent()._schedule_settings_save_and_token_update()
         if not self._is_loading_settings: self.settings_changed.emit()
         
     def _on_structured_output_changed(self, state: int): # state is Qt.CheckState enum
@@ -159,7 +182,7 @@ class GenerationParamsWidget(QWidget):
             "structured_output": self.structured_output_checkbox.isChecked()
         }
 
-    def load_settings(self, settings: dict, default_k_variants="1", default_max_context_tokens_k=5.0, default_structured_output=True):
+    def load_settings(self, settings: dict, default_k_variants="1", default_max_context_tokens_k=50.0, default_structured_output=True):
         self._is_loading_settings = True
         
         model_identifier = settings.get("llm_model")

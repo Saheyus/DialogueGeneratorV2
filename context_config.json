@@ -2,11 +2,11 @@
   "character": {
     "1": [
       {"path": "Nom", "label": "Nom", "truncate": -1},
-      {"path": "Alias", "label": "Alias", "truncate": 400},
-      {"path": "Occupation", "label": "Occupation/Rôle", "fallback_path": "Archétype littéraire", "truncate": 300},
-      {"path": "Introduction.Résumé de la fiche", "label": "Résumé", "truncate": 1500},
-      {"path": "Qualités", "label": "Qualités", "is_list": true, "list_max_items": 5},
-      {"path": "Défauts", "label": "Défauts", "is_list": true, "list_max_items": 5}
+      {"path": "Alias", "label": "Alias", "truncate": 200},
+      {"path": "Occupation", "label": "Occupation/Rôle", "fallback_path": "Archétype littéraire", "truncate": 150},
+      {"path": "Introduction.Résumé de la fiche", "label": "Résumé", "truncate": 600},
+      {"path": "Qualités", "label": "Qualités", "is_list": true, "list_max_items": 3},
+      {"path": "Défauts", "label": "Défauts", "is_list": true, "list_max_items": 3}
     ],
     "2": [
       {"path": "Espèce", "label": "Espèce", "truncate": -1},
@@ -31,8 +31,8 @@
     "1": [
       {"path": "Nom", "label": "Nom", "truncate": -1},
       {"path": "Rôle", "label": "Fonction", "fallback_path": "Catégorie", "truncate": -1},
-      {"path": "Introduction.Résumé de la fiche", "label": "Résumé", "truncate": 1500},
-      {"path": "Identité & Vue d'ensemble.Rôle dans l'intrigue", "label": "Rôle dans l'intrigue", "truncate": 1000}
+      {"path": "Introduction.Résumé de la fiche", "label": "Résumé", "truncate": 600},
+      {"path": "Identité & Vue d'ensemble.Rôle dans l'intrigue", "label": "Rôle dans l'intrigue", "truncate": 500}
     ],
     "2": [
       {"path": "Géographie & Environnement.Écosystème", "label": "Écosystème (extrait)", "truncate": 1000},
@@ -49,8 +49,8 @@
     "1": [
         {"path": "Nom", "label": "Nom Objet", "truncate": -1},
         {"path": "Type", "label": "Type/Rareté", "fallback_path": "Rareté", "truncate": -1},
-        {"path": "Introduction.Résumé de la fiche", "label": "Résumé Objet", "fallback_path": "Description", "truncate": 1000},
-        {"path": "Fonctionnement", "label": "Fonctionnement de base", "truncate": 700, "condition_path_not_exists": "Introduction.Résumé de la fiche"}
+        {"path": "Introduction.Résumé de la fiche", "label": "Résumé Objet", "fallback_path": "Description", "truncate": 400},
+        {"path": "Fonctionnement", "label": "Fonctionnement de base", "truncate": 300, "condition_path_not_exists": "Introduction.Résumé de la fiche"}
     ],
     "2": [
         {"path": "Créé par", "label": "Créé par", "fallback_path": "Appartient à", "truncate": -1},
@@ -66,7 +66,7 @@
     "1": [
         {"path": "Nom", "label": "Nom Espèce", "truncate": -1},
         {"path": "Type", "label": "Type Espèce", "fallback_path": "Catégorie", "truncate": -1},
-        {"path": "Introduction.Résumé de la fiche", "label": "Résumé Espèce", "truncate": 1200}
+        {"path": "Introduction.Résumé de la fiche", "label": "Résumé Espèce", "truncate": 500}
     ],
     "2": [
         {"path": "Biologie.Physiologie", "label": "Physiologie (extrait)", "truncate": 1200},
@@ -81,8 +81,8 @@
   "community": {
     "1": [
         {"path": "Nom", "label": "Nom Communauté", "truncate": -1},
-        {"path": "Introduction.Résumé de la fiche", "label": "Résumé Communauté", "truncate": 1200},
-        {"path": "Besoin de l'intrigue.Rôle dans l'intrigue", "label": "Rôle dans l'intrigue", "truncate": 1000}
+        {"path": "Introduction.Résumé de la fiche", "label": "Résumé Communauté", "truncate": 500},
+        {"path": "Besoin de l'intrigue.Rôle dans l'intrigue", "label": "Rôle dans l'intrigue", "truncate": 400}
     ],
     "2": [
         {"path": "Gestion de la communauté.Leader ou groupe décisionnaire et structuration des pouvoirs", "label": "Leadership", "truncate": 1000},

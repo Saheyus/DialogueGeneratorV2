@@ -126,7 +126,12 @@ class GenerationPanel(QWidget):
         # Pour éviter les signaux inutiles pendant le chargement 
         self._is_settings_loading = False
         self._is_loading_settings = False  # Flag pour éviter les signaux pendant le chargement
-        
+
+        # Initialiser current_max_context_tokens_k avec une valeur par défaut.
+        # Elle sera correctement mise à jour par load_settings() après _init_ui()
+        # ou par le handler si la valeur du spinbox change manuellement.
+        self.current_max_context_tokens_k = Defaults.CONTEXT_TOKENS / 1000 # en k_tokens
+
         self._init_ui()
         # finalize_ui_setup() est appelé par MainWindow
 
@@ -329,16 +334,14 @@ class GenerationPanel(QWidget):
 
         user_specific_goal = self.instructions_widget.get_user_instructions_text()
         selected_context_items = self.main_window_ref._get_current_context_selections() if hasattr(self.main_window_ref, '_get_current_context_selections') else {}
-        logger.info(f"[update_token_estimation_ui] selected_context_items (avant build_context): {selected_context_items}")
-        # Option d'aplatissement si besoin
-        flat_selected_items = []
-        if isinstance(selected_context_items, dict):
-            for v in selected_context_items.values():
-                if isinstance(v, list):
-                    flat_selected_items.extend(v)
-                elif v:
-                    flat_selected_items.append(v)
-        # logger.debug(f"[update_token_estimation_ui] flat_selected_items: {flat_selected_items}")
+        logger.info(f"[update_token_estimation_ui] selected_context_items (récupéré depuis main_window_ref): {selected_context_items}")
+        logger.info(f"[update_token_estimation_ui] Type de selected_context_items: {type(selected_context_items)}")
+
+        if not isinstance(selected_context_items, dict):
+            logger.error(f"CRITICAL: selected_context_items récupéré N'EST PAS UN DICTIONNAIRE. C'est un {type(selected_context_items)}. Le contexte GDD ne sera pas correctement traité. Valeur: {selected_context_items}")
+            # Si ce n'est pas un dictionnaire, selected_context_items est probablement une liste ou autre chose.
+            # Pour la suite, nous allons traiter cela comme si aucun élément GDD n'était sélectionné.
+            selected_context_items = {} # Assurer que c'est un dict pour la suite, même s'il est vide.
 
         # Récupérer les sélections de scène depuis le widget
         scene_info = self.scene_selection_widget.get_selected_scene_info()
@@ -361,7 +364,10 @@ class GenerationPanel(QWidget):
         if scene_sub_location_name: scene_location_dict["sous_lieu"] = scene_sub_location_name
         
         # Préparer context_selections pour le service
+        # Assurer que selected_context_items est bien un dictionnaire avant de le copier.
+        # Si ce n'était pas un dictionnaire à l'origine (géré par le bloc if/else plus haut), il sera maintenant {}
         context_selections_for_service = selected_context_items.copy()
+        
         context_selections_for_service["_scene_protagonists"] = scene_protagonists_dict
         context_selections_for_service["_scene_location"] = scene_location_dict
         # La structure et la description de la structure ne sont pas directement utilisées par prepare_generation_preview,
@@ -371,7 +377,12 @@ class GenerationPanel(QWidget):
 
         logger.info(f"[update_token_estimation_ui] context_selections_for_service transmis à prepare_generation_preview: {context_selections_for_service}")
         try:
-            max_tokens_val = self.main_window_ref.config_service.get_ui_setting("max_context_tokens", Defaults.CONTEXT_TOKENS)
+            # max_tokens_val = self.main_window_ref.config_service.get_ui_setting("max_context_tokens", Defaults.CONTEXT_TOKENS)
+            # Utiliser la valeur de l'attribut mis à jour par le handler
+            max_tokens_val_k = self.current_max_context_tokens_k
+            max_tokens_val = int(max_tokens_val_k * 1000) # Convertir k_tokens en tokens
+            logger.info(f"[update_token_estimation_ui] Utilisation de max_tokens_val = {max_tokens_val} (provenant de self.current_max_context_tokens_k: {max_tokens_val_k}k)")
+            
             system_prompt_override = self.instructions_widget.get_system_prompt_text()
 
             # Appel à la méthode du service
@@ -519,7 +530,57 @@ class GenerationPanel(QWidget):
         self.variants_display_widget.blockSignals(False)
 
     def get_settings(self) -> dict:
-        return get_generation_panel_settings(self)
+        """Retourne les paramètres actuels du panneau pour sauvegarde."""
+        settings = {
+            "character_a": self.scene_selection_widget.character_a_combo.currentText(),
+            "character_b": self.scene_selection_widget.character_b_combo.currentText(),
+            "scene_region": self.scene_selection_widget.scene_region_combo.currentText(),
+            "scene_sub_location": self.scene_selection_widget.scene_sub_location_combo.currentText(),
+            "llm_model": self.generation_params_widget.get_settings().get("llm_model"), # Délégué
+            "k_variants": self.generation_params_widget.get_settings().get("k_variants"), # Délégué
+            "max_context_tokens": self.current_max_context_tokens_k, # Utiliser la valeur stockée
+            "user_instructions": self.instructions_widget.get_user_instructions_text(),
+            "system_prompt": self.instructions_widget.get_system_prompt_text(),
+            "dialogue_structure": self.dialogue_structure_widget.get_structure(),
+            "structured_output": self.generation_params_widget.get_settings().get("structured_output") # Délégué
+        }
+        logger.debug(f"Récupération des paramètres du panneau de génération: {settings}")
+        return settings
 
     def load_settings(self, settings: dict):
-        load_generation_panel_settings(self, settings)
+        """Charge les paramètres sauvegardés dans l'UI."""
+        self._is_loading_settings = True
+        logger.debug(f"Chargement des paramètres dans GenerationPanel: {settings}")
+
+        self.scene_selection_widget.character_a_combo.setCurrentText(settings.get("character_a", UIText.NONE))
+        self.scene_selection_widget.character_b_combo.setCurrentText(settings.get("character_b", UIText.NONE))
+        self.scene_selection_widget.scene_region_combo.setCurrentText(settings.get("scene_region", UIText.NONE_FEM))
+        
+        # Le sous-lieu dépend de la région, donc il est mis à jour par le signal de la région si nécessaire
+        # On le charge explicitement ici au cas où la région n'aurait pas changé.
+        sub_location_setting = settings.get("scene_sub_location")
+        if sub_location_setting:
+            self.scene_selection_widget.scene_sub_location_combo.setCurrentText(sub_location_setting)
+        
+        # Délégué à GenerationParamsWidget pour ses propres paramètres
+        # On passe uniquement la section pertinente des settings
+        llm_params_settings = {
+            "llm_model": settings.get("llm_model"),
+            "k_variants": settings.get("k_variants"),
+            "max_context_tokens": settings.get("max_context_tokens"), # Passe la valeur k_tokens
+            "structured_output": settings.get("structured_output")
+        }
+        self.generation_params_widget.load_settings(llm_params_settings)
+        
+        # Mettre à jour self.current_max_context_tokens_k après le chargement dans le widget
+        self.current_max_context_tokens_k = self.generation_params_widget.max_context_tokens_spinbox.value()
+
+
+        self.instructions_widget.user_instructions_textedit.setPlainText(settings.get("user_instructions", ""))
+        self.instructions_widget.set_system_prompt_text(settings.get("system_prompt", None)) # None comme défaut
+        self.dialogue_structure_widget.set_structure(settings.get("dialogue_structure", ["PNJ", "PJ", "Stop", "", "", ""])) # Défaut explicite
+
+        self._is_loading_settings = False
+        self.update_token_estimation_ui() # Mettre à jour l'estimation après le chargement
+        # Pas besoin d'émettre settings_changed ici car c'est un chargement
+        logger.debug("Paramètres du panneau de génération chargés.")
