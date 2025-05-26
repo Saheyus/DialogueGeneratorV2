@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt, Signal, Slot, QSize
 from PySide6.QtGui import QPalette, QColor, QFont, QIcon, QAction
 import logging # Added for logging
 import asyncio # Added for asynchronous tasks
-from typing import Optional, Callable, Any # Added Any
+from typing import Optional, Callable, Any, List # Added List
 import json # Ajout pour charger la config LLM potentiellement ici aussi si besoin
 from pathlib import Path
 import uuid
@@ -16,7 +16,6 @@ import os
 from models.dialogue_structure.interaction import Interaction
 from services.interaction_service import InteractionService
 from services.repositories.file_repository import FileInteractionRepository
-from models.dialogue_structure.dynamic_interaction_schema import build_interaction_model_from_structure, validate_interaction_elements_order, convert_dynamic_to_standard_interaction
 from constants import UIText, FilePaths, Defaults
 from services.dialogue_generation_service import DialogueGenerationService
 
@@ -31,6 +30,7 @@ from .generation_panel.token_estimation_actions_widget import TokenEstimationAct
 from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTabsWidget
 from .generation_panel.interactions_tab_widget import InteractionsTabWidget
 from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
+from .generation_panel.dialogue_generation_handler import DialogueGenerationHandler # Ajouté
 
 # New service import
 try:
@@ -109,18 +109,16 @@ class GenerationPanel(QWidget):
         self.interaction_repository = FileInteractionRepository(str(interactions_dir))
         self.interaction_service = InteractionService(repository=self.interaction_repository)
 
-        # === MODIFIÉ : Utilisation du service injecté ===
         self.dialogue_generation_service = dialogue_generation_service
         if not self.dialogue_generation_service:
-            # Fallback ou erreur si non fourni, bien que MainWindow devrait le fournir.
             logger.error("DialogueGenerationService non fourni à GenerationPanel!")
-            # Optionnellement, créer une instance par défaut ici, mais l'injection est préférable.
-            # self.dialogue_generation_service = DialogueGenerationService(
-            # context_builder=self.context_builder, 
-            # prompt_engine=self.prompt_engine, 
-            # interaction_service=self.interaction_service
-            # )
-        # === FIN MODIFICATION ===
+
+        # Initialisation du Handler de génération
+        self.generation_handler = DialogueGenerationHandler(
+            llm_client=self.llm_client, 
+            dialogue_generation_service=self.dialogue_generation_service,
+            parent=self  # QObject parent pour la gestion de la mémoire
+        )
 
         self.available_llm_models = available_llm_models if available_llm_models else []
         self.current_llm_model_identifier = current_llm_model_identifier
@@ -227,6 +225,12 @@ class GenerationPanel(QWidget):
         self.interactions_tab_content_widget.edit_interaction_requested_in_tab.connect(self._on_edit_interaction_requested)
         self.interactions_tab_content_widget.interaction_changed_in_tab.connect(self._on_interaction_changed)
 
+        # Connexion des signaux du DialogueGenerationHandler
+        self.generation_handler.generation_started.connect(self._on_generation_task_started)
+        self.generation_handler.generation_succeeded.connect(self._on_generation_task_succeeded)
+        self.generation_handler.generation_failed.connect(self._on_generation_task_failed)
+        self.generation_handler.prompt_preview_ready.connect(self._on_prompt_preview_ready_for_display)
+
         # Connexion du signal de l'alias (pour la sauvegarde de max_context_tokens)
         self.max_context_tokens_spinbox.valueChanged.connect(self._schedule_settings_save)
         
@@ -290,6 +294,12 @@ class GenerationPanel(QWidget):
         logger.info(f"GenerationPanel: Réception d'un nouveau client LLM: {type(new_llm_client).__name__}")
         self.llm_client = new_llm_client
         
+        # Mettre à jour le client LLM dans le handler aussi
+        if hasattr(self, 'generation_handler') and self.generation_handler:
+            self.generation_handler.llm_client = new_llm_client
+        else:
+            logger.warning("GenerationHandler non initialisé lors de la mise à jour du client LLM.")
+            
         new_model_identifier_from_client = None
         if hasattr(new_llm_client, 'model_identifier') and new_llm_client.model_identifier:
             new_model_identifier_from_client = new_llm_client.model_identifier
@@ -424,26 +434,13 @@ class GenerationPanel(QWidget):
         self.generate_dialogue_button.setEnabled(False)
         QApplication.processEvents() 
 
-        asyncio.create_task(self._on_generate_dialogue_button_clicked_local())
-
-    async def _on_generate_dialogue_button_clicked_local(self):
-        # Appelé par _launch_dialogue_generation qui gère le changement de curseur et le try/except global
-        logger.info("Début de la génération de dialogue (méthode locale asynchrone).")
-        self.generation_progress_bar.setRange(0, 0) # Indeterminate
-        self.generation_progress_bar.setVisible(True)
-        self.generate_dialogue_button.setEnabled(False)
-
-        generation_succeeded = True 
-        full_prompt_for_display = "Erreur: Le prompt n'a pas pu être construit."
-        estimated_tokens_for_display = 0
-
+        # Récupérer les paramètres et appeler le handler
         try:
             k_variants = int(self.k_variants_combo.currentText())
             user_instructions = self.instructions_widget.get_user_instructions_text()
             system_prompt_override = self.instructions_widget.get_system_prompt_text() 
             selected_gdd_items = self.main_window_ref._get_current_context_selections() 
             
-            # Récupérer les sélections de scène depuis le widget
             scene_info = self.scene_selection_widget.get_selected_scene_info()
             char_a_name = scene_info.get("character_a")
             char_b_name = scene_info.get("character_b")
@@ -463,156 +460,124 @@ class GenerationPanel(QWidget):
             if scene_region_name: scene_location_dict["lieu"] = scene_region_name
             if scene_sub_location_name: scene_location_dict["sous_lieu"] = scene_sub_location_name
             
-            # Mettre à jour le moteur de prompt avec le system prompt actuel de l'UI AVANT de construire le contexte
-            # Ceci est maintenant géré DANS le service si system_prompt_override est passé.
-            # self._update_prompt_engine_system_prompt() 
-
-            # --- Préparation des informations pour le service --- 
-            # Le service attend _scene_protagonists et _scene_location DANS context_selections
-            context_selections_for_service = selected_gdd_items.copy() # Commencer avec les items GDD
+            context_selections_for_service = selected_gdd_items.copy()
             context_selections_for_service["_scene_protagonists"] = scene_protagonists_dict
             context_selections_for_service["_scene_location"] = scene_location_dict
-            # S'assurer que generate_interaction est bien dans les settings du contexte si besoin pour le prompt engine via le service
-            # context_selections_for_service["generate_interaction"] = True 
-            # (sera inféré par le service en fonction de la méthode appelée ou passé dans generation_params)
 
             dialogue_structure_description = self.dialogue_structure_widget.get_structure_description()
-            dialogue_structure_elements = self.dialogue_structure_widget.get_structure() # ex: ["dialogue_line", "command"]
-            target_response_model_pydantic = build_interaction_model_from_structure(dialogue_structure_elements)
-
+            dialogue_structure_elements = self.dialogue_structure_widget.get_structure()
             max_context_tokens_val = self.main_window_ref.config_service.get_ui_setting("max_context_tokens", Defaults.CONTEXT_TOKENS)
 
-            logger.info(f"Appel de dialogue_generation_service.generate_structured_object_variants avec k={k_variants}...")
-            logger.info(f"[STRUCTURED] Modèle Pydantic dynamique pour la structure: {dialogue_structure_elements}")
-            logger.info(f"[STRUCTURED] Schéma du modèle: {target_response_model_pydantic.model_json_schema()}")
-
-            # Appel au service au lieu de l'appel LLM direct
-            variants_objects, full_prompt_from_service, estimated_tokens_from_service = \
-                await self.dialogue_generation_service.generate_structured_object_variants(
-                    llm_client=self.llm_client, 
-                    k_variants=k_variants, 
-                    max_context_tokens_for_context_builder=max_context_tokens_val,
-                    user_instructions=user_instructions, 
-                    system_prompt_override=system_prompt_override,
-                    context_selections=context_selections_for_service, # Contient GDD items, _scene_protagonists, _scene_location
-                    dialogue_structure_description=dialogue_structure_description, # Pour le prompt engine dans le service
-                    target_response_model=target_response_model_pydantic,
-                    current_llm_model_identifier=self.current_llm_model_identifier
-                )
-            
-            # Mettre à jour les variables pour l'affichage du prompt et des tokens
-            full_prompt_for_display = full_prompt_from_service
-            estimated_tokens_for_display = estimated_tokens_from_service
-
-            if full_prompt_for_display:
-                estimated_tokens_k = estimated_tokens_for_display / 1000 if estimated_tokens_for_display else 0
-                self.token_estimation_label.setText(f"Tokens prompt final: {estimated_tokens_k:.1f}k")
-                self._display_prompt_in_tab(full_prompt_for_display)
-            else:
-                self.token_estimation_label.setText("Tokens prompt final: Erreur")
-                self._display_prompt_in_tab("Erreur: Le prompt n'a pas pu être construit par le service.")
-
-            logger.debug(f"Valeur de 'variants_objects' reçue du service: Type={type(variants_objects)}, Nombre={len(variants_objects) if variants_objects else 0}")
-            if variants_objects:
-                logger.debug(f"Type du premier élément dans variants_objects: {type(variants_objects[0])}")
-            
-                self.variants_display_widget.blockSignals(True)
-                num_tabs_to_keep = 0
-                if self.variants_display_widget.count() > 0 and self.variants_display_widget.tabText(0) == "Prompt Estimé":
-                    num_tabs_to_keep = 1
-                
-                while self.variants_display_widget.count() > num_tabs_to_keep:
-                    self.variants_display_widget.removeTab(num_tabs_to_keep)
-                
-                if variants_objects: # Remplacer variants par variants_objects
-                    for i, variant_data_obj in enumerate(variants_objects): # Remplacer variant_data par variant_data_obj
-                        # Le service retourne directement des objets Pydantic conformes au target_response_model
-                        # Ces objets devraient être des DynamicInteraction (ou équivalent basé sur la structure)
-                        if isinstance(variant_data_obj, Interaction) or (hasattr(variant_data_obj, '__class__') and 'DynamicInteraction' in str(type(variant_data_obj))):
-                            # Validation stricte de la structure
-                            # La structure est déjà validée par le modèle Pydantic lors de la génération par le LLM (si response_model est utilisé)
-                            # Mais on peut faire une validation de l'ordre des éléments si nécessaire.
-                            is_valid_order = validate_interaction_elements_order(variant_data_obj, dialogue_structure_elements)
-                            if not is_valid_order:
-                                logger.error(f"[VALIDATION STRUCTURE] La variante générée (objet) ne respecte pas l'ordre des éléments de la structure imposée : {dialogue_structure_elements}")
-                                error_text = ("// Erreur : La variante générée (objet) ne respecte pas l'ordre des éléments imposé par la structure :\n"
-                                              f"Structure attendue : {dialogue_structure_elements}\n"
-                                              f"Types reçus : {[type(e).__name__ for e in getattr(variant_data_obj, 'elements', [])]}")
-                                text_edit = QTextEdit(error_text)
-                                text_edit.setReadOnly(True)
-                                self.variants_display_widget.addTab(text_edit, f"Variante {i+1} (Erreur Ordre Structure)")
-                                continue
-                            logger.info(f"[VALIDATION STRUCTURE] Variante {i+1} (objet) conforme à l'ordre des éléments de la structure imposée.")
-                            
-                            # +++ CONVERSION EN INTERACTION STANDARD +++
-                            try:
-                                standard_interaction = convert_dynamic_to_standard_interaction(variant_data_obj)
-                                self.variants_display_widget.add_interaction_tab(f"Variante {i+1}", standard_interaction)
-                                logger.info(f"[LOG_DEBUG] Variante {i+1} (DynamicInteraction objet converti en Interaction) ajoutée via add_interaction_tab. ID: {standard_interaction.interaction_id}")
-                            except ValueError as ve:
-                                logger.error(f"Erreur de conversion de DynamicInteraction (objet) en Interaction: {ve}", exc_info=True)
-                                error_text_conversion = ("// Erreur : Impossible de convertir la variante DynamicInteraction (objet) en Interaction standard.\n"
-                                                       f"{ve}")
-                                text_edit_conv = QTextEdit(error_text_conversion)
-                                text_edit_conv.setReadOnly(True)
-                                self.variants_display_widget.addTab(text_edit_conv, f"Variante {i+1} (Erreur Conversion)")
-                                continue
-                                
-                        # Si ce n'est pas un DynamicInteraction ou Interaction, c'est une erreur car le service devrait retourner cela.
-                        # Ou alors, le target_response_model était autre chose, auquel cas il faut adapter l'affichage.
-                        elif isinstance(variant_data_obj, str): # Ne devrait plus arriver avec generate_structured_object_variants
-                            logger.warning(f"[LOG_DEBUG] Variante {i+1} est une chaîne (str), inattendu du service pour objets structurés. Affichage brut.")
-                            self.variants_display_widget.add_variant_tab(f"Variante {i+1}", variant_data_obj)
-                        else:
-                            display_text = f"// Erreur: Type de variante structurée inattendu du service: {type(variant_data_obj)}"
-                            logger.warning(f"[LOG_DEBUG] Variante {i+1} (inattendu du service pour objets structurés): {type(variant_data_obj)}")
-                            text_edit = QTextEdit(display_text)
-                            text_edit.setReadOnly(True)
-                            self.variants_display_widget.addTab(text_edit, f"Variante {i+1} (Inattendu Service)")
-                    
-                    generation_succeeded = True # Renommé de generation_succeded
-                    logger.info(f"{len(variants_objects)} variantes (objets) affichées.") # Remplacer variants par variants_objects
-                else:
-                    logger.warning("Aucune variante (objet) reçue du service ou variants_objects est None/vide.")
-                    error_tab = QTextEdit(UIText.NO_VARIANT)
-                    self.variants_display_widget.addTab(error_tab, "Erreur Génération Service")
-                
-                self.variants_display_widget.blockSignals(False)
-
-        except asyncio.CancelledError:
-            logger.warning("La tâche de génération de dialogue a été annulée.")
-            # Assurer que le prompt est affiché même si annulé pendant la génération LLM mais après la construction du prompt
-            if full_prompt_for_display and full_prompt_for_display != "Erreur: Le prompt n'a pas pu être construit.":
-                self._display_prompt_in_tab(full_prompt_for_display)
-            return 
+            asyncio.create_task(self.generation_handler.generate_dialogue_async(
+                k_variants=k_variants,
+                user_instructions=user_instructions,
+                system_prompt_override=system_prompt_override,
+                context_selections_for_service=context_selections_for_service,
+                dialogue_structure_description=dialogue_structure_description,
+                dialogue_structure_elements=dialogue_structure_elements,
+                max_context_tokens_val=max_context_tokens_val,
+                current_llm_model_identifier=self.current_llm_model_identifier
+            ))
         except Exception as e:
-            logger.error(f"Erreur majeure lors de la génération des dialogues: {e}", exc_info=True)
-            # Afficher le prompt même en cas d'erreur si disponible
-            if full_prompt_for_display and full_prompt_for_display != "Erreur: Le prompt n'a pas pu être construit.":
-                 self._display_prompt_in_tab(full_prompt_for_display)
-            else:
-                self._display_prompt_in_tab(f"Erreur critique avant la construction du prompt: {type(e).__name__}: {e}")
+            logger.error(f"Erreur lors de la préparation du lancement de la génération: {e}", exc_info=True)
+            QMessageBox.critical(self, "Erreur Pré-Génération", f"Impossible de lancer la génération: {e}")
+            self.generation_progress_bar.setVisible(False)
+            self.generate_dialogue_button.setEnabled(True)
 
-            self.variants_display_widget.blockSignals(True)
-            num_tabs_to_keep_err = 0
-            if self.variants_display_widget.count() > 0 and self.variants_display_widget.tabText(0) == "Prompt Estimé":
-                num_tabs_to_keep_err = 1
-            while self.variants_display_widget.count() > num_tabs_to_keep_err:
-                self.variants_display_widget.removeTab(num_tabs_to_keep_err)
+    @Slot()
+    def _on_generation_task_started(self):
+        logger.info("GenerationPanel: Tâche de génération démarrée (via signal du handler).")
+        self.generation_progress_bar.setRange(0, 0) # Indeterminate
+        self.generation_progress_bar.setVisible(True)
+        self.generate_dialogue_button.setEnabled(False)
+        QApplication.processEvents() 
+
+    @Slot(list, str, int) # variants_objects, full_prompt_for_display, estimated_tokens_for_display
+    def _on_generation_task_succeeded(self, processed_variants: List[Interaction], full_prompt: str, estimated_tokens: int):
+        logger.info(f"GenerationPanel: Tâche de génération réussie. {len(processed_variants)} variantes traitées reçues.")
+        
+        if full_prompt:
+            estimated_tokens_k = estimated_tokens / 1000 if estimated_tokens else 0
+            self.token_estimation_label.setText(f"Tokens prompt final: {estimated_tokens_k:.1f}k")
+            self._display_prompt_in_tab(full_prompt)
+        else:
+            self.token_estimation_label.setText("Tokens prompt final: Erreur")
+            self._display_prompt_in_tab("Erreur: Le prompt n'a pas pu être construit par le service/handler.")
+
+        self.variants_display_widget.blockSignals(True)
+        num_tabs_to_keep = 0
+        if self.variants_display_widget.count() > 0 and self.variants_display_widget.tabText(0) == "Prompt Estimé":
+            num_tabs_to_keep = 1
+        
+        while self.variants_display_widget.count() > num_tabs_to_keep:
+            self.variants_display_widget.removeTab(num_tabs_to_keep)
+        
+        if processed_variants:
+            for i, interaction_obj in enumerate(processed_variants):
+                # Les objets sont déjà des Interactions (ou des Interactions d'erreur)
+                if interaction_obj.interaction_id.startswith("error_"):
+                     # C'est un placeholder d'erreur créé par le handler
+                    error_text = interaction_obj.elements[0].get('text', 'Erreur inconnue dans la variante') if interaction_obj.elements else 'Erreur inconnue'
+                    text_edit = QTextEdit(f"// {interaction_obj.title}\n{error_text}")
+                    text_edit.setReadOnly(True)
+                    self.variants_display_widget.addTab(text_edit, f"Variante {i+1} (Erreur)")
+                else:
+                    self.variants_display_widget.add_interaction_tab(f"Variante {i+1}", interaction_obj)
+                    logger.info(f"[GP] Variante {i+1} (Interaction) ajoutée via add_interaction_tab. ID: {interaction_obj.interaction_id}")
             
-            error_tab_content = QTextEdit()
-            error_tab_content.setPlainText(f"Une erreur majeure est survenue lors de la génération:\n\n{type(e).__name__}: {e}")
-            error_tab_content.setReadOnly(True)
-            self.variants_display_widget.addTab(error_tab_content, "Erreur Critique")
-            self.variants_display_widget.blockSignals(False)
-        finally:
-            current_task = asyncio.current_task()
-            if not current_task or not current_task.cancelled(): 
-                self.generation_progress_bar.setVisible(False)
-                self.generate_dialogue_button.setEnabled(True)
-                QApplication.processEvents() 
-                logger.debug(f"Émission du signal generation_finished avec la valeur : {generation_succeeded}") # Renommé de generation_succeded
-                self.generation_finished.emit(generation_succeeded) # Renommé de generation_succeded
+            logger.info(f"{len(processed_variants)} variantes affichées depuis le handler.")
+        else:
+            logger.warning("Aucune variante valide reçue du handler (liste vide).")
+            error_tab = QTextEdit(UIText.NO_VARIANT + " (via Handler)")
+            self.variants_display_widget.addTab(error_tab, "Aucune Variante (Handler)")
+        
+        self.variants_display_widget.blockSignals(False)
+        self.generation_finished.emit(True if processed_variants else False)
+        self._finalize_generation_ui_state()
+
+    @Slot(str, str) # error_message, full_prompt_for_display
+    def _on_generation_task_failed(self, error_message: str, full_prompt: Optional[str]):
+        logger.error(f"GenerationPanel: Tâche de génération échouée: {error_message}")
+        
+        if full_prompt and full_prompt != "Erreur: Le prompt n'a pas pu être construit.":
+             self._display_prompt_in_tab(full_prompt)
+        else:
+            self._display_prompt_in_tab(f"Erreur critique avant ou pendant la construction du prompt: {error_message}")
+
+        self.variants_display_widget.blockSignals(True)
+        num_tabs_to_keep_err = 0
+        if self.variants_display_widget.count() > 0 and self.variants_display_widget.tabText(0) == "Prompt Estimé":
+            num_tabs_to_keep_err = 1
+        while self.variants_display_widget.count() > num_tabs_to_keep_err:
+            self.variants_display_widget.removeTab(num_tabs_to_keep_err)
+        
+        error_tab_content = QTextEdit()
+        error_tab_content.setPlainText(f"Une erreur majeure est survenue lors de la génération (via Handler):\n\n{error_message}")
+        error_tab_content.setReadOnly(True)
+        self.variants_display_widget.addTab(error_tab_content, "Erreur Critique (Handler)")
+        self.variants_display_widget.blockSignals(False)
+        
+        self.generation_finished.emit(False)
+        self._finalize_generation_ui_state()
+
+    @Slot(str, int) # prompt_text, estimated_tokens
+    def _on_prompt_preview_ready_for_display(self, prompt_text: str, estimated_tokens: int):
+        logger.debug(f"GenerationPanel: Prévisualisation du prompt prête (via Handler). Tokens: {estimated_tokens}")
+        if prompt_text:
+            estimated_tokens_k = estimated_tokens / 1000 if estimated_tokens else 0
+            self.token_estimation_label.setText(f"Tokens prompt (en cours): {estimated_tokens_k:.1f}k")
+            self._display_prompt_in_tab(prompt_text)
+        else:
+            self.token_estimation_label.setText("Tokens prompt (en cours): Erreur")
+            self._display_prompt_in_tab("Erreur: Le prompt n'a pas pu être construit par le service/handler pour la prévisualisation.")
+
+    def _finalize_generation_ui_state(self):
+        current_task = asyncio.current_task() # Peut être None si la boucle d'event n'est pas gérée par asyncio ici
+        if not current_task or not current_task.cancelled(): 
+            self.generation_progress_bar.setVisible(False)
+            self.generate_dialogue_button.setEnabled(True)
+            QApplication.processEvents() 
+            logger.debug("GenerationPanel: État UI finalisé après génération.")
 
     def _display_prompt_in_tab(self, prompt_text: str):
         logger.info(f"_display_prompt_in_tab: Entrée avec prompt_text de longueur {len(prompt_text if prompt_text else 0)} chars.") # Ajout d'une vérification pour prompt_text None

@@ -304,9 +304,11 @@ async def test_dialogue_generation_flow(app: ActualMainWindow, qtbot: QtBot):
     generation_panel.generation_finished.connect(on_generation_finished)
 
     # Appeler directement la coroutine
-    await generation_panel._on_generate_dialogue_button_clicked_local()
+    # await generation_panel._on_generate_dialogue_button_clicked_local() # Ancienne méthode
+    # Simuler le clic sur le bouton qui déclenche _launch_dialogue_generation
+    qtbot.mouseClick(generation_panel.generate_dialogue_button, qt_api.QtCore.Qt.MouseButton.LeftButton)
 
-    # Vérifier que le signal a été émis (maintenant que la coroutine est terminée)
+    # Attendre que le signal generation_finished soit émis (ou timeout)
     try:
         await asyncio.wait_for(signal_emitted_event.wait(), timeout=1.0) # Petit timeout, devrait être instantané
     except asyncio.TimeoutError:
