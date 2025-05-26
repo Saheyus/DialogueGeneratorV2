@@ -208,9 +208,10 @@ class GenerationPanel(QWidget):
         # Signaux des widgets de section
         self.scene_selection_widget.character_a_changed.connect(self._schedule_settings_save_and_token_update)
         self.scene_selection_widget.character_b_changed.connect(self._schedule_settings_save_and_token_update)
-        self.scene_selection_widget.scene_region_changed.connect(self._on_scene_region_changed)
+        self.scene_selection_widget.scene_region_changed.connect(self._schedule_settings_save_and_token_update) # Le widget gère la mise à jour des sous-lieux
         self.scene_selection_widget.scene_sub_location_changed.connect(self._schedule_settings_save_and_token_update)
-        self.scene_selection_widget.swap_characters_clicked.connect(self._swap_characters)
+        # swap_characters_clicked n'est plus directement connecté ici,
+        # car _perform_swap_and_emit dans le widget émettra character_a/b_changed.
 
         self.context_actions_widget.select_linked_clicked.connect(self._on_select_linked_elements_clicked)
         self.context_actions_widget.unlink_unrelated_clicked.connect(self._on_unlink_unrelated_clicked)
@@ -252,8 +253,13 @@ class GenerationPanel(QWidget):
 
     def finalize_ui_setup(self):
         logger.debug("Finalizing GenerationPanel UI setup...")
-        self.populate_character_combos()
-        self.populate_scene_combos()
+        # Récupérer les listes de noms pour le peuplement
+        character_names = sorted(self.context_builder.get_characters_names())
+        region_names = sorted(self.context_builder.get_regions())
+
+        self.scene_selection_widget.populate_character_combos(character_names)
+        self.scene_selection_widget.populate_scene_combos(region_names)
+        
         self.generation_params_widget.populate_llm_model_combo()
         self._trigger_token_update() 
         logger.debug("GenerationPanel UI setup finalized.")
@@ -316,61 +322,6 @@ class GenerationPanel(QWidget):
         self._trigger_token_update()
         self._update_structured_output_checkbox_state()
 
-    def populate_character_combos(self):
-        characters = sorted(self.context_builder.get_characters_names())
-        self.scene_selection_widget.character_a_combo.blockSignals(True)
-        self.scene_selection_widget.character_b_combo.blockSignals(True)
-        self.scene_selection_widget.character_a_combo.clear()
-        self.scene_selection_widget.character_b_combo.clear()
-        self.scene_selection_widget.character_a_combo.addItems([UIText.NONE] + characters)
-        self.scene_selection_widget.character_b_combo.addItems([UIText.NONE] + characters)
-        self.scene_selection_widget.character_a_combo.blockSignals(False)
-        self.scene_selection_widget.character_b_combo.blockSignals(False)
-        logger.debug("Character combos populated.")
-
-    def populate_scene_combos(self):
-        regions = sorted(self.context_builder.get_regions())
-        self.scene_selection_widget.scene_region_combo.blockSignals(True)
-        self.scene_selection_widget.scene_sub_location_combo.blockSignals(True)
-        self.scene_selection_widget.scene_region_combo.clear()
-        self.scene_selection_widget.scene_region_combo.addItem(UIText.NONE_FEM)
-        self.scene_selection_widget.scene_region_combo.addItems(regions)
-        self.scene_selection_widget.scene_region_combo.blockSignals(False)
-        self.scene_selection_widget.scene_sub_location_combo.blockSignals(False)
-        self._on_scene_region_changed(self.scene_selection_widget.scene_region_combo.currentText() or UIText.NONE_FEM)
-        logger.debug("Scene region combo populated.")
-
-    @Slot(str)
-    def _on_scene_region_changed(self, region_name: str):
-        self.scene_selection_widget.scene_sub_location_combo.clear()
-        if region_name and region_name != UIText.NONE and region_name != UIText.NO_SELECTION:
-            try:
-                # sub_locations = sorted(self.context_builder.get_sub_locations_for_region(region_name))
-                sub_locations = sorted(self.context_builder.get_sub_locations(region_name))
-                if not sub_locations:
-                    logger.info(f"Aucun sous-lieu trouvé pour la région : {region_name}")
-                    self.scene_selection_widget.scene_sub_location_combo.addItem(UIText.NONE_SUBLOCATION)
-                else:
-                    self.scene_selection_widget.scene_sub_location_combo.addItems([UIText.ALL] + sub_locations)
-                    self.scene_selection_widget.scene_sub_location_combo.setEnabled(True)
-            except Exception as e:
-                logger.error(f"Erreur lors de la récupération des sous-lieux pour la région {region_name}: {e}", exc_info=True)
-                self.scene_selection_widget.scene_sub_location_combo.addItem(UIText.ERROR_PREFIX + "Erreur de chargement des sous-lieux")
-                self.scene_selection_widget.scene_sub_location_combo.setEnabled(False)
-        else:
-            self.scene_selection_widget.scene_sub_location_combo.addItem(UIText.NO_SELECTION)
-            self.scene_selection_widget.scene_sub_location_combo.setEnabled(False)
-        self._schedule_settings_save_and_token_update()
-        logger.debug(f"Sub-location combo updated for region: {region_name}")
-
-    def _swap_characters(self):
-        current_a_index = self.scene_selection_widget.character_a_combo.currentIndex()
-        current_b_index = self.scene_selection_widget.character_b_combo.currentIndex()
-        self.scene_selection_widget.character_a_combo.setCurrentIndex(current_b_index)
-        self.scene_selection_widget.character_b_combo.setCurrentIndex(current_a_index)
-        logger.debug("Characters A and B swapped.")
-        self._schedule_settings_save_and_token_update()
-
     @Slot()
     def _schedule_settings_save(self):
         """Déclenche un signal pour indiquer que les paramètres ont changé."""
@@ -400,10 +351,12 @@ class GenerationPanel(QWidget):
         user_specific_goal = self.instructions_widget.get_user_instructions_text()
         selected_context_items = self.main_window_ref._get_current_context_selections() if hasattr(self.main_window_ref, '_get_current_context_selections') else {}
 
-        char_a_name = self.scene_selection_widget.character_a_combo.currentText()
-        char_b_name = self.scene_selection_widget.character_b_combo.currentText()
-        scene_region_name = self.scene_selection_widget.scene_region_combo.currentText()
-        scene_sub_location_name = self.scene_selection_widget.scene_sub_location_combo.currentText()
+        # Récupérer les sélections de scène depuis le widget
+        scene_info = self.scene_selection_widget.get_selected_scene_info()
+        char_a_name = scene_info.get("character_a")
+        char_b_name = scene_info.get("character_b")
+        scene_region_name = scene_info.get("scene_region")
+        scene_sub_location_name = scene_info.get("scene_sub_location")
 
         char_a_name = char_a_name if char_a_name and char_a_name != UIText.NONE else None
         char_b_name = char_b_name if char_b_name and char_b_name != UIText.NONE else None
@@ -490,23 +443,23 @@ class GenerationPanel(QWidget):
         self.generation_progress_bar.setVisible(True)
         self.generate_dialogue_button.setEnabled(False)
 
-        generation_succeeded = True # Renommé de generation_succeded
-        # Initialisation de full_prompt pour le cas où la génération échoue avant sa définition
+        generation_succeeded = True 
         full_prompt_for_display = "Erreur: Le prompt n'a pas pu être construit."
         estimated_tokens_for_display = 0
 
         try:
             k_variants = int(self.k_variants_combo.currentText())
             user_instructions = self.instructions_widget.get_user_instructions_text()
-            system_prompt_override = self.instructions_widget.get_system_prompt_text() # Récupérer le prompt système de l'UI
-            selected_gdd_items = self.main_window_ref._get_current_context_selections() # Récupère les items GDD cochés
+            system_prompt_override = self.instructions_widget.get_system_prompt_text() 
+            selected_gdd_items = self.main_window_ref._get_current_context_selections() 
             
-            char_a_name = self.scene_selection_widget.character_a_combo.currentText()
-            char_b_name = self.scene_selection_widget.character_b_combo.currentText()
-            scene_region_name = self.scene_selection_widget.scene_region_combo.currentText()
-            scene_sub_location_name = self.scene_selection_widget.scene_sub_location_combo.currentText()
+            # Récupérer les sélections de scène depuis le widget
+            scene_info = self.scene_selection_widget.get_selected_scene_info()
+            char_a_name = scene_info.get("character_a")
+            char_b_name = scene_info.get("character_b")
+            scene_region_name = scene_info.get("scene_region")
+            scene_sub_location_name = scene_info.get("scene_sub_location")
 
-            # Nettoyage des noms pour éviter de passer UIText.NONE ou des chaînes vides si non pertinents
             char_a_name = char_a_name if char_a_name and char_a_name != UIText.NONE else None
             char_b_name = char_b_name if char_b_name and char_b_name != UIText.NONE else None
             scene_region_name = scene_region_name if scene_region_name and scene_region_name != UIText.NONE_FEM else None
@@ -747,10 +700,11 @@ class GenerationPanel(QWidget):
         Récupère les personnages A/B et la scène, puis demande au LeftSelectionPanel
         de cocher tous les éléments du GDD qui leur sont liés.
         """
-        char_a_raw = self.scene_selection_widget.character_a_combo.currentText()
-        char_b_raw = self.scene_selection_widget.character_b_combo.currentText()
-        scene_region_raw = self.scene_selection_widget.scene_region_combo.currentText()
-        scene_sub_location_raw = self.scene_selection_widget.scene_sub_location_combo.currentText()
+        scene_info = self.scene_selection_widget.get_selected_scene_info()
+        char_a_raw = scene_info.get("character_a")
+        char_b_raw = scene_info.get("character_b")
+        scene_region_raw = scene_info.get("scene_region")
+        scene_sub_location_raw = scene_info.get("scene_sub_location")
 
         placeholders = [UIText.NONE, UIText.NONE_FEM, UIText.ALL, UIText.NONE_SUBLOCATION, UIText.NO_SELECTION]
 
@@ -791,10 +745,11 @@ class GenerationPanel(QWidget):
         Récupère les personnages A/B et la scène, puis demande au LeftSelectionPanel
         de ne garder cochés QUE les éléments du GDD qui leur sont liés.
         """
-        char_a_raw = self.scene_selection_widget.character_a_combo.currentText()
-        char_b_raw = self.scene_selection_widget.character_b_combo.currentText()
-        scene_region_raw = self.scene_selection_widget.scene_region_combo.currentText()
-        scene_sub_location_raw = self.scene_selection_widget.scene_sub_location_combo.currentText()
+        scene_info = self.scene_selection_widget.get_selected_scene_info()
+        char_a_raw = scene_info.get("character_a")
+        char_b_raw = scene_info.get("character_b")
+        scene_region_raw = scene_info.get("scene_region")
+        scene_sub_location_raw = scene_info.get("scene_sub_location")
 
         placeholders = [UIText.NONE, UIText.NONE_FEM, UIText.ALL, UIText.NONE_SUBLOCATION, UIText.NO_SELECTION]
 
@@ -849,14 +804,16 @@ class GenerationPanel(QWidget):
 
     def get_settings(self) -> dict:
         # Récupère les paramètres actuels du panneau pour la sauvegarde.
+        scene_settings = self.scene_selection_widget.get_selected_scene_info()
         settings = {
-            "character_a": self.scene_selection_widget.character_a_combo.currentText(),
-            "character_b": self.scene_selection_widget.character_b_combo.currentText(),
-            "scene_region": self.scene_selection_widget.scene_region_combo.currentText(),
-            "scene_sub_location": self.scene_selection_widget.scene_sub_location_combo.currentText(),
+            # Utiliser les clés de scene_settings directement
+            "character_a": scene_settings.get("character_a"),
+            "character_b": scene_settings.get("character_b"),
+            "scene_region": scene_settings.get("scene_region"),
+            "scene_sub_location": scene_settings.get("scene_sub_location"),
             "k_variants": self.k_variants_combo.currentText(),
             "user_instructions": self.instructions_widget.get_user_instructions_text(),
-            "llm_model": self.llm_model_combo.currentData(), # Sauvegarde l'identifiant du modèle
+            "llm_model": self.llm_model_combo.currentData(), 
             "system_prompt": self.instructions_widget.get_system_prompt_text(),
             "max_context_tokens": self.max_context_tokens_spinbox.value(),
             "dialogue_structure": self.dialogue_structure_widget.get_structure()
@@ -868,46 +825,46 @@ class GenerationPanel(QWidget):
         logger.debug(f"Chargement des paramètres dans GenerationPanel: {settings}")
         self._is_loading_settings = True
         
-        self.scene_selection_widget.character_a_combo.setCurrentText(settings.get("character_a", ""))
-        self.scene_selection_widget.character_b_combo.setCurrentText(settings.get("character_b", ""))
-        self.scene_selection_widget.scene_region_combo.setCurrentText(settings.get("scene_region", ""))
-        QApplication.processEvents()
-        self.scene_selection_widget.scene_sub_location_combo.setCurrentText(settings.get("scene_sub_location", ""))
+        # Charger les paramètres de scène via le widget
+        scene_info_to_load = {
+            "character_a": settings.get("character_a"),
+            "character_b": settings.get("character_b"),
+            "scene_region": settings.get("scene_region"),
+            "scene_sub_location": settings.get("scene_sub_location")
+        }
+        self.scene_selection_widget.load_selection(scene_info_to_load)
+        # Les signaux émis par load_selection (via _is_populating=False à la fin)
+        # vont déclencher _schedule_settings_save_and_token_update.
         
         self.k_variants_combo.setCurrentText(settings.get("k_variants", "3"))
         
-        # MODIFIÉ: Appel à load_settings de InstructionsWidget
         instruction_settings_to_load = {
             "user_instructions": settings.get("user_instructions", ""),
-            "system_prompt": settings.get("system_prompt") # Peut être None, InstructionsWidget.load_settings gère cela
+            "system_prompt": settings.get("system_prompt") 
         }
         default_system_prompt_for_iw = self.prompt_engine._get_default_system_prompt() if self.prompt_engine else ""
         self.instructions_widget.load_settings(
             instruction_settings_to_load, 
-            default_user_instructions="", # La valeur est déjà extraite dans instruction_settings_to_load
+            default_user_instructions="", 
             default_system_prompt=default_system_prompt_for_iw
         )
         
         model_identifier = settings.get("llm_model")
         if model_identifier:
-            # MODIFIÉ: Délégué à GenerationParamsWidget
             if hasattr(self, 'generation_params_widget') and self.generation_params_widget:
                 self.generation_params_widget.select_model_in_combo(model_identifier)
         else:
-            # Si aucun modèle n'est sauvegardé, essayer de sélectionner le premier de la liste
-            # La logique est maintenant dans GenerationParamsWidget.populate_llm_model_combo
             if hasattr(self, 'generation_params_widget') and self.generation_params_widget and self.generation_params_widget.llm_model_combo.count() > 0:
                  self.generation_params_widget.llm_model_combo.setCurrentIndex(0)
         
         if "dialogue_structure" in settings:
             self.dialogue_structure_widget.set_structure(settings["dialogue_structure"])
         
-        # Restaure la valeur sauvegardée pour max_context_tokens si présente
         if "max_context_tokens" in settings:
             self.max_context_tokens_spinbox.setValue(settings["max_context_tokens"])
         
         self._is_loading_settings = False
-        self.update_token_estimation_signal.emit()
+        self.update_token_estimation_signal.emit() # Assurer un rafraîchissement global à la fin du chargement
         logger.info("Paramètres du GenerationPanel chargés.")
 
     @Slot(float)

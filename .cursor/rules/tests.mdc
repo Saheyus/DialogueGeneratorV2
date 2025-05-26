@@ -1,7 +1,7 @@
 ---
 description: 
 globs: 
-alwaysApply: false
+alwaysApply: true
 ---
 - Chaque fois que tu finis une tâche, lance les tests unitaires avec pytest
 - Chaque fois que tu finis une tâche, lance un tests d'interface avec "python main_app.py" en avant-plan
