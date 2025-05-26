@@ -122,4 +122,13 @@ def handle_restore_default_system_prompt(panel):
         logger.info("PromptEngine system_prompt_template restauré par défaut.")
     panel.update_token_estimation_signal.emit()
     from PySide6.QtWidgets import QMessageBox
-    QMessageBox.information(panel, "Prompt Restauré", "Le prompt système par défaut a été restauré.") 
+    QMessageBox.information(panel, "Prompt Restauré", "Le prompt système par défaut a été restauré.")
+
+def handle_max_context_tokens_changed(panel, new_value):
+    """
+    Slot pour le changement de la valeur du spinbox max_context_tokens.
+    Met à jour la limite de tokens pour le contexte et déclenche la sauvegarde + estimation des tokens.
+    """
+    tokens_value = int(new_value * 1000)
+    logger.info(f"Limite de tokens pour le contexte mise à jour: {tokens_value}")
+    panel._schedule_settings_save_and_token_update() 

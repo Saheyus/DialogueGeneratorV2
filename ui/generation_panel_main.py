@@ -31,7 +31,7 @@ from .generation_panel.generated_variants_tabs_widget import GeneratedVariantsTa
 from .generation_panel.interactions_tab_widget import InteractionsTabWidget
 from .generation_panel.dialogue_structure_widget import DialogueStructureWidget
 from .generation_panel.dialogue_generation_handler import DialogueGenerationHandler # Ajouté
-from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt
+from .generation_panel.handlers import handle_select_linked_elements, handle_unlink_unrelated, handle_uncheck_all, handle_system_prompt_changed, handle_restore_default_system_prompt, handle_max_context_tokens_changed
 
 # New service import
 try:
@@ -207,7 +207,7 @@ class GenerationPanel(QWidget):
         self.context_actions_widget.uncheck_all_clicked.connect(lambda: handle_uncheck_all(self))
 
         self.generation_params_widget.k_variants_changed.connect(self._schedule_settings_save)
-        self.generation_params_widget.max_context_tokens_changed.connect(self._on_max_context_tokens_changed)
+        self.generation_params_widget.max_context_tokens_changed.connect(lambda value: handle_max_context_tokens_changed(self, value))
         # self.generation_params_widget.structured_output_changed.connect(self._schedule_settings_save) # Checkbox supprimée
 
         self.dialogue_structure_widget.structure_changed.connect(self._schedule_settings_save_and_token_update)
@@ -706,15 +706,6 @@ class GenerationPanel(QWidget):
         self.update_token_estimation_signal.emit() # Assurer un rafraîchissement global à la fin du chargement
         logger.info("Paramètres du GenerationPanel chargés.")
 
-    @Slot(float)
-    def _on_max_context_tokens_changed(self, new_value: float):
-        """Gère le changement de valeur dans le spinbox max_context_tokens."""
-        tokens_value = int(new_value * 1000)
-        logger.info(f"Limite de tokens pour le contexte mise à jour: {tokens_value}")
-        self._schedule_settings_save_and_token_update()
-
-    # --- Gestion des Interactions ---
-    
     @Slot(uuid.UUID)
     def _on_interaction_selected(self, interaction_id: uuid.UUID):
         """Gère la sélection d'une interaction dans la liste.
