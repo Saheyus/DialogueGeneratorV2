@@ -1,16 +1,22 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QCheckBox, QHBoxLayout, QScrollArea, QFrame, QGroupBox, QPushButton, QSizePolicy, QSpacerItem, QAbstractItemView, QTabWidget)
-from PySide6.QtCore import Qt, Signal, Slot, QSortFilterProxyModel, QRegularExpression, QTimer
-from PySide6.QtGui import QPalette, QColor
+# --- Imports standard ---
 import logging
 from functools import partial
 from pathlib import Path
+
+# --- Imports PySide6 ---
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QCheckBox, QHBoxLayout, QScrollArea, QFrame, QGroupBox, QPushButton, QSizePolicy, QSpacerItem, QAbstractItemView, QTabWidget
+)
+from PySide6.QtCore import Qt, Signal, Slot
+
+# --- Imports internes ---
 from config_manager import list_yarn_files
 from services.configuration_service import ConfigurationService
 from constants import UIText, FilePaths, Defaults
-
-# Importation du nouveau widget et du service nécessaire
-from .left_panel.previous_dialogue_selector_widget import PreviousDialogueSelectorWidget
 from services.interaction_service import InteractionService
+
+# --- Imports locaux ---
+from .left_panel.previous_dialogue_selector_widget import PreviousDialogueSelectorWidget
 
 logger = logging.getLogger(__name__)
 
@@ -517,71 +523,34 @@ class LeftSelectionPanel(QWidget):
     # Méthodes utilitaires utilisées par GenerationPanel (sélection rapide)
     # ---------------------------------------------------------------------
 
-    @Slot(list)
-    def set_checked_items_by_name(self, item_names_to_check: list[str]) -> None:
-        """Coche les éléments dont le nom est présent dans la liste fournie.
-
-        Args:
-            item_names_to_check: Liste des noms à cocher dans toutes les catégories.
-        """
-        if not item_names_to_check:
-            return
-
-        items_to_check_set = set(item_names_to_check)
-        something_changed: bool = False
-
-        for cat_key, list_widget in self.lists.items():
-            if cat_key == self.yarn_files_category_key:  # Pas de checkbox pour les fichiers yarn
-                continue
-
-            list_widget.blockSignals(True)
-            try:
-                for i in range(list_widget.count()):
-                    q_item = list_widget.item(i)
-                    item_widget = list_widget.itemWidget(q_item)
-                    if item_widget and hasattr(item_widget, "checkbox"):
-                        should_be_checked = item_widget.text_label.text() in items_to_check_set
-                        if item_widget.checkbox.isChecked() != should_be_checked:
-                            item_widget.checkbox.setChecked(should_be_checked)
-                            something_changed = True
-            finally:
-                list_widget.blockSignals(False)
-
-        if something_changed:
-            self.context_selection_changed.emit()
-
     @Slot()
     def uncheck_all_items(self) -> None:
-        """Décoche tous les items de toutes les catégories."""
-        something_changed = False
-        for cat_key, list_widget in self.lists.items():
-            if cat_key == self.yarn_files_category_key:
-                continue
-            list_widget.blockSignals(True)
-            try:
-                for i in range(list_widget.count()):
-                    q_item = list_widget.item(i)
-                    item_widget = list_widget.itemWidget(q_item)
-                    if item_widget and hasattr(item_widget, "checkbox") and item_widget.checkbox.isChecked():
-                        item_widget.checkbox.setChecked(False)
-                        something_changed = True
-            finally:
-                list_widget.blockSignals(False)
+        """Décoche tous les items de toutes les catégories (délègue au handler)."""
+        from .left_panel.handlers import handle_uncheck_all_items
+        handle_uncheck_all_items(self)
 
-        if something_changed:
-            self.context_selection_changed.emit()
+    @Slot(list)
+    def set_checked_items_by_name(self, item_names_to_check: list[str]) -> None:
+        """Coche les éléments dont le nom est présent dans la liste fournie (délègue au handler)."""
+        from .left_panel.handlers import handle_set_checked_items_by_name
+        handle_set_checked_items_by_name(self, item_names_to_check)
 
     def get_all_selected_item_names(self) -> list[str]:
-        """Retourne la liste plate des noms d'items actuellement cochés."""
+        """
+        Retourne la liste plate des noms d'items actuellement cochés dans toutes les catégories,
+        en gérant à la fois les widgets custom (CheckableListItemWidget) et les QListWidgetItem natifs.
+        """
         selected: list[str] = []
-        for cat_key, list_widget in self.lists.items():
-            if cat_key == self.yarn_files_category_key:
+        for cat_key, list_widget in (self.lists if hasattr(self, 'lists') else self.list_widgets).items():
+            if hasattr(self, 'yarn_files_category_key') and cat_key == self.yarn_files_category_key:
                 continue
             for i in range(list_widget.count()):
                 q_item = list_widget.item(i)
-                item_widget = list_widget.itemWidget(q_item)
+                item_widget = list_widget.itemWidget(q_item) if list_widget.itemWidget(q_item) else None
                 if item_widget and hasattr(item_widget, "checkbox") and item_widget.checkbox.isChecked():
                     selected.append(item_widget.text_label.text())
+                elif q_item and q_item.checkState() == Qt.Checked:
+                    selected.append(q_item.text())
         return selected
 
     # Utility method to be part of the class
@@ -816,16 +785,6 @@ class CheckableListItemWidget(QWidget):
                 if checkbox.isChecked():
                     selected_by_category[category_key].append(item_name)
         return selected_by_category
-
-    def get_all_selected_item_names(self) -> list[str]:
-        """Returns a flat list of all selected (checked) item names across all categories."""
-        all_selected: list[str] = []
-        for _category_key, list_widget in self.list_widgets.items():
-            for i in range(list_widget.count()):
-                item = list_widget.item(i)
-                if item and item.checkState() == Qt.Checked:
-                    all_selected.append(item.text())
-        return all_selected
 
     @Slot(list, bool)
     def clear_and_set_selected_items(self, item_names: list[str], silent: bool = False) -> None:
