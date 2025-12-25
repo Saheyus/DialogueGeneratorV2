@@ -5,8 +5,8 @@ import { useState, useEffect, useCallback } from 'react'
 import * as dialoguesAPI from '../../api/dialogues'
 import * as configAPI from '../../api/config'
 import * as interactionsAPI from '../../api/interactions'
-import * as contextAPI from '../../api/context'
 import { useContextStore } from '../../store/contextStore'
+import { useGenerationStore } from '../../store/generationStore'
 import { getErrorMessage } from '../../types/errors'
 import { theme } from '../../theme'
 import type {
@@ -16,19 +16,37 @@ import type {
   InteractionResponse,
   LLMModelResponse,
   InteractionListResponse,
+  ContextSelection,
+  GenerateDialogueVariantsResponse,
 } from '../../types/api'
+import { DialogueStructureWidget } from './DialogueStructureWidget'
+import { SystemPromptEditor } from './SystemPromptEditor'
+import { SceneSelectionWidget } from './SceneSelectionWidget'
+import { VariantsTabsView } from './VariantsTabsView'
+import { InteractionsTab } from './InteractionsTab'
+import { Tabs, type Tab } from '../shared/Tabs'
+import { ContextActions } from '../context/ContextActions'
 
 type GenerationMode = 'variants' | 'interactions'
+type PanelTab = 'generation' | 'interactions'
 
 export function GenerationPanel() {
   const { selections } = useContextStore()
+  const {
+    sceneSelection,
+    dialogueStructure,
+    systemPromptOverride,
+    setDialogueStructure,
+    setSystemPromptOverride,
+  } = useGenerationStore()
+  
   const [generationMode, setGenerationMode] = useState<GenerationMode>('variants')
   const [userInstructions, setUserInstructions] = useState('')
   const [kVariants, setKVariants] = useState(2)
   const [maxContextTokens, setMaxContextTokens] = useState(1500)
   const [llmModel, setLlmModel] = useState('gpt-4o-mini')
   const [availableModels, setAvailableModels] = useState<LLMModelResponse[]>([])
-  const [variants, setVariants] = useState<DialogueVariantResponse[]>([])
+  const [variantsResponse, setVariantsResponse] = useState<GenerateDialogueVariantsResponse | null>(null)
   const [interactions, setInteractions] = useState<InteractionResponse[]>([])
   const [estimatedTokens, setEstimatedTokens] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -36,10 +54,7 @@ export function GenerationPanel() {
   const [error, setError] = useState<string | null>(null)
   const [previousInteractionId, setPreviousInteractionId] = useState<string>('')
   const [availableInteractions, setAvailableInteractions] = useState<InteractionResponse[]>([])
-  const [characterA, setCharacterA] = useState<string>('')
-  const [characterB, setCharacterB] = useState<string>('')
-  const [sceneRegion, setSceneRegion] = useState<string>('')
-  const [subLocation, setSubLocation] = useState<string>('')
+  const [activePanelTab, setActivePanelTab] = useState<PanelTab>('generation')
 
   const loadModels = useCallback(async () => {
     try {
@@ -78,6 +93,46 @@ export function GenerationPanel() {
     )
   }, [selections])
 
+  // Construire context_selections avec scene_protagonists, scene_location, et generation_settings
+  const buildContextSelections = useCallback((): ContextSelection => {
+    const contextSelections: ContextSelection = {
+      ...selections,
+    }
+
+    // Ajouter scene_protagonists
+    const sceneProtagonists: Record<string, string> = {}
+    if (sceneSelection.characterA) {
+      sceneProtagonists.personnage_a = sceneSelection.characterA
+    }
+    if (sceneSelection.characterB) {
+      sceneProtagonists.personnage_b = sceneSelection.characterB
+    }
+    if (Object.keys(sceneProtagonists).length > 0) {
+      contextSelections.scene_protagonists = sceneProtagonists
+    }
+
+    // Ajouter scene_location
+    const sceneLocation: Record<string, string> = {}
+    if (sceneSelection.sceneRegion) {
+      sceneLocation.lieu = sceneSelection.sceneRegion
+    }
+    if (sceneSelection.subLocation) {
+      sceneLocation.sous_lieu = sceneSelection.subLocation
+    }
+    if (Object.keys(sceneLocation).length > 0) {
+      contextSelections.scene_location = sceneLocation
+    }
+
+    // Ajouter generation_settings avec dialogue_structure
+    if (dialogueStructure && dialogueStructure.length > 0) {
+      contextSelections.generation_settings = {
+        dialogue_structure: dialogueStructure,
+      }
+    }
+
+    return contextSelections
+  }, [selections, sceneSelection, dialogueStructure])
+
   const estimateTokens = useCallback(async () => {
     if (!userInstructions.trim() && !hasSelections()) {
       setEstimatedTokens(null)
@@ -86,20 +141,20 @@ export function GenerationPanel() {
 
     setIsEstimating(true)
     try {
+      const contextSelections = buildContextSelections()
       const response = await dialoguesAPI.estimateTokens(
-        selections,
+        contextSelections,
         userInstructions,
         maxContextTokens
       )
       setEstimatedTokens(response.total_estimated_tokens)
     } catch (err) {
       console.error('Erreur lors de l\'estimation:', err)
-      // Ne pas afficher d'erreur pour l'estimation, juste ne pas afficher le résultat
       setEstimatedTokens(null)
     } finally {
       setIsEstimating(false)
     }
-  }, [selections, userInstructions, maxContextTokens, hasSelections])
+  }, [userInstructions, hasSelections, maxContextTokens, buildContextSelections])
 
   useEffect(() => {
     // Estimer les tokens quand les sélections ou les instructions changent
@@ -112,40 +167,43 @@ export function GenerationPanel() {
     }, 500)
 
     return () => clearTimeout(timeoutId)
-  }, [userInstructions, selections, maxContextTokens, estimateTokens, hasSelections])
-
+  }, [userInstructions, selections, maxContextTokens, estimateTokens, hasSelections, sceneSelection, dialogueStructure])
 
   const handleGenerate = async () => {
     setIsLoading(true)
     setError(null)
 
     try {
+      const contextSelections = buildContextSelections()
+      
       if (generationMode === 'variants') {
         const request: GenerateDialogueVariantsRequest = {
           k_variants: kVariants,
           user_instructions: userInstructions,
-          context_selections: selections,
+          context_selections: contextSelections,
           max_context_tokens: maxContextTokens,
           structured_output: false,
+          system_prompt_override: systemPromptOverride || undefined,
           llm_model_identifier: llmModel,
         }
 
         const response = await dialoguesAPI.generateDialogueVariants(request)
-        setVariants(response.variants)
+        setVariantsResponse(response)
         setInteractions([])
       } else {
         const request: GenerateInteractionVariantsRequest = {
           k_variants: kVariants,
           user_instructions: userInstructions,
-          context_selections: selections,
+          context_selections: contextSelections,
           max_context_tokens: maxContextTokens,
+          system_prompt_override: systemPromptOverride || undefined,
           llm_model_identifier: llmModel,
           previous_interaction_id: previousInteractionId || undefined,
         }
 
         const response = await dialoguesAPI.generateInteractionVariants(request)
         setInteractions(response)
-        setVariants([])
+        setVariantsResponse(null)
       }
     } catch (err) {
       setError(getErrorMessage(err))
@@ -172,20 +230,25 @@ export function GenerationPanel() {
 
       await interactionsAPI.createInteraction(interaction)
       alert('Interaction sauvegardée avec succès!')
+      loadInteractions()
     } catch (err) {
       alert(getErrorMessage(err))
     }
   }
 
-  return (
-    <div style={{ padding: '1.5rem', height: '100%', overflowY: 'auto', backgroundColor: theme.background.panel }}>
-      <h2 style={{ marginTop: 0, color: theme.text.primary }}>Génération de Dialogues</h2>
+  const panelTabs: Tab[] = [
+    {
+      id: 'generation',
+      label: 'Génération',
+      content: (
+        <div style={{ padding: '1.5rem', height: '100%', overflowY: 'auto', backgroundColor: theme.background.panel }}>
+          <h2 style={{ marginTop: 0, color: theme.text.primary }}>Génération de Dialogues</h2>
 
-      <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
+          <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
         <button
           onClick={() => {
             setGenerationMode('variants')
-            setVariants([])
+            setVariantsResponse(null)
             setInteractions([])
           }}
           style={{
@@ -202,7 +265,7 @@ export function GenerationPanel() {
         <button
           onClick={() => {
             setGenerationMode('interactions')
-            setVariants([])
+            setVariantsResponse(null)
             setInteractions([])
           }}
           style={{
@@ -218,25 +281,27 @@ export function GenerationPanel() {
         </button>
       </div>
 
-      <div style={{ marginBottom: '1rem' }}>
-        <label style={{ color: theme.text.primary }}>
-          Instructions:
-          <textarea
-            value={userInstructions}
-            onChange={(e) => setUserInstructions(e.target.value)}
-            rows={5}
-            style={{ 
-              width: '100%', 
-              padding: '0.5rem', 
-              marginTop: '0.5rem', 
-              boxSizing: 'border-box',
-              backgroundColor: theme.input.background,
-              border: `1px solid ${theme.input.border}`,
-              color: theme.input.color,
-            }}
-          />
-        </label>
-      </div>
+      <SceneSelectionWidget />
+
+      <ContextActions
+        onError={setError}
+        onSuccess={(msg: string) => {
+          // Optionnel: afficher un message de succès
+          console.log(msg)
+        }}
+      />
+
+      <SystemPromptEditor
+        userInstructions={userInstructions}
+        systemPromptOverride={systemPromptOverride}
+        onUserInstructionsChange={setUserInstructions}
+        onSystemPromptChange={setSystemPromptOverride}
+      />
+
+      <DialogueStructureWidget
+        value={dialogueStructure}
+        onChange={setDialogueStructure}
+      />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
         <div>
@@ -327,90 +392,6 @@ export function GenerationPanel() {
         </div>
       )}
 
-      <div style={{ marginBottom: '1rem', padding: '1rem', border: `1px solid ${theme.border.primary}`, borderRadius: '4px' }}>
-        <h3 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1rem', fontWeight: 'bold' }}>
-          Lier Éléments Connexes
-        </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
-          <input
-            type="text"
-            placeholder="Personnage A"
-            value={characterA}
-            onChange={(e) => setCharacterA(e.target.value)}
-            style={{ 
-              padding: '0.5rem', 
-              backgroundColor: theme.input.background,
-              border: `1px solid ${theme.input.border}`,
-              color: theme.input.color,
-            }}
-          />
-          <input
-            type="text"
-            placeholder="Personnage B"
-            value={characterB}
-            onChange={(e) => setCharacterB(e.target.value)}
-            style={{ 
-              padding: '0.5rem', 
-              backgroundColor: theme.input.background,
-              border: `1px solid ${theme.input.border}`,
-              color: theme.input.color,
-            }}
-          />
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
-          <input
-            type="text"
-            placeholder="Région"
-            value={sceneRegion}
-            onChange={(e) => setSceneRegion(e.target.value)}
-            style={{ 
-              padding: '0.5rem', 
-              backgroundColor: theme.input.background,
-              border: `1px solid ${theme.input.border}`,
-              color: theme.input.color,
-            }}
-          />
-          <input
-            type="text"
-            placeholder="Sous-lieu"
-            value={subLocation}
-            onChange={(e) => setSubLocation(e.target.value)}
-            style={{ 
-              padding: '0.5rem', 
-              backgroundColor: theme.input.background,
-              border: `1px solid ${theme.input.border}`,
-              color: theme.input.color,
-            }}
-          />
-        </div>
-        <button
-          onClick={async () => {
-            try {
-              const { applyLinkedElements } = useContextStore.getState()
-              const response = await contextAPI.getLinkedElements({
-                character_a: characterA || undefined,
-                character_b: characterB || undefined,
-                scene_region: sceneRegion || undefined,
-                sub_location: subLocation || undefined,
-              })
-              applyLinkedElements(response.linked_elements)
-              alert(`${response.total} éléments liés ajoutés`)
-            } catch (err) {
-              setError(getErrorMessage(err))
-            }
-          }}
-          style={{
-            padding: '0.5rem 1rem',
-            backgroundColor: theme.button.secondary?.background || theme.button.default.background,
-            color: theme.button.secondary?.color || theme.button.default.color,
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
-          Lier Éléments Connexes
-        </button>
-      </div>
 
       {generationMode === 'interactions' && (
         <div style={{ marginBottom: '1rem', padding: '1rem', border: `1px solid ${theme.border.primary}`, borderRadius: '4px' }}>
@@ -467,40 +448,12 @@ export function GenerationPanel() {
         </div>
       )}
 
-      {variants.length > 0 && (
-        <div style={{ marginTop: '2rem' }}>
-          <h3 style={{ color: theme.text.primary }}>Variantes générées ({variants.length}):</h3>
-          {variants.map((variant) => (
-            <div
-              key={variant.id}
-              style={{
-                marginBottom: '1rem',
-                padding: '1rem',
-                border: `1px solid ${theme.border.primary}`,
-                borderRadius: '4px',
-                backgroundColor: theme.background.tertiary,
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <h4 style={{ margin: 0, color: theme.text.primary }}>{variant.title}</h4>
-                <button
-                  onClick={() => handleSaveAsInteraction(variant)}
-                  style={{
-                    padding: '0.25rem 0.5rem',
-                    fontSize: '0.85rem',
-                    border: `1px solid ${theme.border.primary}`,
-                    borderRadius: '4px',
-                    backgroundColor: theme.button.default.background,
-                    color: theme.button.default.color,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Sauvegarder
-                </button>
-              </div>
-              <p style={{ whiteSpace: 'pre-wrap', margin: 0, color: theme.text.secondary }}>{variant.content}</p>
-            </div>
-          ))}
+      {variantsResponse && variantsResponse.variants.length > 0 && (
+        <div style={{ marginTop: '2rem', height: '600px' }}>
+          <VariantsTabsView
+            response={variantsResponse}
+            onValidateAsInteraction={handleSaveAsInteraction}
+          />
         </div>
       )}
 
@@ -542,6 +495,27 @@ export function GenerationPanel() {
           ))}
         </div>
       )}
+        </div>
+      ),
+    },
+    {
+      id: 'interactions',
+      label: 'Interactions',
+      content: (
+        <InteractionsTab
+          onSelectInteraction={(interaction) => {
+            if (interaction) {
+              setPreviousInteractionId(interaction.interaction_id)
+            }
+          }}
+        />
+      ),
+    },
+  ]
+
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: theme.background.panel }}>
+      <Tabs tabs={panelTabs} activeTabId={activePanelTab} onTabChange={(tabId) => setActivePanelTab(tabId as PanelTab)} />
     </div>
   )
 }

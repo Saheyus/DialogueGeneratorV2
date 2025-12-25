@@ -1,6 +1,7 @@
 /**
  * Composant pour afficher un résumé des sélections de contexte actives.
  */
+import { memo } from 'react'
 import type { ContextSelection } from '../../types/api'
 import { theme } from '../../theme'
 
@@ -9,7 +10,10 @@ interface SelectedContextSummaryProps {
   onClear: () => void
 }
 
-export function SelectedContextSummary({ selections, onClear }: SelectedContextSummaryProps) {
+export const SelectedContextSummary = memo(function SelectedContextSummary({
+  selections,
+  onClear,
+}: SelectedContextSummaryProps) {
   const totalSelected =
     selections.characters.length +
     selections.locations.length +
@@ -76,5 +80,5 @@ export function SelectedContextSummary({ selections, onClear }: SelectedContextS
       </div>
     </div>
   )
-}
+})
 

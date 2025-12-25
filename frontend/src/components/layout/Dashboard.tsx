@@ -70,8 +70,8 @@ export function Dashboard() {
             style={{
               padding: '0.25rem 0.5rem',
               fontSize: '0.85rem',
-              backgroundColor: theme.button.secondary?.background || theme.button.default.background,
-              color: theme.button.secondary?.color || theme.button.default.color,
+            backgroundColor: theme.button.default.background,
+            color: theme.button.default.color,
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',

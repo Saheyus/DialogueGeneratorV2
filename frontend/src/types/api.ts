@@ -28,8 +28,8 @@ export interface ContextSelection {
   species: string[]
   communities: string[]
   dialogues_examples: string[]
-  _scene_protagonists?: Record<string, unknown>
-  _scene_location?: Record<string, unknown>
+  scene_protagonists?: Record<string, unknown>
+  scene_location?: Record<string, unknown>
   generation_settings?: Record<string, unknown>
 }
 

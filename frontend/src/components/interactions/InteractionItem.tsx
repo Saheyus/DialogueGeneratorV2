@@ -1,7 +1,7 @@
 /**
  * Composant pour afficher un item d'interaction dans une liste.
  */
-import type { InteractionResponse, InteractionElement } from '../../types/api'
+import type { InteractionResponse } from '../../types/api'
 import { theme } from '../../theme'
 
 interface InteractionItemProps {
