@@ -22,8 +22,8 @@ class PlayerChoicesBlockElement(BaseModel):
     choices: List[PlayerChoiceOption] = Field(default_factory=list, description="Liste des options de choix.")
 
 class CommandElement(BaseModel):
-    element_type: Literal["command"] = Field("command", description="Type de l'élément : commande Yarn.")
-    command_string: str = Field(..., description="La commande Yarn à exécuter (ex: '<<wait 1>>').")
+    element_type: Literal["command"] = Field("command", description="Type de l'élément : commande.")
+    command_string: str = Field(..., description="La commande à exécuter (ex: '<<wait 1>>').")
 
 AnyDialogueElement = Union[DialogueLineElement, PlayerChoicesBlockElement, CommandElement]
 

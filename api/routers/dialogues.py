@@ -13,10 +13,12 @@ from api.schemas.dialogue import (
 from api.schemas.interaction import InteractionResponse
 from api.dependencies import (
     get_dialogue_generation_service,
+    get_interaction_service,
     get_request_id
 )
-from api.exceptions import InternalServerException, ValidationException
+from api.exceptions import InternalServerException, ValidationException, NotFoundException
 from services.dialogue_generation_service import DialogueGenerationService
+from services.interaction_service import InteractionService
 from llm_client import ILLMClient
 from models.dialogue_structure.interaction import Interaction
 
@@ -119,6 +121,7 @@ async def generate_interaction_variants(
     request_data: GenerateInteractionVariantsRequest,
     request: Request,
     dialogue_service: Annotated[DialogueGenerationService, Depends(get_dialogue_generation_service)],
+    interaction_service: Annotated[InteractionService, Depends(get_interaction_service)],
     request_id: Annotated[str, Depends(get_request_id)]
 ) -> list[InteractionResponse]:
     """Génère des interactions structurées.
@@ -127,6 +130,7 @@ async def generate_interaction_variants(
         request_data: Données de la requête de génération.
         request: La requête HTTP.
         dialogue_service: Service de génération injecté.
+        interaction_service: Service d'interactions injecté.
         request_id: ID de la requête.
         
     Returns:
@@ -134,8 +138,25 @@ async def generate_interaction_variants(
         
     Raises:
         InternalServerException: Si la génération échoue.
+        NotFoundException: Si previous_interaction_id est fourni mais l'interaction n'existe pas.
     """
     try:
+        # Gérer la continuité narrative si previous_interaction_id est fourni
+        if request_data.previous_interaction_id:
+            if not interaction_service.exists(request_data.previous_interaction_id):
+                raise NotFoundException(
+                    resource_type="Interaction",
+                    resource_id=request_data.previous_interaction_id,
+                    request_id=request_id
+                )
+            
+            # Récupérer le chemin complet (tous les parents jusqu'à la racine)
+            path_interactions = interaction_service.get_dialogue_path(request_data.previous_interaction_id)
+            
+            # Définir le contexte de dialogue précédent dans le ContextBuilder
+            context_builder = dialogue_service.context_builder
+            context_builder.set_previous_dialogue_context(path_interactions)
+        
         # Créer le client LLM via la factory
         from api.dependencies import get_config_service
         config_service = get_config_service()

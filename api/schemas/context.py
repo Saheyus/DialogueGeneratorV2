@@ -70,6 +70,100 @@ class ItemListResponse(BaseModel):
     total: int = Field(..., description="Nombre total d'objets")
 
 
+class SpeciesResponse(BaseModel):
+    """Réponse contenant une espèce.
+    
+    Attributes:
+        name: Nom de l'espèce.
+        data: Données complètes de l'espèce (dict JSON).
+    """
+    name: str = Field(..., description="Nom de l'espèce")
+    data: Dict[str, Any] = Field(..., description="Données complètes de l'espèce")
+
+
+class SpeciesListResponse(BaseModel):
+    """Réponse contenant une liste d'espèces.
+    
+    Attributes:
+        species: Liste des espèces.
+        total: Nombre total d'espèces.
+    """
+    species: List[SpeciesResponse] = Field(..., description="Liste des espèces")
+    total: int = Field(..., description="Nombre total d'espèces")
+
+
+class CommunityResponse(BaseModel):
+    """Réponse contenant une communauté.
+    
+    Attributes:
+        name: Nom de la communauté.
+        data: Données complètes de la communauté (dict JSON).
+    """
+    name: str = Field(..., description="Nom de la communauté")
+    data: Dict[str, Any] = Field(..., description="Données complètes de la communauté")
+
+
+class CommunityListResponse(BaseModel):
+    """Réponse contenant une liste de communautés.
+    
+    Attributes:
+        communities: Liste des communautés.
+        total: Nombre total de communautés.
+    """
+    communities: List[CommunityResponse] = Field(..., description="Liste des communautés")
+    total: int = Field(..., description="Nombre total de communautés")
+
+
+class RegionListResponse(BaseModel):
+    """Réponse contenant une liste de régions.
+    
+    Attributes:
+        regions: Liste des noms de régions.
+        total: Nombre total de régions.
+    """
+    regions: List[str] = Field(..., description="Liste des noms de régions")
+    total: int = Field(..., description="Nombre total de régions")
+
+
+class SubLocationListResponse(BaseModel):
+    """Réponse contenant une liste de sous-lieux.
+    
+    Attributes:
+        sub_locations: Liste des noms de sous-lieux.
+        total: Nombre total de sous-lieux.
+        region_name: Nom de la région.
+    """
+    sub_locations: List[str] = Field(..., description="Liste des noms de sous-lieux")
+    total: int = Field(..., description="Nombre total de sous-lieux")
+    region_name: str = Field(..., description="Nom de la région")
+
+
+class LinkedElementsRequest(BaseModel):
+    """Requête pour obtenir les éléments liés.
+    
+    Attributes:
+        character_a: Nom du premier personnage (optionnel).
+        character_b: Nom du deuxième personnage (optionnel).
+        scene_region: Nom de la région de la scène (optionnel).
+        sub_location: Nom du sous-lieu (optionnel).
+    """
+    character_a: Optional[str] = Field(None, description="Nom du premier personnage")
+    character_b: Optional[str] = Field(None, description="Nom du deuxième personnage")
+    scene_region: Optional[str] = Field(None, description="Nom de la région de la scène")
+    sub_location: Optional[str] = Field(None, description="Nom du sous-lieu")
+
+
+class LinkedElementsResponse(BaseModel):
+    """Réponse contenant les éléments liés.
+    
+    Attributes:
+        linked_elements: Liste des noms d'éléments à sélectionner.
+        total: Nombre total d'éléments.
+    """
+    linked_elements: List[str] = Field(..., description="Liste des noms d'éléments à sélectionner")
+    total: int = Field(..., description="Nombre total d'éléments")
+
+
 class BuildContextRequest(BaseModel):
     """Requête pour construire un contexte personnalisé.
     

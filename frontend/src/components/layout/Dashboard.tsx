@@ -6,11 +6,13 @@ import { ContextSelector } from '../context/ContextSelector'
 import { GenerationPanel } from '../generation/GenerationPanel'
 import { InteractionList } from '../interactions/InteractionList'
 import { InteractionDetails } from '../interactions/InteractionDetails'
+import { UnityConfigDialog } from '../config/UnityConfigDialog'
 import type { InteractionResponse } from '../../types/api'
 import { theme } from '../../theme'
 
 export function Dashboard() {
   const [selectedInteraction, setSelectedInteraction] = useState<InteractionResponse | null>(null)
+  const [isUnityConfigOpen, setIsUnityConfigOpen] = useState(false)
 
   return (
     <div
@@ -57,9 +59,26 @@ export function Dashboard() {
         <div style={{ 
           padding: '0.5rem', 
           borderBottom: `1px solid ${theme.border.primary}`, 
-          backgroundColor: theme.background.panelHeader 
+          backgroundColor: theme.background.panelHeader,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
         }}>
           <h3 style={{ margin: 0, fontSize: '1rem', color: theme.text.primary }}>Génération</h3>
+          <button
+            onClick={() => setIsUnityConfigOpen(true)}
+            style={{
+              padding: '0.25rem 0.5rem',
+              fontSize: '0.85rem',
+              backgroundColor: theme.button.secondary?.background || theme.button.default.background,
+              color: theme.button.secondary?.color || theme.button.default.color,
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+            }}
+          >
+            Config Unity
+          </button>
         </div>
         <div style={{ flex: 1, overflow: 'hidden' }}>
           <GenerationPanel />
@@ -96,6 +115,11 @@ export function Dashboard() {
           )}
         </div>
       </div>
+
+      <UnityConfigDialog
+        isOpen={isUnityConfigOpen}
+        onClose={() => setIsUnityConfigOpen(false)}
+      />
     </div>
   )
 }

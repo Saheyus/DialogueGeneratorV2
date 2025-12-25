@@ -2,7 +2,7 @@
 import logging
 from typing import Annotated
 from fastapi import APIRouter, Depends, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from api.dependencies import (
     get_config_service,
     get_request_id
@@ -57,6 +57,24 @@ class ContextConfigResponse(BaseModel):
         config: Configuration de contexte complète.
     """
     config: dict
+
+
+class UnityDialoguesPathRequest(BaseModel):
+    """Requête pour configurer le chemin des dialogues Unity.
+    
+    Attributes:
+        path: Chemin vers le dossier Unity des dialogues.
+    """
+    path: str = Field(..., description="Chemin vers le dossier Unity des dialogues")
+
+
+class UnityDialoguesPathResponse(BaseModel):
+    """Réponse contenant le chemin configuré des dialogues Unity.
+    
+    Attributes:
+        path: Chemin vers le dossier Unity des dialogues.
+    """
+    path: str = Field(..., description="Chemin vers le dossier Unity des dialogues")
 
 
 @router.get(
@@ -200,6 +218,90 @@ async def get_context_config(
         logger.exception(f"Erreur lors de la récupération de la config contexte (request_id: {request_id})")
         raise InternalServerException(
             message="Erreur lors de la récupération de la configuration de contexte",
+            details={"error": str(e)},
+            request_id=request_id
+        )
+
+
+@router.get(
+    "/unity-dialogues-path",
+    response_model=UnityDialoguesPathResponse,
+    status_code=status.HTTP_200_OK
+)
+async def get_unity_dialogues_path(
+    request: Request,
+    config_service: Annotated[ConfigurationService, Depends(get_config_service)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> UnityDialoguesPathResponse:
+    """Récupère le chemin configuré des dialogues Unity.
+    
+    Args:
+        request: La requête HTTP.
+        config_service: Service de configuration injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        Chemin configuré des dialogues Unity.
+    """
+    try:
+        unity_path = config_service.get_unity_dialogues_path()
+        if unity_path is None:
+            return UnityDialoguesPathResponse(path="")
+        return UnityDialoguesPathResponse(path=str(unity_path))
+    except Exception as e:
+        logger.exception(f"Erreur lors de la récupération du chemin Unity (request_id: {request_id})")
+        raise InternalServerException(
+            message="Erreur lors de la récupération du chemin Unity",
+            details={"error": str(e)},
+            request_id=request_id
+        )
+
+
+@router.put(
+    "/unity-dialogues-path",
+    response_model=UnityDialoguesPathResponse,
+    status_code=status.HTTP_200_OK
+)
+async def set_unity_dialogues_path(
+    request_data: UnityDialoguesPathRequest,
+    request: Request,
+    config_service: Annotated[ConfigurationService, Depends(get_config_service)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> UnityDialoguesPathResponse:
+    """Configure le chemin des dialogues Unity.
+    
+    Args:
+        request_data: Données de la requête (chemin).
+        request: La requête HTTP.
+        config_service: Service de configuration injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        Chemin configuré des dialogues Unity.
+        
+    Raises:
+        ValidationException: Si le chemin est invalide.
+    """
+    try:
+        success = config_service.set_unity_dialogues_path(request_data.path)
+        if not success:
+            from api.exceptions import ValidationException
+            raise ValidationException(
+                message="Le chemin Unity fourni est invalide ou ne peut pas être créé",
+                details={"path": request_data.path},
+                request_id=request_id
+            )
+        
+        unity_path = config_service.get_unity_dialogues_path()
+        if unity_path is None:
+            return UnityDialoguesPathResponse(path="")
+        return UnityDialoguesPathResponse(path=str(unity_path))
+    except ValidationException:
+        raise
+    except Exception as e:
+        logger.exception(f"Erreur lors de la configuration du chemin Unity (request_id: {request_id})")
+        raise InternalServerException(
+            message="Erreur lors de la configuration du chemin Unity",
             details={"error": str(e)},
             request_id=request_id
         )

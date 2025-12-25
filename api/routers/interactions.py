@@ -7,7 +7,8 @@ from api.schemas.interaction import (
     InteractionCreateRequest,
     InteractionUpdateRequest,
     InteractionListResponse,
-    InteractionRelationsResponse
+    InteractionRelationsResponse,
+    InteractionContextPathResponse
 )
 from api.dependencies import (
     get_interaction_service,
@@ -348,4 +349,48 @@ async def get_interaction_children(
     child_ids = [child.interaction_id for child in children]
     
     return InteractionRelationsResponse(parents=[], children=child_ids)
+
+
+@router.get(
+    "/{interaction_id}/context-path",
+    response_model=InteractionContextPathResponse,
+    status_code=status.HTTP_200_OK
+)
+async def get_interaction_context_path(
+    interaction_id: str,
+    request: Request,
+    interaction_service: Annotated[InteractionService, Depends(get_interaction_service)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> InteractionContextPathResponse:
+    """Récupère le chemin complet de contexte d'une interaction (tous les parents jusqu'à la racine).
+    
+    Args:
+        interaction_id: ID de l'interaction.
+        request: La requête HTTP.
+        interaction_service: Service d'interactions injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        Chemin complet des interactions (de la racine à l'interaction cible).
+        
+    Raises:
+        NotFoundException: Si l'interaction n'existe pas.
+    """
+    if not interaction_service.exists(interaction_id):
+        raise NotFoundException(
+            resource_type="Interaction",
+            resource_id=interaction_id,
+            request_id=request_id
+        )
+    
+    # Récupérer le chemin complet (tous les parents jusqu'à la racine)
+    path_interactions = interaction_service.get_dialogue_path(interaction_id)
+    
+    # Convertir en format de réponse
+    path_responses = [InteractionResponse.from_model(interaction) for interaction in path_interactions]
+    
+    return InteractionContextPathResponse(
+        path=path_responses,
+        total=len(path_responses)
+    )
 

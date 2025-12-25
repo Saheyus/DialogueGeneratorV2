@@ -43,10 +43,10 @@ class PromptEngine:
 
     def _get_default_system_prompt(self) -> str:
         """
-        Retourne un system prompt par défaut pour la génération de dialogues Yarn.
+        Retourne un system prompt par défaut pour la génération de dialogues.
 
         Ce prompt sert de point de départ et peut être enrichi avec des détails
-        sur la structure Yarn attendue, des exemples, des instructions sur la gestion
+        sur la structure JSON Unity attendue, des exemples, des instructions sur la gestion
         des conditions (<<if>>), des commandes (<<command>>), le ton, le style RPG, etc.
 
         Returns:

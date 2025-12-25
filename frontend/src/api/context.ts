@@ -9,6 +9,14 @@ import type {
   LocationListResponse,
   ItemResponse,
   ItemListResponse,
+  SpeciesResponse,
+  SpeciesListResponse,
+  CommunityResponse,
+  CommunityListResponse,
+  RegionListResponse,
+  SubLocationListResponse,
+  LinkedElementsRequest,
+  LinkedElementsResponse,
 } from '../types/api'
 
 /**
@@ -62,5 +70,63 @@ export async function getItem(name: string): Promise<ItemResponse> {
     throw new Error(`Item "${name}" not found`)
   }
   return item
+}
+
+/**
+ * Liste toutes les espèces disponibles.
+ */
+export async function listSpecies(): Promise<SpeciesListResponse> {
+  const response = await apiClient.get<SpeciesListResponse>('/api/v1/context/species')
+  return response.data
+}
+
+/**
+ * Récupère une espèce par son nom.
+ */
+export async function getSpecies(name: string): Promise<SpeciesResponse> {
+  const response = await apiClient.get<SpeciesResponse>(`/api/v1/context/species/${encodeURIComponent(name)}`)
+  return response.data
+}
+
+/**
+ * Liste toutes les communautés disponibles.
+ */
+export async function listCommunities(): Promise<CommunityListResponse> {
+  const response = await apiClient.get<CommunityListResponse>('/api/v1/context/communities')
+  return response.data
+}
+
+/**
+ * Récupère une communauté par son nom.
+ */
+export async function getCommunity(name: string): Promise<CommunityResponse> {
+  const response = await apiClient.get<CommunityResponse>(`/api/v1/context/communities/${encodeURIComponent(name)}`)
+  return response.data
+}
+
+/**
+ * Liste toutes les régions disponibles.
+ */
+export async function listRegions(): Promise<RegionListResponse> {
+  const response = await apiClient.get<RegionListResponse>('/api/v1/context/locations/regions')
+  return response.data
+}
+
+/**
+ * Récupère les sous-lieux d'une région.
+ */
+export async function getSubLocations(regionName: string): Promise<SubLocationListResponse> {
+  const response = await apiClient.get<SubLocationListResponse>(
+    `/api/v1/context/locations/regions/${encodeURIComponent(regionName)}/sub-locations`
+  )
+  return response.data
+}
+
+/**
+ * Suggère des éléments liés à partir de personnages et lieux.
+ */
+export async function getLinkedElements(request: LinkedElementsRequest): Promise<LinkedElementsResponse> {
+  const response = await apiClient.post<LinkedElementsResponse>('/api/v1/context/linked-elements', request)
+  return response.data
 }
 

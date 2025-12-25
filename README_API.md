@@ -43,13 +43,16 @@ L'API sera accessible sur :
 ### Génération de dialogues
 
 - `POST /api/v1/dialogues/generate/variants` - Générer variantes texte
-- `POST /api/v1/dialogues/generate/interactions` - Générer interactions structurées
+- `POST /api/v1/dialogues/generate/interactions` - Générer interactions structurées (supporte `previous_interaction_id` pour la continuité)
 - `POST /api/v1/dialogues/estimate-tokens` - Estimer tokens
 
 ### Interactions
 
 - `GET /api/v1/interactions` - Liste interactions
 - `GET /api/v1/interactions/{id}` - Détails interaction
+- `GET /api/v1/interactions/{id}/parents` - Interactions parentes
+- `GET /api/v1/interactions/{id}/children` - Interactions enfants
+- `GET /api/v1/interactions/{id}/context-path` - Chemin complet de contexte (parents jusqu'à la racine)
 - `POST /api/v1/interactions` - Créer interaction
 - `PUT /api/v1/interactions/{id}` - Mettre à jour
 - `DELETE /api/v1/interactions/{id}` - Supprimer
@@ -57,8 +60,17 @@ L'API sera accessible sur :
 ### Contexte GDD
 
 - `GET /api/v1/context/characters` - Liste personnages
+- `GET /api/v1/context/characters/{name}` - Détails d'un personnage
 - `GET /api/v1/context/locations` - Liste lieux
+- `GET /api/v1/context/locations/{name}` - Détails d'un lieu
 - `GET /api/v1/context/items` - Liste objets
+- `GET /api/v1/context/species` - Liste espèces
+- `GET /api/v1/context/species/{name}` - Détails d'une espèce
+- `GET /api/v1/context/communities` - Liste communautés
+- `GET /api/v1/context/communities/{name}` - Détails d'une communauté
+- `GET /api/v1/context/locations/regions` - Liste régions
+- `GET /api/v1/context/locations/regions/{name}/sub-locations` - Sous-lieux d'une région
+- `POST /api/v1/context/linked-elements` - Suggère des éléments liés
 - `POST /api/v1/context/build` - Construire contexte
 
 ### Configuration
@@ -66,6 +78,8 @@ L'API sera accessible sur :
 - `GET /api/v1/config/llm` - Configuration LLM
 - `GET /api/v1/config/llm/models` - Modèles disponibles
 - `GET /api/v1/config/context` - Configuration contexte
+- `GET /api/v1/config/unity-dialogues-path` - Chemin configuré des dialogues Unity
+- `PUT /api/v1/config/unity-dialogues-path` - Configurer le chemin des dialogues Unity
 
 ## Authentification
 

@@ -19,9 +19,9 @@ L'application propose **deux interfaces** :
 
 1.  Charger le GDD (via des fichiers JSON extraits de Notion).
 2.  Permettre à l'utilisateur de sélectionner un contexte (personnages, lieux, etc.).
-3.  Générer des nœuds de dialogue au format Yarn Spinner en utilisant un LLM.
+3.  Générer des nœuds de dialogue au format JSON Unity en utilisant un LLM.
 4.  Faciliter l'écriture, l'évaluation et la validation de ces dialogues.
-5.  S'intégrer avec une pipeline de production de jeu (export `.yarn`, compilation, commit Git).
+5.  S'intégrer avec une pipeline de production de jeu (export JSON Unity, commit Git).
 
 ## État Actuel du Projet (Mai 2024)
 
@@ -51,11 +51,11 @@ L'application est en cours de développement actif. Les fonctionnalités suivant
         *   Un `QTabWidget` pour afficher les variantes de dialogue générées, chaque variante dans un `QTextEdit` en lecture seule.
 *   **Moteur de Prompt (`PromptEngine`)** :
     *   Classe `PromptEngine` capable de combiner un *system prompt*, un résumé de contexte (incluant les détails JSON des éléments sélectionnés/cochés), et l'instruction utilisateur pour former un prompt complet.
-    *   *System prompt* par défaut basique inclus, avec une brève introduction au format Yarn Spinner.
+    *   *System prompt* par défaut basique inclus, avec une brève introduction au format JSON Unity.
 *   **Client LLM (`LLMClient`)** :
     *   Interface `IGenerator` définissant la méthode `async generate_variants(prompt, k)`.
     *   `OpenAIClient` : Implémentation utilisant l'API OpenAI (modèle par défaut actuel : `gpt-4o-mini`). Nécessite la variable d'environnement `OPENAI_API_KEY`.
-    *   `DummyLLMClient` : Implémentation factice utilisée en fallback si `OpenAIClient` ne peut s'initialiser (ex: clé API manquante) ou pour des tests rapides. Simule la génération de `k` variantes au format Yarn Spinner.
+    *   `DummyLLMClient` : Implémentation factice utilisée en fallback si `OpenAIClient` ne peut s'initialiser (ex: clé API manquante) ou pour des tests rapides. Simule la génération de `k` variantes au format JSON Unity.
 *   **Flux de Génération Initial** :
     *   La sélection d'éléments dans les listes et les `QComboBox` du panneau de génération, ainsi que la modification de l'instruction utilisateur ou de l'état du "Mode Test", mettent à jour l'estimation du nombre de mots du prompt.
     *   Le bouton "Générer le Dialogue" déclenche :
@@ -80,9 +80,9 @@ Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux m
 *   `llm_client/`: Clients pour interagir avec les modèles de langage (OpenAI, Dummy).
 *   `models/`: Structures de données Pydantic utilisées dans l'application.
     *   `dialogue_structure/`: Modèles pour les éléments de dialogue et les interactions.
-*   `services/`: Services applicatifs (ex: gestion des interactions, rendu Yarn).
+*   `services/`: Services applicatifs (ex: gestion des interactions, rendu JSON Unity).
     *   `repositories/`: Abstractions pour l'accès aux données (ex: `FileInteractionRepository`).
-    *   `yarn_renderer/`: Logique pour convertir les interactions en format Yarn Spinner.
+    *   `json_renderer/`: Logique pour convertir les interactions en format JSON Unity.
 *   `tests/`: Tests unitaires et d'intégration.
 *   `ui/`: Code relatif à l'interface utilisateur (PySide6).
     *   `generation_panel/`: Widgets spécifiques au panneau de génération.
@@ -90,8 +90,6 @@ Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux m
 *   `context_builder.py`: Responsable du chargement, du stockage et de l'accès aux données du GDD.
 *   `prompt_engine.py`: Construit les prompts à envoyer aux LLMs.
 *   `config_manager.py`: Gère le chargement et la sauvegarde des configurations.
-*   `yarn_parser.py`: (Potentiellement) Analyseur pour les fichiers Yarn Spinner.
-*   `yarn_renderer.py`: (Potentiellement) Logique de rendu pour Yarn Spinner (peut être fusionné avec `services/yarn_renderer`).
 
 ## Prérequis et Installation
 
@@ -150,11 +148,10 @@ Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux m
     *   Utiliser `asyncqt` ou `QThread` pour les appels LLM afin de ne pas bloquer l'UI.
 *   **Amélioration du `PromptEngine` et du *System Prompt*** :
     *   Itérer sur le *system prompt* basé sur les résultats réels.
-    *   Instructions plus détaillées pour Yarn Spinner.
+    *   Instructions plus détaillées pour le format JSON Unity.
 *   **Interface pour plus de `generation_params`** (ton, style, température, sélection de modèle).
 *   **Sorties Structurées (Structured Outputs)** : Explorer l'utilisation de JSON Schema avec l'API OpenAI pour un output plus fiable.
-*   **`YarnRenderer`** : Module pour convertir la sortie LLM (potentiellement structurée) en fichiers `.yarn` valides.
-*   **`CompilerWrapper`** : Pour appeler `yarnspinner-cli compile`.
+*   **`UnityJsonRenderer`** : Module pour convertir les Interactions en fichiers JSON Unity (tableau de nœuds normalisé).
 *   **`GitService`** : Pour l'intégration Git.
 *   **Stratégie Avancée de Génération de Variantes : Les "Événements Notables"**
     *   Pour améliorer la réactivité des dialogues et gérer la multiplicité des états du monde d'un RPG, une stratégie avancée est envisagée pour la construction du contexte et la génération de variantes.
@@ -163,7 +160,7 @@ Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux m
         *   Chaque événement ou point de divergence narratif clé est identifié (ex: `decision_guilde_voleurs`, `issue_bataille_fort_dragon`).
         *   Chaque événement peut avoir plusieurs **états distincts** (ex: pour `decision_guilde_voleurs` : état 0 = non survenu, état 1 = joueur trahit la guilde, état 2 = joueur reste loyal).
     *   **Structure d'un État d'Événement :**
-        *   **Valeur pour le Code :** Un identifiant simple (entier, chaîne courte) utilisé dans la logique du jeu et pour les conditions Yarn Spinner (ex: `decision_guilde_voleurs = 1`).
+        *   **Valeur pour le Code :** Un identifiant simple (entier, chaîne courte) utilisé dans la logique du jeu.
         *   **Description Textuelle pour le LLM :** Une description narrative détaillée de l'état et de ses implications. Cette description fournit un contexte riche au LLM.
             *   Exemple pour `decision_guilde_voleurs` état 1 : *"Lors d'un assaut dramatique de la garde royale sur le repaire de la guilde des voleurs, le joueur, bien que membre de la guilde, a choisi de coopérer avec la garde, livrant des informations cruciales en échange d'une promesse de clémence."*
     *   **Processus de Génération de Dialogue :**
@@ -181,7 +178,7 @@ Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux m
         *   Contexte sémantique riche pour le LLM.
         *   Automatisation des branches narratives.
         *   Contrôle fin par le designer.
-        *   Intégration naturelle avec Yarn Spinner.
+        *   Intégration avec le format JSON Unity.
     *   **Défis et Considérations :**
         *   Explosion combinatoire des variantes.
         *   Cohérence des descriptions combinées.

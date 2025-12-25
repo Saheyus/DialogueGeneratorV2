@@ -67,3 +67,11 @@ export async function getInteractionChildren(interactionId: string): Promise<{ c
   return response.data
 }
 
+/**
+ * Récupère le chemin complet de contexte d'une interaction (tous les parents jusqu'à la racine).
+ */
+export async function getInteractionContextPath(interactionId: string): Promise<{ path: InteractionResponse[]; total: number }> {
+  const response = await apiClient.get(`/api/v1/interactions/${interactionId}/context-path`)
+  return response.data
+}
+

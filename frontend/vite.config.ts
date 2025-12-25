@@ -10,7 +10,7 @@ export default defineConfig({
     port: 3000,
     host: 'localhost', // Démarrer sur localhost
     strictPort: true, // Échoue si le port est déjà utilisé au lieu de prendre un autre port
-    open: false, // Ne pas ouvrir automatiquement le navigateur (le script dev.js gère ça)
+    open: true, // Ouvrir automatiquement le navigateur sur localhost:3000
     proxy: {
       '/api': {
         target: 'http://localhost:4242',

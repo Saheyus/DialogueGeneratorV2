@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from 'react'
 import * as dialoguesAPI from '../../api/dialogues'
 import * as configAPI from '../../api/config'
 import * as interactionsAPI from '../../api/interactions'
+import * as contextAPI from '../../api/context'
 import { useContextStore } from '../../store/contextStore'
 import { getErrorMessage } from '../../types/errors'
 import { theme } from '../../theme'
@@ -14,6 +15,7 @@ import type {
   DialogueVariantResponse,
   InteractionResponse,
   LLMModelResponse,
+  InteractionListResponse,
 } from '../../types/api'
 
 type GenerationMode = 'variants' | 'interactions'
@@ -32,6 +34,12 @@ export function GenerationPanel() {
   const [isLoading, setIsLoading] = useState(false)
   const [isEstimating, setIsEstimating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [previousInteractionId, setPreviousInteractionId] = useState<string>('')
+  const [availableInteractions, setAvailableInteractions] = useState<InteractionResponse[]>([])
+  const [characterA, setCharacterA] = useState<string>('')
+  const [characterB, setCharacterB] = useState<string>('')
+  const [sceneRegion, setSceneRegion] = useState<string>('')
+  const [subLocation, setSubLocation] = useState<string>('')
 
   const loadModels = useCallback(async () => {
     try {
@@ -47,7 +55,17 @@ export function GenerationPanel() {
 
   useEffect(() => {
     loadModels()
+    loadInteractions()
   }, [loadModels])
+
+  const loadInteractions = useCallback(async () => {
+    try {
+      const response: InteractionListResponse = await interactionsAPI.listInteractions()
+      setAvailableInteractions(response.interactions)
+    } catch (err) {
+      console.error('Erreur lors du chargement des interactions:', err)
+    }
+  }, [])
 
   const hasSelections = useCallback((): boolean => {
     return (
@@ -122,6 +140,7 @@ export function GenerationPanel() {
           context_selections: selections,
           max_context_tokens: maxContextTokens,
           llm_model_identifier: llmModel,
+          previous_interaction_id: previousInteractionId || undefined,
         }
 
         const response = await dialoguesAPI.generateInteractionVariants(request)
@@ -305,6 +324,117 @@ export function GenerationPanel() {
               <strong>Tokens estimés:</strong> {estimatedTokens.toLocaleString()}
             </span>
           )}
+        </div>
+      )}
+
+      <div style={{ marginBottom: '1rem', padding: '1rem', border: `1px solid ${theme.border.primary}`, borderRadius: '4px' }}>
+        <h3 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1rem', fontWeight: 'bold' }}>
+          Lier Éléments Connexes
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+          <input
+            type="text"
+            placeholder="Personnage A"
+            value={characterA}
+            onChange={(e) => setCharacterA(e.target.value)}
+            style={{ 
+              padding: '0.5rem', 
+              backgroundColor: theme.input.background,
+              border: `1px solid ${theme.input.border}`,
+              color: theme.input.color,
+            }}
+          />
+          <input
+            type="text"
+            placeholder="Personnage B"
+            value={characterB}
+            onChange={(e) => setCharacterB(e.target.value)}
+            style={{ 
+              padding: '0.5rem', 
+              backgroundColor: theme.input.background,
+              border: `1px solid ${theme.input.border}`,
+              color: theme.input.color,
+            }}
+          />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+          <input
+            type="text"
+            placeholder="Région"
+            value={sceneRegion}
+            onChange={(e) => setSceneRegion(e.target.value)}
+            style={{ 
+              padding: '0.5rem', 
+              backgroundColor: theme.input.background,
+              border: `1px solid ${theme.input.border}`,
+              color: theme.input.color,
+            }}
+          />
+          <input
+            type="text"
+            placeholder="Sous-lieu"
+            value={subLocation}
+            onChange={(e) => setSubLocation(e.target.value)}
+            style={{ 
+              padding: '0.5rem', 
+              backgroundColor: theme.input.background,
+              border: `1px solid ${theme.input.border}`,
+              color: theme.input.color,
+            }}
+          />
+        </div>
+        <button
+          onClick={async () => {
+            try {
+              const { applyLinkedElements } = useContextStore.getState()
+              const response = await contextAPI.getLinkedElements({
+                character_a: characterA || undefined,
+                character_b: characterB || undefined,
+                scene_region: sceneRegion || undefined,
+                sub_location: subLocation || undefined,
+              })
+              applyLinkedElements(response.linked_elements)
+              alert(`${response.total} éléments liés ajoutés`)
+            } catch (err) {
+              setError(getErrorMessage(err))
+            }
+          }}
+          style={{
+            padding: '0.5rem 1rem',
+            backgroundColor: theme.button.secondary?.background || theme.button.default.background,
+            color: theme.button.secondary?.color || theme.button.default.color,
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
+        >
+          Lier Éléments Connexes
+        </button>
+      </div>
+
+      {generationMode === 'interactions' && (
+        <div style={{ marginBottom: '1rem', padding: '1rem', border: `1px solid ${theme.border.primary}`, borderRadius: '4px' }}>
+          <h3 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1rem', fontWeight: 'bold' }}>
+            Continuité (Interaction précédente)
+          </h3>
+          <select
+            value={previousInteractionId}
+            onChange={(e) => setPreviousInteractionId(e.target.value)}
+            style={{ 
+              width: '100%', 
+              padding: '0.5rem', 
+              backgroundColor: theme.input.background,
+              border: `1px solid ${theme.input.border}`,
+              color: theme.input.color,
+            }}
+          >
+            <option value="">-- Aucune interaction précédente --</option>
+            {availableInteractions.map((interaction) => (
+              <option key={interaction.interaction_id} value={interaction.interaction_id}>
+                {interaction.title || interaction.interaction_id}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 

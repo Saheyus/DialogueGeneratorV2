@@ -97,3 +97,13 @@ class InteractionRelationsResponse(BaseModel):
     parents: List[str] = Field(default_factory=list, description="IDs des interactions parentes")
     children: List[str] = Field(default_factory=list, description="IDs des interactions enfants")
 
+
+class InteractionContextPathResponse(BaseModel):
+    """Réponse contenant le chemin de contexte d'une interaction (tous les parents jusqu'à la racine).
+    
+    Attributes:
+        path: Liste des interactions du chemin, de la racine à l'interaction cible.
+        total: Nombre total d'interactions dans le chemin.
+    """
+    path: List[InteractionResponse] = Field(..., description="Liste des interactions du chemin")
+    total: int = Field(..., description="Nombre total d'interactions dans le chemin")

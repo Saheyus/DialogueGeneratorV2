@@ -74,6 +74,7 @@ class GenerateInteractionVariantsRequest(BaseModel):
         max_context_tokens: Nombre maximum de tokens pour le contexte.
         system_prompt_override: Surcharge du system prompt (optionnel).
         llm_model_identifier: Identifiant du modèle LLM à utiliser.
+        previous_interaction_id: ID d'une interaction précédente pour la continuité narrative (optionnel).
     """
     k_variants: int = Field(default=1, ge=1, le=10, description="Nombre de variantes à générer")
     user_instructions: str = Field(..., min_length=1, description="Instructions spécifiques pour la scène")
@@ -81,6 +82,7 @@ class GenerateInteractionVariantsRequest(BaseModel):
     max_context_tokens: int = Field(default=1500, ge=100, le=50000, description="Nombre maximum de tokens pour le contexte")
     system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
     llm_model_identifier: str = Field(default="gpt-4o-mini", description="Identifiant du modèle LLM")
+    previous_interaction_id: Optional[str] = Field(None, description="ID d'une interaction précédente pour la continuité narrative")
 
 
 class DialogueVariantResponse(BaseModel):

@@ -10,6 +10,7 @@ from llm_client import ILLMClient
 from services.configuration_service import ConfigurationService
 from services.interaction_service import InteractionService
 from services.dialogue_generation_service import DialogueGenerationService
+from services.linked_selector import LinkedSelectorService
 from services.repositories.file_repository import FileInteractionRepository
 from factories.llm_factory import LLMClientFactory
 from constants import FilePaths, Defaults
@@ -137,6 +138,20 @@ def get_llm_client(
         config=llm_config,
         available_models=available_models
     )
+
+
+def get_linked_selector_service(
+    context_builder: Annotated[ContextBuilder, Depends(get_context_builder)]
+) -> LinkedSelectorService:
+    """Retourne le service de sélection d'éléments liés.
+    
+    Args:
+        context_builder: ContextBuilder injecté.
+        
+    Returns:
+        Instance de LinkedSelectorService.
+    """
+    return LinkedSelectorService(context_builder=context_builder)
 
 
 def get_request_id(request: Request) -> str:

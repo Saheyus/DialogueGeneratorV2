@@ -63,6 +63,7 @@ export interface GenerateInteractionVariantsRequest {
   max_context_tokens: number
   system_prompt_override?: string
   llm_model_identifier: string
+  previous_interaction_id?: string
 }
 
 // Interaction
@@ -127,6 +128,49 @@ export interface ItemListResponse {
   total: number
 }
 
+export interface SpeciesResponse {
+  name: string
+  data: Record<string, unknown>
+}
+
+export interface SpeciesListResponse {
+  species: SpeciesResponse[]
+  total: number
+}
+
+export interface CommunityResponse {
+  name: string
+  data: Record<string, unknown>
+}
+
+export interface CommunityListResponse {
+  communities: CommunityResponse[]
+  total: number
+}
+
+export interface RegionListResponse {
+  regions: string[]
+  total: number
+}
+
+export interface SubLocationListResponse {
+  sub_locations: string[]
+  total: number
+  region_name: string
+}
+
+export interface LinkedElementsRequest {
+  character_a?: string
+  character_b?: string
+  scene_region?: string
+  sub_location?: string
+}
+
+export interface LinkedElementsResponse {
+  linked_elements: string[]
+  total: number
+}
+
 // Config
 export interface LLMModelResponse {
   model_identifier: string
@@ -137,6 +181,15 @@ export interface LLMModelResponse {
 
 export interface LLMModelsListResponse {
   models: LLMModelResponse[]
+  total: number
+}
+
+export interface UnityDialoguesPathResponse {
+  path: string
+}
+
+export interface InteractionContextPathResponse {
+  path: InteractionResponse[]
   total: number
 }
 

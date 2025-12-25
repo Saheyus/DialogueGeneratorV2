@@ -1,9 +1,11 @@
 from typing import List, Optional, Dict, Tuple, Any
+from pathlib import Path
 from models.dialogue_structure import Interaction, DialogueLineElement, PlayerChoicesBlockElement
 from .repositories import IInteractionRepository
 from services.repositories import (
     InMemoryInteractionRepository, FileInteractionRepository, IInteractionRepository
 )
+from services.json_renderer import UnityJsonRenderer
 import logging
 import uuid
 import re
@@ -347,4 +349,53 @@ class InteractionService:
                 if 0 <= choice_index < len(element.choices):
                     return element.choices[choice_index].text
                     
-        return None 
+        return None
+    
+    def export_to_unity_json(
+        self, 
+        interaction_ids: List[str], 
+        output_path: Path,
+        normalize: bool = True
+    ) -> None:
+        """Exporte plusieurs interactions vers un fichier JSON Unity.
+        
+        Args:
+            interaction_ids: Liste des IDs d'interactions à exporter.
+            output_path: Chemin du fichier JSON de sortie.
+            normalize: Si True, normalise le JSON (supprime champs vides, etc.).
+            
+        Raises:
+            ValueError: Si certaines interactions n'existent pas ou si la validation échoue.
+        """
+        # Récupérer toutes les interactions
+        interactions: List[Interaction] = []
+        missing_ids: List[str] = []
+        
+        for interaction_id in interaction_ids:
+            interaction = self.get_by_id(interaction_id)
+            if interaction:
+                interactions.append(interaction)
+            else:
+                missing_ids.append(interaction_id)
+        
+        if missing_ids:
+            raise ValueError(f"Interactions introuvables : {missing_ids}")
+        
+        if not interactions:
+            raise ValueError("Aucune interaction à exporter")
+        
+        # Utiliser UnityJsonRenderer pour la conversion
+        renderer = UnityJsonRenderer()
+        
+        # Valider avant export
+        nodes = renderer.render_interactions(interactions)
+        is_valid, errors = renderer.validate_nodes(nodes)
+        
+        if not is_valid:
+            error_msg = "Erreurs de validation avant export :\n" + "\n".join(errors)
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        # Exporter vers fichier
+        renderer.render_interactions_to_file(interactions, output_path, normalize=normalize)
+        logger.info(f"Export Unity JSON réussi : {len(interactions)} interactions vers {output_path}") 

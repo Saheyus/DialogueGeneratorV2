@@ -9,16 +9,26 @@ from api.schemas.context import (
     LocationResponse,
     ItemListResponse,
     ItemResponse,
+    SpeciesListResponse,
+    SpeciesResponse,
+    CommunityListResponse,
+    CommunityResponse,
+    RegionListResponse,
+    SubLocationListResponse,
+    LinkedElementsRequest,
+    LinkedElementsResponse,
     BuildContextRequest,
     BuildContextResponse
 )
 from api.schemas.dialogue import EstimateTokensRequest, EstimateTokensResponse
 from api.dependencies import (
     get_context_builder,
+    get_linked_selector_service,
     get_request_id
 )
 from api.exceptions import NotFoundException, InternalServerException
 from context_builder import ContextBuilder
+from services.linked_selector import LinkedSelectorService
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +132,77 @@ async def list_locations(
     return LocationListResponse(
         locations=location_responses,
         total=len(location_responses)
+    )
+
+
+@router.get(
+    "/locations/regions",
+    response_model=RegionListResponse,
+    status_code=status.HTTP_200_OK
+)
+async def list_regions(
+    request: Request,
+    context_builder: Annotated[ContextBuilder, Depends(get_context_builder)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> RegionListResponse:
+    """Liste toutes les régions disponibles.
+    
+    Args:
+        request: La requête HTTP.
+        context_builder: ContextBuilder injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        Liste des régions.
+    """
+    regions = context_builder.get_regions()
+    
+    return RegionListResponse(
+        regions=regions,
+        total=len(regions)
+    )
+
+
+@router.get(
+    "/locations/regions/{name}/sub-locations",
+    response_model=SubLocationListResponse,
+    status_code=status.HTTP_200_OK
+)
+async def get_sub_locations(
+    name: str,
+    request: Request,
+    context_builder: Annotated[ContextBuilder, Depends(get_context_builder)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> SubLocationListResponse:
+    """Récupère les sous-lieux d'une région.
+    
+    Args:
+        name: Nom de la région.
+        request: La requête HTTP.
+        context_builder: ContextBuilder injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        Liste des sous-lieux de la région.
+        
+    Raises:
+        NotFoundException: Si la région n'existe pas.
+    """
+    # Vérifier que la région existe
+    region_details = context_builder.get_location_details_by_name(name)
+    if region_details is None or region_details.get("Catégorie") != "Région":
+        raise NotFoundException(
+            resource_type="Région",
+            resource_id=name,
+            request_id=request_id
+        )
+    
+    sub_locations = context_builder.get_sub_locations(name)
+    
+    return SubLocationListResponse(
+        sub_locations=sub_locations,
+        total=len(sub_locations),
+        region_name=name
     )
 
 
@@ -285,6 +366,189 @@ async def estimate_context_tokens(
         logger.exception(f"Erreur lors de l'estimation de tokens (request_id: {request_id})")
         raise InternalServerException(
             message="Erreur lors de l'estimation de tokens",
+            details={"error": str(e)},
+            request_id=request_id
+        )
+
+
+@router.get(
+    "/species",
+    response_model=SpeciesListResponse,
+    status_code=status.HTTP_200_OK
+)
+async def list_species(
+    request: Request,
+    context_builder: Annotated[ContextBuilder, Depends(get_context_builder)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> SpeciesListResponse:
+    """Liste toutes les espèces disponibles.
+    
+    Args:
+        request: La requête HTTP.
+        context_builder: ContextBuilder injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        Liste des espèces.
+    """
+    species = context_builder.species
+    species_responses = [
+        SpeciesResponse(name=spec.get("Nom", "Unknown"), data=spec)
+        for spec in species
+    ]
+    
+    return SpeciesListResponse(
+        species=species_responses,
+        total=len(species_responses)
+    )
+
+
+@router.get(
+    "/species/{name}",
+    response_model=SpeciesResponse,
+    status_code=status.HTTP_200_OK
+)
+async def get_species(
+    name: str,
+    request: Request,
+    context_builder: Annotated[ContextBuilder, Depends(get_context_builder)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> SpeciesResponse:
+    """Récupère une espèce par son nom.
+    
+    Args:
+        name: Nom de l'espèce.
+        request: La requête HTTP.
+        context_builder: ContextBuilder injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        L'espèce demandée.
+        
+    Raises:
+        NotFoundException: Si l'espèce n'existe pas.
+    """
+    species_data = context_builder.get_species_details_by_name(name)
+    if species_data is None:
+        raise NotFoundException(
+            resource_type="Espèce",
+            resource_id=name,
+            request_id=request_id
+        )
+    
+    return SpeciesResponse(name=name, data=species_data)
+
+
+@router.get(
+    "/communities",
+    response_model=CommunityListResponse,
+    status_code=status.HTTP_200_OK
+)
+async def list_communities(
+    request: Request,
+    context_builder: Annotated[ContextBuilder, Depends(get_context_builder)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> CommunityListResponse:
+    """Liste toutes les communautés disponibles.
+    
+    Args:
+        request: La requête HTTP.
+        context_builder: ContextBuilder injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        Liste des communautés.
+    """
+    communities = context_builder.communities
+    community_responses = [
+        CommunityResponse(name=comm.get("Nom", "Unknown"), data=comm)
+        for comm in communities
+    ]
+    
+    return CommunityListResponse(
+        communities=community_responses,
+        total=len(community_responses)
+    )
+
+
+@router.get(
+    "/communities/{name}",
+    response_model=CommunityResponse,
+    status_code=status.HTTP_200_OK
+)
+async def get_community(
+    name: str,
+    request: Request,
+    context_builder: Annotated[ContextBuilder, Depends(get_context_builder)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> CommunityResponse:
+    """Récupère une communauté par son nom.
+    
+    Args:
+        name: Nom de la communauté.
+        request: La requête HTTP.
+        context_builder: ContextBuilder injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        La communauté demandée.
+        
+    Raises:
+        NotFoundException: Si la communauté n'existe pas.
+    """
+    community_data = context_builder.get_community_details_by_name(name)
+    if community_data is None:
+        raise NotFoundException(
+            resource_type="Communauté",
+            resource_id=name,
+            request_id=request_id
+        )
+    
+    return CommunityResponse(name=name, data=community_data)
+
+
+@router.post(
+    "/linked-elements",
+    response_model=LinkedElementsResponse,
+    status_code=status.HTTP_200_OK
+)
+async def get_linked_elements(
+    request_data: LinkedElementsRequest,
+    request: Request,
+    linked_selector: Annotated[LinkedSelectorService, Depends(get_linked_selector_service)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> LinkedElementsResponse:
+    """Suggère des éléments liés à partir de personnages et lieux.
+    
+    Args:
+        request_data: Données de la requête (personnages, lieux).
+        request: La requête HTTP.
+        linked_selector: LinkedSelectorService injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        Liste des éléments liés à sélectionner.
+    """
+    try:
+        elements_to_select = linked_selector.get_elements_to_select(
+            character_a=request_data.character_a,
+            character_b=request_data.character_b,
+            scene_region=request_data.scene_region,
+            sub_location=request_data.sub_location
+        )
+        
+        # Convertir le set en liste pour la réponse JSON
+        linked_elements_list = list(elements_to_select)
+        
+        return LinkedElementsResponse(
+            linked_elements=linked_elements_list,
+            total=len(linked_elements_list)
+        )
+        
+    except Exception as e:
+        logger.exception(f"Erreur lors de la récupération des éléments liés (request_id: {request_id})")
+        raise InternalServerException(
+            message="Erreur lors de la récupération des éléments liés",
             details={"error": str(e)},
             request_id=request_id
         )

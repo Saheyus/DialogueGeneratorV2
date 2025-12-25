@@ -3,7 +3,13 @@
  */
 import { useState, useEffect } from 'react'
 import * as contextAPI from '../../api/context'
-import type { CharacterResponse, LocationResponse, ItemResponse } from '../../types/api'
+import type { 
+  CharacterResponse, 
+  LocationResponse, 
+  ItemResponse,
+  SpeciesResponse,
+  CommunityResponse,
+} from '../../types/api'
 import { ContextList } from './ContextList'
 import { ContextDetail } from './ContextDetail'
 import { SelectedContextSummary } from './SelectedContextSummary'
@@ -11,18 +17,28 @@ import { useContextStore } from '../../store/contextStore'
 import { getErrorMessage } from '../../types/errors'
 import { theme } from '../../theme'
 
-type TabType = 'characters' | 'locations' | 'items'
+type TabType = 'characters' | 'locations' | 'items' | 'species' | 'communities'
 
 export function ContextSelector() {
   const [activeTab, setActiveTab] = useState<TabType>('characters')
   const [characters, setCharacters] = useState<CharacterResponse[]>([])
   const [locations, setLocations] = useState<LocationResponse[]>([])
   const [items, setItems] = useState<ItemResponse[]>([])
+  const [species, setSpecies] = useState<SpeciesResponse[]>([])
+  const [communities, setCommunities] = useState<CommunityResponse[]>([])
   const [selectedDetail, setSelectedDetail] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const { selections, toggleCharacter, toggleLocation, toggleItem, clearSelections } = useContextStore()
+  const { 
+    selections, 
+    toggleCharacter, 
+    toggleLocation, 
+    toggleItem, 
+    toggleSpecies,
+    toggleCommunity,
+    clearSelections 
+  } = useContextStore()
 
   useEffect(() => {
     loadData()
@@ -32,14 +48,18 @@ export function ContextSelector() {
     setIsLoading(true)
     setError(null)
     try {
-      const [charsRes, locsRes, itemsRes] = await Promise.all([
+      const [charsRes, locsRes, itemsRes, speciesRes, communitiesRes] = await Promise.all([
         contextAPI.listCharacters(),
         contextAPI.listLocations(),
         contextAPI.listItems(),
+        contextAPI.listSpecies(),
+        contextAPI.listCommunities(),
       ])
       setCharacters(charsRes.characters)
       setLocations(locsRes.locations)
       setItems(itemsRes.items)
+      setSpecies(speciesRes.species)
+      setCommunities(communitiesRes.communities)
     } catch (err) {
       setError(getErrorMessage(err))
     } finally {
@@ -49,13 +69,17 @@ export function ContextSelector() {
 
   const handleItemClick = async (name: string) => {
     try {
-      let item: CharacterResponse | LocationResponse | ItemResponse | null = null
+      let item: CharacterResponse | LocationResponse | ItemResponse | SpeciesResponse | CommunityResponse | null = null
       if (activeTab === 'characters') {
         item = await contextAPI.getCharacter(name)
       } else if (activeTab === 'locations') {
         item = await contextAPI.getLocation(name)
       } else if (activeTab === 'items') {
         item = await contextAPI.getItem(name)
+      } else if (activeTab === 'species') {
+        item = await contextAPI.getSpecies(name)
+      } else if (activeTab === 'communities') {
+        item = await contextAPI.getCommunity(name)
       }
 
       if (item && selectedDetail === name) {
@@ -75,31 +99,43 @@ export function ContextSelector() {
       toggleLocation(name)
     } else if (activeTab === 'items') {
       toggleItem(name)
+    } else if (activeTab === 'species') {
+      toggleSpecies(name)
+    } else if (activeTab === 'communities') {
+      toggleCommunity(name)
     }
     if (selectedDetail === name) {
       setSelectedDetail(null)
     }
   }
 
-  const getCurrentItems = (): (CharacterResponse | LocationResponse | ItemResponse)[] => {
+  const getCurrentItems = (): (CharacterResponse | LocationResponse | ItemResponse | SpeciesResponse | CommunityResponse)[] => {
     if (activeTab === 'characters') return characters
     if (activeTab === 'locations') return locations
-    return items
+    if (activeTab === 'items') return items
+    if (activeTab === 'species') return species
+    if (activeTab === 'communities') return communities
+    return []
   }
 
   const getSelectedItems = (): string[] => {
     if (activeTab === 'characters') return selections.characters
     if (activeTab === 'locations') return selections.locations
-    return selections.items
+    if (activeTab === 'items') return selections.items
+    if (activeTab === 'species') return selections.species
+    if (activeTab === 'communities') return selections.communities
+    return []
   }
 
   const getSelectedDetailItem = ():
     | CharacterResponse
     | LocationResponse
     | ItemResponse
+    | SpeciesResponse
+    | CommunityResponse
     | null => {
     if (!selectedDetail) return null
-    const allItems = [...characters, ...locations, ...items]
+    const allItems = [...characters, ...locations, ...items, ...species, ...communities]
     return allItems.find((item) => item.name === selectedDetail) || null
   }
 
@@ -159,6 +195,42 @@ export function ContextSelector() {
           }}
         >
           Objets ({items.length})
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('species')
+            setSelectedDetail(null)
+          }}
+          style={{
+            flex: 1,
+            padding: '0.75rem',
+            border: 'none',
+            borderBottom: activeTab === 'species' ? `2px solid ${theme.button.primary.background}` : 'none',
+            backgroundColor: activeTab === 'species' ? theme.background.tertiary : 'transparent',
+            color: theme.text.primary,
+            cursor: 'pointer',
+            fontWeight: activeTab === 'species' ? 'bold' : 'normal',
+          }}
+        >
+          Espèces ({species.length})
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('communities')
+            setSelectedDetail(null)
+          }}
+          style={{
+            flex: 1,
+            padding: '0.75rem',
+            border: 'none',
+            borderBottom: activeTab === 'communities' ? `2px solid ${theme.button.primary.background}` : 'none',
+            backgroundColor: activeTab === 'communities' ? theme.background.tertiary : 'transparent',
+            color: theme.text.primary,
+            cursor: 'pointer',
+            fontWeight: activeTab === 'communities' ? 'bold' : 'normal',
+          }}
+        >
+          Communautés ({communities.length})
         </button>
       </div>
 

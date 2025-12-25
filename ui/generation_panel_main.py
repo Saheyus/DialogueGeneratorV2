@@ -35,14 +35,12 @@ from .generation_panel.handlers import (
 # --- Imports pour compatibilité exécution directe (try/except) ---
 try:
     from services.linked_selector import LinkedSelectorService
-    from services.yarn_renderer import JinjaYarnRenderer
     from llm_client import OpenAIClient, DummyLLMClient
 except ImportError:
     current_dir = pathlib.Path(__file__).resolve().parent.parent
     if str(current_dir) not in sys.path:
         sys.path.insert(0, str(current_dir))
     from services.linked_selector import LinkedSelectorService
-    from services.yarn_renderer import JinjaYarnRenderer
     from llm_client import OpenAIClient, DummyLLMClient
 
 logger = logging.getLogger(__name__)
@@ -110,7 +108,6 @@ class GenerationPanel(QWidget):
         self.llm_client = llm_client
         self.main_window_ref = main_window_ref
         self.linked_selector = LinkedSelectorService(self.context_builder)
-        self.yarn_renderer = JinjaYarnRenderer()
         
         # Initialisation de interaction_service ici pour qu'il soit dispo dans _init_ui
         interactions_dir = DEFAULT_INTERACTIONS_DIR
