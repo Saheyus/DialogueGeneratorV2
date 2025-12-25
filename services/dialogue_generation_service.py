@@ -469,12 +469,14 @@ class DialogueGenerationService(IDialogueGenerationService):
         full_prompt: Optional[str] = None
         estimated_tokens: int = 0
         context_summary: Optional[str] = None # Initialisation
+        # Copie pour pouvoir utiliser .pop() sans affecter l'original en dehors de cette portée
+        current_context_selections = context_selections.copy()
 
         try:
             # 1. Construire le contexte avec ContextBuilder
             # Note: user_instructions est aussi passé à context_builder comme scene_instruction.
             context_summary = self.context_builder.build_context(
-                selected_elements=context_selections, 
+                selected_elements=current_context_selections, 
                 scene_instruction=user_instructions,
                 max_tokens=max_context_tokens
             )
@@ -482,9 +484,9 @@ class DialogueGenerationService(IDialogueGenerationService):
                 context_summary = "" # Assurer une chaîne vide
                 logger.warning("ContextBuilder a retourné None pour le résumé du contexte. Utilisation d'une chaîne vide.")
 
-            # 2. Extraire les informations de scène pour PromptEngine depuis context_selections
-            scene_protagonists_dict = context_selections.pop("_scene_protagonists", {}) # Utiliser {} comme défaut
-            scene_location_dict = context_selections.pop("_scene_location", {}) # Utiliser {} comme défaut
+            # 2. Extraire les informations de scène pour PromptEngine depuis current_context_selections
+            scene_protagonists_dict = current_context_selections.pop("_scene_protagonists", {}) # Utiliser {} comme défaut
+            scene_location_dict = current_context_selections.pop("_scene_location", {}) # Utiliser {} comme défaut
 
             # 3. Construire le prompt final avec PromptEngine
             original_system_prompt = None
@@ -494,7 +496,7 @@ class DialogueGenerationService(IDialogueGenerationService):
                 logger.info("Utilisation d'un system_prompt_override pour la prévisualisation.")
 
             # Déterminer si nous générons une interaction structurée
-            generate_interaction = structured_output and context_selections.get("generate_interaction", False)
+            generate_interaction = structured_output and current_context_selections.get("generate_interaction", False)
             generation_params = {
                 "structured_output": structured_output,
                 "generate_interaction": generate_interaction
