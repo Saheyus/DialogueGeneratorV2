@@ -44,9 +44,18 @@ app = FastAPI(
 )
 
 # Configuration CORS
+cors_origins_env = os.getenv("CORS_ORIGINS", "")
+is_production_env = os.getenv("ENVIRONMENT", "development") == "production"
+
+# En production, lire depuis CORS_ORIGINS (format CSV), sinon permettre tout en dev
+if is_production_env and cors_origins_env:
+    cors_origins = [origin.strip() for origin in cors_origins_env.split(",")]
+else:
+    cors_origins = ["*"]  # Dev par défaut
+
 app.add_middleware(
     FastAPICORSMiddleware,
-    allow_origins=["*"],  # À restreindre en production
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -138,6 +147,25 @@ app.include_router(interactions.router, prefix="/api/v1/interactions", tags=["In
 app.include_router(context.router, prefix="/api/v1/context", tags=["Context"])
 app.include_router(config.router, prefix="/api/v1/config", tags=["Configuration"])
 
+# Servir le frontend statique en production (APRÈS les routes API)
+if is_production_env:
+    try:
+        from fastapi.staticfiles import StaticFiles
+        from pathlib import Path
+        
+        # Chemin vers le dossier dist du frontend
+        frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+        
+        if frontend_dist.exists():
+            app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="static")
+            logger.info(f"Frontend statique monté depuis: {frontend_dist}")
+        else:
+            logger.warning(f"Dossier frontend/dist introuvable: {frontend_dist}")
+    except ImportError:
+        logger.warning("StaticFiles non disponible, le frontend ne sera pas servi")
+    except Exception as e:
+        logger.error(f"Erreur lors du montage du frontend statique: {e}")
+
 
 if __name__ == "__main__":
     import uvicorn
@@ -148,7 +176,8 @@ if __name__ == "__main__":
     def open_browser():
         """Ouvre le navigateur après un court délai pour laisser le serveur démarrer."""
         time.sleep(1.5)  # Attendre que le serveur démarre
-        webbrowser.open("http://localhost:8000/api/docs")
+        port = int(os.getenv("API_PORT", "4242"))
+        webbrowser.open(f"http://localhost:{port}/api/docs")
     
     # Lancer l'ouverture du navigateur dans un thread séparé
     browser_thread = threading.Thread(target=open_browser, daemon=True)
@@ -157,7 +186,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "api.main:app",
         host="0.0.0.0",
-        port=8000,
+        port=int(os.getenv("API_PORT", "4242")),
         reload=True,
         log_level="info"
     )

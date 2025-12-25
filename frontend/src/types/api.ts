@@ -28,9 +28,9 @@ export interface ContextSelection {
   species: string[]
   communities: string[]
   dialogues_examples: string[]
-  _scene_protagonists?: Record<string, any>
-  _scene_location?: Record<string, any>
-  generation_settings?: Record<string, any>
+  _scene_protagonists?: Record<string, unknown>
+  _scene_location?: Record<string, unknown>
+  generation_settings?: Record<string, unknown>
 }
 
 export interface GenerateDialogueVariantsRequest {
@@ -66,10 +66,26 @@ export interface GenerateInteractionVariantsRequest {
 }
 
 // Interaction
+export interface DialogueElement {
+  type: 'dialogue'
+  content: string
+  speaker?: string
+}
+
+export interface ChoiceElement {
+  type: 'choice'
+  options: Array<{
+    text: string
+    next_interaction_id: string
+  }>
+}
+
+export type InteractionElement = DialogueElement | ChoiceElement | Record<string, unknown>
+
 export interface InteractionResponse {
   interaction_id: string
   title: string
-  elements: any[]
+  elements: InteractionElement[]
   header_commands: string[]
   header_tags: string[]
   next_interaction_id_if_no_choices?: string
@@ -83,7 +99,7 @@ export interface InteractionListResponse {
 // Context
 export interface CharacterResponse {
   name: string
-  data: Record<string, any>
+  data: Record<string, unknown>
 }
 
 export interface CharacterListResponse {
@@ -93,11 +109,21 @@ export interface CharacterListResponse {
 
 export interface LocationResponse {
   name: string
-  data: Record<string, any>
+  data: Record<string, unknown>
 }
 
 export interface LocationListResponse {
   locations: LocationResponse[]
+  total: number
+}
+
+export interface ItemResponse {
+  name: string
+  data: Record<string, unknown>
+}
+
+export interface ItemListResponse {
+  items: ItemResponse[]
   total: number
 }
 

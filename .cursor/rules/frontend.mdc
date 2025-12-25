@@ -14,4 +14,5 @@ alwaysApply: false
 - **UX**: États loading/error/empty gérés, messages d'erreur utilisateur-friendly, pas de secrets exposés.
 - **Tests**: Tests unitaires composants (React Testing Library), tests hooks, mocks pour API client.
 - **Build**: Vite pour dev/build, proxy API en dev (`vite.config.ts`), build production dans `dist/`.
-- **Références**: Voir `frontend/README.md` pour setup, `README_API.md` pour contrats API.
+- **Commande dev**: `npm run dev` (depuis racine, lance tout) ou `cd frontend && npm run dev` (frontend seul).
+- **Références**: Voir `README_API.md` pour contrats API.

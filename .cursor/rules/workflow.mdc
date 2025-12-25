@@ -1,32 +1,32 @@
 ---
-description: Workflow (global) — tests, UI smoke, git (Windows)
+description: Workflow (global) — commandes essentielles, tests, déploiement
 globs: []
 alwaysApply: true
 ---
 
-- Quand du code a changé:
-  - **Tests automatiques** : `pytest tests/` (exécuter automatiquement, ne pas oublier)
+- **Commandes essentielles (donner en une ligne)** :
+  - Développement : `npm run dev` (lance backend sur 4242 + frontend sur 3000 automatiquement)
+  - Tests : `npm test` ou `pytest tests/`
+  - Build production : `npm run deploy:build`
+  - Vérification déploiement : `npm run deploy:check`
+
+- **Quand du code a changé** :
+  - **Backend Python** : `pytest tests/` (exécuter automatiquement)
     - Tests API : `pytest tests/api/` (utilise TestClient FastAPI, pas besoin de serveur)
-    - Tests unitaires : `pytest tests/ -k "not api"` si besoin d'exclure les tests API
-    - Couverture : `pytest tests/ --cov=api --cov=services --cov-report=term-missing`
-  - Pour l'UI desktop: préciser ce qui doit être vérifié et lancer un smoke UI via `python main_app.py`;
-  - Pour l'API: tester les endpoints via `python -m api.main` puis vérifier `/api/docs` et tests manuels;
-  - Pour le frontend: `cd frontend && npm run dev` et vérifier l'intégration avec l'API.
+    - Tests unitaires : `pytest tests/ -k "not api"`
+  - **Frontend React** : `.\scripts\test-frontend.ps1` ou `npm run test:frontend` (build + lint + tests unitaires)
+    - Build check détecte erreurs TypeScript
+    - Lint check détecte erreurs de code
+    - Tests Vitest vérifient les composants
+  - **UI desktop** : `python main_app.py` (boucle Qt, nécessite arrêt manuel)
+  - **Interface web** : `npm run dev` (démarre tout sur localhost:3000)
 
-- **Exécution automatique des tests** :
-  - **Avant commit** : exécuter `pytest tests/` (idéalement via pre-commit hook, voir ci-dessous)
-  - **Tests API** : utiliser `TestClient` de FastAPI, pas de serveur réel nécessaire (tests dans `tests/api/`)
-  - **Mocks** : utiliser `pytest-mock` pour services externes (LLM, fichiers GDD si besoin)
-  - **Commande standard** : `pytest tests/` exécute tous les tests (API + unitaires + UI)
-  - **Configuration** : `pytest.ini` définit les options (asyncio_mode, testpaths, etc.)
-  - **Script Windows** : `.\scripts\run_tests.ps1` pour exécuter les tests facilement
-  
-- **Pre-commit hook (optionnel mais recommandé)** :
-  - Exemple disponible : `.git/hooks/pre-commit.example` (copier vers `.git/hooks/pre-commit` pour activer)
-  - Sur Windows : utiliser Git Bash ou adapter le script pour PowerShell
-  - Si tests échouent, empêcher le commit (ou avertir selon préférence)
-  - Alternative : utiliser le framework `pre-commit` (https://pre-commit.com/) pour plus de fonctionnalités
+- **Tests** :
+  - Commande standard : `pytest tests/` (tous les tests)
+  - Tests API : utiliser `TestClient` de FastAPI, pas de serveur réel
+  - Mocks : `pytest-mock` pour services externes (LLM, fichiers GDD)
+  - Configuration : `pytest.ini` définit les options (asyncio_mode, testpaths, etc.)
 
-- Note (automation Windows): `python main_app.py` ne termine pas tout seul (boucle Qt). Pour un smoke automatisé, préférer le script dédié et versionné dans le repo (`scripts/smoke_ui.py`) plutôt qu'une one-liner shell fragile.
+- **Avant commit** : `pytest tests/` (backend) + `.\scripts\test-frontend.ps1` (frontend). Si vert : commit + push.
 
-- Si tout est vert (tests passent): commit + push.
+- **Déploiement** : `npm run deploy:build` puis uploader + configurer `ENVIRONMENT=production` et `CORS_ORIGINS`.

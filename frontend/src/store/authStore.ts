@@ -1,54 +1,87 @@
 /**
- * Store Zustand pour l'authentification.
+ * Store Zustand pour l'authentification avec persistance de session.
  */
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import type { UserResponse } from '../types/api'
 import * as authAPI from '../api/auth'
 
-interface AuthState {
+export interface AuthState {
   user: UserResponse | null
   isAuthenticated: boolean
   isLoading: boolean
   login: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
   fetchCurrentUser: () => Promise<void>
+  initialize: () => Promise<void>
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  isAuthenticated: false,
-  isLoading: false,
+export type UseAuthStoreReturn = ReturnType<typeof useAuthStore>
 
-  login: async (username: string, password: string) => {
-    set({ isLoading: true })
-    try {
-      await authAPI.login({ username, password })
-      const user = await authAPI.getCurrentUser()
-      set({ user, isAuthenticated: true, isLoading: false })
-    } catch (error) {
-      set({ isLoading: false })
-      throw error
-    }
-  },
+const STORAGE_KEY = 'auth-storage'
 
-  logout: async () => {
-    try {
-      await authAPI.logout()
-    } catch (error) {
-      // Ignorer les erreurs de déconnexion
-    } finally {
-      set({ user: null, isAuthenticated: false })
-    }
-  },
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
 
-  fetchCurrentUser: async () => {
-    set({ isLoading: true })
-    try {
-      const user = await authAPI.getCurrentUser()
-      set({ user, isAuthenticated: true, isLoading: false })
-    } catch (error) {
-      set({ user: null, isAuthenticated: false, isLoading: false })
+      login: async (username: string, password: string) => {
+        set({ isLoading: true })
+        try {
+          await authAPI.login({ username, password })
+          const user = await authAPI.getCurrentUser()
+          set({ user, isAuthenticated: true, isLoading: false })
+        } catch (error) {
+          set({ isLoading: false })
+          throw error
+        }
+      },
+
+      logout: async () => {
+        try {
+          await authAPI.logout()
+        } catch (error) {
+          // Ignorer les erreurs de déconnexion
+        } finally {
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('refresh_token')
+          set({ user: null, isAuthenticated: false })
+        }
+      },
+
+      fetchCurrentUser: async () => {
+        set({ isLoading: true })
+        try {
+          const user = await authAPI.getCurrentUser()
+          set({ user, isAuthenticated: true, isLoading: false })
+        } catch (error) {
+          // Si le token est invalide, nettoyer la session
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('refresh_token')
+          set({ user: null, isAuthenticated: false, isLoading: false })
+        }
+      },
+
+      // Initialise la session depuis le localStorage
+      initialize: async () => {
+        const token = localStorage.getItem('access_token')
+        if (token) {
+          // Vérifier que le token est encore valide
+          await useAuthStore.getState().fetchCurrentUser()
+        }
+      },
+    }),
+    {
+      name: STORAGE_KEY,
+      partialize: (state) => ({
+        // Ne persister que l'user et l'état d'authentification
+        // Les tokens restent dans localStorage via le client API
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
+      }),
     }
-  },
-}))
+  )
+)
 

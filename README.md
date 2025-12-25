@@ -2,6 +2,19 @@
 
 Ce projet vise à créer une application autonome pour assister à la création de dialogues pour jeux de rôle, en s'interfaçant avec des modèles de langage (LLM) et en s'appuyant sur un Game Design Document (GDD) existant.
 
+## 🚀 Démarrage rapide
+
+```bash
+npm install          # Première fois seulement
+npm run dev          # Lance backend + frontend automatiquement
+```
+
+**L'app sera accessible sur http://localhost:3000**
+
+L'application propose **deux interfaces** :
+- **Interface Desktop** (PySide6) : `python main_app.py`
+- **Interface Web** (React + FastAPI) : `npm run dev`
+
 ## Objectif Principal (Rappel des Spécifications)
 
 1.  Charger le GDD (via des fichiers JSON extraits de Notion).

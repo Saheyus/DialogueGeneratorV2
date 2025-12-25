@@ -7,6 +7,7 @@ import type {
   GenerateDialogueVariantsResponse,
   GenerateInteractionVariantsRequest,
   InteractionResponse,
+  ContextSelection,
 } from '../types/api'
 
 /**
@@ -39,7 +40,7 @@ export async function generateInteractionVariants(
  * Estime le nombre de tokens pour un contexte donné.
  */
 export async function estimateTokens(
-  contextSelections: any,
+  contextSelections: ContextSelection,
   userInstructions: string,
   maxContextTokens: number
 ): Promise<{ context_tokens: number; total_estimated_tokens: number }> {

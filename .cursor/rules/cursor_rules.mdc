@@ -11,3 +11,4 @@ alwaysApply: true
 - **Organisation**: Une règle par domaine/concern (backend_api, frontend, tests, etc.). `alwaysApply: true` pour règles générales (comme celle-ci), `false` pour règles spécifiques à certains fichiers.
 - **Références croisées**: Dans les règles, référencer les docs détaillées (`README_API.md`, `docs/DEPLOYMENT.md`) pour plus de contexte, garder les règles concises.
 - **Exemples**: Voir `.cursor/rules/backend_api.mdc`, `.cursor/rules/frontend.mdc` pour exemples de règles bien structurées.
+- **Documentation Markdown**: Seuls le fichier `README*.md` peut être à la racine du projet. Tous les autres fichiers `.md` (spécifications techniques, analyses, documentation détaillée) doivent être placés dans `docs/`. 
