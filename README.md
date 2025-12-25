@@ -176,5 +176,22 @@ Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux m
         *   Adaptation de l'interface utilisateur de `DialogueGenerator`.
     *   Cette approche représente une évolution significative pour la génération de dialogues dynamiques et contextuellement conscients.
 
+## Dépannage
+
+### Erreur Git "fatal: bad object refs/heads/desktop.ini" (Windows)
+
+**Symptôme** : Git affiche des erreurs comme `fatal: bad object refs/heads/desktop.ini` ou `fatal: bad object refs/desktop.ini`.
+
+**Cause** : Windows crée automatiquement des fichiers `desktop.ini` dans les dossiers pour la personnalisation de l'affichage. Si ces fichiers sont créés dans `.git/refs/`, Git les traite comme des références invalides.
+
+**Solution** : Exécuter le script de nettoyage :
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/cleanup_desktop_ini.ps1
+```
+
+Ce script déplace tous les fichiers `desktop.ini` de `.git/` vers `.git/_desktop_ini_quarantine/` sans les supprimer. Vous pouvez supprimer le dossier de quarantaine une fois que Git fonctionne correctement.
+
+**Prévention** : Le `.gitignore` ignore déjà `desktop.ini`, mais cela n'empêche pas Windows d'en créer dans `.git/`. Si le problème réapparaît, réexécutez le script de nettoyage.
+
 ---
 *Ce document sera mis à jour au fur et à mesure de l'avancement du projet.* 
