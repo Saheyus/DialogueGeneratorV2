@@ -1,9 +1,11 @@
 ---
-description: 
-globs: 
-alwaysApply: true
+description: Tests — pytest/pytest-qt/pytest-asyncio, isolation, typing
+globs: ["tests/**/*.py"]
+alwaysApply: false
 ---
-- Chaque fois que tu finis une tâche, lance les tests unitaires avec pytest
-- Chaque fois que tu finis une tâche, précise ce qui doit être testé dans l'interface puis lance un tests d'interface avec "python main_app.py" en avant-plan
-
-- Une fois les tests validés, commit et push
+- Utiliser uniquement pytest et plugins (pytest-qt, pytest-asyncio, pytest-mock). Ne pas utiliser `unittest`.
+- Les tests vivent dans `tests/`. Pour tout nouveau sous-package de tests : ajouter `__init__.py`.
+- Pour tout test/fixture modifié/ajouté : annotations de types + docstrings.
+- Éviter réseau/IO externes par défaut : mock/monkeypatch (OpenAI, env vars, filesystem hors `tmp_path`).
+- UI/Qt : préférer `qtbot`, `qtbot.addWidget`, timeouts explicites; éviter dépendances GDD non garanties.
+- Si `TYPE_CHECKING` : importer les types de fixtures selon le standard du projet (_pytest/pytest-mock).

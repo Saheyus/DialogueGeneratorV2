@@ -8,9 +8,9 @@ Concevoir une **application autonome** (exécutable Windows) qui :
 
 2. Permet à l’utilisateur de **sélectionner** rapidement le contexte (personnages, lieux, scène) et d’enrichir les métadonnées (conditions de compétence, traits, effets).
 
-3. Génère, évalue et valide des nœuds **Yarn** complets en appelant un LLM (cloud ou local).
+3. Génère, évalue et valide des **interactions de dialogue** au format JSON custom (compatible Unity) en appelant un LLM (cloud ou local).
 
-4. Écrit les fichiers `.yarn` sous `Assets/Dialogues/`, compile‑les et, sur validation, commit Git.
+4. Écrit les fichiers JSON sous `Assets/Dialogues/generated/` et, sur validation, commit Git.
 
 5. Laisse intacte la pipeline existante.
 
@@ -42,13 +42,12 @@ Concevoir une **application autonome** (exécutable Windows) qui :
 │  - ContextBuilder           │
 │  - PromptEngine             │
 │  - LLMClient (pluggable)    │
-│  - YarnRenderer (Jinja2)    │
-│  - CompilerWrapper          │
+│  - JSON Exporter            │
 │  - GitService               │
 └─────────────────────────────┘
-                              │  .yarn
+                              │  .json
                               ▼
-                     Unity + Yarn Spinner
+                     Unity (format JSON custom)
 ```
 
 ---
@@ -69,7 +68,7 @@ Concevoir une **application autonome** (exécutable Windows) qui :
 
 - Combine :
   
-  - *system prompt* fixe (grammaire Yarn, règles RPG).
+  - *system prompt* fixe (format JSON custom Unity, règles RPG).
   
   - *context* (output ContextBuilder).
   
@@ -97,19 +96,19 @@ Implémentations :
 
 - Score > threshold sinon relance (max rounds configurable).
 
-### 3.5 YarnRenderer
+### 3.5 JSON Exporter
 
-- Jinja2 → `.yarn` : entête YAML, balises `<<if>>`, etc.
+- Exporte les interactions au format JSON custom Unity.
 
-- Garantit l’échappement des guillemets et caractères spéciaux.
+- Utilise le modèle Pydantic `Interaction` pour garantir la validité du schéma.
 
-### 3.6 CompilerWrapper
+- Les interactions sont stockées directement en JSON dans `data/interactions/`.
 
-- Appelle `yarnspinner-cli compile`.
+### 3.6 (Legacy) YarnRenderer
 
-- Capture erreurs, renvoie ligne/colonne à la UI.
+- **Note :** Conservé pour compatibilité, mais Unity utilise maintenant directement le format JSON.
 
-- **Doute :** faut‑il proposer un *lint* supplémentaire ?
+- Peut être utilisé pour exporter vers Yarn si nécessaire pour d'autres outils.
 
 ### 3.7 GitService
 
@@ -143,7 +142,7 @@ Implémentations :
 | 2     | Sélectionne « Barmaid » + « Taverne » | ContextBuilder renvoie 1 200 tokens |
 | 3     | Règle *k=3*, modèle `gpt‑4o-mini`     | PromptEngine compose prompt         |
 | 4     | Clique **Generate**                   | LLMClient → 3 variants              |
-| 5     | Lit, choisit la nº2                   | YarnRenderer + compile              |
+| 5     | Lit, choisit la nº2                   | Export JSON                        |
 | 6     | **Commit**                            | GitService push                     |
 | 7     | Alt‑Tab Unity ➜ Play                  | Import auto, test                   |
 
@@ -157,7 +156,7 @@ Total clics : ≃ 6.
 | ----------- | ------------- | ----------------------------------- |
 | Cache GDD   | JSON lines    | `%APPDATA%\RPGGen\cache.jsonl`      |
 | Config      | `config.yaml` | même dossier que l'exe              |
-| Yarn généré | Texte         | `Assets/Dialogues/generated/*.yarn` |
+| Dialogues générés | JSON         | `Assets/Dialogues/generated/*.json` |
 | Logs        | HTML (rich)   | `logs/YYYY-MM-DD.html`              |
 
 ---
@@ -190,6 +189,6 @@ Total clics : ≃ 6.
 
 ## 9. Conclusion
 
-Cette architecture isole la **génération IA** dans un outil léger, diff‑friendly, et compatible avec votre pipeline Unity/Yarn existant. Elle laisse la porte ouverte à des extensions (auto‑critique, modèle local) sans perturber `main.py`/`filter.py`. Les choix techniques (JSON pivot, Yarn simplifié, UI desktop autonome) visent à minimiser les clics et les erreurs, tout en préservant votre contrôle rédactionnel.
+Cette architecture isole la **génération IA** dans un outil léger, diff‑friendly, et compatible avec votre pipeline Unity (format JSON custom). Elle laisse la porte ouverte à des extensions (auto‑critique, modèle local, version web) sans perturber `main.py`/`filter.py`. Les choix techniques (JSON pivot, UI desktop autonome) visent à minimiser les clics et les erreurs, tout en préservant votre contrôle rédactionnel.
 
 > **Doutes restants :** quelle granularité pour les presets de contexte ? faut‑il une prévisualisation RichText du Yarn ? Ces points peuvent être affinés lors du premier sprint.

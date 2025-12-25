@@ -143,6 +143,38 @@ Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux m
 *   **`YarnRenderer`** : Module pour convertir la sortie LLM (potentiellement structurée) en fichiers `.yarn` valides.
 *   **`CompilerWrapper`** : Pour appeler `yarnspinner-cli compile`.
 *   **`GitService`** : Pour l'intégration Git.
+*   **Stratégie Avancée de Génération de Variantes : Les "Événements Notables"**
+    *   Pour améliorer la réactivité des dialogues et gérer la multiplicité des états du monde d'un RPG, une stratégie avancée est envisagée pour la construction du contexte et la génération de variantes.
+    *   **Concept Principal :**
+        *   Au lieu de se baser uniquement sur des variables simples, cette approche introduit la notion d'"**Événements Notables**".
+        *   Chaque événement ou point de divergence narratif clé est identifié (ex: `decision_guilde_voleurs`, `issue_bataille_fort_dragon`).
+        *   Chaque événement peut avoir plusieurs **états distincts** (ex: pour `decision_guilde_voleurs` : état 0 = non survenu, état 1 = joueur trahit la guilde, état 2 = joueur reste loyal).
+    *   **Structure d'un État d'Événement :**
+        *   **Valeur pour le Code :** Un identifiant simple (entier, chaîne courte) utilisé dans la logique du jeu et pour les conditions Yarn Spinner (ex: `decision_guilde_voleurs = 1`).
+        *   **Description Textuelle pour le LLM :** Une description narrative détaillée de l'état et de ses implications. Cette description fournit un contexte riche au LLM.
+            *   Exemple pour `decision_guilde_voleurs` état 1 : *"Lors d'un assaut dramatique de la garde royale sur le repaire de la guilde des voleurs, le joueur, bien que membre de la guilde, a choisi de coopérer avec la garde, livrant des informations cruciales en échange d'une promesse de clémence."*
+    *   **Processus de Génération de Dialogue :**
+        *   **Sélection dans l'Interface :**
+            *   Dans `DialogueGenerator`, l'utilisateur sélectionne le dialogue de base à continuer.
+            *   L'utilisateur active ensuite un ou plusieurs "Événements Notables" pertinents pour cette interaction.
+            *   Pour chaque événement activé, tous ses états possibles (ou un sous-ensemble choisi par l'utilisateur) sont considérés.
+        *   **Génération de Variantes Multiples :**
+            *   Le système génère automatiquement une variante de dialogue pour **chaque combinaison possible** des états des événements sélectionnés.
+            *   Si un seul événement `E_A` avec 3 états (A0, A1, A2) est activé, 3 variantes de dialogue sont générées.
+            *   Si deux événements, `E_A` (3 états) et `E_B` (2 états), sont activés, 3 * 2 = 6 variantes sont générées.
+        *   **Appels au LLM :**
+            *   Chaque variante de dialogue nécessite un **appel séparé au LLM**, car le contexte textuel fourni est unique.
+    *   **Avantages :**
+        *   Contexte sémantique riche pour le LLM.
+        *   Automatisation des branches narratives.
+        *   Contrôle fin par le designer.
+        *   Intégration naturelle avec Yarn Spinner.
+    *   **Défis et Considérations :**
+        *   Explosion combinatoire des variantes.
+        *   Cohérence des descriptions combinées.
+        *   Gestion des dépendances entre événements.
+        *   Adaptation de l'interface utilisateur de `DialogueGenerator`.
+    *   Cette approche représente une évolution significative pour la génération de dialogues dynamiques et contextuellement conscients.
 
 ---
 *Ce document sera mis à jour au fur et à mesure de l'avancement du projet.* 

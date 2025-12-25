@@ -1,0 +1,10 @@
+---
+description: Backend API (migration) — FastAPI/Flask, boundaries, REST/GraphQL
+globs: ["backend/**/*.py", "api/**/*.py", "server/**/*.py", "src/backend/**/*.py", "src/api/**/*.py"]
+alwaysApply: false
+---
+
+- Backend = API + orchestration; la logique métier doit rester dans `services/` réutilisable (UI desktop + API + tests).
+- API: contrats stables (schemas Pydantic), versionner si besoin, et tester les endpoints (pytest) sans dépendre d’un frontend.
+- REST/GraphQL: choisir selon usage; dans les deux cas, isoler sérialisation/validation au bord (API layer).
+- Observabilité: logs structurés, corrélation requête, erreurs sans fuite de secrets.

@@ -1,0 +1,10 @@
+---
+description: LLM/OpenAI — SDK v1 AsyncOpenAI, config, tests sans réseau
+globs: ["llm_client.py", "llm_client/**/*.py", "factories/**/*.py", "prompt_engine.py", "config/**/llm*.json", "llm_config.json"]
+alwaysApply: false
+---
+
+- OpenAI: respecter le SDK v1 (ex: `AsyncOpenAI`) et éviter les patterns legacy.
+- Ne jamais logguer de secrets. Les clés viennent des variables d’environnement/config (ex: `OPENAI_API_KEY`).
+- Tests: aucune requête réseau; utiliser `DummyLLMClient` ou mocks.
+- JSON: conserver compatibilité Unity (schémas Pydantic / export) et couvrir par tests.

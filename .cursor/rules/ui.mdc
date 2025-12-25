@@ -1,0 +1,9 @@
+---
+description: UI (PySide6) — réactivité, qasync, tests pytest-qt
+globs: ["ui/**/*.py", "main_app.py", "launcher.py"]
+alwaysApply: false
+---
+
+- PySide6: préserver la réactivité (pas de travail long sur le thread UI). Pour async: s’aligner sur `qasync`/patterns existants.
+- Les erreurs côté UI doivent être loggées + présentées proprement (message utilisateur non-technique).
+- Tests UI: pytest-qt (`qtbot`), pas d’accès réseau, et éviter les dépendances aux données GDD externes non contrôlées.
