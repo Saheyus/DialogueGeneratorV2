@@ -29,21 +29,31 @@ from constants import UIText, FilePaths, Defaults
 from context_builder import ContextBuilder
 from ui.main_window import MainWindow
 
-# --- Configuration du logging fichier + console ---
-LOGS_DIR = os.path.join(os.path.dirname(__file__), '..', 'logs')
-os.makedirs(LOGS_DIR, exist_ok=True)
-log_filename = os.path.join(LOGS_DIR, datetime.now().strftime('%Y-%m-%d') + '.log')
+def _is_debug_enabled() -> bool:
+    """Return True when debug logging should be enabled (via environment variable)."""
+    value = os.getenv("DIALOGUEGEN_DEBUG", "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_filename, encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
+
+def configure_logging(debug: bool) -> None:
+    """Configure root logging (file + console) exactly once for the application."""
+    logs_dir = Path(os.path.dirname(__file__)).resolve().parent / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    log_filename = logs_dir / (datetime.now().strftime("%Y-%m-%d") + ".log")
+
+    logging.basicConfig(
+        level=logging.DEBUG if debug else logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler(str(log_filename), encoding="utf-8"),
+            logging.StreamHandler(),
+        ],
+        # Ensure this config actually applies even if something configured logging earlier.
+        force=True,
+    )
 
 def main():
+    configure_logging(debug=_is_debug_enabled())
     logger = logging.getLogger(__name__) # Obtenir un logger spécifique au module
 
     logger.info("Démarrage de l'application DialogueGenerator...")
@@ -75,6 +85,4 @@ def main():
     sys.exit(0)
 
 if __name__ == "__main__":
-    import logging
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     main() 
