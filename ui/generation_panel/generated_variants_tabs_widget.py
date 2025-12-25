@@ -7,7 +7,7 @@ import json
 from typing import List, Dict, Union, Optional, Any
 
 try:
-    from ...models.dialogue_structure.interaction import Interaction
+    from models.dialogue_structure.interaction import Interaction
 except ImportError:
     # Fallback pour le support d'exécution isolée
     import sys
@@ -15,7 +15,7 @@ except ImportError:
     current_dir = Path(__file__).resolve().parent.parent.parent
     if str(current_dir) not in sys.path:
         sys.path.insert(0, str(current_dir))
-    from DialogueGenerator.models.dialogue_structure.interaction import Interaction
+    from models.dialogue_structure.interaction import Interaction
 
 logger = logging.getLogger(__name__)
 

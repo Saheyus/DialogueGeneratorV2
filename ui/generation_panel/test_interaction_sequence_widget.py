@@ -1,6 +1,6 @@
 import sys
 from PySide6.QtWidgets import QApplication, QMainWindow
-from DialogueGenerator.ui.generation_panel.interaction_sequence_widget import InteractionSequenceWidget
+from ui.generation_panel.interaction_sequence_widget import InteractionSequenceWidget
 
 class TestWindow(QMainWindow):
     def __init__(self):

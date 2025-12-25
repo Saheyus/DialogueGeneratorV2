@@ -12,14 +12,13 @@ try:
 except ImportError:
     # Ce fallback est moins probable ici si lancé avec -m,
     # mais par cohérence avec les règles d'import du projet.
-    # Si on arrive ici, c'est probablement que quelque chose d'autre est mal configuré.
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
     PROJECT_ROOT = os.path.dirname(SCRIPT_DIR) # Notion_Scrapper
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
     
     # Tenter à nouveau l'import qui devrait maintenant fonctionner si PROJECT_ROOT est la clé
-    from DialogueGenerator.main_app import main
+    from main_app import main
 
 if __name__ == "__main__":
     main() 

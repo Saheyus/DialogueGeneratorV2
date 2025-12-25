@@ -6,14 +6,15 @@ import re
 import os
 from typing import List, Optional, Dict
 import traceback
+import time
 
 try:
     import tiktoken
 except ImportError:
     tiktoken = None
 
-from DialogueGenerator.models.dialogue_structure.interaction import Interaction
-from DialogueGenerator.models.dialogue_structure.dialogue_elements import DialogueLineElement, PlayerChoicesBlockElement, PlayerChoiceOption
+from models.dialogue_structure.interaction import Interaction
+from models.dialogue_structure.dialogue_elements import DialogueLineElement, PlayerChoicesBlockElement, PlayerChoiceOption
 
 logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s') # Déjà configuré dans main_app
@@ -23,6 +24,11 @@ PROJECT_ROOT_DIR = CONTEXT_BUILDER_DIR.parent
 DEFAULT_CONFIG_FILE = CONTEXT_BUILDER_DIR / "context_config.json"
 
 class ContextBuilder:
+    _last_no_config_log_time: dict = {}
+    _no_config_log_interval: float = 5.0
+    _last_info_log_time: dict = {}
+    _info_log_interval: float = 5.0
+
     def __init__(self, config_file_path: Path = DEFAULT_CONFIG_FILE):
         self.gdd_data = {}
         self.characters = []
@@ -233,7 +239,7 @@ class ContextBuilder:
 
     def _format_previous_dialogue_for_context(self, max_tokens_for_history: int) -> str:
         """Formate le dialogue précédent stocké pour l'inclure dans le contexte LLM."""
-        logger.info(f"[LOG DEBUG] Appel à _format_previous_dialogue_for_context. previous_dialogue_context présent: {self.previous_dialogue_context is not None} (len={len(self.previous_dialogue_context) if self.previous_dialogue_context else 0})")
+        self._throttled_info_log('format_prev_dialogue', f"[LOG DEBUG] Appel à _format_previous_dialogue_for_context. previous_dialogue_context présent: {self.previous_dialogue_context is not None} (len={len(self.previous_dialogue_context) if self.previous_dialogue_context else 0})")
         if not self.previous_dialogue_context:
             return ""
 
@@ -318,181 +324,182 @@ class ContextBuilder:
 
     def _get_prioritized_info(self, element_data: dict, element_type: str, level: int, **kwargs) -> str:
         """
-        Extrait les informations d'un élément en fonction du type, du niveau de priorité,
-        et de la configuration chargée dans self.context_config.
-        Les kwargs peuvent contenir des indicateurs conditionnels comme `include_dialogue_type`.
+        Extrait et formate les informations d'un élément en fonction de sa priorité et du niveau de détail.
+        MODIFIÉ : Ignore la troncature et les limites de liste pour retourner les données complètes.
         """
-        if not element_data or not self.context_config:
-            return ""
+        details = []
+        config_for_type = self.context_config.get(element_type.lower(), {})
+        
+        # Pour l'instant, on prend toutes les infos définies jusqu'au level demandé, sans tronquer.
+        # On pourrait aussi simplement prendre toutes les clés de element_data si on veut tout.
+        # Mais pour garder une certaine structure issue de la config :
+        fields_to_extract = []
+        for l in range(1, level + 1):
+            fields_to_extract.extend(config_for_type.get(str(l), []))
 
-        type_config = self.context_config.get(element_type)
-        if not type_config:
-            logger.debug(f"Aucune configuration de contexte trouvée pour le type: {element_type}")
-            return ""
+        if not fields_to_extract and element_data: # Si la config est vide pour ce type/level, mais qu'on a des données
+            now = time.time()
+            log_key = (element_type, level)
+            last_time = ContextBuilder._last_no_config_log_time.get(log_key, 0)
+            if now - last_time > ContextBuilder._no_config_log_interval:
+                logger.info(f"Aucune configuration de champ pour {element_type} au niveau {level}, tentative de formatage direct des données.")
+                ContextBuilder._last_no_config_log_time[log_key] = now
+            for key, value in element_data.items():
+                if isinstance(value, list):
+                    formatted_list = ", ".join(map(str, value))
+                    details.append(f"{key.replace('_', ' ').capitalize()}: {formatted_list}")
+                elif isinstance(value, dict):
+                    # Pour les dictionnaires imbriqués, on pourrait les aplatir ou les formater spécifiquement.
+                    # Pour l'instant, on les convertit en string simple.
+                    details.append(f"{key.replace('_', ' ').capitalize()}: {json.dumps(value, ensure_ascii=False)}")
+                elif value is not None:
+                    details.append(f"{key.replace('_', ' ').capitalize()}: {str(value)}")
+            return "\n".join(details)
 
-        level_config = type_config.get(str(level))
-        if not level_config or not isinstance(level_config, list):
-            logger.debug(f"Aucune configuration de niveau {level} trouvée ou invalide pour le type: {element_type}")
-            return ""
+        processed_paths = set()
 
-        parts = []
-        for field_desc in level_config:
-            if not isinstance(field_desc, dict):
+        for field_config in fields_to_extract:
+            path = field_config.get("path")
+            if not path or path in processed_paths:
+                continue
+            processed_paths.add(path)
+
+            label = field_config.get("label", path.split('.')[-1].replace('_', ' ').capitalize())
+            condition_flag = field_config.get("condition_flag")
+            condition_path_not_exists = field_config.get("condition_path_not_exists")
+
+            if condition_flag and not kwargs.get(condition_flag, False):
                 continue
 
-            condition_flag_name = field_desc.get("condition_flag")
-            if condition_flag_name and not kwargs.get(condition_flag_name, True):
-                continue # La condition pour inclure ce champ n'est pas remplie
-
-            main_path = field_desc.get("path")
-            if not main_path:
-                continue
-
-            value = self._extract_from_dict(element_data, main_path)
-
-            fallback_path = field_desc.get("fallback_path")
-            if (value == "N/A" or not value) and fallback_path:
-                value = self._extract_from_dict(element_data, fallback_path)
-            
-            # Gestion de condition_path_not_exists (pour afficher un champ seulement si un autre n'existe pas)
-            # Ceci est une logique un peu plus spécifique demandée pour le champ "Fonctionnement de base" de l'item.
-            # On pourrait la généraliser si besoin.
-            cond_path_not_exists = field_desc.get("condition_path_not_exists")
-            if cond_path_not_exists:
-                check_val = self._extract_from_dict(element_data, cond_path_not_exists)
-                if check_val and check_val != "N/A":
-                    continue # Le champ conditionnel existe, donc on saute ce champ
-
-            if value and value != "N/A":
-                label = field_desc.get("label", main_path.split('.')[-1]) # Utilise la dernière partie du path comme label par défaut
-                text_value = str(value)
-
-                if field_desc.get("is_list", False):
-                    max_list_items = field_desc.get("list_max_items", 5)
-                    text_value = self._format_list(value, max_items=max_list_items)
-                else:
-                    truncate_len = field_desc.get("truncate", -1)
-                    if truncate_len > 0 and len(text_value) > truncate_len:
-                        text_value = text_value[:truncate_len] + "..."
-                
-                parts.append(f"{label}: {text_value}")
-        
-        return "\n".join(filter(None, parts)) + ("\n" if parts else "")
-
-    def build_context(self, selected_elements: dict[str, list[str]], scene_instruction: str, max_tokens: int = 16000, include_dialogue_type: bool = True) -> str:
-        context_parts = []
-        current_tokens = 0
-        logger.debug(f"[ContextBuilder.build_context] Received selected_elements: {selected_elements}")
-
-        # 1. Instruction de scène / CADRE DE LA SCENE (toujours incluse si fournie)
-        #    Ceci correspond à votre "--- CADRE DE LA SCÈNE ---" implicitement
-        if scene_instruction:
-            instruction_str = f"### Instruction de Scène\n{scene_instruction}\n"
-            instruction_tokens = self._count_tokens(instruction_str)
-            if current_tokens + instruction_tokens <= max_tokens:
-                context_parts.append(instruction_str)
-                current_tokens += instruction_tokens
-            else:
-                logger.warning("L'instruction de scène est trop longue pour être incluse avec le budget de tokens actuel.")
-        
-        # 2. Ajouter l'historique du dialogue précédent si disponible
-        max_tokens_for_history = int(max_tokens * 0.25) # Conserve la même logique d'allocation
-        # Le reste des tokens disponibles après l'instruction de scène
-        remaining_tokens_for_history = max_tokens - current_tokens 
-        actual_max_tokens_for_history = min(max_tokens_for_history, remaining_tokens_for_history)
-
-        previous_dialogue_str = self._format_previous_dialogue_for_context(actual_max_tokens_for_history)
-        if previous_dialogue_str:
-            tokens_previous_dialogue = self._count_tokens(previous_dialogue_str)
-            # Vérifier à nouveau car _format_previous_dialogue_for_context a sa propre logique de token
-            if current_tokens + tokens_previous_dialogue <= max_tokens:
-                context_parts.append(previous_dialogue_str)
-                current_tokens += tokens_previous_dialogue
-                logger.info(f"Contexte du dialogue précédent ajouté ({tokens_previous_dialogue} tokens).")
-            else:
-                logger.warning(f"Pas assez de tokens pour ajouter l'historique du dialogue précédent ({tokens_previous_dialogue} tokens vs {max_tokens - current_tokens} restants), même après allocation ajustée.")
-
-        # 3. Ajouter les éléments GDD sélectionnés
-        element_order = ["characters", "locations", "items", "species", "communities", "quests", "dialogues_examples"]
-
-        for element_type in element_order:
-            if element_type in selected_elements:
-                if not selected_elements[element_type]:
+            if condition_path_not_exists:
+                value_for_condition_check = self._extract_from_dict(element_data, condition_path_not_exists, None)
+                if value_for_condition_check is not None:
                     continue
 
-                type_header = f"### {element_type.capitalize()}\n"
-                type_header_tokens = self._count_tokens(type_header)
-                if current_tokens + type_header_tokens > max_tokens:
-                    break 
-                
-                context_parts.append(type_header)
-                current_tokens += type_header_tokens
+            value = self._extract_from_dict(element_data, path)
+            fallback_path = field_config.get("fallback_path")
+            if (value is None or value == "N/A" or (isinstance(value, list) and not value)) and fallback_path:
+                value = self._extract_from_dict(element_data, fallback_path)
+            
+            if value is None or value == "N/A" or (isinstance(value, list) and not value):
+                continue
 
-                for name in selected_elements[element_type]:
-                    details = None
-                    # Utilisation des méthodes get_..._details_by_name existantes
-                    if element_type == "characters": details = self.get_character_details_by_name(name)
-                    elif element_type == "locations": details = self.get_location_details_by_name(name)
-                    elif element_type == "items": details = self.get_item_details_by_name(name)
-                    elif element_type == "species": details = self.get_species_details_by_name(name)
-                    elif element_type == "communities": details = self.get_community_details_by_name(name)
-                    elif element_type == "quests": details = self.get_quest_details_by_name(name)
-                    elif element_type == "dialogues_examples": details = self.get_dialogue_example_details_by_title(name)
-                    
-                    logger.debug(f"[ContextBuilder.build_context] Processing {element_type}: '{name}'. Details found: {'Yes' if details else 'No'}")
+            if isinstance(value, list):
+                # Si c'est une liste, on joint tous les éléments.
+                # Si les éléments sont des dictionnaires, on les convertit en chaînes (par exemple, leurs 'Nom').
+                formatted_list_items = []
+                for item in value: # Ne plus utiliser list_max_items
+                    if isinstance(item, dict):
+                        # Essayer de trouver un champ 'Nom' ou 'Titre' ou prendre une représentation str
+                        name = item.get("Nom", item.get("Titre", str(item)))
+                        formatted_list_items.append(str(name))
+                    else:
+                        formatted_list_items.append(str(item))
+                if formatted_list_items:
+                    details.append(f"{label}: {', '.join(formatted_list_items)}")
+            elif isinstance(value, dict):
+                # Pour les dictionnaires, on pourrait vouloir une représentation plus détaillée.
+                # Pour l'instant, on prend une conversion simple en string, ou on cherche une clé spécifique.
+                # Cela pourrait être amélioré pour extraire des sous-clés pertinentes.
+                display_value = value.get("Nom", value.get("Résumé", json.dumps(value, ensure_ascii=False, indent=2)))
+                details.append(f"{label}: {display_value}")
+            else:
+                # text_value = str(value)
+                # if truncate_length != -1 and len(text_value) > truncate_length:
+                #     text_value = text_value[:truncate_length] + "... (extrait)"
+                # details.append(f"{label}: {text_value}")
+                details.append(f"{label}: {str(value)}") # Ne plus tronquer
 
-                    if details:
-                        for level in [1, 2, 3]:
-                            singular_type = element_type[:-1] if element_type.endswith("s") and element_type != "species" else element_type
-                            if element_type == "dialogues_examples": singular_type = "dialogue_example"
-                            
-                            # Passer les indicateurs conditionnels à _get_prioritized_info
-                            conditional_flags = {"include_dialogue_type": include_dialogue_type}
-                            info_str = self._get_prioritized_info(details, singular_type, level, **conditional_flags)
-                            logger.debug(f"[ContextBuilder.build_context] For '{name}' (type: {singular_type}, level: {level}), _get_prioritized_info returned: '{info_str[:100]}...'")
-                            
-                            if not info_str: continue
-                            info_tokens = self._count_tokens(info_str)
-                            
-                            if current_tokens + info_tokens <= max_tokens:
-                                context_parts.append(info_str)
-                                current_tokens += info_tokens
-                            else:
-                                logger.info(f"Token limit reached for {element_type} '{name}' at priority level {level}. Skipping further details for this item.")
-                                break 
-                    if current_tokens >= max_tokens: break 
-            if current_tokens >= max_tokens: break 
+        return "\n".join(details)
 
-        if self.vision_data and (current_tokens + self._count_tokens("### Vision du Monde\n") < max_tokens):
-            # Utiliser la config pour extraire la vision si elle est définie, sinon fallback
-            vision_summary_from_config = ""
-            if self.context_config.get("vision") and self.context_config["vision"].get("1"):
-                 # Supposons une structure simple pour la vision dans config: [{"path": "Resume", "label": "Vision du Monde", "truncate": 1000}]
-                field_desc_vision = self.context_config["vision"]["1"][0]
-                raw_vision_summary = self._extract_from_dict(self.vision_data, field_desc_vision.get("path", "Resume"))
-                if raw_vision_summary and raw_vision_summary != "N/A":
-                    truncate_len_vision = field_desc_vision.get("truncate", 1000)
-                    label_vision = field_desc_vision.get("label", "Vision du Monde")
-                    if truncate_len_vision > 0 and len(raw_vision_summary) > truncate_len_vision:
-                        raw_vision_summary = raw_vision_summary[:truncate_len_vision] + "..."
-                    vision_summary_from_config = f"### {label_vision}\n{raw_vision_summary}\n"
-            else: # Fallback à l'ancienne méthode si pas de config pour la vision
-                vision_summary = self.vision_data.get("Resume", "") 
-                if vision_summary:
-                    vision_summary_from_config = f"### Vision du Monde\n{vision_summary[:1000]}\n" 
+    def _throttled_info_log(self, log_key: str, message: str):
+        now = time.time()
+        last_time = ContextBuilder._last_info_log_time.get(log_key, 0)
+        if now - last_time > ContextBuilder._info_log_interval:
+            logger.info(message)
+            ContextBuilder._last_info_log_time[log_key] = now
 
-            if vision_summary_from_config:
-                vision_tokens = self._count_tokens(vision_summary_from_config)
-                if current_tokens + vision_tokens <= max_tokens:
-                    context_parts.append(vision_summary_from_config)
-                    current_tokens += vision_tokens
+    def build_context(self, selected_elements: dict[str, list[str]], scene_instruction: str, max_tokens: int = 70000, include_dialogue_type: bool = True) -> str:
+        """
+        Construit un résumé contextuel basé sur les éléments sélectionnés et une instruction de scène,
+        en ignorant toute limite de tokens (plus de troncature ni de refus d'ajout).
+        """
+        self._throttled_info_log('start_build', f"Début de la construction du contexte avec max_tokens={max_tokens}.")
+        self._throttled_info_log('selected_elements', f"Éléments sélectionnés: {selected_elements}")
         
-        logger.info(f"Contexte construit avec {current_tokens} tokens (approx).")
-        final_context_string = "\n".join(context_parts)
-        logger.debug(f"[ContextBuilder.build_context] Final context string (first 300 chars): {final_context_string[:300]}")
-        return final_context_string
+        context_parts = []
+        # total_tokens = 0  # Plus utilisé
+        level = 3  # Détail maximal
+        
+        # Contexte du dialogue précédent (si disponible)
+        previous_dialogue_formatted = self._format_previous_dialogue_for_context(max_tokens)
+        if previous_dialogue_formatted:
+            context_parts.append(previous_dialogue_formatted)
+            logger.info(f"Historique du dialogue précédent ajouté au contexte.")
+        
+        # Ajouter l'objectif de la scène juste après l'historique
+        if scene_instruction and scene_instruction.strip():
+            context_parts.append("\n--- OBJECTIF DE LA SCÈNE (Instruction Utilisateur) ---\n" + scene_instruction.strip())
+        
+        # Informations sur le GDD (personnages, lieux, etc.)
+        element_categories_order = ["characters", "species", "communities", "locations", "items", "quests"]
+        prioritized_elements_for_context = {}
+        for category_key in element_categories_order:
+            if category_key in selected_elements:
+                prioritized_elements_for_context[category_key] = selected_elements[category_key]
+        for category_key in selected_elements:
+            if category_key not in prioritized_elements_for_context:
+                prioritized_elements_for_context[category_key] = selected_elements[category_key]
+        
+        gdd_context_parts = []
+        for category_key, names_list in prioritized_elements_for_context.items():
+            # Ajout log détaillé sur le type de chaque valeur
+            logger.debug(f"[build_context] Catégorie '{category_key}': type(names_list)={type(names_list)}, valeur={names_list}")
+            if not isinstance(names_list, list):
+                logger.warning(f"[build_context] Clé '{category_key}' ignorée car sa valeur n'est pas une liste (type={type(names_list)}). Valeur: {names_list}")
+                continue
+            if not names_list:
+                continue
+            category_title = category_key.replace('_', ' ').capitalize()
+            gdd_context_parts.append(f"\n--- {category_title.upper()} ---")
+            for name in names_list:
+                element_data = None
+                if category_key == "characters": element_data = self.get_character_details_by_name(name)
+                elif category_key == "locations": element_data = self.get_location_details_by_name(name)
+                elif category_key == "items": element_data = self.get_item_details_by_name(name)
+                elif category_key == "species": element_data = self.get_species_details_by_name(name)
+                elif category_key == "communities": element_data = self.get_community_details_by_name(name)
+                elif category_key == "quests": element_data = self.get_quest_details_by_name(name)
+                if element_data:
+                    info_str = self._get_prioritized_info(element_data, category_key, level, include_dialogue_type=include_dialogue_type)
+                    gdd_context_parts.append(info_str)
+                else:
+                    logger.warning(f"Aucune donnée trouvée pour l'élément '{name}' dans la catégorie '{category_key}'.")
+        if gdd_context_parts:
+            context_parts.extend(gdd_context_parts)
+        
+        # Construction finale du résumé
+        context_summary = "\n".join(context_parts).strip()
+        final_tokens = self._count_tokens(context_summary)
+        self._throttled_info_log('context_summary', f"Résumé du contexte construit. Total tokens (après assemblage GDD et historique): {final_tokens}")
+        if final_tokens > max_tokens:
+            logger.warning(f"ATTENTION : Le contexte final ({final_tokens} tokens) dépasse la limite max_tokens ({max_tokens}). Le contenu sera tronqué.")
+            # Troncature effective : découper le texte pour ne garder que max_tokens tokens
+            # Utilise tiktoken si dispo, sinon découpe naïve sur les mots
+            try:
+                enc = tiktoken.get_encoding("cl100k_base")
+                tokens = enc.encode(context_summary)
+                truncated_tokens = tokens[:max_tokens]
+                truncated_text = enc.decode(truncated_tokens)
+            except Exception:
+                # Fallback naïf : découpe sur les mots
+                words = context_summary.split()
+                truncated_text = " ".join(words[:max_tokens])
+            context_summary = truncated_text + "\n... (contexte tronqué)"
+        return context_summary
 
     def get_regions(self) -> list[str]:
+        """Retourne une liste de noms de régions uniques à partir des données de localisation."""
         if not self.locations: return []
         return [loc.get("Nom") for loc in self.locations 
                 if isinstance(loc, dict) and loc.get("Nom") and loc.get("Catégorie") == "Région"]

@@ -2,13 +2,13 @@ import pytest
 
 # Import du service
 try:
-    from DialogueGenerator.services.linked_selector import LinkedSelectorService
+    from services.linked_selector import LinkedSelectorService
 except ImportError:
     import sys, os
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
-    from DialogueGenerator.services.linked_selector import LinkedSelectorService
+    from services.linked_selector import LinkedSelectorService
 
 
 class DummyContextBuilder:

@@ -1,0 +1,13 @@
+---
+description: Workflow (global) — tests, UI smoke, git (Windows)
+globs: []
+alwaysApply: true
+---
+
+- Quand du code a changé:
+  - lancer `pytest`;
+  - puis préciser ce qui doit être vérifié côté UI, et lancer un smoke UI via `python main_app.py`.
+
+- Note (automation Windows): `python main_app.py` ne termine pas tout seul (boucle Qt). Pour un smoke automatisé, préférer le script dédié et versionné dans le repo (`scripts/smoke_ui.py`) plutôt qu’une one-liner shell fragile.
+
+- Si tout est vert: commit + push.

@@ -1,21 +1,66 @@
 from PySide6.QtWidgets import (QWidget, QGroupBox, QGridLayout, QLabel, QComboBox, QCheckBox, QDoubleSpinBox, QVBoxLayout)
 from PySide6.QtCore import Signal, Qt
 import logging
+from llm_client import DummyLLMClient # Nouvel import direct
+from constants import UIText, FilePaths, Defaults
 
 logger = logging.getLogger(__name__)
+
+class AlwaysTrueCheckbox:
+    """
+    A mock checkbox class that always reports its state as True (checked).
+    Its primary purpose is to maintain the logical state of "structured output always enabled"
+    while still integrating with the QCheckBox API for UI settings persistence (load/save)
+    if the actual QCheckBox widget is removed or replaced but its setting needs to be preserved.
+    Methods like setChecked, setEnabled, etc., are implemented for API compatibility
+    but do not alter the functional "always True" state.
+    """
+    def isChecked(self):
+        """Always returns True, indicating the checkbox is logically checked."""
+        return True
+
+    def setChecked(self, value):
+        """
+        API compatibility method. Does not change the logical state.
+        Logs an attempt if trying to set to False.
+        """
+        # This checkbox is always considered true for logic purposes,
+        # but we need a setChecked method for compatibility with QCheckBox API
+        # during settings load, etc.
+        # We can log if someone tries to set it to False, but functionally it remains true.
+        if not value:
+            logger.debug("Attempted to set AlwaysTrueCheckbox to False. It remains functionally True.")
+        pass # Or log an attempt to set it
+
+    def setEnabled(self, enabled):
+        """API compatibility method. Does not affect enabled state."""
+        # For compatibility with QCheckBox API
+        pass
+
+    def setToolTip(self, tooltip):
+        """API compatibility method. Tooltip might not be visible if not a real widget."""
+        # For compatibility with QCheckBox API
+        pass
+
+    def isEnabled(self):
+        """API compatibility method. Always considered enabled for logic."""
+        # For compatibility with QCheckBox API
+        return True # Or a more appropriate fixed value
 
 class GenerationParamsWidget(QWidget):
     llm_model_selection_changed = Signal(str) # identifier
     k_variants_changed = Signal(str)
-    max_context_tokens_changed = Signal(float) # k_tokens
+    max_context_tokens_changed = Signal(float) # Émet la valeur en k_tokens (float)
     structured_output_changed = Signal(bool)
     settings_changed = Signal() # Generic signal for any setting change
+    no_limit_changed = Signal(bool)
 
     def __init__(self, available_llm_models, current_llm_model_identifier, parent=None):
         super().__init__(parent)
         self.available_llm_models = available_llm_models if available_llm_models else []
         self.current_llm_model_identifier = current_llm_model_identifier
         self._is_loading_settings = False
+        self.structured_output_checkbox = AlwaysTrueCheckbox()
         self._init_ui()
         self.populate_llm_model_combo()
 
@@ -35,7 +80,7 @@ class GenerationParamsWidget(QWidget):
         layout.addWidget(QLabel("Nombre de Variantes (k):"), row, 0)
         self.k_variants_combo = QComboBox()
         self.k_variants_combo.addItems([str(i) for i in range(1, 6)])
-        self.k_variants_combo.setCurrentText("2")
+        self.k_variants_combo.setCurrentText("1")
         self.k_variants_combo.setToolTip("Nombre de dialogues alternatifs à générer.")
         self.k_variants_combo.currentTextChanged.connect(self._on_k_variants_changed)
         layout.addWidget(self.k_variants_combo, row, 1)
@@ -46,19 +91,24 @@ class GenerationParamsWidget(QWidget):
         self.max_context_tokens_spinbox.setMinimum(0.5)
         self.max_context_tokens_spinbox.setMaximum(1000)
         self.max_context_tokens_spinbox.setSingleStep(0.5)
-        self.max_context_tokens_spinbox.setValue(1.5)
+        self.max_context_tokens_spinbox.setValue(50.0)
         self.max_context_tokens_spinbox.setSuffix("k")
         self.max_context_tokens_spinbox.setDecimals(1)
         self.max_context_tokens_spinbox.setToolTip("Nombre maximum de tokens à utiliser pour le contexte GDD en milliers (k).")
         self.max_context_tokens_spinbox.valueChanged.connect(self._on_max_context_tokens_spinbox_changed)
         layout.addWidget(self.max_context_tokens_spinbox, row, 1)
+        # Ajout de la case à cocher No limit
+        self.no_limit_checkbox = QCheckBox("No limit")
+        self.no_limit_checkbox.setToolTip("Si coché, aucune limite de tokens ne sera appliquée au contexte.")
+        self.no_limit_checkbox.stateChanged.connect(self._on_no_limit_checkbox_changed)
+        layout.addWidget(self.no_limit_checkbox, row, 2)
         row += 1
 
-        self.structured_output_checkbox = QCheckBox("Utiliser Sortie Structurée (JSON)")
-        self.structured_output_checkbox.setToolTip("Si coché, demande au LLM de formater la sortie en JSON.")
-        self.structured_output_checkbox.setChecked(True)
-        self.structured_output_checkbox.stateChanged.connect(self._on_structured_output_changed)
-        layout.addWidget(self.structured_output_checkbox, row, 0, 1, 2)
+        # self.structured_output_checkbox = QCheckBox("Utiliser Sortie Structurée (JSON)")
+        # self.structured_output_checkbox.setToolTip("Si coché, demande au LLM de formater la sortie en JSON.")
+        # self.structured_output_checkbox.setChecked(True)
+        # self.structured_output_checkbox.stateChanged.connect(self._on_structured_output_changed)
+        # layout.addWidget(self.structured_output_checkbox, row, 0, 1, 2)
         
         self.main_layout.addLayout(layout)
 
@@ -72,8 +122,8 @@ class GenerationParamsWidget(QWidget):
         found_current_model = False
 
         if not self.available_llm_models:
-            logger.warning("Aucun modèle LLM disponible à afficher dans le ComboBox.")
-            self.llm_model_combo.addItem("Aucun modèle configuré", userData="dummy_error")
+            logger.warning(UIText.NO_MODEL_CONFIGURED)
+            self.llm_model_combo.addItem(UIText.NO_MODEL_CONFIGURED, userData="dummy_error")
             self.llm_model_combo.setEnabled(False)
             self.llm_model_combo.blockSignals(False)
             return
@@ -113,6 +163,8 @@ class GenerationParamsWidget(QWidget):
 
     def _on_max_context_tokens_spinbox_changed(self, value: float):
         self.max_context_tokens_changed.emit(value)
+        if hasattr(self.parent(), '_schedule_settings_save_and_token_update'):
+            self.parent()._schedule_settings_save_and_token_update()
         if not self._is_loading_settings: self.settings_changed.emit()
         
     def _on_structured_output_changed(self, state: int): # state is Qt.CheckState enum
@@ -120,10 +172,15 @@ class GenerationParamsWidget(QWidget):
         self.structured_output_changed.emit(is_checked)
         if not self._is_loading_settings: self.settings_changed.emit()
 
+    def _on_no_limit_checkbox_changed(self, state: int):
+        is_checked = (state == Qt.CheckState.Checked.value)
+        self.max_context_tokens_spinbox.setEnabled(not is_checked)
+        self.no_limit_changed.emit(is_checked)
+        if not self._is_loading_settings: self.settings_changed.emit()
+
     def update_llm_client_dependent_state(self, llm_client, current_llm_model_properties):
         # Placeholder for logic similar to _update_structured_output_checkbox_state in GenerationPanel
         # This might involve enabling/disabling structured_output_checkbox based on llm_client type or model properties
-        from DialogueGenerator.llm_client import DummyLLMClient # Nouvel import absolu
         is_dummy = isinstance(llm_client, DummyLLMClient)
         
         if is_dummy:
@@ -149,11 +206,16 @@ class GenerationParamsWidget(QWidget):
         return {
             "llm_model": self.llm_model_combo.currentData(),
             "k_variants": self.k_variants_combo.currentText(),
-            "max_context_tokens": self.max_context_tokens_spinbox.value(), # k_tokens
+            "max_context_tokens": None if self.no_limit_checkbox.isChecked() else self.max_context_tokens_spinbox.value(),
+            "no_limit": self.no_limit_checkbox.isChecked(),
             "structured_output": self.structured_output_checkbox.isChecked()
         }
 
-    def load_settings(self, settings: dict, default_k_variants="2", default_max_context_tokens_k=1.5, default_structured_output=True):
+    def load_settings(self, settings: dict, default_k_variants="1", default_max_context_tokens_k=50.0, default_structured_output=True):
+        """
+        Charge les paramètres UI de ce widget.
+        'max_context_tokens' dans le dictionnaire settings est attendu en k_tokens (float).
+        """
         self._is_loading_settings = True
         
         model_identifier = settings.get("llm_model")

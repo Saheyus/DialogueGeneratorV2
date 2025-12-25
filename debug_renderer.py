@@ -10,10 +10,10 @@ parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
-from DialogueGenerator.models.dialogue_structure import (
+from models.dialogue_structure import (
     DialogueLineElement, PlayerChoiceOption, PlayerChoicesBlockElement, Interaction
 )
-from DialogueGenerator.services.yarn_renderer import JinjaYarnRenderer
+from services.yarn_renderer import JinjaYarnRenderer
 
 def main():
     """Fonction principale de débogage."""

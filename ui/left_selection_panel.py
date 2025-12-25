@@ -1,15 +1,22 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QCheckBox, QHBoxLayout, QScrollArea, QFrame, QGroupBox, QPushButton, QSizePolicy, QSpacerItem, QAbstractItemView, QTabWidget)
-from PySide6.QtCore import Qt, Signal, Slot, QSortFilterProxyModel, QRegularExpression, QTimer
-from PySide6.QtGui import QPalette, QColor
+# --- Imports standard ---
 import logging
 from functools import partial
 from pathlib import Path
-from .. import config_manager
 
-# Importation du nouveau widget et du service nécessaire
+# --- Imports PySide6 ---
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QCheckBox, QHBoxLayout, QScrollArea, QFrame, QGroupBox, QPushButton, QSizePolicy, QSpacerItem, QAbstractItemView, QTabWidget
+)
+from PySide6.QtCore import Qt, Signal, Slot
+
+# --- Imports internes ---
+from config_manager import list_yarn_files
+from services.configuration_service import ConfigurationService
+from constants import UIText, FilePaths, Defaults
+from services.interaction_service import InteractionService
+
+# --- Imports locaux ---
 from .left_panel.previous_dialogue_selector_widget import PreviousDialogueSelectorWidget
-from ..services.interaction_service import InteractionService
-from ..services.configuration_service import ConfigurationService
 
 logger = logging.getLogger(__name__)
 
@@ -27,17 +34,19 @@ class LeftSelectionPanel(QWidget):
     # selection_changed: Signal = Signal(list) # List of selected item names - Redondant avec context_selection_changed si ce dernier est bien utilisé
     # item_focused: Signal = Signal(str, str) # item_name, category_key - Semble non utilisé, à vérifier
 
-    def __init__(self, context_builder, interaction_service: InteractionService, parent=None):
+    def __init__(self, context_builder, interaction_service: InteractionService, config_service: ConfigurationService, parent=None):
         """Initializes the LeftSelectionPanel.
 
         Args:
             context_builder: Instance of ContextBuilder to access GDD data.
             interaction_service: Instance of InteractionService for dialogue history.
+            config_service: Instance of ConfigurationService for app settings.
             parent: The parent widget.
         """
         super().__init__(parent)
         self.context_builder = context_builder
-        self.interaction_service = interaction_service # Stocker l'instance du service
+        self.interaction_service = interaction_service
+        self.config_service = config_service
         self.filters = {}
         self.lists = {}
         self.filter_edits = {}
@@ -207,22 +216,17 @@ class LeftSelectionPanel(QWidget):
     def _on_yarn_file_item_clicked(self, item_widget_or_list_item: QWidget | QListWidgetItem):
         item_text = ""
         if isinstance(item_widget_or_list_item, QWidget) and hasattr(item_widget_or_list_item, 'text_label'):
-            item_text = item_widget_or_list_item.text_label.text() 
+            item_text = item_widget_or_list_item.text_label.text()
         elif isinstance(item_widget_or_list_item, QListWidgetItem):
             item_text = item_widget_or_list_item.text()
         else:
-            logger.warning("Clicked yarn file item is of an unexpected type.")
+            logger.warning("Clicked Yarn item is of an unexpected type.")
             return
-
+        
         logger.info(f"Yarn file selected: {item_text}")
         # The item_text here will be the relative path of the yarn file.
         # We need the full path to read it.
-        main_window = self.parent()
-        if not main_window or not hasattr(main_window, 'config_service'):
-            logger.error("Cannot access ConfigurationService from LeftSelectionPanel's parent (MainWindow).")
-            return
-
-        dialogues_path = main_window.config_service.get_unity_dialogues_path()
+        dialogues_path = self.config_service.get_unity_dialogues_path()
         if dialogues_path:
             full_path = dialogues_path / item_text
             # Emit a signal or call a method on MainWindow/DetailsPanel to show content
@@ -252,7 +256,7 @@ class LeftSelectionPanel(QWidget):
                     list_widget = self.lists.get(cat_key)
                     if list_widget:
                         list_widget.clear()
-                        list_widget.addItem(QListWidgetItem("(ContextBuilder not available)"))
+                        list_widget.addItem(QListWidgetItem(UIText.CONTEXT_BUILDER_NOT_AVAILABLE))
             self.populate_yarn_files_list() # Attempt to populate yarn files even if GDD fails
             return
 
@@ -274,7 +278,7 @@ class LeftSelectionPanel(QWidget):
                     logger.info(f"  Category '{cat_key}': Raw items list is empty for attr '{attr_name}'.")
                 for idx, item_dict in enumerate(items_data):
                     if isinstance(item_dict, dict):
-                        item_display_name = "Unknown Item (error in name key)"
+                        item_display_name = UIText.UNKNOWN_ITEM_ERROR
                         for name_key in name_keys:
                             if name_key in item_dict and item_dict[name_key] is not None and str(item_dict[name_key]).strip() != "":
                                 item_display_name = str(item_dict[name_key])
@@ -314,27 +318,19 @@ class LeftSelectionPanel(QWidget):
             logger.error("Yarn files list widget not found.")
             return
 
-        # MODIFIÉ: Accéder à config_service via le parent (MainWindow)
-        main_window = self.parent()
-        if not main_window or not hasattr(main_window, 'config_service'):
-            logger.error("Cannot access ConfigurationService from LeftSelectionPanel's parent (MainWindow).")
-            list_widget.clear()
-            list_widget.addItem(QListWidgetItem("(Erreur: ConfigurationService inaccessible)"))
-            return
-
-        dialogues_path = main_window.config_service.get_unity_dialogues_path()
+        dialogues_path = self.config_service.get_unity_dialogues_path()
         if not dialogues_path:
             logger.warning("Unity dialogues path not configured via ConfigurationService. Cannot list Yarn files.")
             list_widget.clear()
             # Proposer de configurer ?
-            config_msg_item = QListWidgetItem("Chemin des dialogues Unity non configuré.")
+            config_msg_item = QListWidgetItem(UIText.UNITY_DIALOGUES_PATH_NOT_CONFIGURED)
             # Pourrait être un QListWidgetItem cliquable qui ouvre la config, mais pour l'instant simple message.
             list_widget.addItem(config_msg_item)
             return
 
         # config_manager.list_yarn_files est OK car c'est une fonction utilitaire qui prend un chemin.
-        yarn_files = config_manager.list_yarn_files(dialogues_path, recursive=True)
-        self.category_data_map[self.yarn_files_category_key] = yarn_files # Store Path objects
+        yarn_files = list_yarn_files(dialogues_path, recursive=True)
+        self.category_data_map[self.yarn_files_category_key] = sorted([str(Path(f).resolve()) for f in yarn_files])
 
         display_items = []
         for file_path in yarn_files:
@@ -351,7 +347,7 @@ class LeftSelectionPanel(QWidget):
         # So, we adapt or do it manually.
         list_widget.clear()
         if not display_items:
-            list_widget.addItem(QListWidgetItem("(No .yarn files found)"))
+            list_widget.addItem(QListWidgetItem(UIText.NO_YARN_FILES_FOUND))
         else:
             for item_text in display_items:
                 q_list_item = QListWidgetItem(item_text)
@@ -367,7 +363,7 @@ class LeftSelectionPanel(QWidget):
         list_widget.clear()
 
         if not items:
-            list_widget.addItem(QListWidgetItem("(No items for this category or filter)"))
+            list_widget.addItem(QListWidgetItem(UIText.NO_ITEMS_CATEGORY_OR_FILTER))
             return
 
         # No restoration logic here. This is handled by load_settings -> _set_checked_list_items
@@ -451,7 +447,7 @@ class LeftSelectionPanel(QWidget):
     def _filter_yarn_list(self, list_widget_to_filter: QListWidget, category_key: str, filter_text: str):
         """Filters items in the Yarn files QListWidget based on text."""
         yarn_paths = self.category_data_map.get(category_key, []) # List of Path objects
-        dialogues_base_path = config_manager.get_unity_dialogues_path() # For making paths relative
+        dialogues_base_path = self.config_service.get_unity_dialogues_path() # For making paths relative
 
         list_widget_to_filter.clear()
         
@@ -465,7 +461,7 @@ class LeftSelectionPanel(QWidget):
                 found_match = True
         
         if not found_match:
-            list_widget_to_filter.addItem(QListWidgetItem("(No matching .yarn files)"))
+            list_widget_to_filter.addItem(QListWidgetItem(UIText.NO_MATCHING_YARN_FILES))
 
     def get_settings(self) -> dict:
         """Gets the current settings for the LeftSelectionPanel."""
@@ -481,6 +477,10 @@ class LeftSelectionPanel(QWidget):
                     checked_items[cat_key].append(item_widget.text_label.text())
         
         filters_text = {cat_key: edit.text() for cat_key, edit in self.filter_edits.items()}
+        
+        # LOG: Afficher le contenu des checked_items pour diagnostic
+        logger.info(f"[DEBUG] get_settings - checked_items: {checked_items}")
+        logger.info(f"[DEBUG] get_settings - filters: {filters_text}")
         
         return {
             "filters": filters_text,
@@ -527,71 +527,36 @@ class LeftSelectionPanel(QWidget):
     # Méthodes utilitaires utilisées par GenerationPanel (sélection rapide)
     # ---------------------------------------------------------------------
 
-    @Slot(list)
-    def set_checked_items_by_name(self, item_names_to_check: list[str]) -> None:
-        """Coche les éléments dont le nom est présent dans la liste fournie.
-
-        Args:
-            item_names_to_check: Liste des noms à cocher dans toutes les catégories.
-        """
-        if not item_names_to_check:
-            return
-
-        items_to_check_set = set(item_names_to_check)
-        something_changed: bool = False
-
-        for cat_key, list_widget in self.lists.items():
-            if cat_key == self.yarn_files_category_key:  # Pas de checkbox pour les fichiers yarn
-                continue
-
-            list_widget.blockSignals(True)
-            try:
-                for i in range(list_widget.count()):
-                    q_item = list_widget.item(i)
-                    item_widget = list_widget.itemWidget(q_item)
-                    if item_widget and hasattr(item_widget, "checkbox"):
-                        should_be_checked = item_widget.text_label.text() in items_to_check_set
-                        if item_widget.checkbox.isChecked() != should_be_checked:
-                            item_widget.checkbox.setChecked(should_be_checked)
-                            something_changed = True
-            finally:
-                list_widget.blockSignals(False)
-
-        if something_changed:
-            self.context_selection_changed.emit()
-
     @Slot()
     def uncheck_all_items(self) -> None:
-        """Décoche tous les items de toutes les catégories."""
-        something_changed = False
-        for cat_key, list_widget in self.lists.items():
-            if cat_key == self.yarn_files_category_key:
-                continue
-            list_widget.blockSignals(True)
-            try:
-                for i in range(list_widget.count()):
-                    q_item = list_widget.item(i)
-                    item_widget = list_widget.itemWidget(q_item)
-                    if item_widget and hasattr(item_widget, "checkbox") and item_widget.checkbox.isChecked():
-                        item_widget.checkbox.setChecked(False)
-                        something_changed = True
-            finally:
-                list_widget.blockSignals(False)
+        """Décoche tous les items de toutes les catégories (délègue au handler)."""
+        from .left_panel.handlers import handle_uncheck_all_items
+        handle_uncheck_all_items(self)
 
-        if something_changed:
-            self.context_selection_changed.emit()
+    @Slot(list)
+    def set_checked_items_by_name(self, item_names_to_check: list[str]) -> None:
+        """Coche les éléments dont le nom est présent dans la liste fournie (délègue au handler)."""
+        from .left_panel.handlers import handle_set_checked_items_by_name
+        handle_set_checked_items_by_name(self, item_names_to_check)
 
     def get_all_selected_item_names(self) -> list[str]:
-        """Retourne la liste plate des noms d'items actuellement cochés."""
+        """
+        Retourne la liste plate des noms d'items actuellement cochés dans toutes les catégories,
+        en gérant à la fois les widgets custom (CheckableListItemWidget) et les QListWidgetItem natifs.
+        """
         selected: list[str] = []
-        for cat_key, list_widget in self.lists.items():
-            if cat_key == self.yarn_files_category_key:
+        for cat_key, list_widget in (self.lists if hasattr(self, 'lists') else self.list_widgets).items():
+            if hasattr(self, 'yarn_files_category_key') and cat_key == self.yarn_files_category_key:
                 continue
             for i in range(list_widget.count()):
                 q_item = list_widget.item(i)
-                item_widget = list_widget.itemWidget(q_item)
+                item_widget = list_widget.itemWidget(q_item) if list_widget.itemWidget(q_item) else None
                 if item_widget and hasattr(item_widget, "checkbox") and item_widget.checkbox.isChecked():
                     selected.append(item_widget.text_label.text())
+                elif q_item and q_item.checkState() == Qt.Checked:
+                    selected.append(q_item.text())
+        # LOG: Afficher la liste plate des items sélectionnés
+        logger.info(f"[DEBUG] get_all_selected_item_names - selected: {selected}")
         return selected
 
     # Utility method to be part of the class
@@ -700,7 +665,7 @@ class CheckableListItemWidget(QWidget):
                 list_widget_to_populate.addItem(list_item)
             label_to_update.setText(f"{original_label_text_content} ({len(valid_item_names)}/{len(valid_item_names)})")
         else:
-            list_widget_to_populate.addItem(QListWidgetItem("(No items)")) # Changed for clarity
+            list_widget_to_populate.addItem(QListWidgetItem(UIText.NO_ITEMS))
             label_to_update.setText(f"{original_label_text_content} (0/0)")
         
         if list_widget_to_populate.count() > 0:
@@ -826,16 +791,6 @@ class CheckableListItemWidget(QWidget):
                 if checkbox.isChecked():
                     selected_by_category[category_key].append(item_name)
         return selected_by_category
-
-    def get_all_selected_item_names(self) -> list[str]:
-        """Returns a flat list of all selected (checked) item names across all categories."""
-        all_selected: list[str] = []
-        for _category_key, list_widget in self.list_widgets.items():
-            for i in range(list_widget.count()):
-                item = list_widget.item(i)
-                if item and item.checkState() == Qt.Checked:
-                    all_selected.append(item.text())
-        return all_selected
 
     @Slot(list, bool)
     def clear_and_set_selected_items(self, item_names: list[str], silent: bool = False) -> None:

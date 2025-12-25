@@ -5,8 +5,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from .. import yarn_parser
-from .. import config_manager
+from services.yarn_renderer import yarn_parser
 
 logger = logging.getLogger(__name__)
 

@@ -6,18 +6,21 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, Slot
 from typing import Optional, List
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QColor, QPalette
 
-# Assurer l'accès aux modules du projet
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+# MODIFIED: Changed to direct import from services
+from services.interaction_service import InteractionService
+from services.configuration_service import ConfigurationService
+from context_builder import ContextBuilder
+# from ...services.context_builder import ContextBuilder # MODIFIED: Commenté pour éviter confusion avec le précédent
 
-from DialogueGenerator.services.interaction_service import InteractionService
-from DialogueGenerator.models.dialogue_structure.interaction import Interaction
-from DialogueGenerator.context_builder import ContextBuilder
+# MODIFIED: Changed to direct import from models
+from models.dialogue_structure.interaction import Interaction
 
 import logging
 logger = logging.getLogger(__name__)
+
+from constants import UIText, FilePaths, Defaults
 
 class PreviousDialogueSelectorWidget(QWidget):
     """Widget pour sélectionner une interaction précédente comme contexte."""
@@ -77,7 +80,7 @@ class PreviousDialogueSelectorWidget(QWidget):
         try:
             interactions = self._interaction_service.get_all()
             if not interactions:
-                self.interactions_list_widget.addItem("Aucune interaction trouvée.")
+                self.interactions_list_widget.addItem(UIText.NO_INTERACTION_FOUND)
                 self.interactions_list_widget.setEnabled(False)
                 return
             
@@ -142,7 +145,7 @@ class PreviousDialogueSelectorWidget(QWidget):
                 self.path_display_text_edit.setText("\n".join(path_texts))
                 self.use_context_button.setEnabled(True)
             else:
-                self.path_display_text_edit.setText(f"Aucun chemin trouvé pour l'interaction {interaction_id}.")
+                self.path_display_text_edit.setText(UIText.NO_PATH_FOUND.format(interaction_id=interaction_id))
                 self.use_context_button.setEnabled(False)
             # Met à jour les cases à cocher
             path_ids = [inter.interaction_id for inter in self._current_path_interactions]
@@ -214,8 +217,8 @@ class PreviousDialogueSelectorWidget(QWidget):
 if __name__ == '__main__':
     # Pour tester ce widget isolément
     from PySide6.QtWidgets import QApplication
-    from DialogueGenerator.services.repositories import InMemoryInteractionRepository
-    from DialogueGenerator.models.dialogue_structure.dialogue_elements import DialogueLineElement, PlayerChoicesBlockElement, PlayerChoiceOption
+    from ...services.repositories import InMemoryInteractionRepository
+    from ...models.dialogue_structure.dialogue_elements import DialogueLineElement, PlayerChoicesBlockElement, PlayerChoiceOption
 
     app = QApplication(sys.argv)
 

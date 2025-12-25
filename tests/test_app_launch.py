@@ -16,15 +16,16 @@ import asyncio # Ajout asyncio
 # Il est possible que vous deviez ajouter DialogueGenerator au PYTHONPATH ou ajuster les imports relatifs
 try:
     # Mode package (python -m DialogueGenerator.main_app)
-    from DialogueGenerator.main_app import MainWindow # main_app n'exporte pas directement MainWindow, mais l'utilise
-    from DialogueGenerator.ui.main_window import MainWindow as ActualMainWindow # On importe la classe directement
-    from DialogueGenerator.context_builder import ContextBuilder
-    from DialogueGenerator.ui.left_selection_panel import LeftSelectionPanel
-    from DialogueGenerator.ui.details_panel import DetailsPanel
-    # from DialogueGenerator.config_manager import ConfigManager # Module, pas une classe à instancier comme ça
-    from DialogueGenerator import config_manager # Importer le module
-    from DialogueGenerator.llm_client import DummyLLMClient, OpenAIClient # Ajout OpenAIClient pour monkeypatch
-    from DialogueGenerator.ui.generation_panel import GenerationPanel # Ajout
+    from main_app import MainWindow # main_app n'exporte pas directement MainWindow, mais l'utilise
+    from ui.main_window import MainWindow as ActualMainWindow # On importe la classe directement
+    from context_builder import ContextBuilder
+    from ui.left_selection_panel import LeftSelectionPanel
+    from ui.details_panel import DetailsPanel
+    # from config_manager import ConfigManager # Module, pas une classe à instancier comme ça
+    import config_manager # Importer le module
+    from llm_client import DummyLLMClient, OpenAIClient # Ajout OpenAIClient pour monkeypatch
+    # from ui.generation_panel import GenerationPanel # MODIFIED: Commenté
+    from ui.generation_panel_main import GenerationPanel # MODIFIED: Nouvel import direct
 except ImportError:
     # Tentative d'import relatif si exécuté comme partie d'un package non installé
     import sys
@@ -37,13 +38,14 @@ except ImportError:
     if dialogue_generator_dir not in sys.path:
         sys.path.insert(0, dialogue_generator_dir)
 
-    from DialogueGenerator.ui.main_window import MainWindow as ActualMainWindow
-    from DialogueGenerator.context_builder import ContextBuilder
-    from DialogueGenerator.ui.left_selection_panel import LeftSelectionPanel
-    from DialogueGenerator.ui.details_panel import DetailsPanel
-    from DialogueGenerator import config_manager
-    from DialogueGenerator.llm_client import DummyLLMClient, OpenAIClient # Ajout OpenAIClient pour monkeypatch
-    from DialogueGenerator.ui.generation_panel import GenerationPanel # Ajout
+    from ui.main_window import MainWindow as ActualMainWindow
+    from context_builder import ContextBuilder
+    from ui.left_selection_panel import LeftSelectionPanel
+    from ui.details_panel import DetailsPanel
+    import config_manager
+    from llm_client import DummyLLMClient, OpenAIClient # Ajout OpenAIClient pour monkeypatch
+    # from ui.generation_panel import GenerationPanel # MODIFIED: Commenté
+    from ui.generation_panel_main import GenerationPanel # MODIFIED: Nouvel import direct
 
 # Forcer anyio à utiliser le backend asyncio pour tous les tests de ce module
 @pytest.fixture
@@ -79,6 +81,18 @@ def app(qtbot: QtBot, monkeypatch, tmp_path):
     # monkeypatch.setattr(config_manager, 'get_config_file_path', lambda: project_root_path / 'config.txt')
 
 
+    # Mocker ConfigurationService pour ne pas sauvegarder sur disque
+    def mock_save_settings(self, *args, **kwargs): # Ajout de *args, **kwargs pour flexibilité
+        # logger.debug("(Mocked) ConfigurationService.save_ui_settings called, no actual save.")
+        return True
+    monkeypatch.setattr("services.configuration_service.ConfigurationService.save_ui_settings", mock_save_settings)
+    # Assurer que le mock est appliqué à la bonne classe si elle est importée différemment ailleurs.
+    # Si ConfigurationService est importé directement dans ui.main_window, il faudrait aussi le patcher là:
+    # monkeypatch.setattr("ui.main_window.ConfigurationService.save_ui_settings", mock_save_settings)
+    # Cependant, MainWindow obtient son instance de ConfigurationService via `self.config_service = ConfigurationService()`,
+    # donc patcher la classe originale `services.configuration_service.ConfigurationService` devrait suffire.
+
+
     # Assurez-vous que les fichiers de configuration référencés par context_config.json sont disponibles
     # et que context_config.json lui-même est au bon endroit.
     # Par défaut: DialogueGenerator/context_config.json
@@ -95,12 +109,12 @@ def app(qtbot: QtBot, monkeypatch, tmp_path):
     def mock_openai_client(*args, **kwargs):
         return DummyLLMClient()
     
-    monkeypatch.setattr("DialogueGenerator.ui.main_window.OpenAIClient", mock_openai_client)
+    monkeypatch.setattr("ui.main_window.OpenAIClient", mock_openai_client)
     # Si MainWindow importe OpenAIClient directement (from ..llm_client import OpenAIClient)
     # et que llm_client est dans le même dossier que main_window, le chemin pourrait être différent.
     # Le chemin actuel suppose que main_window.py fait `from ..llm_client import OpenAIClient`
-    # ou `from DialogueGenerator.llm_client import OpenAIClient` et que le système d'import résout cela.
-    # Le chemin "DialogueGenerator.ui.main_window.OpenAIClient" cible l'endroit où MainWindow *utilise* OpenAIClient.
+    # ou `from llm_client import OpenAIClient` et que le système d'import résout cela.
+    # Le chemin "ui.main_window.OpenAIClient" cible l'endroit où MainWindow *utilise* OpenAIClient.
 
     # Créer une instance de DummyLLMClient pour les tests -> N'est plus nécessaire car monkeypatch s'en occupe
     # dummy_llm_client = DummyLLMClient()
@@ -224,9 +238,10 @@ async def test_dialogue_generation_flow(app: ActualMainWindow, qtbot: QtBot):
     # Attendre que les combobox du GenerationPanel soient peuplées.
     # populate_scene_combos est appelé dans finalize_ui_setup -> load_initial_data de MainWindow
     def combos_ready():
-        char_a_ok = generation_panel.character_a_combo.count() > 0
-        char_b_ok = generation_panel.character_b_combo.count() > 0
-        scene_ok = generation_panel.scene_region_combo.count() > 0
+        # MODIFIED: Accès via scene_selection_widget
+        char_a_ok = generation_panel.scene_selection_widget.character_a_combo.count() > 0
+        char_b_ok = generation_panel.scene_selection_widget.character_b_combo.count() > 0
+        scene_ok = generation_panel.scene_selection_widget.scene_region_combo.count() > 0
         # On ne vérifie pas sub_location car il peut être vide initialement
         # et est peuplé en fonction de scene_region_combo.
         return char_a_ok and char_b_ok and scene_ok
@@ -238,17 +253,20 @@ async def test_dialogue_generation_flow(app: ActualMainWindow, qtbot: QtBot):
 
     # 1. Sélectionner des personnages et une scène
     # Vérifier qu'il y a au moins un item sélectionnable (l'index 0 est souvent un placeholder)
-    if generation_panel.character_a_combo.count() <= 1:
+    # MODIFIED: Accès via scene_selection_widget
+    if generation_panel.scene_selection_widget.character_a_combo.count() <= 1:
         pytest.skip("Pas assez de personnages dans character_a_combo pour le test.")
-    generation_panel.character_a_combo.setCurrentIndex(1) 
+    generation_panel.scene_selection_widget.character_a_combo.setCurrentIndex(1) 
     
-    if generation_panel.character_b_combo.count() <= 1:
+    # MODIFIED: Accès via scene_selection_widget
+    if generation_panel.scene_selection_widget.character_b_combo.count() <= 1:
         pytest.skip("Pas assez de personnages dans character_b_combo pour le test.")
-    generation_panel.character_b_combo.setCurrentIndex(1)
+    generation_panel.scene_selection_widget.character_b_combo.setCurrentIndex(1)
 
-    if generation_panel.scene_region_combo.count() <= 1:
+    # MODIFIED: Accès via scene_selection_widget
+    if generation_panel.scene_selection_widget.scene_region_combo.count() <= 1:
         pytest.skip("Pas assez de scènes dans scene_region_combo pour le test.")
-    generation_panel.scene_region_combo.setCurrentIndex(1)
+    generation_panel.scene_selection_widget.scene_region_combo.setCurrentIndex(1)
     # Laisser sub_location_combo à son état par défaut (souvent vide ou "Any")
 
     # Simuler une sélection dans LeftSelectionPanel pour avoir un contexte minimal
@@ -268,18 +286,22 @@ async def test_dialogue_generation_flow(app: ActualMainWindow, qtbot: QtBot):
 
     # 2. Remplir les instructions utilisateur
     test_instruction = "Ceci est une instruction de test pour le DummyLLMClient."
-    generation_panel.user_instructions_textedit.setPlainText(test_instruction)
+    # MODIFIED: Accès via instructions_widget
+    generation_panel.instructions_widget.user_instructions_textedit.setPlainText(test_instruction)
 
     # Définir le nombre de variantes
     num_variants_to_generate = 2
-    generation_panel.k_variants_combo.setCurrentText(str(num_variants_to_generate))
+    # MODIFIED: Accès via generation_params_widget et son alias k_variants_combo
+    generation_panel.generation_params_widget.k_variants_combo.setCurrentText(str(num_variants_to_generate))
 
     # Vider les onglets existants au cas où (même si ça ne devrait pas être nécessaire pour un test frais)
-    generation_panel.variant_display_tabs.clear()
+    # MODIFIED: Accès via variants_display_widget (instance de GeneratedVariantsTabsWidget)
+    generation_panel.variants_display_widget.clear() 
     # Ajouter l'onglet "Prompt" qui est créé par _on_generate_dialogue_button_clicked_local avant la génération
     prompt_tab_temp = QTextEdit()
     prompt_tab_temp.setReadOnly(True)
-    generation_panel.variant_display_tabs.addTab(prompt_tab_temp, "Prompt Estimé")
+    # MODIFIED: Accès via variants_display_widget
+    generation_panel.variants_display_widget.addTab(prompt_tab_temp, "Prompt Estimé")
 
     # Store an event to check if the signal is emitted
     signal_emitted_event = asyncio.Event()
@@ -294,9 +316,11 @@ async def test_dialogue_generation_flow(app: ActualMainWindow, qtbot: QtBot):
     generation_panel.generation_finished.connect(on_generation_finished)
 
     # Appeler directement la coroutine
-    await generation_panel._on_generate_dialogue_button_clicked_local()
+    # await generation_panel._on_generate_dialogue_button_clicked_local() # Ancienne méthode
+    # Simuler le clic sur le bouton qui déclenche _launch_dialogue_generation
+    qtbot.mouseClick(generation_panel.generate_dialogue_button, qt_api.QtCore.Qt.MouseButton.LeftButton)
 
-    # Vérifier que le signal a été émis (maintenant que la coroutine est terminée)
+    # Attendre que le signal generation_finished soit émis (ou timeout)
     try:
         await asyncio.wait_for(signal_emitted_event.wait(), timeout=1.0) # Petit timeout, devrait être instantané
     except asyncio.TimeoutError:
@@ -308,14 +332,16 @@ async def test_dialogue_generation_flow(app: ActualMainWindow, qtbot: QtBot):
 
     # Maintenant, vérifier le nombre d'onglets, car la méthode await-ed est terminée
     expected_tab_count = num_variants_to_generate + 1  # +1 pour l'onglet "Prompt Estimé"
-    current_tab_count = generation_panel.variant_display_tabs.count()
+    # MODIFIED: Accès via variants_display_widget
+    current_tab_count = generation_panel.variants_display_widget.count()
     assert current_tab_count == expected_tab_count, \
         f"Nombre d'onglets incorrect. Attendu: {expected_tab_count}, Obtenu: {current_tab_count}"
     print(f"DEBUG TEST: Nombre d'onglets correct: {current_tab_count}")
 
     # Vérification du contenu (optionnel, mais bon à avoir si ça passe)
     for i in range(num_variants_to_generate):
-        variant_tab_widget = generation_panel.variant_display_tabs.widget(i + 1)  # +1 pour sauter l'onglet Prompt
+        # MODIFIED: Accès via variants_display_widget
+        variant_tab_widget = generation_panel.variants_display_widget.widget(i + 1)  # +1 pour sauter l'onglet Prompt
         assert variant_tab_widget is not None, f"L'onglet pour la variante {i+1} est None."
 
         # Le contenu de l'onglet est maintenant un QWidget avec un QVBoxLayout contenant un QTextEdit et un QPushButton
@@ -323,8 +349,11 @@ async def test_dialogue_generation_flow(app: ActualMainWindow, qtbot: QtBot):
         assert text_edit_variant is not None, f"QTextEdit non trouvé dans l'onglet variante {i+1}."
 
         generated_text = text_edit_variant.toPlainText().lower()
-        assert f"variante {i+1}" in generated_text, \
-            f"Le texte de la variante {i+1} (Attendu: 'variante {i+1}') ne correspond pas. Contenu: \n{generated_text[:200]}..."
+        # MODIFIED: Adapter l'assertion au nouveau format du DummyLLMClient
+        assert f"dummy title {i+1}" in generated_text, \
+            f"Le titre de la variante {i+1} ne correspond pas. Contenu: \n{generated_text[:250]}..."
+        assert f"ligne pnj phase 1 var {i+1}" in generated_text, \
+            f"Le contenu de la variante {i+1} ne correspond pas. Contenu: \n{generated_text[:250]}..."
         print(f"DEBUG TEST: Contenu de l'onglet variante {i+1} vérifié.")
 
     generation_panel.generation_finished.disconnect(on_generation_finished) # Nettoyage
@@ -358,7 +387,7 @@ async def test_dialogue_generation_flow(app: ActualMainWindow, qtbot: QtBot):
 # Ajout pour clarifier l'import de ActualMainWindow vs MainWindow de main_app
 # Dans main_app.py, MainWindow est la classe de ui.main_window, pas le module lui-même.
 # Le test doit importer et utiliser la classe directement.
-# from DialogueGenerator.ui.main_window import MainWindow as ActualMainWindow # Déjà fait plus haut.
+# from ui.main_window import MainWindow as ActualMainWindow # Déjà fait plus haut.
 # ... (le reste du fichier est identique)
 # Dans la fixture app :
 # main_window = ActualMainWindow(context_builder=context_builder_instance) # Déjà corrigé plus haut.
@@ -370,7 +399,7 @@ async def test_dialogue_generation_flow(app: ActualMainWindow, qtbot: QtBot):
 # Ajout pour clarifier l'import de ActualMainWindow vs MainWindow de main_app
 # Dans main_app.py, MainWindow est la classe de ui.main_window, pas le module lui-même.
 # Le test doit importer et utiliser la classe directement.
-# from DialogueGenerator.ui.main_window import MainWindow as ActualMainWindow # Déjà fait plus haut.
+# from ui.main_window import MainWindow as ActualMainWindow # Déjà fait plus haut.
 # ... (le reste du fichier est identique)
 # Dans la fixture app :
 # main_window = ActualMainWindow(context_builder=context_builder_instance, llm_client=dummy_llm_client) # Corrigé

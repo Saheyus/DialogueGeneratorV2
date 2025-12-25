@@ -1,7 +1,8 @@
 import logging
 import json
 import re
-from typing import Optional, Any, Tuple, List, Dict, Union
+from typing import Optional, Any, Tuple, List, Dict, Union, Type
+from pydantic import BaseModel
 import uuid
 from abc import ABC, abstractmethod
 import asyncio
@@ -22,14 +23,14 @@ except ImportError:
     current_dir = Path(__file__).resolve().parent.parent
     if str(current_dir) not in sys.path:
         sys.path.insert(0, str(current_dir))
-    from DialogueGenerator.context_builder import ContextBuilder
-    from DialogueGenerator.prompt_engine import PromptEngine
-    from DialogueGenerator.llm_client import ILLMClient
-    from DialogueGenerator.models.dialogue_structure.interaction import Interaction
-    from DialogueGenerator.models.dialogue_structure.dialogue_elements import (
+    from context_builder import ContextBuilder
+    from prompt_engine import PromptEngine
+    from llm_client import ILLMClient
+    from models.dialogue_structure.interaction import Interaction
+    from models.dialogue_structure.dialogue_elements import (
         DialogueLineElement, PlayerChoicesBlockElement, CommandElement, PlayerChoiceOption
     )
-    from DialogueGenerator.services.interaction_service import InteractionService
+    from services.interaction_service import InteractionService
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,20 @@ class IDialogueGenerationService(ABC):
                                             context_selections: Dict[str, Any],
                                             current_llm_model_identifier: str
                                             ) -> Tuple[Optional[List[Interaction]], Optional[str], Optional[int]]:
+        pass
+
+    @abstractmethod
+    async def generate_structured_object_variants(self,
+                                               llm_client: ILLMClient,
+                                               k_variants: int,
+                                               max_context_tokens_for_context_builder: int,
+                                               user_instructions: str,
+                                               system_prompt_override: Optional[str],
+                                               context_selections: Dict[str, Any], # Doit contenir _scene_protagonists, _scene_location
+                                               dialogue_structure_description: str, # Description de la structure pour le prompt
+                                               target_response_model: Type[BaseModel], # Le modèle Pydantic pour la réponse LLM
+                                               current_llm_model_identifier: str # Pour logging ou logique spécifique au modèle
+                                               ) -> Tuple[Optional[List[BaseModel]], Optional[str], Optional[int]]:
         pass
 
 class DialogueGenerationService(IDialogueGenerationService):
@@ -92,16 +107,22 @@ class DialogueGenerationService(IDialogueGenerationService):
         final_prompt_str = None
         estimated_tokens = 0
         variants_output: Optional[List[Dict[str, Any]]] = []
+        # Copie pour pouvoir utiliser .pop() sans affecter l'original en dehors de cette portée
+        current_context_selections = context_selections.copy()
 
         try:
             context_summary_text = self._build_context_summary(
-                context_selections, user_instructions, max_context_tokens_for_context_builder
+                current_context_selections, user_instructions, max_context_tokens_for_context_builder # Utilise la copie
             )
 
             if system_prompt_override is not None and self.prompt_engine.system_prompt_template != system_prompt_override:
                 original_system_prompt = self.prompt_engine.system_prompt_template
                 self.prompt_engine.system_prompt_template = system_prompt_override
                 logger.info(f"System prompt temporarily set for TEXT: '{system_prompt_override[:100]}...'" ) 
+
+            # Extraire les informations de scène pour PromptEngine depuis context_selections
+            scene_protagonists_dict = current_context_selections.pop("_scene_protagonists", {})
+            scene_location_dict = current_context_selections.pop("_scene_location", {})
 
             generation_params_for_prompt_build = {
                 "structured_generation_request": structured_output,
@@ -110,6 +131,8 @@ class DialogueGenerationService(IDialogueGenerationService):
             final_prompt_str, estimated_tokens = self.prompt_engine.build_prompt(
                 context_summary=context_summary_text,
                 user_specific_goal=user_instructions,
+                scene_protagonists=scene_protagonists_dict,
+                scene_location=scene_location_dict,
                 generation_params=generation_params_for_prompt_build
             )
             logger.info(f"Final prompt for TEXT dialogue built. Estimated tokens: {estimated_tokens}. Length: {len(final_prompt_str)} chars.")
@@ -163,12 +186,14 @@ class DialogueGenerationService(IDialogueGenerationService):
         final_prompt_str = None
         estimated_tokens = 0
         interactions_output: Optional[List[Interaction]] = []
+        # Copie pour pouvoir utiliser .pop() sans affecter l'original en dehors de cette portée
+        current_context_selections = context_selections.copy()
 
         try:
             # context_selections déjà enrichi avec _scene_protagonists, _scene_location, generate_interaction=True
             # et generation_settings.dialogue_structure par GenerationPanel
             context_summary_text = self._build_context_summary(
-                context_selections, user_instructions, max_context_tokens_for_context_builder
+                current_context_selections, user_instructions, max_context_tokens_for_context_builder # Utilise la copie
             )
 
             if system_prompt_override is not None and self.prompt_engine.system_prompt_template != system_prompt_override:
@@ -176,7 +201,10 @@ class DialogueGenerationService(IDialogueGenerationService):
                 self.prompt_engine.system_prompt_template = system_prompt_override
                 logger.info(f"System prompt temporarily set for INTERACTION: '{system_prompt_override[:100]}...'" )
             
-            dialogue_structure_description = context_selections.get("generation_settings", {}).get("dialogue_structure", "")
+            dialogue_structure_description = current_context_selections.get("generation_settings", {}).get("dialogue_structure", "")
+            # Extraire les informations de scène pour PromptEngine depuis context_selections
+            scene_protagonists_dict = current_context_selections.pop("_scene_protagonists", {})
+            scene_location_dict = current_context_selections.pop("_scene_location", {})
 
             generation_params_for_prompt_build = {
                 "structured_generation_request": True, 
@@ -187,6 +215,8 @@ class DialogueGenerationService(IDialogueGenerationService):
             final_prompt_str, estimated_tokens = self.prompt_engine.build_prompt(
                 context_summary=context_summary_text,
                 user_specific_goal=user_instructions, 
+                scene_protagonists=scene_protagonists_dict,
+                scene_location=scene_location_dict,
                 generation_params=generation_params_for_prompt_build
             )
             logger.info(f"Final prompt for INTERACTION built. Estimated tokens: {estimated_tokens}. Length: {len(final_prompt_str)} chars.")
@@ -230,23 +260,14 @@ class DialogueGenerationService(IDialogueGenerationService):
             self._restore_prompt_on_error(original_system_prompt)
             return None, final_prompt_str if final_prompt_str else "Error during INTERACTION generation.", estimated_tokens
 
-    def _build_context_summary(self, context_selections: Dict[str, Any], user_instructions: str, max_tokens: int) -> str:
-        # Cette méthode encapsule la logique de construction du résumé du contexte.
-        # Elle utilise context_selections qui devrait contenir _scene_protagonists et _scene_location si applicables.
-        # user_instructions est passé à build_context comme scene_instruction.
-        
-        # Note: La construction de `scene_instruction` à partir de `_scene_protagonists` et `_scene_location`
-        # a été retirée d'ici car `GenerationPanel` prépare déjà `context_selections` avec ces informations.
-        # Le `ContextBuilder.build_context` doit utiliser `scene_instruction` (qui est `user_instructions` ici)
-        # et les `selected_elements` (qui est `context_selections` ici) pour former le contexte.
-        
-        context_summary_text = self.context_builder.build_context(
-            selected_elements=context_selections, 
-            scene_instruction=user_instructions, 
-            max_tokens=max_tokens,
-        )
-        logger.debug(f"Context summary built by service: {len(context_summary_text)} chars, first 100: {context_summary_text[:100]}")
-        return context_summary_text
+    def _build_context_summary(self, context_selections: Dict[str, Any], user_instructions: str, max_tokens: int, no_limit: bool = False) -> str:
+        """
+        Construit le résumé contextuel à partir des sélections et instructions utilisateur.
+        Si no_limit est True, max_tokens est ignoré (valeur très haute transmise).
+        """
+        if no_limit:
+            max_tokens = 999999
+        return self.context_builder.build_context(context_selections, user_instructions, max_tokens=max_tokens)
 
     def _restore_prompt_on_error(self, original_system_prompt: Optional[str]):
         if original_system_prompt is not None:
@@ -448,12 +469,14 @@ class DialogueGenerationService(IDialogueGenerationService):
         full_prompt: Optional[str] = None
         estimated_tokens: int = 0
         context_summary: Optional[str] = None # Initialisation
+        # Copie pour pouvoir utiliser .pop() sans affecter l'original en dehors de cette portée
+        current_context_selections = context_selections.copy()
 
         try:
             # 1. Construire le contexte avec ContextBuilder
             # Note: user_instructions est aussi passé à context_builder comme scene_instruction.
             context_summary = self.context_builder.build_context(
-                selected_elements=context_selections, 
+                selected_elements=current_context_selections, 
                 scene_instruction=user_instructions,
                 max_tokens=max_context_tokens
             )
@@ -461,9 +484,9 @@ class DialogueGenerationService(IDialogueGenerationService):
                 context_summary = "" # Assurer une chaîne vide
                 logger.warning("ContextBuilder a retourné None pour le résumé du contexte. Utilisation d'une chaîne vide.")
 
-            # 2. Extraire les informations de scène pour PromptEngine depuis context_selections
-            scene_protagonists_dict = context_selections.pop("_scene_protagonists", {}) # Utiliser {} comme défaut
-            scene_location_dict = context_selections.pop("_scene_location", {}) # Utiliser {} comme défaut
+            # 2. Extraire les informations de scène pour PromptEngine depuis current_context_selections
+            scene_protagonists_dict = current_context_selections.pop("_scene_protagonists", {}) # Utiliser {} comme défaut
+            scene_location_dict = current_context_selections.pop("_scene_location", {}) # Utiliser {} comme défaut
 
             # 3. Construire le prompt final avec PromptEngine
             original_system_prompt = None
@@ -473,7 +496,7 @@ class DialogueGenerationService(IDialogueGenerationService):
                 logger.info("Utilisation d'un system_prompt_override pour la prévisualisation.")
 
             # Déterminer si nous générons une interaction structurée
-            generate_interaction = structured_output and context_selections.get("generate_interaction", False)
+            generate_interaction = structured_output and current_context_selections.get("generate_interaction", False)
             generation_params = {
                 "structured_output": structured_output,
                 "generate_interaction": generate_interaction
@@ -545,3 +568,90 @@ class DialogueGenerationService(IDialogueGenerationService):
         except Exception as e:
             logger.exception(f"Erreur inattendue dans parse_interaction_response: {str(e)}")
             return None 
+
+    async def generate_structured_object_variants(self,
+                                               llm_client: ILLMClient,
+                                               k_variants: int,
+                                               max_context_tokens_for_context_builder: int,
+                                               user_instructions: str,
+                                               system_prompt_override: Optional[str],
+                                               context_selections: Dict[str, Any], # Doit contenir _scene_protagonists, _scene_location
+                                               dialogue_structure_description: str, # Description de la structure pour le prompt
+                                               target_response_model: Type[BaseModel], # Le modèle Pydantic pour la réponse LLM
+                                               current_llm_model_identifier: str # Pour logging ou logique spécifique au modèle
+                                               ) -> Tuple[Optional[List[BaseModel]], Optional[str], Optional[int]]:
+        """
+        Génère des variantes de dialogue structurées directement en objets Pydantic.
+        Utilise un target_response_model pour que le LLM retourne des objets conformes.
+        """
+        logger.info(f"Service: Starting STRUCTURED OBJECT generation. Model: {current_llm_model_identifier}, K: {k_variants}, TargetModel: {target_response_model.__name__}")
+        original_system_prompt = None
+        final_prompt_str = None
+        estimated_tokens = 0
+        structured_objects_output: Optional[List[BaseModel]] = []
+        
+        # Copie pour pouvoir utiliser .pop() sans affecter l'original en dehors de cette portée
+        current_context_selections = context_selections.copy()
+
+        try:
+            context_summary_text = self._build_context_summary(
+                current_context_selections, user_instructions, max_context_tokens_for_context_builder # Utilise la copie
+            )
+
+            if system_prompt_override is not None and self.prompt_engine.system_prompt_template != system_prompt_override:
+                original_system_prompt = self.prompt_engine.system_prompt_template
+                self.prompt_engine.system_prompt_template = system_prompt_override
+                logger.info(f"System prompt temporarily set for STRUCTURED OBJECT: '{system_prompt_override[:100]}...'")
+
+            # Extraire les informations de scène pour PromptEngine depuis context_selections
+            scene_protagonists_dict = current_context_selections.pop("_scene_protagonists", {})
+            scene_location_dict = current_context_selections.pop("_scene_location", {})
+            
+            generation_params_for_prompt_build = {
+                "structured_generation_request": True, # Indique une demande de sortie structurée
+                "generate_interaction": True, # Suppose que l'objet structuré est une forme d'interaction
+                "dialogue_structure_description": dialogue_structure_description
+            }
+
+            final_prompt_str, estimated_tokens = self.prompt_engine.build_prompt(
+                context_summary=context_summary_text,
+                user_specific_goal=user_instructions,
+                scene_protagonists=scene_protagonists_dict,
+                scene_location=scene_location_dict,
+                generation_params=generation_params_for_prompt_build
+            )
+            logger.info(f"Final prompt for STRUCTURED OBJECT built. Estimated tokens: {estimated_tokens}. Length: {len(final_prompt_str)} chars.")
+
+            if not final_prompt_str:
+                logger.error("Failed to build prompt string (empty) for STRUCTURED OBJECT.")
+                self._restore_prompt_on_error(original_system_prompt)
+                return None, "Error: Prompt could not be built for STRUCTURED OBJECT.", 0
+
+            if not llm_client:
+                logger.error("LLM client is None, cannot generate STRUCTURED OBJECT variants.")
+                self._restore_prompt_on_error(original_system_prompt)
+                return None, final_prompt_str, estimated_tokens
+
+            logger.debug(f"Calling LLM to generate {k_variants} STRUCTURED OBJECT variants using response_model: {target_response_model.__name__}.")
+            
+            # Appel LLM avec le response_model
+            llm_pydantic_variants = await llm_client.generate_variants(
+                prompt=final_prompt_str, 
+                k=k_variants, 
+                response_model=target_response_model # C'est la différence clé
+            )
+            
+            if llm_pydantic_variants:
+                structured_objects_output = llm_pydantic_variants # Directement les objets Pydantic
+                logger.info(f"LLM generated {len(structured_objects_output)} STRUCTURED OBJECT variants.")
+            else:
+                logger.warning("LLM returned no STRUCTURED OBJECT variants.")
+                structured_objects_output = []
+
+            self._restore_prompt_on_error(original_system_prompt) # Restore even on success
+            return structured_objects_output, final_prompt_str, estimated_tokens
+
+        except Exception as e:
+            logger.exception("Error during STRUCTURED OBJECT generation in DialogueGenerationService:")
+            self._restore_prompt_on_error(original_system_prompt)
+            return None, final_prompt_str if final_prompt_str else "Error during STRUCTURED OBJECT generation.", estimated_tokens

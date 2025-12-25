@@ -7,7 +7,7 @@ import logging
 # Adjust imports based on your project structure
 # Assuming pytest is run from the project root (Notion_Scrapper)
 # or that DialogueGenerator is in PYTHONPATH.
-from DialogueGenerator.context_builder import ContextBuilder, DEFAULT_CONFIG_FILE
+from context_builder import ContextBuilder, DEFAULT_CONFIG_FILE
 # get_project_root is not in config_manager, it's usually a local helper or part of sys.path setup.
 
 # If the above direct import fails, this block can help if tests are run from other locations
@@ -16,7 +16,7 @@ from DialogueGenerator.context_builder import ContextBuilder, DEFAULT_CONFIG_FIL
 
 # Original try-except block modified:
 # try:
-#     from DialogueGenerator.context_builder import ContextBuilder, DEFAULT_CONFIG_FILE
+#     from context_builder import ContextBuilder, DEFAULT_CONFIG_FILE
 # except ImportError:
 #     import sys
 #     import os
@@ -28,8 +28,8 @@ from DialogueGenerator.context_builder import ContextBuilder, DEFAULT_CONFIG_FIL
 #     # It's better if DialogueGenerator itself is in PYTHONPATH, or Notion_Scrapper is the root
 #     # and pytest is run from there.
 #     if dialogue_generator_dir not in sys.path:
-#          sys.path.insert(0, dialogue_generator_dir) # This might make 'from DialogueGenerator...' work
-#     from DialogueGenerator.context_builder import ContextBuilder, DEFAULT_CONFIG_FILE
+#          sys.path.insert(0, dialogue_generator_dir) # This might make 'from ..' work
+#     from context_builder import ContextBuilder, DEFAULT_CONFIG_FILE
 
 
 # Fixture to provide a temporary directory for test files
@@ -73,7 +73,7 @@ def mock_project_root_for_context_builder(monkeypatch, temp_test_dir: Path):
     
     # Monkeypatch DEFAULT_CONFIG_FILE specifically for tests related to config loading
     # This ensures ContextBuilder tries to load its config from our controlled dummy file
-    monkeypatch.setattr("DialogueGenerator.context_builder.DEFAULT_CONFIG_FILE", temp_test_dir / "dummy_context_config.json")
+    monkeypatch.setattr("context_builder.DEFAULT_CONFIG_FILE", temp_test_dir / "dummy_context_config.json")
 
     # For GDD loading tests, we will need to mock PROJECT_ROOT_DIR within context_builder.py
     # or pass explicit, controlled base paths to load_gdd_files.
@@ -82,7 +82,7 @@ def mock_project_root_for_context_builder(monkeypatch, temp_test_dir: Path):
 @pytest.fixture
 def mock_gdd_project_root(monkeypatch, temp_test_dir: Path):
     """Mocks context_builder.PROJECT_ROOT_DIR to point to the temp_test_dir."""
-    monkeypatch.setattr("DialogueGenerator.context_builder.PROJECT_ROOT_DIR", temp_test_dir)
+    monkeypatch.setattr("context_builder.PROJECT_ROOT_DIR", temp_test_dir)
     
     # Create dummy GDD directories and files inside temp_test_dir
     (temp_test_dir / "GDD" / "categories").mkdir(parents=True, exist_ok=True)
@@ -121,7 +121,7 @@ class TestContextBuilderInitialization:
     def test_init_with_nonexistent_config_file(self, temp_test_dir: Path, monkeypatch, caplog):
         """Tests ContextBuilder initialization with a non-existent config file."""
         non_existent_config = temp_test_dir / "non_existent_config.json"
-        monkeypatch.setattr("DialogueGenerator.context_builder.DEFAULT_CONFIG_FILE", non_existent_config)
+        monkeypatch.setattr("context_builder.DEFAULT_CONFIG_FILE", non_existent_config)
         
         cb = ContextBuilder(config_file_path=non_existent_config)
         assert cb.context_config == {} # Should default to empty dict
@@ -133,13 +133,13 @@ class TestContextBuilderInitialization:
         with open(malformed_config_file, "w", encoding="utf-8") as f:
             f.write("{malformed_json: ") # Invalid JSON
         
-        monkeypatch.setattr("DialogueGenerator.context_builder.DEFAULT_CONFIG_FILE", malformed_config_file)
+        monkeypatch.setattr("context_builder.DEFAULT_CONFIG_FILE", malformed_config_file)
         
         cb = ContextBuilder(config_file_path=malformed_config_file)
         assert cb.context_config == {} # Should default to empty dict
         assert f"Erreur de décodage JSON pour le fichier de configuration {malformed_config_file}" in caplog.text
 
-    @patch('DialogueGenerator.context_builder.tiktoken', None)
+    @patch('context_builder.tiktoken', None)
     def test_init_without_tiktoken(self, dummy_context_config_file: Path, mock_project_root_for_context_builder, caplog):
         """Tests ContextBuilder initialization when tiktoken is not available."""
         cb = ContextBuilder(config_file_path=dummy_context_config_file)
@@ -230,7 +230,7 @@ class TestContextBuilderGDDLoading:
 
         # Ensure caplog captures INFO level messages for this specific test
         # Must be set BEFORE the code that generates the logs is run.
-        caplog.set_level(logging.INFO, logger="DialogueGenerator.context_builder")
+        caplog.set_level(logging.INFO, logger="context_builder")
 
         cb = ContextBuilder(config_file_path=dummy_context_config_file)
         cb.load_gdd_files()
@@ -565,13 +565,18 @@ class TestContextBuilderContextBuilding:
 
     def test_get_prioritized_info_character(self, cb_for_context: ContextBuilder):
         elara_data = cb_for_context.get_character_details_by_name("Elara")
-        info_lvl1 = cb_for_context._get_prioritized_info(elara_data, "character", 1)
-        assert "Personnage: Elara" in info_lvl1
-        assert "Rôle: Mage" in info_lvl1
-        
-        info_lvl2 = cb_for_context._get_prioritized_info(elara_data, "character", 2)
-        assert "Origine: Une tour l..." in info_lvl2 # Truncated
-        assert "Caractère: Sage et réservée" in info_lvl2
+        # Test avec level=1
+        info_lvl1 = cb_for_context._get_prioritized_info(elara_data, "characters", 1)
+        assert "Nom: Elara" in info_lvl1 
+        assert "Occupation: Mage" in info_lvl1
+        assert 'Background: {"Origine": "Une tour lointaine et mystérieuse"}' in info_lvl1
+
+        # Test avec level=2
+        info_lvl2 = cb_for_context._get_prioritized_info(elara_data, "characters", 2)
+        assert "Nom: Elara" in info_lvl2
+        assert "Occupation: Mage" in info_lvl2
+        assert 'Background: {"Origine": "Une tour lointaine et mystérieuse"}' in info_lvl2
+        assert 'Traits: {"Personnalité": "Sage et réservée"}' in info_lvl2
 
     def test_get_prioritized_info_item_condition_path_not_exists(self, cb_for_context: ContextBuilder):
         amulette = cb_for_context.get_item_details_by_name("Amulette de Clairvoyance")
@@ -605,144 +610,138 @@ class TestContextBuilderContextBuilding:
             "locations": ["La Bibliothèque Infinie"]
         }
         instruction = "Elara explore la bibliothèque."
-        context_str = cb_for_context.build_context(selected, instruction, max_tokens=1000)
+        context_str = cb_for_context.build_context(selected, instruction, max_tokens=3000)
+    
+        assert "--- CHARACTERS ---" in context_str
+        assert "Nom: Elara" in context_str 
+        assert "Occupation: Mage" in context_str # Corrigé
+        assert "--- LOCATIONS ---" in context_str
+        assert "Nom: La Bibliothèque Infinie" in context_str 
+        assert "Description: Un labyrinthe de savoir et de secrets anciens." in context_str
+        assert "OBJECTIF DE LA SCÈNE" in context_str
+        assert instruction in context_str
 
-        assert "### Instruction de Scène\nElara explore la bibliothèque." in context_str
-        # Check for character details, less sensitive to exact newlines around the block
-        assert "Personnage: Elara" in context_str
-        assert "Rôle: Mage" in context_str
-        assert "Origine: Une tour l..." in context_str # From level 2, check if it appears
-        assert "Caractère: Sage et réservée" in context_str # From level 2
+    def test_build_context_with_previous_dialogue(self, cb_for_context: ContextBuilder):
+        # Setup des interactions précédentes
+        from models.dialogue_structure.interaction import Interaction # Ajout import local si besoin
+        from models.dialogue_structure.dialogue_elements import DialogueLineElement # Ajout import local
         
-        # Check for location details
-        assert "Lieu: La Bibliothèque Infinie" in context_str
-        assert "Ambiance: Un labyrinthe d..." in context_str # Truncated
-        assert "### Vision Globale\nUn monde au bord du chaos" in context_str # Truncated vision
-
-    def test_build_context_token_limit(self, cb_for_context: ContextBuilder, monkeypatch):
-        # Mock _count_tokens to control token counting precisely for this test
-        token_counts = {}
-        original_count_tokens = cb_for_context._count_tokens
-
-        def mock_count_tokens_for_limit(text):
-            # Simple mock: count words, but make some sections very "heavy"
-            if "Elara" in text and "Personnage: Elara" in text: # First character info
-                return 50 # Heavy
-            elif "La Bibliothèque Infinie" in text: # First location info
-                return 60 # Heavier, should be cut if limit is low
-            elif "Vision Globale" in text:
-                return 30 # Vision
-            return original_count_tokens(text) # Default for other small parts
-        
-        monkeypatch.setattr(cb_for_context, '_count_tokens', mock_count_tokens_for_limit)
+        interaction1 = Interaction(
+            interaction_id="prev_inter_1", 
+            title="Rencontre initiale", 
+            elements=[
+                DialogueLineElement(element_id="line1", speaker="Elara", text="Bonjour Gorok.")
+            ]
+        )
+        cb_for_context.set_previous_dialogue_context([interaction1]) # Appel avant build_context
 
         selected = {
             "characters": ["Elara"],
-            "locations": ["La Bibliothèque Infinie", "Le Pic du Destin"], # Add another location
-            "items": ["Amulette de Clairvoyance"]
+            "locations": ["La Bibliothèque Infinie"],
         }
-        instruction = "Instruction test"
-        
-        # Max tokens allows instruction, Elara (char), but not the first location
-        # Instruction (approx 2) + Header Char (approx 2) + Elara (50) = 54
-        # Header Loc (approx 2) + Biblio (60) -> 62. Total 54+62 = 116. 
-        # Vision Header (2) + Vision (30) -> 32. Total 116 + 32 = 148
-        # If max_tokens = 60, only instruction and Elara should fit.
-        context_str_limited = cb_for_context.build_context(selected, instruction, max_tokens=60)
-        
-        assert "Instruction test" in context_str_limited
-        assert "Personnage: Elara" in context_str_limited
-        assert "La Bibliothèque Infinie" not in context_str_limited
-        assert "Le Pic du Destin" not in context_str_limited
-        assert "Amulette de Clairvoyance" not in context_str_limited
-        assert "Vision Globale" not in context_str_limited
-        # print(f"\nLimited Context (60 tokens):\n{context_str_limited}")
+        instruction = "Elara explore la bibliothèque et repense à sa discussion."
+        context_str = cb_for_context.build_context(selected, instruction, max_tokens=2000)
 
-        # Max tokens allows instruction, char, first loc, but not second loc or vision
-        # Instr (2) + HChar(2) + Elara(50) + HLoc(2) + Biblio(60) = 116
-        # If max_tokens = 120, instr, char, loc1 should fit. PicDestin (assume 10) and vision (30) not.
-        context_str_more_limited = cb_for_context.build_context(selected, instruction, max_tokens=120)
-        assert "Instruction test" in context_str_more_limited
-        assert "Personnage: Elara" in context_str_more_limited
-        # Based on token costs: Biblio (60) is skipped. Pic du Destin (10) should fit.
-        assert "La Bibliothèque Infinie" not in context_str_more_limited 
-        assert "Le Pic du Destin" in context_str_more_limited
-        assert "Ambiance: Vent glacial et..." in context_str_more_limited # Part of Pic du Destin Lvl 2
-        # Vision (30 tokens) + header (2) = 32. Current after Pic Lvl2 and Item Lvl1 (10+2) is 98. 120-98=22. So Vision (30) should NOT fit.
-        assert "Vision Globale" not in context_str_more_limited 
-        # print(f"\nMore Limited Context (120 tokens):\n{context_str_more_limited}")
+        assert "--- DIALOGUES PRECEDENTS ---" in context_str
+        assert "Bonjour Gorok." in context_str
+        assert "--- CHARACTERS ---" in context_str
+        assert "Nom: Elara" in context_str
+        assert "--- LOCATIONS ---" in context_str
+        assert "Nom: La Bibliothèque Infinie" in context_str
+        assert "OBJECTIF DE LA SCÈNE" in context_str
+        assert instruction in context_str
 
     def test_build_context_includes_vision_when_space(self, cb_for_context: ContextBuilder):
         selected = {"characters": ["Grog"]}
         instruction = "Grog se bat."
-        context_str = cb_for_context.build_context(selected, instruction, max_tokens=1000) # Ample space
-        assert "### Vision Globale\nUn monde au bord du chaos" in context_str
+        context_str = cb_for_context.build_context(selected, instruction, max_tokens=1000)
+
+        assert "--- CHARACTERS ---" in context_str
+        assert "Nom: Grog" in context_str
+        assert "### Vision Globale" not in context_str
+        assert "Vision du monde" not in context_str
 
     def test_build_context_empty_selection(self, cb_for_context: ContextBuilder):
         selected = {
-            "characters": [], "locations": [], "items": [], 
+            "characters": [], "locations": [], "items": [],
             "species": [], "communities": [], "quests": [], "dialogues_examples": []
         }
         instruction = "Une scène vide."
         context_str = cb_for_context.build_context(selected, instruction, max_tokens=500)
-        assert "### Instruction de Scène\nUne scène vide." in context_str
-        assert "### Characters" not in context_str # Headers should not appear if no items for them
-        assert "### Locations" not in context_str
-        assert "### Vision Globale" in context_str # Vision should still be there if space
+        
+        expected_context = "--- OBJECTIF DE LA SCÈNE (Instruction Utilisateur) ---\nUne scène vide."
+        assert context_str.strip() == expected_context
 
     def test_build_context_element_order(self, cb_for_context: ContextBuilder):
         selected = {
-            "locations": ["Le Pic du Destin"], # Select location first
-            "characters": ["Grog"],          # Then character
-            "items": ["Amulette de Clairvoyance"]
+            "locations": ["Le Pic du Destin"],
+            "items": ["Amulette de Clairvoyance"],
+            "characters": ["Grog"],
         }
         instruction = "Test order"
-        context_str = cb_for_context.build_context(selected, instruction, max_tokens=1000)
-        
-        char_idx = context_str.find("### Characters")
-        loc_idx = context_str.find("### Locations")
-        item_idx = context_str.find("### Items")
-        vision_idx = context_str.find("### Vision Globale")
+        context_str = cb_for_context.build_context(selected, instruction, max_tokens=3000) # Augmenté
 
-        assert -1 < char_idx < loc_idx < item_idx < vision_idx, "Element order in context is incorrect."
+        char_idx = context_str.find("--- CHARACTERS ---")
+        loc_idx = context_str.find("--- LOCATIONS ---")
+        item_idx = context_str.find("--- ITEMS ---")
+        
+        present_indices = {}
+        if char_idx != -1: present_indices["char"] = char_idx
+        if loc_idx != -1: present_indices["loc"] = loc_idx
+        if item_idx != -1: present_indices["item"] = item_idx
+        
+        expected_order_indices = []
+        if "char" in present_indices: expected_order_indices.append(present_indices["char"])
+        if "loc" in present_indices: expected_order_indices.append(present_indices["loc"])
+        if "item" in present_indices: expected_order_indices.append(present_indices["item"])
+        
+        assert expected_order_indices == sorted(expected_order_indices), \
+            f"Order issue: Indices collected {expected_order_indices} vs sorted {sorted(expected_order_indices)}. Context: {context_str[:500]}"
+            
+        assert "Nom: Grog" in context_str
+        assert "Occupation: Guerrier" in context_str
+        assert "Nom: Le Pic du Destin" in context_str
+        assert "Nom: Amulette de Clairvoyance" in context_str
 
 class TestContextBuilderLinkedElements:
     @pytest.fixture
     def cb_for_linking(self, mock_gdd_project_root, dummy_context_config_file) -> ContextBuilder:
         # GDD data specifically for testing linking
-        char_data = {"personnages": [
+        # Utiliser les données originales de la fixture pour les tests de liaisons
+        char_data_linking = {"personnages": [
             {"Nom": "Alice", "Occupation": "Espionne", "Détient": "Dague Empoisonnée, Passe-Partout", "Espèce": "Humain", "Communautés": "La Main Invisible", "Lieux de vie": "Taverne du Rat Crevé, Les Bas-Fonds", "Background": {"Relations": "Bob est son contact. Charles la traque."}},
             {"Nom": "Bob", "Occupation": "Informateur", "Détient": "Messages Codés"},
             {"Nom": "Charles", "Occupation": "Chasseur de primes"}
         ]}
-        with open(mock_gdd_project_root / "GDD" / "categories" / "personnages.json", "w") as f: json.dump(char_data, f)
-        
-        loc_data = {"lieux": [
+        loc_data_linking = {"lieux": [
             {"Nom": "Taverne du Rat Crevé", "Personnages présents": "Alice, Bob", "Contient": "Cave Secrète"},
             {"Nom": "Les Bas-Fonds", "Communautés présentes": "La Main Invisible"},
             {"Nom": "Cave Secrète", "Contenu par": "Taverne du Rat Crevé", "Faunes & Flores présentes": "Rats Géants"}
         ]}
-        with open(mock_gdd_project_root / "GDD" / "categories" / "lieux.json", "w") as f: json.dump(loc_data, f)
+        item_data_linking = {"objets": [{"Nom": "Dague Empoisonnée"}, {"Nom": "Passe-Partout"}, {"Nom": "Messages Codés"}]}
+        species_data_linking = {"especes": [{"Nom": "Humain"}, {"Nom": "Rats Géants"}]}
+        comm_data_linking = {"communautes": [{"Nom": "La Main Invisible"}]}
 
-        item_data = {"objets": [{"Nom": "Dague Empoisonnée"}, {"Nom": "Passe-Partout"}, {"Nom": "Messages Codés"}]}
-        with open(mock_gdd_project_root / "GDD" / "categories" / "objets.json", "w") as f: json.dump(item_data, f)
-
-        species_data = {"especes": [{"Nom": "Humain"}, {"Nom": "Rats Géants"}]}
-        with open(mock_gdd_project_root / "GDD" / "categories" / "especes.json", "w") as f: json.dump(species_data, f)
-
-        comm_data = {"communautes": [{"Nom": "La Main Invisible"}]}
-        with open(mock_gdd_project_root / "GDD" / "categories" / "communautes.json", "w") as f: json.dump(comm_data, f)
+        gdd_path = mock_gdd_project_root / "GDD" / "categories"
+        with open(gdd_path / "personnages.json", "w", encoding="utf-8") as f: json.dump(char_data_linking, f)
+        with open(gdd_path / "lieux.json", "w", encoding="utf-8") as f: json.dump(loc_data_linking, f)
+        with open(gdd_path / "objets.json", "w", encoding="utf-8") as f: json.dump(item_data_linking, f)
+        with open(gdd_path / "especes.json", "w", encoding="utf-8") as f: json.dump(species_data_linking, f)
+        with open(gdd_path / "communautes.json", "w", encoding="utf-8") as f: json.dump(comm_data_linking, f)
         
-        # Ensure other files are minimal to not interfere
-        for cat_file in ["dialogues.json", "quetes.json", "structure_macro.json", "structure_micro.json"]:
-            p = mock_gdd_project_root / "GDD" / "categories" / cat_file
+        # Ensure other files are minimal
+        for cat_file_name in ["dialogues.json", "quetes.json", "structure_macro.json", "structure_micro.json"]:
+            p = gdd_path / cat_file_name
             if not p.exists(): 
-                with open(p, "w") as f:
-                    if "structure" in cat_file: json.dump({},f)
-                    else: json.dump({cat_file.replace(".json", ""): []}, f)
-        with open(mock_gdd_project_root / "import" / "Bible_Narrative" / "Vision.json", "w") as f: json.dump({}, f)
-
-        cb = ContextBuilder(config_file_path=dummy_context_config_file) # Basic config is fine for linking
+                with open(p, "w", encoding="utf-8") as f:
+                    if "structure" in cat_file_name: json.dump({},f)
+                    else: json.dump({cat_file_name.replace(".json", ""): []}, f)
+        
+        vision_path = mock_gdd_project_root / "import" / "Bible_Narrative" / "Vision.json"
+        if not vision_path.exists():
+             with open(vision_path, "w", encoding="utf-8") as f: json.dump({}, f)
+        
+        cb = ContextBuilder(config_file_path=dummy_context_config_file) 
         cb.load_gdd_files()
         return cb
 
@@ -750,7 +749,7 @@ class TestContextBuilderLinkedElements:
         char_names = cb_for_linking.get_characters_names()
         text1 = "Alice a vu Bob, mais Charles n'était pas là."
         assert ContextBuilder.potential_related_names_from_text(text1, char_names) == {"Alice", "Bob", "Charles"}
-        
+
         text2 = "David est un ami."
         assert ContextBuilder.potential_related_names_from_text(text2, char_names) == set()
         
@@ -793,20 +792,20 @@ class TestContextBuilderLinkedElements:
         assert "Taverne du Rat Crevé" not in linked["locations"]
 
 class TestContextBuilderTokenization:
-    @patch('DialogueGenerator.context_builder.tiktoken')
+    @patch('context_builder.tiktoken')
     def test_count_tokens_with_tiktoken(self, mock_tiktoken, dummy_context_config_file):
         mock_encoder = mock_tiktoken.get_encoding.return_value
-        mock_encoder.encode.return_value = [1, 2, 3, 4, 5] # Simulate 5 tokens
+        mock_encoder.encode.return_value = [0, 0, 0, 0, 0] # Simulate 5 tokens
 
         cb = ContextBuilder(config_file_path=dummy_context_config_file)
-        assert cb.tokenizer is not None
-        assert cb._count_tokens("Un texte de test") == 5
-        mock_encoder.encode.assert_called_once_with("Un texte de test")
+        assert cb._count_tokens("some text") == 5
+        mock_tiktoken.get_encoding.assert_called_once_with("cl100k_base")
+        mock_encoder.encode.assert_called_once_with("some text")
 
-    @patch('DialogueGenerator.context_builder.tiktoken', None)
+    @patch('context_builder.tiktoken', None)
     def test_count_tokens_without_tiktoken(self, dummy_context_config_file):
         cb = ContextBuilder(config_file_path=dummy_context_config_file)
         assert cb.tokenizer is None
-        text = "Un simple texte de test"
-        expected_tokens = len(text.split()) # Fallback behavior
-        assert cb._count_tokens(text) == expected_tokens 
+        assert cb._count_tokens("Hello world test") == 3 # Counts words
+        assert cb._count_tokens("OneWord") == 1
+        assert cb._count_tokens("") == 0

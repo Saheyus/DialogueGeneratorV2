@@ -3,7 +3,7 @@
 import re
 from typing import List, Optional, Dict, Any, Union, Tuple
 
-from DialogueGenerator.models.dialogue_structure import (
+from models.dialogue_structure import (
     DialogueLineElement, PlayerChoiceOption, PlayerChoicesBlockElement, Interaction
 )
 
@@ -124,7 +124,7 @@ class YarnParser:
             if choice_match:
                 choices, new_i = self._parse_choices(lines, i)
                 if choices:
-                    elements.append(PlayerChoicesBlockElement(choices))
+                    elements.append(PlayerChoicesBlockElement(choices=choices))
                 i = new_i
                 continue
             

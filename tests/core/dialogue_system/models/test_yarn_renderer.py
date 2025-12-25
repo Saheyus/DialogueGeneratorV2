@@ -3,23 +3,23 @@ import pytest
 import tempfile
 from pathlib import Path
 
-from DialogueGenerator.models.dialogue_structure import (
+from models.dialogue_structure import (
     DialogueLineElement, PlayerChoiceOption, PlayerChoicesBlockElement, Interaction
 )
-from DialogueGenerator.services.yarn_renderer import JinjaYarnRenderer
+from services.yarn_renderer import JinjaYarnRenderer
 
 class TestJinjaYarnRenderer:
     @pytest.fixture
     def sample_interaction(self):
         """Fixture créant une interaction de test."""
-        line1 = DialogueLineElement("Bonjour aventurier !", "Marchand")
-        line2 = DialogueLineElement("Qu'est-ce qui vous amène dans ma boutique ?", "Marchand")
+        line1 = DialogueLineElement(text="Bonjour aventurier !", speaker="Marchand")
+        line2 = DialogueLineElement(text="Qu'est-ce qui vous amène dans ma boutique ?", speaker="Marchand")
         
-        choice1 = PlayerChoiceOption("Je cherche des armes", "acheter_armes")
-        choice2 = PlayerChoiceOption("Je veux vendre des objets", "vendre_objets")
-        choice3 = PlayerChoiceOption("Juste en train de regarder", "fin_dialogue")
+        choice1 = PlayerChoiceOption(text="Je cherche des armes", next_interaction_id="acheter_armes")
+        choice2 = PlayerChoiceOption(text="Je veux vendre des objets", next_interaction_id="vendre_objets")
+        choice3 = PlayerChoiceOption(text="Juste en train de regarder", next_interaction_id="fin_dialogue")
         
-        choices = PlayerChoicesBlockElement([choice1, choice2, choice3])
+        choices = PlayerChoicesBlockElement(choices=[choice1, choice2, choice3])
         
         return Interaction(
             interaction_id="dialogue_marchand",

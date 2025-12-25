@@ -12,8 +12,8 @@ from pytestqt.exceptions import TimeoutError as QtTimeoutError
 
 # Ajustez les imports en fonction de la structure de votre projet
 try:
-    from DialogueGenerator.ui.left_selection_panel import LeftSelectionPanel, CheckableListItemWidget
-    from DialogueGenerator.context_builder import ContextBuilder # Pour mocker ou dummifier
+    from ui.left_selection_panel import LeftSelectionPanel, CheckableListItemWidget
+    from context_builder import ContextBuilder # Pour mocker ou dummifier
 except ImportError:
     import sys
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -24,10 +24,48 @@ except ImportError:
     if dialogue_generator_dir not in sys.path:
         sys.path.insert(0, dialogue_generator_dir)
     
-    from DialogueGenerator.ui.left_selection_panel import LeftSelectionPanel, CheckableListItemWidget
-    from DialogueGenerator.context_builder import ContextBuilder
+    from ui.left_selection_panel import LeftSelectionPanel, CheckableListItemWidget
+    from context_builder import ContextBuilder
+
+# MODIFIED: Ajout des imports nécessaires pour les mocks
+from services.interaction_service import InteractionService
+from services.configuration_service import ConfigurationService
+from services.repositories.interfaces import IInteractionRepository # Pour le mock repo
 
 # Mocks / Dummies
+class DummyInteractionRepository(IInteractionRepository):
+    def get_all(self): return []
+    def get_by_id(self, interaction_id: str): return None
+    def save(self, interaction): pass
+    def delete(self, interaction_id: str): return False
+    def exists(self, interaction_id: str): return False
+    def clear(self): pass
+    def get_path_to_interaction(self, interaction_id: str, current_path=None, visited=None): return []
+
+class DummyInteractionService(InteractionService):
+    def __init__(self):
+        super().__init__(DummyInteractionRepository())
+
+class DummyConfigurationService(ConfigurationService):
+    def __init__(self):
+        super().__init__()
+        # MODIFIED: Utiliser self.ui_settings initialisé par le parent,
+        # ou s'assurer que les méthodes surchargées utilisent un _settings privé de manière cohérente.
+        # Pour l'instant, on s'attend à ce que le parent initialise ui_settings.
+        # Si on veut un _settings complètement séparé, il faut surcharger plus de méthodes.
+        # self._settings = {} # Commenté car le parent initialise self.ui_settings
+
+    def get_unity_dialogues_path(self): return None
+    # MODIFIED: Utiliser self.ui_settings pour cohérer avec le parent ou surcharger toutes les méthodes.
+    def get_ui_setting(self, key, default=None): return self.ui_settings.get(key, default)
+    def get_all_ui_settings(self): return self.ui_settings.copy()
+    def update_ui_setting(self, key, value): self.ui_settings[key] = value
+    def save_ui_settings(self): 
+        # Simuler une sauvegarde sans écrire réellement de fichier
+        # logger.debug("(Dummy) Sauvegarde des paramètres UI simulée.")
+        return True
+
+
 class DummyContextBuilder:
     def __init__(self):
         self.characters = [{"Nom": "Alice"}, {"Nom": "Bob"}, {"Nom": "Charlie"}]
@@ -55,7 +93,14 @@ def app_instance(qtbot): # Renommé pour éviter conflit avec test_app_launch
 def left_panel(qtbot, app_instance):
     """Crée et retourne une instance de LeftSelectionPanel pour les tests."""
     dummy_context_builder = DummyContextBuilder()
-    panel = LeftSelectionPanel(context_builder=dummy_context_builder)
+    # MODIFIED: Instancier et passer les services mockés
+    dummy_interaction_service = DummyInteractionService()
+    dummy_config_service = DummyConfigurationService()
+    panel = LeftSelectionPanel(
+        context_builder=dummy_context_builder,
+        interaction_service=dummy_interaction_service,
+        config_service=dummy_config_service
+    )
     qtbot.addWidget(panel)
     # populate_all_lists est appelé dans __init__ via _setup_ui_elements et _create_category_group
     # mais les listes sont vides car DummyContextBuilder.characters etc. ne sont pas "chargés" comme des fichiers.

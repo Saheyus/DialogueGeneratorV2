@@ -4,10 +4,10 @@ import os
 import shutil
 from pathlib import Path
 
-from DialogueGenerator.models.dialogue_structure import (
+from models.dialogue_structure import (
     DialogueLineElement, PlayerChoiceOption, PlayerChoicesBlockElement, Interaction
 )
-from DialogueGenerator.services.repositories import (
+from services.repositories import (
     InMemoryInteractionRepository, FileInteractionRepository
 )
 
@@ -20,10 +20,10 @@ class TestInMemoryInteractionRepository:
     
     @pytest.fixture
     def sample_interaction(self):
-        line1 = DialogueLineElement("Bonjour !", "PNJ1")
-        choice1 = PlayerChoiceOption("Réponse 1", "next_node_1")
-        choice2 = PlayerChoiceOption("Réponse 2", "next_node_2")
-        choices = PlayerChoicesBlockElement([choice1, choice2])
+        line1 = DialogueLineElement(text="Bonjour !", speaker="PNJ1")
+        choice1 = PlayerChoiceOption(text="Réponse 1", next_interaction_id="next_node_1")
+        choice2 = PlayerChoiceOption(text="Réponse 2", next_interaction_id="next_node_2")
+        choices = PlayerChoicesBlockElement(choices=[choice1, choice2])
         
         return Interaction(
             interaction_id="test_interaction",
@@ -52,7 +52,7 @@ class TestInMemoryInteractionRepository:
         
         interaction2 = Interaction(
             interaction_id="test_interaction_2",
-            elements=[DialogueLineElement("Bonjour 2!", "PNJ2")]
+            elements=[DialogueLineElement(text="Bonjour 2!", speaker="PNJ2")]
         )
         memory_repo.save(interaction2)
         
@@ -127,10 +127,10 @@ class TestFileInteractionRepository:
     
     @pytest.fixture
     def sample_interaction(self):
-        line1 = DialogueLineElement("Bonjour !", "PNJ1")
-        choice1 = PlayerChoiceOption("Réponse 1", "next_node_1")
-        choice2 = PlayerChoiceOption("Réponse 2", "next_node_2")
-        choices = PlayerChoicesBlockElement([choice1, choice2])
+        line1 = DialogueLineElement(text="Bonjour !", speaker="PNJ1")
+        choice1 = PlayerChoiceOption(text="Réponse 1", next_interaction_id="next_node_1")
+        choice2 = PlayerChoiceOption(text="Réponse 2", next_interaction_id="next_node_2")
+        choices = PlayerChoicesBlockElement(choices=[choice1, choice2])
         
         return Interaction(
             interaction_id="test_interaction",
@@ -163,7 +163,7 @@ class TestFileInteractionRepository:
         
         interaction2 = Interaction(
             interaction_id="test_interaction_2",
-            elements=[DialogueLineElement("Bonjour 2!", "PNJ2")]
+            elements=[DialogueLineElement(text="Bonjour 2!", speaker="PNJ2")]
         )
         file_repo.save(interaction2)
         
@@ -214,7 +214,7 @@ class TestFileInteractionRepository:
         
         interaction2 = Interaction(
             interaction_id="test_interaction_2",
-            elements=[DialogueLineElement("Bonjour 2!", "PNJ2")]
+            elements=[DialogueLineElement(text="Bonjour 2!", speaker="PNJ2")]
         )
         file_repo.save(interaction2)
         

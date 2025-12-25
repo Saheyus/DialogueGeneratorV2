@@ -1,0 +1,10 @@
+---
+description: Frontend (migration) — React/Vue/Svelte, API contracts, DX
+globs: ["frontend/**/*", "web/**/*", "client/**/*", "apps/**/*", "packages/**/*"]
+alwaysApply: false
+---
+
+- Frontend = client; il ne “ré-implémente” pas la logique métier. Il consomme l’API (REST/GraphQL) et affiche/édite.
+- Contrats: s’aligner sur les schémas côté backend (OpenAPI/GraphQL schema) et générer les types si possible.
+- Erreurs: UX claire (states loading/error/empty), pas de secrets côté client.
+- Tests: privilégier tests unitaires composants + e2e ciblés sur les parcours critiques.

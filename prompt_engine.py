@@ -1,5 +1,6 @@
 import logging
 from typing import Tuple, Optional, Dict, Any
+import time
 
 # Essayer d'importer tiktoken, mais continuer si non disponible
 try:
@@ -18,6 +19,15 @@ class PromptEngine:
     Cette classe combine un system prompt, un contexte de scène, et une instruction
     utilisateur pour créer un prompt final optimisé pour la génération de dialogue.
     """
+    _last_info_log_time = {}
+    _info_log_interval = 5.0
+    def _throttled_info_log(self, log_key: str, message: str):
+        now = time.time()
+        last_time = PromptEngine._last_info_log_time.get(log_key, 0)
+        if now - last_time > PromptEngine._info_log_interval:
+            logger.info(message)
+            PromptEngine._last_info_log_time[log_key] = now
+
     def __init__(self, system_prompt_template: Optional[str] = None) -> None:
         """
         Initialise le PromptEngine.
@@ -208,7 +218,7 @@ RÈGLES À SUIVRE:
         full_prompt = "\n".join(prompt_parts)
         num_tokens = self._count_tokens(full_prompt) 
         
-        logger.info(f"Prompt construit pour le LLM. Longueur estimée: {num_tokens} tokens.")
+        self._throttled_info_log('prompt_llm', f"Prompt construit pour le LLM. Longueur estimée: {num_tokens} tokens.")
         return full_prompt, num_tokens
 
 # Pour des tests rapides
