@@ -13,15 +13,15 @@ export const theme = {
   },
   // Couleurs de bordure
   border: {
-    primary: '#404040',
-    secondary: '#4a4a4a',
+    primary: '#505050',
+    secondary: '#5a5a5a',
     focus: '#646cff',
   },
   // Couleurs de texte
   text: {
-    primary: 'rgba(255, 255, 255, 0.87)',
-    secondary: 'rgba(255, 255, 255, 0.6)',
-    tertiary: 'rgba(255, 255, 255, 0.4)',
+    primary: 'rgba(255, 255, 255, 0.95)',
+    secondary: 'rgba(255, 255, 255, 0.75)',
+    tertiary: 'rgba(255, 255, 255, 0.55)',
     inverse: '#213547',
   },
   // Couleurs de bouton

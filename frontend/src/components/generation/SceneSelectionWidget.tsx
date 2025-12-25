@@ -1,8 +1,8 @@
 /**
  * Widget pour sélectionner la scène principale (personnages A/B, région, sous-lieu).
  */
-import { memo, useCallback, useEffect } from 'react'
-import { Select, type SelectOption } from '../shared/Select'
+import { memo, useCallback, useEffect, useState } from 'react'
+import { Combobox, type ComboboxOption } from '../shared/Combobox'
 import { FormField } from '../shared/FormField'
 import { useSceneSelection } from '../../hooks/useSceneSelection'
 import { useGenerationStore } from '../../store/generationStore'
@@ -12,10 +12,27 @@ export const SceneSelectionWidget = memo(function SceneSelectionWidget() {
   const { data, selection, updateSelection, swapCharacters, isLoading } =
     useSceneSelection()
   const { setSceneSelection } = useGenerationStore()
+  const [recentCharacters, setRecentCharacters] = useState<string[]>([])
+  const [recentRegions, setRecentRegions] = useState<string[]>([])
 
   useEffect(() => {
     setSceneSelection(selection)
   }, [selection, setSceneSelection])
+
+  // Raccourci clavier pour swap (Alt+S)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && e.key === 's') {
+        e.preventDefault()
+        if (selection.characterA || selection.characterB) {
+          swapCharacters()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selection, swapCharacters])
 
   const handleCharacterAChange = useCallback(
     (value: string | null) => {
@@ -45,20 +62,44 @@ export const SceneSelectionWidget = memo(function SceneSelectionWidget() {
     [updateSelection]
   )
 
-  const characterOptions: SelectOption[] = [
-    { value: '', label: '(Aucun)' },
-    ...data.characters.map((name) => ({ value: name, label: name })),
-  ]
+  const characterOptions: ComboboxOption[] = data.characters.map((name) => ({
+    value: name,
+    label: name,
+  }))
 
-  const regionOptions: SelectOption[] = [
-    { value: '', label: '(Aucune)' },
-    ...data.regions.map((name) => ({ value: name, label: name })),
-  ]
+  const regionOptions: ComboboxOption[] = data.regions.map((name) => ({
+    value: name,
+    label: name,
+  }))
 
-  const subLocationOptions: SelectOption[] = [
-    { value: '', label: '(Aucun)' },
-    ...data.subLocations.map((name) => ({ value: name, label: name })),
-  ]
+  const subLocationOptions: ComboboxOption[] = data.subLocations.map((name) => ({
+    value: name,
+    label: name,
+  }))
+
+  const hasContext = selection.characterA || selection.characterB || selection.sceneRegion
+
+  if (!hasContext && !isLoading) {
+    return (
+      <div
+        style={{
+          padding: '2rem',
+          border: `1px dashed ${theme.border.primary}`,
+          borderRadius: '4px',
+          backgroundColor: theme.background.tertiary,
+          marginBottom: '1rem',
+          textAlign: 'center',
+        }}
+      >
+        <div style={{ color: theme.text.secondary, marginBottom: '1rem' }}>
+          <strong style={{ color: theme.text.primary, display: 'block', marginBottom: '0.5rem' }}>
+            Aucun contexte sélectionné
+          </strong>
+          Choisis Personnage A/B + région, ou charge une interaction existante à droite
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -92,20 +133,22 @@ export const SceneSelectionWidget = memo(function SceneSelectionWidget() {
         }}
       >
         <FormField label="Personnage A:" style={{ marginBottom: 0 }}>
-          <Select
+          <Combobox
             options={characterOptions}
-            value={selection.characterA || ''}
-            onChange={(value) => handleCharacterAChange(value)}
-            placeholder="Sélectionner..."
+            value={selection.characterA}
+            onChange={handleCharacterAChange}
+            placeholder="(Aucun) - Rechercher..."
             disabled={isLoading}
             allowClear
+            recentlyUsed={recentCharacters}
+            onRecentUpdate={setRecentCharacters}
           />
         </FormField>
 
         <button
           onClick={swapCharacters}
-          disabled={isLoading || !selection.characterA && !selection.characterB}
-          title="Échanger Personnage A et Personnage B"
+          disabled={isLoading || (!selection.characterA && !selection.characterB)}
+          title="Échanger Personnage A et Personnage B (Alt+S)"
           style={{
             width: '32px',
             height: '32px',
@@ -133,13 +176,15 @@ export const SceneSelectionWidget = memo(function SceneSelectionWidget() {
         </button>
 
         <FormField label="Personnage B:" style={{ marginBottom: 0 }}>
-          <Select
+          <Combobox
             options={characterOptions}
-            value={selection.characterB || ''}
-            onChange={(value) => handleCharacterBChange(value)}
-            placeholder="Sélectionner..."
+            value={selection.characterB}
+            onChange={handleCharacterBChange}
+            placeholder="(Aucun) - Rechercher..."
             disabled={isLoading}
             allowClear
+            recentlyUsed={recentCharacters}
+            onRecentUpdate={setRecentCharacters}
           />
         </FormField>
       </div>
@@ -152,24 +197,26 @@ export const SceneSelectionWidget = memo(function SceneSelectionWidget() {
         }}
       >
         <FormField label="Région de la Scène:" style={{ marginBottom: 0 }}>
-          <Select
+          <Combobox
             options={regionOptions}
-            value={selection.sceneRegion || ''}
-            onChange={(value) => handleRegionChange(value)}
-            placeholder="Sélectionner..."
+            value={selection.sceneRegion}
+            onChange={handleRegionChange}
+            placeholder="(Aucune) - Rechercher..."
             disabled={isLoading}
             allowClear
+            recentlyUsed={recentRegions}
+            onRecentUpdate={setRecentRegions}
           />
         </FormField>
 
         <FormField label="Sous-Lieu (optionnel):" style={{ marginBottom: 0 }}>
-          <Select
+          <Combobox
             options={subLocationOptions}
-            value={selection.subLocation || ''}
-            onChange={(value) => handleSubLocationChange(value)}
+            value={selection.subLocation}
+            onChange={handleSubLocationChange}
             placeholder={
               selection.sceneRegion
-                ? 'Sélectionner...'
+                ? '(Aucun) - Rechercher...'
                 : 'Sélectionnez d\'abord une région'
             }
             disabled={isLoading || !selection.sceneRegion}

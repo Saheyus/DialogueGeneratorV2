@@ -1,5 +1,5 @@
 /**
- * Composant Dashboard avec layout 3 panneaux.
+ * Composant Dashboard avec layout 3 panneaux redimensionnables.
  */
 import { useState } from 'react'
 import { ContextSelector } from '../context/ContextSelector'
@@ -7,6 +7,7 @@ import { GenerationPanel } from '../generation/GenerationPanel'
 import { InteractionList } from '../interactions/InteractionList'
 import { InteractionDetails } from '../interactions/InteractionDetails'
 import { UnityConfigDialog } from '../config/UnityConfigDialog'
+import { ResizablePanels } from '../shared/ResizablePanels'
 import type { InteractionResponse } from '../../types/api'
 import { theme } from '../../theme'
 
@@ -15,12 +16,13 @@ export function Dashboard() {
   const [isUnityConfigOpen, setIsUnityConfigOpen] = useState(false)
 
   return (
-    <div
+    <ResizablePanels
+      storageKey="dashboard_panels"
+      defaultSizes={[20, 50, 30]}
+      minSizes={[200, 400, 250]}
+      direction="horizontal"
       style={{
-        display: 'grid',
-        gridTemplateColumns: '300px 1fr 400px',
-        height: 'calc(100vh - 60px)', // Ajuster selon la hauteur du header
-        overflow: 'hidden',
+        height: 'calc(100vh - 60px)',
         backgroundColor: theme.background.primary,
       }}
     >
@@ -32,6 +34,7 @@ export function Dashboard() {
           display: 'flex',
           flexDirection: 'column',
           backgroundColor: theme.background.panel,
+          height: '100%',
         }}
       >
         <div style={{ 
@@ -54,6 +57,7 @@ export function Dashboard() {
           display: 'flex',
           flexDirection: 'column',
           backgroundColor: theme.background.panel,
+          height: '100%',
         }}
       >
         <div style={{ 
@@ -92,6 +96,7 @@ export function Dashboard() {
           display: 'flex',
           flexDirection: 'column',
           backgroundColor: theme.background.panel,
+          height: '100%',
         }}
       >
         <div style={{ 
@@ -120,7 +125,7 @@ export function Dashboard() {
         isOpen={isUnityConfigOpen}
         onClose={() => setIsUnityConfigOpen(false)}
       />
-    </div>
+    </ResizablePanels>
   )
 }
 

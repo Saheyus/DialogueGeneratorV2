@@ -26,6 +26,7 @@ import { VariantsTabsView } from './VariantsTabsView'
 import { InteractionsTab } from './InteractionsTab'
 import { Tabs, type Tab } from '../shared/Tabs'
 import { ContextActions } from '../context/ContextActions'
+import { ActionBar, ContextSummaryChips, useToast } from '../shared'
 
 type GenerationMode = 'variants' | 'interactions'
 type PanelTab = 'generation' | 'interactions'
@@ -55,6 +56,8 @@ export function GenerationPanel() {
   const [previousInteractionId, setPreviousInteractionId] = useState<string>('')
   const [availableInteractions, setAvailableInteractions] = useState<InteractionResponse[]>([])
   const [activePanelTab, setActivePanelTab] = useState<PanelTab>('generation')
+  const [isDirty, setIsDirty] = useState(false)
+  const toast = useToast()
 
   const loadModels = useCallback(async () => {
     try {
@@ -169,9 +172,16 @@ export function GenerationPanel() {
     return () => clearTimeout(timeoutId)
   }, [userInstructions, selections, maxContextTokens, estimateTokens, hasSelections, sceneSelection, dialogueStructure])
 
-  const handleGenerate = async () => {
+  const handleGenerate = useCallback(async () => {
+    // Validation minimale
+    if (!sceneSelection.characterA && !sceneSelection.characterB && !userInstructions.trim()) {
+      toast('Veuillez sélectionner au moins un personnage ou ajouter des instructions', 'error')
+      return
+    }
+
     setIsLoading(true)
     setError(null)
+    toast('Génération en cours...', 'info', 2000)
 
     try {
       const contextSelections = buildContextSelections()
@@ -190,6 +200,8 @@ export function GenerationPanel() {
         const response = await dialoguesAPI.generateDialogueVariants(request)
         setVariantsResponse(response)
         setInteractions([])
+        setIsDirty(false)
+        toast('Génération réussie!', 'success')
       } else {
         const request: GenerateInteractionVariantsRequest = {
           k_variants: kVariants,
@@ -204,13 +216,68 @@ export function GenerationPanel() {
         const response = await dialoguesAPI.generateInteractionVariants(request)
         setInteractions(response)
         setVariantsResponse(null)
+        setIsDirty(false)
+        toast('Génération réussie!', 'success')
       }
     } catch (err) {
-      setError(getErrorMessage(err))
+      const errorMsg = getErrorMessage(err)
+      setError(errorMsg)
+      toast(errorMsg, 'error')
     } finally {
       setIsLoading(false)
     }
+  }, [
+    sceneSelection,
+    userInstructions,
+    generationMode,
+    kVariants,
+    maxContextTokens,
+    systemPromptOverride,
+    llmModel,
+    previousInteractionId,
+    buildContextSelections,
+    toast,
+  ])
+
+  const handlePreview = () => {
+    // TODO: Implémenter prévisualisation
+    toast('Prévisualisation à implémenter', 'info')
   }
+
+  const handleSaveDraft = () => {
+    // TODO: Implémenter sauvegarde brouillon
+    toast('Sauvegarde brouillon à implémenter', 'info')
+    setIsDirty(false)
+  }
+
+  const handleExportUnity = () => {
+    // TODO: Implémenter export Unity
+    toast('Export Unity à implémenter', 'info')
+  }
+
+  const handleReset = () => {
+    setUserInstructions('')
+    setVariantsResponse(null)
+    setInteractions([])
+    setError(null)
+    setIsDirty(false)
+    toast('Formulaire réinitialisé', 'info')
+  }
+
+  // Raccourci clavier pour générer (Ctrl+Enter)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault()
+        if (!isLoading) {
+          handleGenerate()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isLoading, handleGenerate])
 
   const handleSaveAsInteraction = async (variant: DialogueVariantResponse) => {
     try {
@@ -241,10 +308,58 @@ export function GenerationPanel() {
       id: 'generation',
       label: 'Génération',
       content: (
-        <div style={{ padding: '1.5rem', height: '100%', overflowY: 'auto', backgroundColor: theme.background.panel }}>
-          <h2 style={{ marginTop: 0, color: theme.text.primary }}>Génération de Dialogues</h2>
+        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: theme.background.panel }}>
+          <ActionBar
+            actions={[
+              {
+                id: 'generate',
+                label: 'Générer',
+                onClick: handleGenerate,
+                variant: 'primary',
+                disabled: isLoading,
+                shortcut: 'Ctrl+Enter',
+              },
+              {
+                id: 'preview',
+                label: 'Prévisualiser',
+                onClick: handlePreview,
+                variant: 'secondary',
+                disabled: isLoading,
+              },
+              {
+                id: 'save-draft',
+                label: 'Sauvegarder brouillon',
+                onClick: handleSaveDraft,
+                variant: 'secondary',
+                disabled: isLoading,
+              },
+              {
+                id: 'export-unity',
+                label: 'Exporter (Unity)',
+                onClick: handleExportUnity,
+                variant: 'secondary',
+                disabled: isLoading,
+              },
+              {
+                id: 'reset',
+                label: 'Reset',
+                onClick: handleReset,
+                variant: 'secondary',
+                disabled: isLoading,
+              },
+            ]}
+            isDirty={isDirty}
+          />
 
-          <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
+          <div style={{ padding: '1.5rem', flex: 1, overflowY: 'auto' }}>
+            <h2 style={{ marginTop: 0, color: theme.text.primary }}>Génération de Dialogues</h2>
+
+            <ContextSummaryChips
+              sceneSelection={sceneSelection}
+              style={{ marginBottom: '1rem' }}
+            />
+
+            <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
         <button
           onClick={() => {
             setGenerationMode('variants')
@@ -294,8 +409,14 @@ export function GenerationPanel() {
       <SystemPromptEditor
         userInstructions={userInstructions}
         systemPromptOverride={systemPromptOverride}
-        onUserInstructionsChange={setUserInstructions}
-        onSystemPromptChange={setSystemPromptOverride}
+        onUserInstructionsChange={(value) => {
+          setUserInstructions(value)
+          setIsDirty(true)
+        }}
+        onSystemPromptChange={(value) => {
+          setSystemPromptOverride(value)
+          setIsDirty(true)
+        }}
       />
 
       <DialogueStructureWidget
@@ -419,22 +540,6 @@ export function GenerationPanel() {
         </div>
       )}
 
-      <button
-        onClick={handleGenerate}
-        disabled={isLoading || !userInstructions.trim()}
-        style={{
-          padding: '0.75rem 1.5rem',
-          backgroundColor: theme.button.primary.background,
-          color: theme.button.primary.color,
-          border: 'none',
-          borderRadius: '4px',
-          cursor: isLoading || !userInstructions.trim() ? 'not-allowed' : 'pointer',
-          opacity: isLoading || !userInstructions.trim() ? 0.6 : 1,
-          marginBottom: '1rem',
-        }}
-      >
-        {isLoading ? 'Génération...' : 'Générer'}
-      </button>
 
       {error && (
         <div style={{ 
@@ -495,6 +600,7 @@ export function GenerationPanel() {
           ))}
         </div>
       )}
+          </div>
         </div>
       ),
     },

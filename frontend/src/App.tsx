@@ -6,6 +6,7 @@ import { Dashboard } from './components/layout/Dashboard'
 import { InteractionsPage } from './components/interactions/InteractionsPage'
 import { InteractionDetails } from './components/interactions/InteractionDetails'
 import { useAuthStore } from './store/authStore'
+import { ToastContainer } from './components/shared'
 import './App.css'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -41,8 +42,10 @@ function InteractionDetailRoute() {
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
+    <>
+      <ToastContainer />
+      <BrowserRouter>
+        <Routes>
         <Route
           path="/login"
           element={
@@ -84,6 +87,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
+    </>
   )
 }
 
