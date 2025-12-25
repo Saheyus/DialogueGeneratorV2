@@ -1,10 +1,17 @@
 ---
-description: Backend API (migration) — FastAPI/Flask, boundaries, REST/GraphQL
-globs: ["backend/**/*.py", "api/**/*.py", "server/**/*.py", "src/backend/**/*.py", "src/api/**/*.py"]
+description: Backend API REST FastAPI — architecture, SOLID, RESTful, sécurité
+globs: ["api/**/*.py", "backend/**/*.py", "server/**/*.py"]
 alwaysApply: false
 ---
 
-- Backend = API + orchestration; la logique métier doit rester dans `services/` réutilisable (UI desktop + API + tests).
-- API: contrats stables (schemas Pydantic), versionner si besoin, et tester les endpoints (pytest) sans dépendre d’un frontend.
-- REST/GraphQL: choisir selon usage; dans les deux cas, isoler sérialisation/validation au bord (API layer).
-- Observabilité: logs structurés, corrélation requête, erreurs sans fuite de secrets.
+- **Architecture**: API REST FastAPI dans `api/`. La logique métier reste dans `services/` (réutilisable UI desktop + API + tests).
+- **Structure**: `api/routers/` (routes HTTP), `api/schemas/` (DTOs Pydantic), `api/services/` (adaptateurs), `api/dependencies.py` (injection).
+- **SOLID**: Routers = routes uniquement, Services API = adaptation, Services métier = logique pure, Repositories = données.
+- **RESTful**: Versioning `/api/v1/`, méthodes HTTP appropriées, codes de statut corrects, format de réponse standardisé.
+- **Authentification**: JWT (python-jose), access token (15 min) + refresh token (7 jours), middleware d'auth.
+- **Validation**: Pydantic pour schemas API, double validation (API + métier), messages d'erreur clairs.
+- **Gestion d'erreurs**: Exceptions hiérarchisées (`api/exceptions.py`), handler global, logging structuré avec request_id.
+- **Sécurité**: HTTPS en production, CORS configuré, validation inputs, pas de secrets dans logs/réponses.
+- **Documentation**: OpenAPI/Swagger automatique via FastAPI (`/api/docs`), maintenir les docstrings.
+- **Tests**: `tests/api/` avec pytest, tests unitaires routers + intégration API, mocks pour services externes.
+- **Références**: Voir `README_API.md` pour détails complets, `docs/DEPLOYMENT.md` pour déploiement.

@@ -9,9 +9,10 @@ alwaysApply: true
 - Erreurs: messages utiles + logging contextualisé; pas de `except Exception` silencieux.
 - Config/secrets: aucun secret en dur; passer par variables d’environnement et config existante (ex: `OPENAI_API_KEY`, `config/*.json`).
 
-- Migration web en cours (cible):
-  - Frontend (React/Vue/Svelte) ↔ API (REST/GraphQL) ↔ Backend Python (FastAPI/Flask) ↔ Services existants ↔ LLM/GDD/Storage
-  - Priorité: isoler la logique dans des services importables; l’UI desktop devient un client (comme le frontend).
+- Migration web terminée (API REST FastAPI + Frontend React):
+  - Frontend React (`frontend/`) ↔ API REST FastAPI (`api/`) ↔ Services existants (`services/`) ↔ LLM/GDD/Storage
+  - L'UI desktop et le frontend web sont tous deux des clients de l'API. La logique métier reste dans `services/` (réutilisable).
+  - Voir `.cursor/rules/backend_api.mdc` et `.cursor/rules/frontend.mdc` pour détails, `README_API.md` pour documentation complète.
 
 - Outils: avant d’inférer, localiser la source réelle (recherche sémantique + grep). Si une API “récente” est incertaine (Cursor rules, OpenAI SDK, Qt), valider via navigateur/web.
 

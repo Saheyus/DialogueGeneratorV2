@@ -1,0 +1,13 @@
+---
+description: Règles Cursor — création proactive et maintenance des règles
+globs: ["**/*"]
+alwaysApply: true
+---
+
+- **Création proactive de règles**: Quand un pattern, convention ou décision architecturale émerge, créer/mettre à jour une règle `.mdc` dans `.cursor/rules/` pour documenter et guider les futures modifications.
+- **Quand créer une règle**: Nouveau domaine technique (ex: nouvelle stack), pattern récurrent (ex: gestion d'erreurs), convention spécifique (ex: nommage), décision architecturale importante.
+- **Format**: Utiliser le format standard avec frontmatter YAML (`description`, `globs`, `alwaysApply`), contenu concis en puces, références vers docs détaillées si besoin.
+- **Maintenance**: Mettre à jour les règles existantes quand l'architecture évolue (ex: migration API, nouveau framework). Supprimer les règles obsolètes.
+- **Organisation**: Une règle par domaine/concern (backend_api, frontend, tests, etc.). `alwaysApply: true` pour règles générales (comme celle-ci), `false` pour règles spécifiques à certains fichiers.
+- **Références croisées**: Dans les règles, référencer les docs détaillées (`README_API.md`, `docs/DEPLOYMENT.md`) pour plus de contexte, garder les règles concises.
+- **Exemples**: Voir `.cursor/rules/backend_api.mdc`, `.cursor/rules/frontend.mdc` pour exemples de règles bien structurées.
