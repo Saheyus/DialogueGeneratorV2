@@ -1,7 +1,5 @@
 ---
-description: Tests — pytest/pytest-qt/pytest-asyncio, isolation, typing
-globs: ["tests/**/*.py"]
-alwaysApply: false
+alwaysApply: true
 ---
 - Utiliser uniquement pytest et plugins (pytest-qt, pytest-asyncio, pytest-mock). Ne pas utiliser `unittest`.
 - Les tests vivent dans `tests/`. Pour tout nouveau sous-package de tests : ajouter `__init__.py`.
@@ -9,3 +7,12 @@ alwaysApply: false
 - Éviter réseau/IO externes par défaut : mock/monkeypatch (OpenAI, env vars, filesystem hors `tmp_path`).
 - UI/Qt : préférer `qtbot`, `qtbot.addWidget`, timeouts explicites; éviter dépendances GDD non garanties.
 - Si `TYPE_CHECKING` : importer les types de fixtures selon le standard du projet (_pytest/pytest-mock).
+- **Quand tester** :
+  - Après modification backend : `pytest tests/` (tous les tests backend)
+  - Après modification API : `pytest tests/api/` (tests API rapides)
+  - Après modification services/core : `pytest tests/ -k "not api"` (tests unitaires)
+  - Avant commit : `pytest tests/` (tous les tests backend)
+- **Exécution automatique** :
+  - Avant chaque commit (via pre-commit hook si configuré) : `pytest tests/`
+  - Dans CI/CD : `pytest tests/ --cov=api --cov=services --cov-report=html`
+- **Configuration**: `pytest.ini` définit les options par défaut. Respecter les markers (`@pytest.mark.asyncio`, etc.).

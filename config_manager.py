@@ -13,40 +13,39 @@ logger = logging.getLogger(__name__)
 # MODIFIÉ: Fonctions load_ui_settings, save_ui_settings, get_unity_dialogues_path, set_unity_dialogues_path supprimées.
 # Leur logique est maintenant dans ConfigurationService.
 
-def list_yarn_files(dialogues_base_path: Path, recursive: bool = False) -> List[Path]:
+def list_json_files(dialogues_base_path: Path, recursive: bool = False) -> List[Path]:
     """
-    Lists .yarn files in the specified Unity dialogues path.
+    Lists .json files in the specified Unity dialogues path.
 
     Args:
-        dialogues_base_path (Path): The base path to search for .yarn files.
+        dialogues_base_path (Path): The base path to search for .json files.
         recursive (bool): If True, searches recursively in subdirectories.
                           Defaults to False (searches only in the root of dialogues_base_path).
 
     Returns:
-        List[Path]: A list of Path objects for each .yarn file found.
+        List[Path]: A list of Path objects for each .json file found.
     """
     if not dialogues_base_path or not dialogues_base_path.is_dir():
-        # MODIFIÉ: Utiliser logger au lieu de print pour les erreurs/warnings.
-        logger.error(f"Cannot list .yarn files, path is invalid or not a directory: {dialogues_base_path}")
+        logger.error(f"Cannot list .json files, path is invalid or not a directory: {dialogues_base_path}")
         return []
 
-    pattern = "*.yarn"
+    pattern = "*.json"
     if recursive:
-        pattern = "**/*.yarn" 
+        pattern = "**/*.json" 
     
     try:
-        yarn_files = list(dialogues_base_path.glob(pattern))
-        return yarn_files
+        json_files = list(dialogues_base_path.glob(pattern))
+        return json_files
     except Exception as e:
-        logger.error(f"Error listing .yarn files in {dialogues_base_path}: {e}")
+        logger.error(f"Error listing .json files in {dialogues_base_path}: {e}")
         return []
 
-def read_yarn_file_content(file_path: Path) -> Optional[str]:
+def read_json_file_content(file_path: Path) -> Optional[str]:
     """
-    Reads the content of a specified .yarn file.
+    Reads the content of a specified .json file.
 
     Args:
-        file_path (Path): The Path object pointing to the .yarn file.
+        file_path (Path): The Path object pointing to the .json file.
 
     Returns:
         Optional[str]: The content of the file as a string, or None if an error occurs.
@@ -63,19 +62,8 @@ def read_yarn_file_content(file_path: Path) -> Optional[str]:
         return None
 
 if __name__ == "__main__":
-    # Le bloc __main__ ici référençait les fonctions supprimées.
-    # Il doit être supprimé ou adapté pour tester list_yarn_files/read_yarn_file_content si besoin.
-    # Pour l'instant, je le commente pour éviter les erreurs.
-    pass
-    # print(f"Config manager - Ce module contient maintenant des utilitaires de fichiers Yarn.")
-    # # Exemple de test pour list_yarn_files (nécessite un chemin valide)
-    # # test_path = Path("./some_test_yarn_directory") # Créez ce répertoire avec des fichiers .yarn pour tester
-    # # if test_path.is_dir():
-    # #     print(f"\n--- Testing list_yarn_files (non-recursive) in {test_path} ---")
-    # #     yarn_files_in_root = list_yarn_files(test_path, recursive=False)
-    # #     # ... (suite des tests comme avant)
-    # # else:
-    # #     print(f"Pour tester list_yarn_files, créez un dossier de test: {test_path}") 
+    # Le bloc __main__ pourrait être utilisé pour tester list_json_files/read_json_file_content si besoin.
+    pass 
 
 DEFAULT_LLM_CONFIG_PATH = FilePaths.CONFIG_DIR / FilePaths.LLM_CONFIG
 DEFAULT_UI_SETTINGS_PATH = FilePaths.CONFIG_DIR / "ui_settings.json" # Maintenu ici si spécifique

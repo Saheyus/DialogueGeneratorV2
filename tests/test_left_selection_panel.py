@@ -78,7 +78,7 @@ class DummyContextBuilder:
     def get_unity_dialogues_path(self):
         return None # Pas pertinent pour ces tests
     
-    def list_yarn_files(self, path, recursive):
+    def list_json_files(self, path, recursive):
         return [] # Pas pertinent
 
 @pytest.fixture

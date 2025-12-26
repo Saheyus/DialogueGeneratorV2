@@ -1,0 +1,23 @@
+---
+description: Tests Frontend — Vitest, React Testing Library, Playwright, workflow de test automatique
+globs: ["frontend/**/*", "e2e/**/*", "*.test.tsx", "*.spec.ts"]
+alwaysApply: false
+---
+
+- **Tests unitaires**: Vitest + React Testing Library dans `frontend/src/test/`. Tests rapides, isolation complète, mocks pour API.
+- **Tests E2E**: Playwright dans `e2e/`. Tests critiques (auth, navigation, génération), nécessite serveurs lancés.
+- **Vérifications automatiques après modification frontend**:
+  1. Build check : `cd frontend && npm run build` (détecte erreurs TypeScript)
+  2. Lint check : `cd frontend && npm run lint` (détecte erreurs de code)
+  3. Tests unitaires : `cd frontend && npm test -- --run` (tests rapides)
+  4. Tests E2E : `npm run test:e2e` (si serveurs lancés, tests critiques)
+- **Script automatisé**: `.\scripts\test-frontend.ps1` (build + lint + tests unitaires), `.\scripts\test-frontend.ps1 -E2E` (inclut E2E).
+- **MCP Browser** (si disponible): Pour inspection visuelle, vérifier console logs, network requests, après avoir lancé `npm run dev`.
+- **Quand tester**:
+  - Après modification composants : build + lint + tests unitaires
+  - Avant commit : `.\scripts\test-frontend.ps1` ou `npm run test:frontend`
+  - Pour tests E2E : s'assurer que `npm run dev` est lancé, puis `npm run test:e2e`
+- **Commandes**:
+  - `npm run test:frontend` : Tests unitaires frontend
+  - `npm run test:e2e` : Tests E2E Playwright
+  - `npm run test:all` : Backend + frontend (unitaires uniquement)

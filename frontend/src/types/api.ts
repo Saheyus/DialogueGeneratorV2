@@ -1,0 +1,222 @@
+/**
+ * Types TypeScript pour l'API.
+ */
+
+// Auth
+export interface LoginRequest {
+  username: string
+  password: string
+}
+
+export interface TokenResponse {
+  access_token: string
+  token_type: string
+  expires_in: number
+}
+
+export interface UserResponse {
+  id: string
+  username: string
+  email?: string
+}
+
+// Dialogue
+export interface ContextSelection {
+  characters: string[]
+  locations: string[]
+  items: string[]
+  species: string[]
+  communities: string[]
+  dialogues_examples: string[]
+  scene_protagonists?: Record<string, unknown>
+  scene_location?: Record<string, unknown>
+  generation_settings?: Record<string, unknown>
+}
+
+export interface GenerateDialogueVariantsRequest {
+  k_variants: number
+  user_instructions: string
+  context_selections: ContextSelection
+  max_context_tokens: number
+  structured_output: boolean
+  system_prompt_override?: string
+  llm_model_identifier: string
+  npc_speaker_id?: string
+}
+
+export interface DialogueVariantResponse {
+  id: string
+  title: string
+  content: string
+  is_new: boolean
+}
+
+export interface GenerateDialogueVariantsResponse {
+  variants: DialogueVariantResponse[]
+  prompt_used?: string
+  estimated_tokens: number
+  warning?: string
+}
+
+export interface EstimateTokensResponse {
+  context_tokens: number
+  total_estimated_tokens: number
+  estimated_prompt?: string | null
+}
+
+export interface GenerateInteractionVariantsRequest {
+  k_variants: number
+  user_instructions: string
+  context_selections: ContextSelection
+  max_context_tokens: number
+  system_prompt_override?: string
+  llm_model_identifier: string
+  previous_interaction_id?: string
+}
+
+// Interaction
+export interface DialogueElement {
+  type: 'dialogue'
+  content: string
+  speaker?: string
+}
+
+export interface ChoiceElement {
+  type: 'choice'
+  options: Array<{
+    text: string
+    next_interaction_id: string
+  }>
+}
+
+export type InteractionElement = DialogueElement | ChoiceElement | Record<string, unknown>
+
+export interface InteractionResponse {
+  interaction_id: string
+  title: string
+  elements: InteractionElement[]
+  header_commands: string[]
+  header_tags: string[]
+  next_interaction_id_if_no_choices?: string
+}
+
+export interface InteractionListResponse {
+  interactions: InteractionResponse[]
+  total: number
+}
+
+// Context
+export interface CharacterResponse {
+  name: string
+  data: Record<string, unknown>
+}
+
+export interface CharacterListResponse {
+  characters: CharacterResponse[]
+  total: number
+}
+
+export interface LocationResponse {
+  name: string
+  data: Record<string, unknown>
+}
+
+export interface LocationListResponse {
+  locations: LocationResponse[]
+  total: number
+}
+
+export interface ItemResponse {
+  name: string
+  data: Record<string, unknown>
+}
+
+export interface ItemListResponse {
+  items: ItemResponse[]
+  total: number
+}
+
+export interface SpeciesResponse {
+  name: string
+  data: Record<string, unknown>
+}
+
+export interface SpeciesListResponse {
+  species: SpeciesResponse[]
+  total: number
+}
+
+export interface CommunityResponse {
+  name: string
+  data: Record<string, unknown>
+}
+
+export interface CommunityListResponse {
+  communities: CommunityResponse[]
+  total: number
+}
+
+export interface RegionListResponse {
+  regions: string[]
+  total: number
+}
+
+export interface SubLocationListResponse {
+  sub_locations: string[]
+  total: number
+  region_name: string
+}
+
+export interface LinkedElementsRequest {
+  character_a?: string
+  character_b?: string
+  scene_region?: string
+  sub_location?: string
+}
+
+export interface LinkedElementsResponse {
+  linked_elements: string[]
+  total: number
+}
+
+// Config
+export interface LLMModelResponse {
+  model_identifier: string
+  display_name: string
+  client_type: string
+  max_tokens: number
+}
+
+export interface LLMModelsListResponse {
+  models: LLMModelResponse[]
+  total: number
+}
+
+export interface UnityDialoguesPathResponse {
+  path: string
+}
+
+export interface InteractionContextPathResponse {
+  path: InteractionResponse[]
+  total: number
+}
+
+// Unity Dialogue
+export interface GenerateUnityDialogueRequest {
+  user_instructions: string
+  context_selections: ContextSelection
+  npc_speaker_id?: string
+  max_context_tokens: number
+  system_prompt_override?: string
+  llm_model_identifier: string
+  max_choices?: number | null
+}
+
+export interface GenerateUnityDialogueResponse {
+  json_content: string
+  title?: string
+  prompt_used?: string
+  estimated_tokens: number
+  warning?: string
+}
+

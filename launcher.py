@@ -1,5 +1,10 @@
 """Application launcher for DialogueGenerator.
 
+⚠️ DÉPRÉCIÉ : Ce launcher démarre l'interface desktop PySide6 qui est dépréciée.
+
+Utiliser l'interface web React à la place :
+    npm run dev
+
 This module ensures Python dependencies are installed (based on `requirements.txt`)
 and then starts `main_app.py` reliably regardless of the caller's working directory.
 """
@@ -50,6 +55,16 @@ def install_dependencies(project_dir: Path) -> None:
 
 def main() -> None:
     """Install dependencies (if needed) and launch the application."""
+    import warnings
+    
+    # ⚠️ Avertissement de dépréciation
+    deprecation_warning = (
+        "⚠️ DÉPRÉCIÉ : L'interface desktop PySide6 est dépréciée.\n"
+        "Utiliser l'interface web React à la place : npm run dev"
+    )
+    warnings.warn(deprecation_warning, DeprecationWarning, stacklevel=2)
+    print("⚠️ DÉPRÉCIÉ : Interface desktop dépréciée. Utiliser 'npm run dev' pour l'interface web.")
+    
     project_dir = Path(__file__).resolve().parent
     main_app_path = project_dir / "main_app.py"
 

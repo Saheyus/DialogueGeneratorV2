@@ -197,12 +197,12 @@ def test_details_panel_updates_on_click(app: ActualMainWindow, qtbot: QtBot):
     
     def check_details_populated():
         # La méthode update_details dans DetailsPanel rend details_text_edit visible
-        # et le remplit, ou remplit le groupe yarn.
+        # et le remplit, ou remplit le groupe JSON.
         # Pour un personnage, c'est details_text_edit qui doit être visible et non vide.
         assert details_panel.details_text_edit.isVisible(), "details_text_edit devrait être visible après clic sur personnage."
         assert details_panel.details_text_edit.toPlainText() != "", "DetailsPanel (details_text_edit) est vide après le clic sur un personnage."
-        # On peut aussi vérifier que la section Yarn est cachée
-        assert not details_panel.yarn_display_group.isVisible(), "yarn_display_group ne devrait pas être visible pour un personnage."
+        # On peut aussi vérifier que la section JSON est cachée
+        assert not details_panel.json_display_group.isVisible(), "json_display_group ne devrait pas être visible pour un personnage."
         return True
 
     try:
@@ -211,7 +211,7 @@ def test_details_panel_updates_on_click(app: ActualMainWindow, qtbot: QtBot):
         # Pour aider au débogage si ça échoue :
         print(f"Debug Info: details_panel.details_text_edit.isVisible() = {details_panel.details_text_edit.isVisible()}")
         print(f"Debug Info: details_panel.details_text_edit.toPlainText() = '{details_panel.details_text_edit.toPlainText()}'")
-        print(f"Debug Info: details_panel.yarn_display_group.isVisible() = {details_panel.yarn_display_group.isVisible()}")
+        print(f"Debug Info: details_panel.json_display_group.isVisible() = {details_panel.json_display_group.isVisible()}")
         current_item_text = list_item.text() # Ou le texte du widget si c'est un CheckableListItemWidget
         if character_list_widget.itemWidget(list_item):
              current_item_text = character_list_widget.itemWidget(list_item).text_label.text()

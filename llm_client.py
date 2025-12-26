@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import os
+import time
 from abc import ABC, abstractmethod
 from openai import AsyncOpenAI, APIError, NOT_GIVEN
 import json # Ajout pour charger la config
@@ -62,20 +63,38 @@ class DummyLLMClient(ILLMClient):
                 await asyncio.sleep(self.delay_seconds)
             
             if response_model:
-                dummy_data: Dict[str, Any] = {
-                    "interaction_id": f"dummy_id_{i+1}",
-                    "title": f"Dummy Title {i+1}",
-                }
-                if hasattr(response_model, "model_fields"):
-                    phase_idx = 1
-                    while f"phase_{phase_idx}" in response_model.model_fields:
-                        field_info = response_model.model_fields[f"phase_{phase_idx}"]
-                        field_type_name = str(field_info.annotation)
-                        if "DialogueLineElement" in field_type_name: 
-                             dummy_data[f"phase_{phase_idx}"] = {"element_type": "dialogue_line", "speaker":"DummyPNJ", "text":f"Ligne PNJ phase {phase_idx} var {i+1}"}
-                        elif "PlayerChoicesBlockElement" in field_type_name:
-                             dummy_data[f"phase_{phase_idx}"] = {"element_type": "player_choices_block", "choices":[{"text":f"Choix {c_idx+1}", "next_interaction_id":f"next_dummy_{i+1}_{phase_idx}_{c_idx+1}"} for c_idx in range(2)]}
-                        phase_idx += 1
+                # Cas spécial pour UnityDialogueGenerationResponse
+                if response_model.__name__ == "UnityDialogueGenerationResponse":
+                    dummy_data = {
+                        "nodes": [
+                            {
+                                "line": "Texte de test généré par DummyLLMClient pour Unity JSON.",
+                                "choices": [
+                                    {
+                                        "text": "Choix de test",
+                                        "targetNode": ""
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                else:
+                    # Pour les autres modèles (Interaction, etc.)
+                    dummy_data: Dict[str, Any] = {
+                        "interaction_id": f"dummy_id_{i+1}",
+                        "title": f"Dummy Title {i+1}",
+                    }
+                    if hasattr(response_model, "model_fields"):
+                        phase_idx = 1
+                        while f"phase_{phase_idx}" in response_model.model_fields:
+                            field_info = response_model.model_fields[f"phase_{phase_idx}"]
+                            field_type_name = str(field_info.annotation)
+                            if "DialogueLineElement" in field_type_name: 
+                                 dummy_data[f"phase_{phase_idx}"] = {"element_type": "dialogue_line", "speaker":"DummyPNJ", "text":f"Ligne PNJ phase {phase_idx} var {i+1}"}
+                            elif "PlayerChoicesBlockElement" in field_type_name:
+                                 dummy_data[f"phase_{phase_idx}"] = {"element_type": "player_choices_block", "choices":[{"text":f"Choix {c_idx+1}", "next_interaction_id":f"next_dummy_{i+1}_{phase_idx}_{c_idx+1}"} for c_idx in range(2)]}
+                            phase_idx += 1
+                
                 try:
                     parsed_dummy = response_model.model_validate(dummy_data) 
                     variants.append(parsed_dummy)
@@ -87,9 +106,25 @@ class DummyLLMClient(ILLMClient):
                     logger.error(f"DummyLLMClient: Erreur générique lors de la simulation de variante structurée: {e_generic_dummy}")
                     variants.append(f"// Erreur Dummy LLM: {e_generic_dummy}")
             else:
-                variant_text = f"---title: TitreDummy_Variant{i+1}_{k}\n---\n// Corps de variante {i+1} de DummyLLMClient.\n==="
+                # #region agent log
+                log_data = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "A",
+                    "location": "llm_client.py:90",
+                    "message": "DummyLLMClient génération variante texte",
+                    "data": {"variant_index": i+1, "k_variants": k, "response_model": None},
+                    "timestamp": int(time.time() * 1000)
+                }
+                try:
+                    with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                        log_file.write(json.dumps(log_data) + "\n")
+                except: pass
+                # #endregion
+                # Format texte libre au lieu de Yarn (Yarn n'est plus utilisé)
+                variant_text = f"Texte de dialogue variante {i+1} généré par DummyLLMClient.\n\nLe personnage A dit : \"Bonjour, je suis une variante de test.\"\n\nLe personnage B répond : \"Moi aussi, c'est pour tester le système sans format Yarn.\""
                 variants.append(variant_text)
-                logger.info(f"DummyLLMClient: Variante textuelle {i+1} générée.")
+                logger.info(f"DummyLLMClient: Variante textuelle {i+1} générée (format texte libre, pas Yarn).")
         return variants
 
     def get_max_tokens(self) -> int:
@@ -187,6 +222,26 @@ class OpenAIClient(ILLMClient):
         for i in range(k):
             try:
                 logger.info(f"Début de la génération de la variante {i+1}/{k} pour le prompt.")
+                # #region agent log
+                log_data = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "B",
+                    "location": "llm_client.py:190",
+                    "message": "OpenAIClient génération variante - messages envoyés",
+                    "data": {
+                        "variant_index": i+1,
+                        "system_message_preview": messages[0]["content"][:200] if messages else None,
+                        "user_message_preview": messages[-1]["content"][:200] if messages else None,
+                        "has_response_model": response_model is not None
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }
+                try:
+                    with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                        log_file.write(json.dumps(log_data) + "\n")
+                except: pass
+                # #endregion
                 response = await self.client.chat.completions.create(
                     model=self.model_name,
                     messages=messages,
@@ -217,6 +272,26 @@ class OpenAIClient(ILLMClient):
 
                 elif response.choices and response.choices[0].message and response.choices[0].message.content:
                     text_output = response.choices[0].message.content.strip()
+                    # #region agent log
+                    log_data = {
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "B",
+                        "location": "llm_client.py:221",
+                        "message": "OpenAIClient réponse texte reçue",
+                        "data": {
+                            "variant_index": i+1,
+                            "output_preview": text_output[:300],
+                            "contains_yarn_title": "---title:" in text_output,
+                            "contains_yarn_separator": "===" in text_output
+                        },
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    try:
+                        with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                            log_file.write(json.dumps(log_data) + "\n")
+                    except: pass
+                    # #endregion
                     generated_results.append(text_output)
                     logger.info(f"Variante {i+1} générée avec succès (texte simple).")
                 else:

@@ -23,7 +23,7 @@ from .generation_panel_main import GenerationPanel # MODIFIÉ: Ajout de cet impo
 from .utils import get_icon_path # Assurez-vous que utils.py et get_icon_path existent
 
 # MODIFIED: Imports absolus ou relatifs corrigés
-from config_manager import list_yarn_files # Assumant que config_manager est à la racine et expose cela
+# config_manager import removed - no longer needed for JSON files listing
 from services.configuration_service import ConfigurationService # Service pour gérer la config
 from prompt_engine import PromptEngine
 from llm_client import ILLMClient, OpenAIClient, DummyLLMClient # MODIFIED: AnthropicClient retiré
@@ -59,6 +59,9 @@ from factories.llm_factory import LLMClientFactory
 
 class MainWindow(QMainWindow):
     """Main window of the DialogueGenerator application.
+
+    ⚠️ DÉPRÉCIÉ : Cette interface desktop PySide6 est dépréciée.
+    Utiliser l'interface web React à la place : npm run dev
 
     This class manages the main UI structure, including the LeftSelectionPanel
     for GDD element browsing and selection, the DetailsPanel for displaying
@@ -240,8 +243,8 @@ class MainWindow(QMainWindow):
                 logger.debug(f"Chemin des dialogues Unity configuré: {new_path_str}")
                 self.statusBar().showMessage(f"Chemin des dialogues Unity configuré: {new_path_str}", 5000)
                 
-                if hasattr(self.left_panel, 'populate_yarn_files_list'):
-                    self.left_panel.populate_yarn_files_list() # Ceci devra utiliser le service aussi
+                if hasattr(self.left_panel, 'populate_json_files_list'):
+                    self.left_panel.populate_json_files_list() # Ceci devra utiliser le service aussi
             else:
                 logger.error(f"Échec de la configuration du chemin des dialogues Unity: {new_path_str}")
                 # Afficher une QMessageBox pour plus de visibilité
@@ -429,7 +432,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Selected: {category_singular_name} - {item_text}")
         
         # Pass all necessary info directly to DetailsPanel, including category_key
-        # DetailsPanel will now handle finding the item if it's a GDD item, or reading the file if it's a yarn file.
+        # DetailsPanel will now handle finding the item if it's a GDD item, or reading the file if it's a JSON file.
         self.details_panel.update_details(category_key, item_text, category_data, category_singular_name)
 
     def load_initial_data(self):

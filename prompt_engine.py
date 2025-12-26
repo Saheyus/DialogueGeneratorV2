@@ -1,5 +1,5 @@
 import logging
-from typing import Tuple, Optional, Dict, Any
+from typing import Tuple, Optional, Dict, Any, List
 import time
 
 # Essayer d'importer tiktoken, mais continuer si non disponible
@@ -43,10 +43,10 @@ class PromptEngine:
 
     def _get_default_system_prompt(self) -> str:
         """
-        Retourne un system prompt par défaut pour la génération de dialogues Yarn.
+        Retourne un system prompt par défaut pour la génération de dialogues.
 
         Ce prompt sert de point de départ et peut être enrichi avec des détails
-        sur la structure Yarn attendue, des exemples, des instructions sur la gestion
+        sur la structure JSON Unity attendue, des exemples, des instructions sur la gestion
         des conditions (<<if>>), des commandes (<<command>>), le ton, le style RPG, etc.
 
         Returns:
@@ -57,6 +57,13 @@ class PromptEngine:
 Tu es un assistant expert en écriture de dialogues pour jeux de rôle (RPG).
 Ta tâche est de générer un dialogue cohérent avec le contexte fourni et l'instruction utilisateur.
 Si une structure de dialogue spécifique est demandée (ex: PNJ suivi d'un choix PJ), respecte cette structure.
+
+IMPORTANT - FORMAT DE SORTIE :
+- Génère le dialogue en texte libre narratif, naturel et lisible
+- N'utilise PAS le format Yarn (pas de ---title, pas de ===, pas de nœuds Yarn)
+- N'utilise PAS de format de balisage spécial (pas de markdown complexe, pas de JSON sauf indication contraire)
+- Écris simplement le dialogue comme un texte narratif normal, avec des guillemets pour les répliques si nécessaire
+- Indique clairement qui parle (nom du personnage ou indication narrative)
 """
 
     def _get_interaction_system_prompt_reference(self) -> str:
@@ -205,12 +212,19 @@ RÈGLES À SUIVRE:
             prompt_parts.append("\n--- SÉQUENCE NARRATIVE ATTENDUE ---")
             prompt_parts.append(dialogue_structure_narrative)
         
-        prompt_parts.append("\n--- OBJECTIF DE LA SCÈNE (Instruction Utilisateur) ---")
-        prompt_parts.append(user_specific_goal)
+        if user_specific_goal and user_specific_goal.strip():
+            prompt_parts.append("\n--- OBJECTIF DE LA SCÈNE (Instruction Utilisateur) ---")
+            prompt_parts.append(user_specific_goal)
         
         if "tone" in generation_params:
             prompt_parts.append("\n--- TON ATTENDU ---")
             prompt_parts.append(str(generation_params["tone"]))
+        
+        # Pour les générations de texte libre (non structurées), rappeler le format attendu
+        structured_output = generation_params.get("structured_generation_request", False)
+        if not structured_output:
+            prompt_parts.append("\n--- FORMAT DE SORTIE ATTENDU ---")
+            prompt_parts.append("Génère le dialogue en texte libre narratif. N'utilise PAS le format Yarn (pas de ---title, pas de ===). Écris simplement le dialogue naturellement avec des répliques claires et des indications de qui parle.")
             
         # Plus besoin de rappels sur le format JSON si on utilise le function calling.
         # Le client LLM s'en charge via la définition de l'outil.
@@ -219,6 +233,132 @@ RÈGLES À SUIVRE:
         num_tokens = self._count_tokens(full_prompt) 
         
         self._throttled_info_log('prompt_llm', f"Prompt construit pour le LLM. Longueur estimée: {num_tokens} tokens.")
+        return full_prompt, num_tokens
+    
+    def build_unity_dialogue_prompt(
+        self,
+        user_instructions: str,
+        npc_speaker_id: str,
+        player_character_id: str = "URESAIR",
+        skills_list: Optional[List[str]] = None,
+        traits_list: Optional[List[str]] = None,
+        context_summary: Optional[str] = None,
+        scene_location: Optional[Dict[str, str]] = None,
+        max_choices: Optional[int] = None
+    ) -> Tuple[str, int]:
+        """Construit le prompt pour génération Unity JSON.
+        
+        Args:
+            user_instructions: Instructions spécifiques de l'utilisateur.
+            npc_speaker_id: ID du PNJ interlocuteur.
+            player_character_id: ID du personnage joueur (par défaut "URESAIR").
+            skills_list: Liste des compétences disponibles (optionnel).
+            traits_list: Liste des labels de traits disponibles (optionnel).
+            context_summary: Résumé du contexte GDD (optionnel).
+            scene_location: Dictionnaire du lieu de la scène (optionnel).
+            max_choices: Nombre maximum de choix à générer (0-8, ou None pour laisser l'IA décider).
+            
+        Returns:
+            Tuple contenant le prompt complet et une estimation du nombre de tokens.
+        """
+        prompt_parts = []
+        
+        # Instructions sur le format Unity JSON
+        prompt_parts.append("--- FORMAT DE SORTIE ATTENDU ---")
+        prompt_parts.append(
+            "Tu dois générer un nœud de dialogue au format Unity JSON. "
+            "Le format sera géré automatiquement via Structured Output, mais voici les règles importantes :"
+        )
+        prompt_parts.append(
+            "- IMPORTANT : Génère un titre descriptif et reconnaissable pour ce dialogue "
+            "(ex: 'Rencontre avec le tavernier', 'Discussion sur la quête principale', 'Confrontation avec le bandit'). "
+            "Ce titre sera utilisé pour identifier l'interaction, pas dans le dialogue lui-même."
+        )
+        prompt_parts.append(
+            "- Le speaker doit être l'ID du personnage qui parle (contrôlé par l'auteur). "
+            "Pour cette génération, le PNJ interlocuteur est : " + npc_speaker_id
+        )
+        prompt_parts.append(
+            "- Le personnage joueur est : " + player_character_id + " (Seigneuresse Uresaïr). "
+            "Les choix (choices) sont toujours les options du joueur."
+        )
+        prompt_parts.append(
+            "- Les tests d'attributs utilisent le format : 'AttributeType+SkillId:DD' "
+            "(ex: 'Raison+Rhétorique:8'). La compétence est obligatoire."
+        )
+        prompt_parts.append(
+            "- Ne génère PAS d'IDs de nœuds (id, targetNode, successNode, etc.). "
+            "Le système les ajoutera automatiquement."
+        )
+        prompt_parts.append(
+            "- Si un nœud n'a ni choices ni nextNode, il termine le dialogue."
+        )
+        
+        # Instructions sur le nombre de choix
+        if max_choices is not None:
+            if max_choices == 0:
+                prompt_parts.append(
+                    "- IMPORTANT : Ce nœud ne doit PAS avoir de choix (choices). "
+                    "Utilise nextNode pour la navigation linéaire ou laisse vide pour terminer le dialogue."
+                )
+            else:
+                prompt_parts.append(
+                    f"- IMPORTANT : Ce nœud doit avoir exactement {max_choices} choix (choices) au maximum. "
+                    f"Génère entre 1 et {max_choices} choix selon ce qui est approprié pour la scène."
+                )
+        else:
+            prompt_parts.append(
+                "- Tu peux générer des choix (choices) si cela est approprié pour la scène. "
+                "Le nombre de choix est libre, mais reste raisonnable (généralement entre 0 et 8 choix). "
+                "Si aucun choix n'est nécessaire, utilise nextNode pour la navigation linéaire."
+            )
+        
+        # Liste des compétences disponibles
+        if skills_list:
+            skills_text = ", ".join(skills_list[:50])  # Limiter à 50 pour éviter un prompt trop long
+            if len(skills_list) > 50:
+                skills_text += f" (et {len(skills_list) - 50} autres compétences)"
+            prompt_parts.append("\n--- COMPÉTENCES DISPONIBLES ---")
+            prompt_parts.append(f"Compétences disponibles: {skills_text}")
+            prompt_parts.append(
+                "Utilise ces compétences dans les tests d'attributs (format: 'AttributeType+NomCompétence:DD')."
+            )
+        
+        # Liste des traits disponibles
+        if traits_list:
+            traits_text = ", ".join(traits_list[:30])  # Limiter à 30 pour éviter un prompt trop long
+            if len(traits_list) > 30:
+                traits_text += f" (et {len(traits_list) - 30} autres traits)"
+            prompt_parts.append("\n--- TRAITS DISPONIBLES ---")
+            prompt_parts.append(f"Traits disponibles: {traits_text}")
+            prompt_parts.append(
+                "Utilise ces traits dans traitRequirements des choix (format: [{'trait': 'NomTrait', 'minValue': 5}]). "
+                "Les traits peuvent être positifs (ex: 'Courageux') ou négatifs (ex: 'Lâche')."
+            )
+        
+        # Contexte de la scène
+        if scene_location:
+            prompt_parts.append("\n--- LIEU DE LA SCÈNE ---")
+            lieu = scene_location.get("lieu", "Non spécifié")
+            sous_lieu = scene_location.get("sous_lieu")
+            prompt_parts.append(f"Lieu : {lieu}")
+            if sous_lieu:
+                prompt_parts.append(f"Sous-Lieu : {sous_lieu}")
+        
+        # Contexte GDD
+        if context_summary:
+            prompt_parts.append("\n--- CONTEXTE GÉNÉRAL DE LA SCÈNE ---")
+            prompt_parts.append(context_summary)
+        
+        # Instructions utilisateur
+        if user_instructions and user_instructions.strip():
+            prompt_parts.append("\n--- OBJECTIF DE LA SCÈNE (Instruction Utilisateur) ---")
+            prompt_parts.append(user_instructions)
+        
+        full_prompt = "\n".join(prompt_parts)
+        num_tokens = self._count_tokens(full_prompt)
+        
+        self._throttled_info_log('prompt_unity', f"Prompt Unity construit. Longueur estimée: {num_tokens} tokens.")
         return full_prompt, num_tokens
 
 # Pour des tests rapides

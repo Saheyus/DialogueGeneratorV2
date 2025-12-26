@@ -1,6 +1,6 @@
 PySide6>=6.0
 openai>=1.15
-PyYAML>=6.0 # Utilisé par yarn_renderer, et potentiellement utile ailleurs 
+PyYAML>=6.0 # Potentiellement utile pour configuration YAML (non utilisé actuellement) 
 jinja2>=3.0
 tiktoken>=0.4 
 pytest>=7.0
@@ -10,3 +10,12 @@ pytest-asyncio # Ajout pour le support asyncio dans pytest
 pydantic>=2.0 # Ajout pour les modèles de données et la validation de schéma 
 pytest-cov>=2.12 # Ajout pour la couverture de tests 
 pytest-mock>=3.6 # Ajout pour la fixture 'mocker'
+# API REST FastAPI
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+bcrypt>=4.0.0
+python-multipart>=0.0.6
+pydantic-settings>=2.0.0
+email-validator>=2.0.0

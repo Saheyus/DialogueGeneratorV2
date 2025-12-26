@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, Slot
 
 # --- Imports internes ---
-from config_manager import list_yarn_files
+from config_manager import list_json_files
 from services.configuration_service import ConfigurationService
 from constants import UIText, FilePaths, Defaults
 from services.interaction_service import InteractionService
@@ -63,12 +63,12 @@ class LeftSelectionPanel(QWidget):
             {"key": "items", "attr": "items", "display_name": "Items", "singular_name": "Item", "name_keys": ["Nom"]},
             {"key": "species", "attr": "species", "display_name": "Species", "singular_name": "Species", "name_keys": ["Nom"]},
             {"key": "communities", "attr": "communities", "display_name": "Communities", "singular_name": "Community", "name_keys": ["Nom"]},
-            # 'dialogues_examples' retiré pour éviter le doublon avec Yarn Files
+            # 'dialogues_examples' retiré pour éviter le doublon avec JSON Files
         ]
-        # Add a new static category for existing Yarn files
-        self.yarn_files_category_key = "existing_yarn_files"
-        self.yarn_files_display_name = "Yarn Files (Project)"
-        self.yarn_files_singular_name = "Yarn File"
+        # Add a new static category for existing JSON files
+        self.json_files_category_key = "existing_json_files"
+        self.json_files_display_name = "JSON Files (Project)"
+        self.json_files_singular_name = "JSON File"
 
         self.gdd_data_loaded = False # Flag to track if GDD data has been loaded
 
@@ -79,8 +79,8 @@ class LeftSelectionPanel(QWidget):
         self._setup_ui_elements()
         self._connect_signals()
 
-        # Placeholder for Yarn files data (will be paths)
-        self.category_data_map[self.yarn_files_category_key] = [] 
+        # Placeholder for JSON files data (will be paths)
+        self.category_data_map[self.json_files_category_key] = [] 
 
         # Référence pour le nouveau widget
         self.previous_dialogue_selector_widget: Optional[PreviousDialogueSelectorWidget] = None
@@ -114,16 +114,16 @@ class LeftSelectionPanel(QWidget):
         separator.setFrameShadow(QFrame.Shadow.Sunken)
         self.selection_layout.addWidget(separator)
 
-        # Create UI for Existing Yarn Files
-        yarn_group_box, yarn_list_widget, yarn_filter_edit = self._create_category_group(
-            self.yarn_files_display_name,
-            is_yarn_file_list=True # Differentiate for click handling if needed
+        # Create UI for Existing JSON Files
+        json_group_box, json_list_widget, json_filter_edit = self._create_category_group(
+            self.json_files_display_name,
+            is_json_file_list=True # Differentiate for click handling if needed
         )
-        self.lists[self.yarn_files_category_key] = yarn_list_widget
-        self.filter_edits[self.yarn_files_category_key] = yarn_filter_edit
-        self.selection_layout.addWidget(yarn_group_box)
-        self.category_display_names[self.yarn_files_category_key] = self.yarn_files_display_name
-        # For yarn files, the "name key" is implicitly the file path or name
+        self.lists[self.json_files_category_key] = json_list_widget
+        self.filter_edits[self.json_files_category_key] = json_filter_edit
+        self.selection_layout.addWidget(json_group_box)
+        self.category_display_names[self.json_files_category_key] = self.json_files_display_name
+        # For JSON files, the "name key" is implicitly the file path or name
 
         self.selection_layout.addStretch(1) # Add stretch to push everything up
         
@@ -151,7 +151,7 @@ class LeftSelectionPanel(QWidget):
         else:
             logger.error("tab_widget non trouvé dans LeftSelectionPanel, impossible d'ajouter l'onglet Détails.")
 
-    def _create_category_group(self, title: str, is_yarn_file_list: bool = False):
+    def _create_category_group(self, title: str, is_json_file_list: bool = False):
         group_box = QGroupBox(title)
         group_box.setStyleSheet("QGroupBox { font-weight: bold; } QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 3px 5px; }")
         group_layout = QVBoxLayout(group_box)
@@ -166,10 +166,10 @@ class LeftSelectionPanel(QWidget):
         list_widget.setStyleSheet("QListWidget::item { padding: 2px; }")
         list_widget.setSpacing(1)  # Réduit l'espacement entre les items
         
-        if is_yarn_file_list:
-            list_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection) # Single selection for yarn files
+        if is_json_file_list:
+            list_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection) # Single selection for JSON files
             list_widget.itemClicked.connect(
-                lambda item, lw=list_widget: self._on_yarn_file_item_clicked(lw.itemWidget(item) if lw.itemWidget(item) else item)
+                lambda item, lw=list_widget: self._on_json_file_item_clicked(lw.itemWidget(item) if lw.itemWidget(item) else item)
             )
         else:
             list_widget.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection) # Explicitly set for GDD
@@ -189,7 +189,7 @@ class LeftSelectionPanel(QWidget):
                 category_key = key
                 break
         
-        if not category_key or category_key == self.yarn_files_category_key:
+        if not category_key or category_key == self.json_files_category_key:
             logger.debug(f"GDD item click ignored or category_key not found for title: {category_title}")
             return
 
@@ -213,31 +213,31 @@ class LeftSelectionPanel(QWidget):
             self.tab_widget.setCurrentWidget(self.details_panel_instance)
             logger.debug(f"Onglet 'Détails' activé après clic sur item GDD '{item_text}'.")
 
-    def _on_yarn_file_item_clicked(self, item_widget_or_list_item: QWidget | QListWidgetItem):
+    def _on_json_file_item_clicked(self, item_widget_or_list_item: QWidget | QListWidgetItem):
         item_text = ""
         if isinstance(item_widget_or_list_item, QWidget) and hasattr(item_widget_or_list_item, 'text_label'):
             item_text = item_widget_or_list_item.text_label.text()
         elif isinstance(item_widget_or_list_item, QListWidgetItem):
             item_text = item_widget_or_list_item.text()
         else:
-            logger.warning("Clicked Yarn item is of an unexpected type.")
+            logger.warning("Clicked JSON item is of an unexpected type.")
             return
         
-        logger.info(f"Yarn file selected: {item_text}")
-        # The item_text here will be the relative path of the yarn file.
+        logger.info(f"JSON file selected: {item_text}")
+        # The item_text here will be the relative path of the JSON file.
         # We need the full path to read it.
         dialogues_path = self.config_service.get_unity_dialogues_path()
         if dialogues_path:
             full_path = dialogues_path / item_text
             # Emit a signal or call a method on MainWindow/DetailsPanel to show content
             # For now, let's just emit item_clicked_for_details with special handling
-            # The 'category_data' for yarn files will be the full path string
-            self.item_clicked_for_details.emit(self.yarn_files_category_key, str(full_path), [str(full_path)], self.yarn_files_singular_name)
+            # The 'category_data' for JSON files will be the full path string
+            self.item_clicked_for_details.emit(self.json_files_category_key, str(full_path), [str(full_path)], self.json_files_singular_name)
             if self.details_panel_instance and hasattr(self.tab_widget, 'setCurrentWidget'):
                 self.tab_widget.setCurrentWidget(self.details_panel_instance)
-                logger.debug(f"Onglet 'Détails' activé après clic sur fichier Yarn '{item_text}'.")
+                logger.debug(f"Onglet 'Détails' activé après clic sur fichier JSON '{item_text}'.")
         else:
-            logger.warning("Unity dialogues path not configured via ConfigurationService, cannot get full path for yarn file.")
+            logger.warning("Unity dialogues path not configured via ConfigurationService, cannot get full path for JSON file.")
 
     def populate_all_lists(self):
         logger.info("Populating all GDD lists in LeftSelectionPanel...")
@@ -252,12 +252,12 @@ class LeftSelectionPanel(QWidget):
             logger.warning("LeftSelectionPanel: self.context_builder is None. Cannot populate GDD lists.")
             # Populate with placeholder messages
             for cat_key in self.lists:
-                if cat_key != self.yarn_files_category_key:
+                if cat_key != self.json_files_category_key:
                     list_widget = self.lists.get(cat_key)
                     if list_widget:
                         list_widget.clear()
                         list_widget.addItem(QListWidgetItem(UIText.CONTEXT_BUILDER_NOT_AVAILABLE))
-            self.populate_yarn_files_list() # Attempt to populate yarn files even if GDD fails
+            self.populate_json_files_list() # Attempt to populate JSON files even if GDD fails
             return
 
         logger.info(f"  LeftSelectionPanel: self.context_builder exists. Checking direct attributes for GDD data.")
@@ -309,18 +309,18 @@ class LeftSelectionPanel(QWidget):
             logger.info("LeftSelectionPanel: Finished processing GDD categories. gdd_data_loaded set to True as ContextBuilder is present.")
         
         logger.info("All GDD lists processing finished.")
-        self.populate_yarn_files_list()
+        self.populate_json_files_list()
 
-    def populate_yarn_files_list(self):
-        logger.info("Populating existing Yarn files list...")
-        list_widget = self.lists.get(self.yarn_files_category_key)
+    def populate_json_files_list(self):
+        logger.info("Populating existing JSON files list...")
+        list_widget = self.lists.get(self.json_files_category_key)
         if not list_widget:
-            logger.error("Yarn files list widget not found.")
+            logger.error("JSON files list widget not found.")
             return
 
         dialogues_path = self.config_service.get_unity_dialogues_path()
         if not dialogues_path:
-            logger.warning("Unity dialogues path not configured via ConfigurationService. Cannot list Yarn files.")
+            logger.warning("Unity dialogues path not configured via ConfigurationService. Cannot list JSON files.")
             list_widget.clear()
             # Proposer de configurer ?
             config_msg_item = QListWidgetItem(UIText.UNITY_DIALOGUES_PATH_NOT_CONFIGURED)
@@ -328,18 +328,18 @@ class LeftSelectionPanel(QWidget):
             list_widget.addItem(config_msg_item)
             return
 
-        # config_manager.list_yarn_files est OK car c'est une fonction utilitaire qui prend un chemin.
-        yarn_files = list_yarn_files(dialogues_path, recursive=True)
-        self.category_data_map[self.yarn_files_category_key] = sorted([str(Path(f).resolve()) for f in yarn_files])
+        # config_manager.list_json_files est OK car c'est une fonction utilitaire qui prend un chemin.
+        json_files = list_json_files(dialogues_path, recursive=True)
+        self.category_data_map[self.json_files_category_key] = sorted([str(Path(f).resolve()) for f in json_files])
 
         display_items = []
-        for file_path in yarn_files:
+        for file_path in json_files:
             # Display relative path from the dialogues_path for brevity
             try:
                 relative_path = file_path.relative_to(dialogues_path)
                 display_items.append(str(relative_path))
             except ValueError:
-                # Should not happen if list_yarn_files works correctly from dialogues_path
+                # Should not happen if list_json_files works correctly from dialogues_path
                 display_items.append(file_path.name) 
         
         # Using _populate_list_widget directly for non-checkable items
@@ -347,12 +347,12 @@ class LeftSelectionPanel(QWidget):
         # So, we adapt or do it manually.
         list_widget.clear()
         if not display_items:
-            list_widget.addItem(QListWidgetItem(UIText.NO_YARN_FILES_FOUND))
+            list_widget.addItem(QListWidgetItem(UIText.NO_JSON_FILES_FOUND))
         else:
             for item_text in display_items:
                 q_list_item = QListWidgetItem(item_text)
                 list_widget.addItem(q_list_item)
-        logger.info(f"Populated Yarn files list with {len(display_items)} items.")
+        logger.info(f"Populated JSON files list with {len(display_items)} items.")
 
     def _populate_list_widget(self, list_widget: QListWidget, items: list[str], category_key: str): # restore_checked_states param removed
         current_filter_text = ""
@@ -388,10 +388,10 @@ class LeftSelectionPanel(QWidget):
         for cat_key, filter_edit in self.filter_edits.items():
             # Pass the correct list_widget and category_key to the lambda
             list_widget = self.lists[cat_key]
-            # Check if the category is for yarn files to connect to the correct handler
-            if cat_key == self.yarn_files_category_key:
-                 filter_edit.textChanged.connect(
-                    lambda text, lw=list_widget, ck=cat_key: self._filter_yarn_list(lw, ck, text)
+            # Check if the category is for JSON files to connect to the correct handler
+            if cat_key == self.json_files_category_key:
+                filter_edit.textChanged.connect(
+                    lambda text, lw=list_widget, ck=cat_key: self._filter_json_list(lw, ck, text)
                 )
             else:
                 filter_edit.textChanged.connect(
@@ -444,15 +444,15 @@ class LeftSelectionPanel(QWidget):
                 #     checkable_item_widget.checkbox.setChecked(True)
                 # Ceci est maintenant géré globalement par get_settings / load_settings
 
-    def _filter_yarn_list(self, list_widget_to_filter: QListWidget, category_key: str, filter_text: str):
-        """Filters items in the Yarn files QListWidget based on text."""
-        yarn_paths = self.category_data_map.get(category_key, []) # List of Path objects
+    def _filter_json_list(self, list_widget_to_filter: QListWidget, category_key: str, filter_text: str):
+        """Filters items in the JSON files QListWidget based on text."""
+        json_paths = self.category_data_map.get(category_key, []) # List of Path objects
         dialogues_base_path = self.config_service.get_unity_dialogues_path() # For making paths relative
 
         list_widget_to_filter.clear()
         
         found_match = False
-        for file_path_obj in yarn_paths:
+        for file_path_obj in json_paths:
             # Display relative path for consistency
             display_text = str(file_path_obj.relative_to(dialogues_base_path)) if dialogues_base_path and dialogues_base_path in file_path_obj.parents else file_path_obj.name
             if filter_text.lower() in display_text.lower():
@@ -461,13 +461,13 @@ class LeftSelectionPanel(QWidget):
                 found_match = True
         
         if not found_match:
-            list_widget_to_filter.addItem(QListWidgetItem(UIText.NO_MATCHING_YARN_FILES))
+            list_widget_to_filter.addItem(QListWidgetItem(UIText.NO_MATCHING_JSON_FILES))
 
     def get_settings(self) -> dict:
         """Gets the current settings for the LeftSelectionPanel."""
         checked_items = {}
         for cat_key, list_widget in self.lists.items():
-            if cat_key == self.yarn_files_category_key: # Skip yarn files for checked items
+            if cat_key == self.json_files_category_key: # Skip JSON files for checked items
                 continue
             checked_items[cat_key] = []
             for i in range(list_widget.count()):
@@ -516,8 +516,8 @@ class LeftSelectionPanel(QWidget):
 
     def _get_singular_name_for_category_key(self, category_key: str) -> str:
         """Helper to get the singular display name for a category key."""
-        if category_key == self.yarn_files_category_key:
-            return self.yarn_files_singular_name
+        if category_key == self.json_files_category_key:
+            return self.json_files_singular_name
         for config in self.categories_config:
             if config["key"] == category_key:
                 return config.get("singular_name", category_key.capitalize())
@@ -546,7 +546,7 @@ class LeftSelectionPanel(QWidget):
         """
         selected: list[str] = []
         for cat_key, list_widget in (self.lists if hasattr(self, 'lists') else self.list_widgets).items():
-            if hasattr(self, 'yarn_files_category_key') and cat_key == self.yarn_files_category_key:
+            if hasattr(self, 'json_files_category_key') and cat_key == self.json_files_category_key:
                 continue
             for i in range(list_widget.count()):
                 q_item = list_widget.item(i)
@@ -566,15 +566,15 @@ class LeftSelectionPanel(QWidget):
         list_widget.blockSignals(True)
         for i in range(list_widget.count()):
             item = list_widget.item(i)
-            # GDD lists use custom widgets, Yarn list does not (or might in future)
+            # GDD lists use custom widgets, JSON list does not (or might in future)
             widget_item = list_widget.itemWidget(item)
             if widget_item and hasattr(widget_item, 'checkbox') and hasattr(widget_item, 'text_label'): # CheckableListItemWidget
                 if widget_item.text_label.text() in items_to_check:
                     widget_item.checkbox.setChecked(True)
                 else:
                     widget_item.checkbox.setChecked(False)
-            elif item: # For simple QListWidgetItems (like Yarn files if they were checkable)
-                 # This branch might not be used if Yarn files are not checkable or use a different mechanism
+            elif item: # For simple QListWidgetItems (like JSON files if they were checkable)
+                 # This branch might not be used if JSON files are not checkable or use a different mechanism
                 if item.text() in items_to_check:
                     item.setCheckState(Qt.Checked)
                 else:

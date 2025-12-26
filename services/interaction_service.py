@@ -1,9 +1,11 @@
 from typing import List, Optional, Dict, Tuple, Any
+from pathlib import Path
 from models.dialogue_structure import Interaction, DialogueLineElement, PlayerChoicesBlockElement
 from .repositories import IInteractionRepository
 from services.repositories import (
     InMemoryInteractionRepository, FileInteractionRepository, IInteractionRepository
 )
+from services.json_renderer import UnityJsonRenderer
 import logging
 import uuid
 import re
@@ -77,9 +79,15 @@ class InteractionService:
             del self._parent_index[k]
 
     def get_all(self) -> List[Interaction]:
-        """Retourne toutes les interactions."""
+        """Retourne toutes les interactions, triées par interaction_id pour un ordre stable.
+        
+        Returns:
+            Liste de toutes les interactions, triées par ID.
+        """
         logger.info("[DEBUG] Appel à get_all sur InteractionService")
         interactions = self._repo.get_all()
+        # Trier par interaction_id pour un ordre stable
+        interactions.sort(key=lambda i: i.interaction_id)
         logger.info(f"[DEBUG] Interactions récupérées: {[getattr(i, 'interaction_id', None) for i in interactions]}")
         return interactions
 
@@ -87,17 +95,120 @@ class InteractionService:
         """Retourne une interaction par son ID."""
         return self._repo.get_by_id(interaction_id)
 
+    def _has_cycle(self, parent_id: str, child_id: str, max_depth: int = 10) -> bool:
+        """Vérifie si ajouter un lien parent->child créerait un cycle.
+        
+        Un cycle serait créé si on peut déjà atteindre parent_id depuis child_id
+        en remontant la chaîne des parents. Dans ce cas, ajouter parent_id->child_id
+        créerait une boucle.
+        
+        Args:
+            parent_id: ID de l'interaction parente (le lien à ajouter serait parent_id -> child_id).
+            child_id: ID de l'interaction enfant.
+            max_depth: Profondeur maximale de recherche (protection contre récursion infinie).
+            
+        Returns:
+            True si un cycle serait créé, False sinon.
+        """
+        # Si parent == child, cycle évident (self-loop)
+        if parent_id == child_id:
+            return True
+        
+        # Parcours DFS depuis child_id pour voir si on peut atteindre parent_id
+        # en remontant les parents. Si oui, ajouter parent_id->child_id créerait un cycle.
+        visited = set()
+        stack = [child_id]
+        depth = 0
+        
+        while stack and depth < max_depth:
+            current_id = stack.pop()
+            
+            if current_id in visited:
+                continue
+            visited.add(current_id)
+            
+            # Si on atteint parent_id, cela signifie qu'on peut déjà remonter
+            # de child_id à parent_id, donc ajouter parent_id->child_id créerait un cycle
+            if current_id == parent_id:
+                return True
+            
+            # Récupérer les parents de current_id dans l'index actuel
+            # (avant l'ajout du nouveau lien parent_id->child_id)
+            parents = self._parent_index.get(current_id, [])
+            for pid, _ in parents:
+                if pid not in visited:
+                    stack.append(pid)
+            
+            depth += 1
+        
+        return False
+    
+    def _validate_references(self, interaction: Interaction) -> None:
+        """Valide que tous les IDs référencés dans une interaction existent.
+        
+        Args:
+            interaction: L'interaction à valider.
+            
+        Raises:
+            ValueError: Si une référence cassée est trouvée.
+        """
+        referenced_ids = []
+        
+        # Collecter tous les IDs référencés
+        if interaction.next_interaction_id_if_no_choices:
+            referenced_ids.append(interaction.next_interaction_id_if_no_choices)
+        
+        for element in interaction.elements:
+            if isinstance(element, PlayerChoicesBlockElement):
+                for choice in element.choices:
+                    if choice.next_interaction_id:
+                        referenced_ids.append(choice.next_interaction_id)
+        
+        # Vérifier que tous les IDs référencés existent
+        for ref_id in referenced_ids:
+            if not self.exists(ref_id):
+                raise ValueError(f"Référence cassée : l'interaction '{ref_id}' référencée n'existe pas")
+    
     def save(self, interaction: Interaction) -> None:
-        """Sauvegarde une interaction (création ou mise à jour)."""
+        """Sauvegarde une interaction (création ou mise à jour).
+        
+        Args:
+            interaction: L'interaction à sauvegarder.
+            
+        Raises:
+            ValueError: Si un cycle serait créé ou si des références sont cassées.
+        """
         logger.info(f"[DEBUG] Sauvegarde de l'interaction: id={interaction.interaction_id}, titre={getattr(interaction, 'title', None)}")
         
         # Vérifier si l'interaction existe déjà pour mise à jour de l'index
         existing_interaction = self._repo.get_by_id(interaction.interaction_id)
         
-        # Si c'est une mise à jour, retirer l'ancienne version de l'index
+        # Si c'est une mise à jour, retirer l'ancienne version de l'index temporairement
+        # pour permettre la validation
         if existing_interaction:
             self._remove_interaction_from_index(interaction.interaction_id)
-            
+        
+        # Valider les références (tous les IDs référencés doivent exister)
+        self._validate_references(interaction)
+        
+        # Collecter tous les IDs d'enfants référencés
+        child_ids = []
+        if interaction.next_interaction_id_if_no_choices:
+            child_ids.append(interaction.next_interaction_id_if_no_choices)
+        for element in interaction.elements:
+            if isinstance(element, PlayerChoicesBlockElement):
+                for choice in element.choices:
+                    if choice.next_interaction_id:
+                        child_ids.append(choice.next_interaction_id)
+        
+        # Vérifier les cycles pour chaque lien parent->child
+        for child_id in child_ids:
+            if self._has_cycle(interaction.interaction_id, child_id):
+                # Restaurer l'index si on avait retiré l'interaction
+                if existing_interaction:
+                    self._index_interaction_links(existing_interaction)
+                raise ValueError(f"Cycle détecté : créer le lien {interaction.interaction_id} -> {child_id} créerait un cycle dans le graphe")
+        
         # Sauvegarder l'interaction
         result = self._repo.save(interaction)
         
@@ -108,8 +219,80 @@ class InteractionService:
         logger.debug(f"Index des parents mis à jour. Entrées totales: {len(self._parent_index)}")
         return result
 
+    def get_parent_interactions(self, interaction_id: str) -> List[Interaction]:
+        """Retourne les interactions parentes d'une interaction.
+        
+        Args:
+            interaction_id: L'ID de l'interaction enfant.
+            
+        Returns:
+            Liste des interactions parentes.
+        """
+        parent_info = self._parent_index.get(interaction_id, [])
+        parents = []
+        for parent_id, _ in parent_info:
+            parent = self.get_by_id(parent_id)
+            if parent:
+                parents.append(parent)
+        return parents
+    
+    def get_child_interactions(self, interaction_id: str) -> List[Interaction]:
+        """Retourne les interactions enfants d'une interaction.
+        
+        Args:
+            interaction_id: L'ID de l'interaction parente.
+            
+        Returns:
+            Liste des interactions enfants.
+        """
+        children = []
+        parent_interaction = self.get_by_id(interaction_id)
+        if not parent_interaction:
+            return children
+        
+        # Récupérer les enfants référencés
+        child_ids = set()
+        if parent_interaction.next_interaction_id_if_no_choices:
+            child_ids.add(parent_interaction.next_interaction_id_if_no_choices)
+        
+        for element in parent_interaction.elements:
+            if isinstance(element, PlayerChoicesBlockElement):
+                for choice in element.choices:
+                    if choice.next_interaction_id:
+                        child_ids.add(choice.next_interaction_id)
+        
+        # Récupérer les interactions enfants
+        for child_id in child_ids:
+            child = self.get_by_id(child_id)
+            if child:
+                children.append(child)
+        
+        return children
+    
     def delete(self, interaction_id: str) -> bool:
-        """Supprime une interaction par son ID."""
+        """Supprime une interaction par son ID.
+        
+        Vérifie d'abord si l'interaction a des enfants. Si oui, lève une exception.
+        
+        Args:
+            interaction_id: L'ID de l'interaction à supprimer.
+            
+        Returns:
+            True si l'interaction a été supprimée.
+            
+        Raises:
+            ValueError: Si l'interaction a des enfants (doit être supprimée en cascade manuellement).
+        """
+        # Vérifier si l'interaction a des enfants
+        children = self.get_child_interactions(interaction_id)
+        if children:
+            child_ids = [child.interaction_id for child in children]
+            raise ValueError(
+                f"Impossible de supprimer l'interaction '{interaction_id}': "
+                f"elle a {len(children)} enfant(s). "
+                f"Supprimez d'abord les interactions enfants : {', '.join(child_ids)}"
+            )
+        
         # Retirer de l'index avant suppression
         self._remove_interaction_from_index(interaction_id)
         
@@ -347,4 +530,53 @@ class InteractionService:
                 if 0 <= choice_index < len(element.choices):
                     return element.choices[choice_index].text
                     
-        return None 
+        return None
+    
+    def export_to_unity_json(
+        self, 
+        interaction_ids: List[str], 
+        output_path: Path,
+        normalize: bool = True
+    ) -> None:
+        """Exporte plusieurs interactions vers un fichier JSON Unity.
+        
+        Args:
+            interaction_ids: Liste des IDs d'interactions à exporter.
+            output_path: Chemin du fichier JSON de sortie.
+            normalize: Si True, normalise le JSON (supprime champs vides, etc.).
+            
+        Raises:
+            ValueError: Si certaines interactions n'existent pas ou si la validation échoue.
+        """
+        # Récupérer toutes les interactions
+        interactions: List[Interaction] = []
+        missing_ids: List[str] = []
+        
+        for interaction_id in interaction_ids:
+            interaction = self.get_by_id(interaction_id)
+            if interaction:
+                interactions.append(interaction)
+            else:
+                missing_ids.append(interaction_id)
+        
+        if missing_ids:
+            raise ValueError(f"Interactions introuvables : {missing_ids}")
+        
+        if not interactions:
+            raise ValueError("Aucune interaction à exporter")
+        
+        # Utiliser UnityJsonRenderer pour la conversion
+        renderer = UnityJsonRenderer()
+        
+        # Valider avant export
+        nodes = renderer.render_interactions(interactions)
+        is_valid, errors = renderer.validate_nodes(nodes)
+        
+        if not is_valid:
+            error_msg = "Erreurs de validation avant export :\n" + "\n".join(errors)
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        # Exporter vers fichier
+        renderer.render_interactions_to_file(interactions, output_path, normalize=normalize)
+        logger.info(f"Export Unity JSON réussi : {len(interactions)} interactions vers {output_path}") 

@@ -1,4 +1,10 @@
-"""Permet de lancer le module DialogueGenerator directement avec `python -m DialogueGenerator`."""
+"""Permet de lancer le module DialogueGenerator directement avec `python -m DialogueGenerator`.
+
+⚠️ DÉPRÉCIÉ : Cette interface desktop PySide6 est dépréciée.
+
+Utiliser l'interface web React à la place :
+    npm run dev
+"""
 
 import sys
 import os
@@ -21,4 +27,14 @@ except ImportError:
     from main_app import main
 
 if __name__ == "__main__":
+    import warnings
+    
+    # ⚠️ Avertissement de dépréciation
+    deprecation_warning = (
+        "⚠️ DÉPRÉCIÉ : L'interface desktop PySide6 est dépréciée.\n"
+        "Utiliser l'interface web React à la place : npm run dev"
+    )
+    warnings.warn(deprecation_warning, DeprecationWarning, stacklevel=2)
+    print("⚠️ DÉPRÉCIÉ : Interface desktop dépréciée. Utiliser 'npm run dev' pour l'interface web.")
+    
     main() 

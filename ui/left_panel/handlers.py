@@ -9,7 +9,7 @@ def handle_uncheck_all_items(panel):
     """
     something_changed = False
     for cat_key, list_widget in (panel.lists if hasattr(panel, 'lists') else panel.list_widgets).items():
-        if hasattr(panel, 'yarn_files_category_key') and cat_key == getattr(panel, 'yarn_files_category_key', None):
+        if hasattr(panel, 'json_files_category_key') and cat_key == getattr(panel, 'json_files_category_key', None):
             continue
         list_widget.blockSignals(True)
         try:
@@ -38,7 +38,7 @@ def handle_set_checked_items_by_name(panel, item_names_to_check):
     items_to_check_set = set(item_names_to_check)
     something_changed = False
     for cat_key, list_widget in (panel.lists if hasattr(panel, 'lists') else panel.list_widgets).items():
-        if hasattr(panel, 'yarn_files_category_key') and cat_key == getattr(panel, 'yarn_files_category_key', None):
+        if hasattr(panel, 'json_files_category_key') and cat_key == getattr(panel, 'json_files_category_key', None):
             continue
         list_widget.blockSignals(True)
         try:

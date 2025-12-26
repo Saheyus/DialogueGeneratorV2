@@ -35,14 +35,12 @@ from .generation_panel.handlers import (
 # --- Imports pour compatibilité exécution directe (try/except) ---
 try:
     from services.linked_selector import LinkedSelectorService
-    from services.yarn_renderer import JinjaYarnRenderer
     from llm_client import OpenAIClient, DummyLLMClient
 except ImportError:
     current_dir = pathlib.Path(__file__).resolve().parent.parent
     if str(current_dir) not in sys.path:
         sys.path.insert(0, str(current_dir))
     from services.linked_selector import LinkedSelectorService
-    from services.yarn_renderer import JinjaYarnRenderer
     from llm_client import OpenAIClient, DummyLLMClient
 
 logger = logging.getLogger(__name__)
@@ -110,7 +108,6 @@ class GenerationPanel(QWidget):
         self.llm_client = llm_client
         self.main_window_ref = main_window_ref
         self.linked_selector = LinkedSelectorService(self.context_builder)
-        self.yarn_renderer = JinjaYarnRenderer()
         
         # Initialisation de interaction_service ici pour qu'il soit dispo dans _init_ui
         interactions_dir = DEFAULT_INTERACTIONS_DIR
@@ -147,13 +144,13 @@ class GenerationPanel(QWidget):
     # --- Initialisation UI et connexion des signaux ---
     def _init_ui(self):
         main_layout = QHBoxLayout(self)
-        main_splitter = QSplitter(Qt.Orientation.Horizontal)
-        main_layout.addWidget(main_splitter)
+        self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        main_layout.addWidget(self.main_splitter)
 
         left_column_widget = QWidget()
         left_column_layout = QVBoxLayout(left_column_widget)
         left_column_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        main_splitter.addWidget(left_column_widget)
+        self.main_splitter.addWidget(left_column_widget)
 
         # Onglets central
         central_tabs = QTabWidget()
@@ -193,7 +190,7 @@ class GenerationPanel(QWidget):
         right_column_widget = QWidget()
         right_column_layout = QVBoxLayout(right_column_widget)
         right_column_layout.setContentsMargins(0,0,0,0)
-        main_splitter.addWidget(right_column_widget)
+        self.main_splitter.addWidget(right_column_widget)
         right_column_layout.addWidget(self.variants_display_widget)
         
         # 2. Création de TOUS les alias APRÈS l'initialisation des widgets enfants
@@ -251,13 +248,16 @@ class GenerationPanel(QWidget):
         self.max_context_tokens_spinbox.valueChanged.connect(self._schedule_settings_save)
         
         # Autres configurations UI
-        main_splitter.setStretchFactor(0, 1)
-        main_splitter.setStretchFactor(1, 2)
+        self.main_splitter.setStretchFactor(0, 1)
+        self.main_splitter.setStretchFactor(1, 2)
         initial_widths = [self.width() // 3 if self.width() > 0 else 300, 2 * self.width() // 3 if self.width() > 0 else 600]
         if all(w > 50 for w in initial_widths):
-            main_splitter.setSizes(initial_widths)
+            self.main_splitter.setSizes(initial_widths)
         else:
             logger.warning("Largeurs initiales pour QSplitter non valides, utilisation des tailles par défaut.")
+        
+        # Connecter le signal pour sauvegarder automatiquement quand le splitter est déplacé
+        self.main_splitter.splitterMoved.connect(self._schedule_settings_save)
         
         self.update_token_estimation_signal.connect(self.update_token_estimation_ui)
 
@@ -573,7 +573,8 @@ class GenerationPanel(QWidget):
             "system_prompt": self.instructions_widget.get_system_prompt_text(),
             "dialogue_structure": self.dialogue_structure_widget.get_structure(),
             "structured_output": self.generation_params_widget.get_settings().get("structured_output"), # Délégué
-            "no_limit": self.generation_params_widget.get_settings().get("no_limit", False)
+            "no_limit": self.generation_params_widget.get_settings().get("no_limit", False),
+            "splitter_sizes": self.main_splitter.sizes() if hasattr(self, 'main_splitter') and self.main_splitter else None
         }
         logger.debug(f"Récupération des paramètres du panneau de génération: {settings}")
         return settings
@@ -614,6 +615,15 @@ class GenerationPanel(QWidget):
         self.instructions_widget.user_instructions_textedit.setPlainText(settings.get("user_instructions", ""))
         self.instructions_widget.set_system_prompt_text(settings.get("system_prompt", None)) # None comme défaut
         self.dialogue_structure_widget.set_structure(settings.get("dialogue_structure", ["PNJ", "PJ", "Stop", "", "", ""])) # Défaut explicite
+
+        # Restaurer les tailles du splitter
+        splitter_sizes = settings.get("splitter_sizes")
+        if splitter_sizes and hasattr(self, 'main_splitter') and self.main_splitter:
+            if isinstance(splitter_sizes, list) and len(splitter_sizes) == 2 and all(isinstance(s, int) and s > 0 for s in splitter_sizes):
+                self.main_splitter.setSizes(splitter_sizes)
+                logger.debug(f"Tailles du splitter du GenerationPanel restaurées: {splitter_sizes}")
+            else:
+                logger.warning(f"Tailles de splitter invalides dans les settings: {splitter_sizes}")
 
         self._is_loading_settings = False
         self.update_token_estimation_ui() # Mettre à jour l'estimation après le chargement

@@ -1,10 +1,18 @@
 ---
-description: Frontend (migration) — React/Vue/Svelte, API contracts, DX
-globs: ["frontend/**/*", "web/**/*", "client/**/*", "apps/**/*", "packages/**/*"]
+description: Frontend React TypeScript — API client, state management, composants
+globs: ["frontend/**/*", "web/**/*", "client/**/*"]
 alwaysApply: false
 ---
 
-- Frontend = client; il ne “ré-implémente” pas la logique métier. Il consomme l’API (REST/GraphQL) et affiche/édite.
-- Contrats: s’aligner sur les schémas côté backend (OpenAPI/GraphQL schema) et générer les types si possible.
-- Erreurs: UX claire (states loading/error/empty), pas de secrets côté client.
-- Tests: privilégier tests unitaires composants + e2e ciblés sur les parcours critiques.
+- **Architecture**: React + TypeScript + Vite dans `frontend/`. **Interface principale** du projet. Consomme l'API REST (`/api/v1/*`), n'implémente pas la logique métier. ⚠️ L'ancienne interface desktop PySide6 est dépréciée.
+- **Client API**: `frontend/src/api/client.ts` (axios avec intercepteurs), modules par domaine (`auth.ts`, `dialogues.ts`, `interactions.ts`).
+- **Types**: `frontend/src/types/api.ts` alignés sur les schémas backend Pydantic. Générer depuis OpenAPI si possible.
+- **State Management**: Zustand (`frontend/src/store/`) pour auth et état global. Éviter prop drilling excessif.
+- **Composants**: Structure modulaire (`components/layout/`, `components/auth/`, `components/generation/`), réutilisables et testables.
+- **Routing**: React Router (`react-router-dom`) pour navigation, routes protégées avec `ProtectedRoute`.
+- **Authentification**: JWT stocké en localStorage (access_token), refresh automatique via intercepteur axios, déconnexion propre.
+- **UX**: États loading/error/empty gérés, messages d'erreur utilisateur-friendly, pas de secrets exposés.
+- **Tests**: Tests unitaires composants (React Testing Library), tests hooks, mocks pour API client.
+- **Build**: Vite pour dev/build, proxy API en dev (`vite.config.ts`), build production dans `dist/`.
+- **Commande dev**: `npm run dev` (depuis racine, lance tout) ou `cd frontend && npm run dev` (frontend seul).
+- **Références**: Voir `README_API.md` pour contrats API.

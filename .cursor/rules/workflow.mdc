@@ -1,13 +1,32 @@
 ---
-description: Workflow (global) — tests, UI smoke, git (Windows)
+description: Workflow (global) — commandes essentielles, tests, déploiement
 globs: []
 alwaysApply: true
 ---
 
-- Quand du code a changé:
-  - lancer `pytest`;
-  - puis préciser ce qui doit être vérifié côté UI, et lancer un smoke UI via `python main_app.py`.
+- **Commandes essentielles (donner en une ligne)** :
+  - Développement : `npm run dev` (lance backend sur 4242 + frontend sur 3000 automatiquement)
+  - Tests : `npm test` ou `pytest tests/`
+  - Build production : `npm run deploy:build`
+  - Vérification déploiement : `npm run deploy:check`
 
-- Note (automation Windows): `python main_app.py` ne termine pas tout seul (boucle Qt). Pour un smoke automatisé, préférer le script dédié et versionné dans le repo (`scripts/smoke_ui.py`) plutôt qu’une one-liner shell fragile.
+- **Quand du code a changé** :
+  - **Backend Python** : `pytest tests/` (exécuter automatiquement)
+    - Tests API : `pytest tests/api/` (utilise TestClient FastAPI, pas besoin de serveur)
+    - Tests unitaires : `pytest tests/ -k "not api"`
+  - **Frontend React** : `.\scripts\test-frontend.ps1` ou `npm run test:frontend` (build + lint + tests unitaires)
+    - Build check détecte erreurs TypeScript
+    - Lint check détecte erreurs de code
+    - Tests Vitest vérifient les composants
+  - ⚠️ **UI desktop (DÉPRÉCIÉE)** : `python main_app.py` — Ne plus utiliser, interface dépréciée
+  - **Interface web (PRINCIPALE)** : `npm run dev` (démarre tout sur localhost:3000)
 
-- Si tout est vert: commit + push.
+- **Tests** :
+  - Commande standard : `pytest tests/` (tous les tests)
+  - Tests API : utiliser `TestClient` de FastAPI, pas de serveur réel
+  - Mocks : `pytest-mock` pour services externes (LLM, fichiers GDD)
+  - Configuration : `pytest.ini` définit les options (asyncio_mode, testpaths, etc.)
+
+- **Avant commit** : `pytest tests/` (backend) + `.\scripts\test-frontend.ps1` (frontend). Si vert : commit + push.
+
+- **Déploiement** : `npm run deploy:build` puis uploader + configurer `ENVIRONMENT=production` et `CORS_ORIGINS`.

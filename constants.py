@@ -15,9 +15,9 @@ class UIText:
     CONTEXT_BUILDER_NOT_AVAILABLE = "(ContextBuilder non disponible)"
     UNKNOWN_ITEM_ERROR = "(Erreur - Nom d'item inconnu)"
     UNITY_DIALOGUES_PATH_NOT_CONFIGURED = "Chemin des dialogues Unity non configuré."
-    NO_YARN_FILES_FOUND = "(Aucun fichier .yarn trouvé)"
+    NO_JSON_FILES_FOUND = "(Aucun fichier JSON trouvé)"
     NO_ITEMS_CATEGORY_OR_FILTER = "(Aucun item pour cette catégorie ou filtre)"
-    NO_MATCHING_YARN_FILES = "(Aucun fichier .yarn correspondant)"
+    NO_MATCHING_JSON_FILES = "(Aucun fichier JSON correspondant)"
     NO_ITEMS = "(Aucun item)"
 
 class FilePaths:

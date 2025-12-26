@@ -28,14 +28,20 @@ class LLMClientFactory:
             logger.info("Création d'un DummyLLMClient (demandé explicitement).")
             return DummyLLMClient()
 
-        model_config = next((m for m in available_models if m.get("model_identifier") == model_id), None)
+        # Chercher le modèle par api_identifier (champ dans llm_config.json) ou model_identifier (compatibilité)
+        model_config = next(
+            (m for m in available_models 
+             if m.get("api_identifier") == model_id or m.get("model_identifier") == model_id), 
+            None
+        )
 
         if not model_config:
             logger.warning(f"Configuration non trouvée pour model_id '{model_id}'. Utilisation de DummyLLMClient.")
             return DummyLLMClient()
 
-        client_type = model_config.get("client_type")
-        api_key_env_var = model_config.get("api_key_env_var")
+        client_type = model_config.get("client_type", "openai")  # Par défaut openai
+        # La clé API est dans la config globale, pas dans chaque modèle
+        api_key_env_var = config.get("api_key_env_var")
 
         if client_type == "openai":
             if not api_key_env_var:
@@ -48,10 +54,19 @@ class LLMClientFactory:
                 return DummyLLMClient()
             
             try:
-                # La config passée à OpenAIClient est la config spécifique du modèle (model_config)
-                # et non la config globale des LLM.
-                logger.info(f"Création d'un OpenAIClient pour model_id: {model_id}")
-                return OpenAIClient(api_key=api_key, model_config=model_config)
+                # La config passée à OpenAIClient doit contenir default_model avec l'identifiant du modèle
+                # On construit une config compatible avec OpenAIClient qui attend "default_model"
+                model_identifier = model_config.get("api_identifier") or model_config.get("model_identifier") or model_id
+                client_config = config.copy()  # Commencer avec la config globale
+                client_config["default_model"] = model_identifier  # Définir le modèle spécifique
+                # Ajouter les paramètres du modèle s'ils existent
+                if "parameters" in model_config:
+                    if "default_temperature" in model_config["parameters"]:
+                        client_config["temperature"] = model_config["parameters"]["default_temperature"]
+                    if "max_tokens" in model_config["parameters"]:
+                        client_config["max_tokens"] = model_config["parameters"]["max_tokens"]
+                logger.info(f"Création d'un OpenAIClient pour model_id: {model_id} (default_model: {model_identifier})")
+                return OpenAIClient(api_key=api_key, config=client_config)
             except Exception as e:
                 logger.error(f"Erreur lors de la création de OpenAIClient pour '{model_id}': {e}. Utilisation de DummyLLMClient.")
                 return DummyLLMClient()
