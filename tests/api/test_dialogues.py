@@ -41,8 +41,16 @@ def client(mock_dialogue_service, mock_interaction_service):
     
     # Mock du config service pour éviter les erreurs
     mock_config_service = MagicMock()
-    mock_config_service.get_llm_config = MagicMock(return_value={})
-    mock_config_service.get_available_llm_models = MagicMock(return_value=[])
+    mock_config_service.get_llm_config = MagicMock(return_value={
+        "api_key_env_var": "OPENAI_API_KEY"
+    })
+    mock_config_service.get_available_llm_models = MagicMock(return_value=[
+        {
+            "api_identifier": "gpt-4o-mini",
+            "display_name": "GPT-4o Mini",
+            "client_type": "openai"
+        }
+    ])
     
     # Override les dépendances FastAPI
     app.dependency_overrides[get_dialogue_generation_service] = lambda: mock_dialogue_service

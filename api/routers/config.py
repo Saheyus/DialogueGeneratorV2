@@ -170,9 +170,9 @@ async def list_llm_models(
         
         model_responses = [
             LLMModelResponse(
-                model_identifier=model.get("model_identifier", "unknown"),
-                display_name=model.get("display_name", model.get("model_identifier", "Unknown")),
-                client_type=model.get("client_type", "unknown"),
+                model_identifier=model.get("api_identifier", model.get("model_identifier", "unknown")),
+                display_name=model.get("display_name", model.get("api_identifier", model.get("model_identifier", "Unknown"))),
+                client_type=model.get("client_type", "openai"),  # Par défaut openai pour les modèles de la config
                 max_tokens=model.get("max_tokens", 4096)
             )
             for model in available_models

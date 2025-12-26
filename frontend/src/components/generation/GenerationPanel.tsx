@@ -27,7 +27,7 @@ import { VariantsTabsView } from './VariantsTabsView'
 import { InteractionsTab } from './InteractionsTab'
 import { Tabs, type Tab } from '../shared/Tabs'
 import { ContextActions } from '../context/ContextActions'
-import { ContextSummaryChips, useToast } from '../shared'
+import { ContextSummaryChips, useToast, toastManager } from '../shared'
 
 type GenerationMode = 'variants' | 'interactions'
 type PanelTab = 'generation' | 'interactions'
@@ -42,6 +42,9 @@ export function GenerationPanel() {
     setSystemPromptOverride,
     setEstimatedPrompt,
     setSceneSelection,
+    setVariantsResponse: setStoreVariantsResponse,
+    setInteractionsResponse: setStoreInteractionsResponse,
+    setTokensUsed,
   } = useGenerationStore()
   
   const [generationMode, setGenerationMode] = useState<GenerationMode>('variants')
@@ -60,6 +63,7 @@ export function GenerationPanel() {
   const [availableInteractions, setAvailableInteractions] = useState<InteractionResponse[]>([])
   const [activePanelTab, setActivePanelTab] = useState<PanelTab>('generation')
   const [isDirty, setIsDirty] = useState(false)
+  const [npcSpeakerId, setNpcSpeakerId] = useState<string>('')
   const toast = useToast()
 
   // Sauvegarde automatique très fréquente (toutes les 2 secondes)
@@ -76,6 +80,7 @@ export function GenerationPanel() {
       llmModel,
       generationMode,
       previousInteractionId,
+      npcSpeakerId,
       timestamp: Date.now(),
     }
     try {
@@ -84,7 +89,7 @@ export function GenerationPanel() {
     } catch (err) {
       console.error('Erreur lors de la sauvegarde automatique:', err)
     }
-  }, [userInstructions, systemPromptOverride, dialogueStructure, sceneSelection, kVariants, maxContextTokens, llmModel, generationMode, previousInteractionId])
+  }, [userInstructions, systemPromptOverride, dialogueStructure, sceneSelection, kVariants, maxContextTokens, llmModel, generationMode, previousInteractionId, npcSpeakerId])
 
   // Charger le brouillon au démarrage
   useEffect(() => {
@@ -103,6 +108,7 @@ export function GenerationPanel() {
         if (draft.llmModel !== undefined) setLlmModel(draft.llmModel)
         if (draft.generationMode !== undefined) setGenerationMode(draft.generationMode)
         if (draft.previousInteractionId !== undefined) setPreviousInteractionId(draft.previousInteractionId)
+        if (draft.npcSpeakerId !== undefined) setNpcSpeakerId(draft.npcSpeakerId)
         setIsDirty(false)
       }
     } catch (err) {
@@ -234,8 +240,12 @@ export function GenerationPanel() {
       )
       setEstimatedTokens(response.total_estimated_tokens)
       setEstimatedPrompt(response.estimated_prompt || null, response.total_estimated_tokens, false)
-    } catch (err) {
-      console.error('Erreur lors de l\'estimation:', err)
+    } catch (err: any) {
+      // Ne logger que les erreurs non liées à la connexion (backend non accessible)
+      // Les erreurs de connexion sont normales si le backend n'est pas encore démarré
+      if (err?.code !== 'ERR_NETWORK' && err?.code !== 'ECONNREFUSED' && err?.response?.status !== 401) {
+        console.error('Erreur lors de l\'estimation:', err)
+      }
       setEstimatedTokens(null)
       setEstimatedPrompt(null, null, false)
     } finally {
@@ -276,10 +286,29 @@ export function GenerationPanel() {
 
     setIsLoading(true)
     setError(null)
-    toast('Génération en cours...', 'info', 2000)
+    // Toast sans durée (0) pour qu'il reste affiché pendant la génération
+    const toastId = toast('Génération en cours...', 'info', 0)
 
     try {
       const contextSelections = buildContextSelections()
+      // Log pour déboguer les personnages sélectionnés
+      console.log('Context selections envoyés:', contextSelections)
+      console.log('Personnages dans contextSelections:', contextSelections.characters)
+      
+      // Calculer les tokens envoyés avant la génération
+      let tokensSent = 0
+      try {
+        const estimateResponse = await dialoguesAPI.estimateTokens(
+          contextSelections,
+          userInstructions,
+          maxContextTokens,
+          systemPromptOverride
+        )
+        tokensSent = estimateResponse.total_estimated_tokens
+        setTokensUsed(tokensSent)
+      } catch (err) {
+        console.warn('Impossible d\'estimer les tokens:', err)
+      }
       
       if (generationMode === 'variants') {
         const request: GenerateDialogueVariantsRequest = {
@@ -290,9 +319,19 @@ export function GenerationPanel() {
           structured_output: false,
           system_prompt_override: systemPromptOverride || undefined,
           llm_model_identifier: llmModel,
+          npc_speaker_id: npcSpeakerId || undefined,
         }
 
         const response = await dialoguesAPI.generateDialogueVariants(request)
+        
+        // Afficher un avertissement si DummyLLMClient a été utilisé
+        if (response.warning) {
+          toast(response.warning, 'error', 10000) // Afficher pendant 10 secondes
+        }
+        
+        // Stocker dans le store pour affichage dans le panneau de droite
+        setStoreVariantsResponse(response)
+        setStoreInteractionsResponse(null)
         setVariantsResponse(response)
         setInteractions([])
         setIsDirty(false)
@@ -300,7 +339,17 @@ export function GenerationPanel() {
         if (response.prompt_used) {
           setEstimatedPrompt(response.prompt_used, response.estimated_tokens, false)
         }
-        toast('Génération réussie!', 'success')
+        // Mettre à jour les tokens utilisés
+        if (response.estimated_tokens) {
+          setTokensUsed(response.estimated_tokens)
+        }
+        // Fermer le toast de génération en cours et afficher le succès
+        if (toastId) {
+          toastManager.remove(toastId)
+        }
+        if (!response.warning) {
+          toast('Génération réussie!', 'success')
+        }
       } else {
         const request: GenerateInteractionVariantsRequest = {
           k_variants: kVariants,
@@ -313,14 +362,25 @@ export function GenerationPanel() {
         }
 
         const response = await dialoguesAPI.generateInteractionVariants(request)
+        // Stocker dans le store pour affichage dans le panneau de droite
+        setStoreInteractionsResponse(response)
+        setStoreVariantsResponse(null)
         setInteractions(response)
         setVariantsResponse(null)
         setIsDirty(false)
+        // Fermer le toast de génération en cours et afficher le succès
+        if (toastId) {
+          toastManager.remove(toastId)
+        }
         toast('Génération réussie!', 'success')
       }
     } catch (err) {
       const errorMsg = getErrorMessage(err)
       setError(errorMsg)
+      // Fermer le toast de génération en cours en cas d'erreur
+      if (toastId) {
+        toastManager.remove(toastId)
+      }
       toast(errorMsg, 'error')
     } finally {
       setIsLoading(false)
@@ -336,6 +396,10 @@ export function GenerationPanel() {
     previousInteractionId,
     buildContextSelections,
     toast,
+    setStoreVariantsResponse,
+    setStoreInteractionsResponse,
+    setTokensUsed,
+    setEstimatedPrompt,
   ])
 
   const handlePreview = () => {
@@ -481,6 +545,43 @@ export function GenerationPanel() {
         }}
       />
 
+      {selections.characters.length > 0 && (
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{ color: theme.text.primary, display: 'block', marginBottom: '0.5rem' }}>
+            PNJ interlocuteur:
+          </label>
+          <select
+            value={npcSpeakerId}
+            onChange={(e) => {
+              setNpcSpeakerId(e.target.value)
+              setIsDirty(true)
+            }}
+            style={{ 
+              width: '100%', 
+              padding: '0.5rem', 
+              boxSizing: 'border-box',
+              backgroundColor: theme.input.background,
+              border: `1px solid ${theme.input.border}`,
+              color: theme.input.color,
+            }}
+          >
+            <option value="">Sélectionner un PNJ...</option>
+            {selections.characters.map((char) => (
+              <option key={char} value={char}>
+                {char}
+              </option>
+            ))}
+          </select>
+          <div style={{ 
+            fontSize: '0.85rem', 
+            color: theme.text.secondary, 
+            marginTop: '0.25rem' 
+          }}>
+            Personnage joueur: Seigneuresse Uresaïr (par défaut)
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
         <div>
           <label style={{ color: theme.text.primary }}>
@@ -621,54 +722,6 @@ export function GenerationPanel() {
           {error}
         </div>
       )}
-
-      {variantsResponse && variantsResponse.variants.length > 0 && (
-        <div style={{ marginTop: '2rem', height: '600px' }}>
-          <VariantsTabsView
-            response={variantsResponse}
-            onValidateAsInteraction={handleSaveAsInteraction}
-          />
-        </div>
-      )}
-
-      {interactions.length > 0 && (
-        <div style={{ marginTop: '2rem' }}>
-          <h3 style={{ color: theme.text.primary }}>Interactions générées ({interactions.length}):</h3>
-          {interactions.map((interaction) => (
-            <div
-              key={interaction.interaction_id}
-              style={{
-                marginBottom: '1rem',
-                padding: '1rem',
-                border: `1px solid ${theme.border.primary}`,
-                borderRadius: '4px',
-                backgroundColor: theme.background.tertiary,
-              }}
-            >
-              <h4 style={{ marginTop: 0, color: theme.text.primary }}>{interaction.title}</h4>
-              <div style={{ fontSize: '0.9rem', color: theme.text.secondary, marginBottom: '0.5rem' }}>
-                ID: {interaction.interaction_id}
-                {interaction.header_tags.length > 0 && (
-                  <span style={{ marginLeft: '1rem' }}>
-                    Tags: {interaction.header_tags.join(', ')}
-                  </span>
-                )}
-              </div>
-              <pre style={{ 
-                whiteSpace: 'pre-wrap', 
-                fontSize: '0.9rem', 
-                backgroundColor: theme.background.secondary, 
-                color: theme.text.secondary,
-                padding: '0.5rem', 
-                borderRadius: '4px',
-                border: `1px solid ${theme.border.primary}`,
-              }}>
-                {JSON.stringify(interaction.elements, null, 2)}
-              </pre>
-            </div>
-          ))}
-        </div>
-      )}
           </div>
         </div>
       ),
@@ -709,7 +762,7 @@ export function GenerationPanel() {
   }, [handleGenerate, handlePreview, handleExportUnity, handleReset])
 
   // Exposer les handlers via le store pour Dashboard
-  // Ne mettre à jour que quand isLoading ou isDirty changent
+  // Mettre à jour au montage initial et quand isLoading ou isDirty changent
   useEffect(() => {
     setActions({
       handleGenerate: handlersRef.current.handleGenerate,
@@ -720,6 +773,20 @@ export function GenerationPanel() {
       isDirty,
     })
   }, [isLoading, isDirty, setActions])
+  
+  // S'assurer que le store est initialisé au montage même si isLoading/isDirty ne changent pas
+  // (nécessaire car le useEffect ci-dessus ne s'exécute que si isLoading/isDirty changent)
+  useEffect(() => {
+    setActions({
+      handleGenerate: handlersRef.current.handleGenerate,
+      handlePreview: handlersRef.current.handlePreview,
+      handleExportUnity: handlersRef.current.handleExportUnity,
+      handleReset: handlersRef.current.handleReset,
+      isLoading,
+      isDirty,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Exécuter une seule fois au montage pour initialiser le store
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: theme.background.panel }}>

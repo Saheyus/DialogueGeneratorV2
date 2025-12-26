@@ -426,6 +426,8 @@ class ContextBuilder:
         """
         self._throttled_info_log('start_build', f"Début de la construction du contexte avec max_tokens={max_tokens}.")
         self._throttled_info_log('selected_elements', f"Éléments sélectionnés: {selected_elements}")
+        logger.info(f"[build_context] Personnages reçus dans selected_elements: {selected_elements.get('characters', [])}")
+        logger.info(f"[build_context] Lieux reçus dans selected_elements: {selected_elements.get('locations', [])}")
         
         context_parts = []
         # total_tokens = 0  # Plus utilisé

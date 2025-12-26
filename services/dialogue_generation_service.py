@@ -267,6 +267,9 @@ class DialogueGenerationService(IDialogueGenerationService):
         """
         if no_limit:
             max_tokens = 999999
+        # Log pour déboguer les personnages sélectionnés
+        logger.debug(f"[_build_context_summary] context_selections reçu: {context_selections}")
+        logger.debug(f"[_build_context_summary] characters dans context_selections: {context_selections.get('characters', [])}")
         return self.context_builder.build_context(context_selections, user_instructions, max_tokens=max_tokens)
 
     def _restore_prompt_on_error(self, original_system_prompt: Optional[str]):

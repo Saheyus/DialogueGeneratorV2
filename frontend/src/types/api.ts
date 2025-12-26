@@ -41,6 +41,7 @@ export interface GenerateDialogueVariantsRequest {
   structured_output: boolean
   system_prompt_override?: string
   llm_model_identifier: string
+  npc_speaker_id?: string
 }
 
 export interface DialogueVariantResponse {
@@ -54,6 +55,7 @@ export interface GenerateDialogueVariantsResponse {
   variants: DialogueVariantResponse[]
   prompt_used?: string
   estimated_tokens: number
+  warning?: string
 }
 
 export interface EstimateTokensResponse {
@@ -197,5 +199,22 @@ export interface UnityDialoguesPathResponse {
 export interface InteractionContextPathResponse {
   path: InteractionResponse[]
   total: number
+}
+
+// Unity Dialogue
+export interface GenerateUnityDialogueRequest {
+  user_instructions: string
+  context_selections: ContextSelection
+  npc_speaker_id?: string
+  max_context_tokens: number
+  system_prompt_override?: string
+  llm_model_identifier: string
+}
+
+export interface GenerateUnityDialogueResponse {
+  json_content: string
+  prompt_used?: string
+  estimated_tokens: number
+  warning?: string
 }
 

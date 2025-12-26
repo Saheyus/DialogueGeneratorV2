@@ -39,7 +39,8 @@ export function ResizablePanels({
         const stored = localStorage.getItem(`resizable_${storageKey}`)
         if (stored) {
           const parsed = JSON.parse(stored)
-          if (Array.isArray(parsed) && parsed.length === children.length) {
+          // Utiliser defaultSizes.length au lieu de children.length car plus stable
+          if (Array.isArray(parsed) && parsed.length === defaultSizes.length) {
             initialSizes = parsed
           }
         }
@@ -55,16 +56,7 @@ export function ResizablePanels({
   const [isDragging, setIsDragging] = useState<number | null>(null)
   const [startPos, setStartPos] = useState(0)
   const [startSizes, setStartSizes] = useState<number[]>([])
-
-  useEffect(() => {
-    if (storageKey && sizes) {
-      try {
-        localStorage.setItem(`resizable_${storageKey}`, JSON.stringify(sizes))
-      } catch {
-        // Ignore storage errors
-      }
-    }
-  }, [sizes, storageKey])
+  const sizesToSaveRef = useRef<number[] | null>(null)
 
   const normalizeSizes = useCallback(
     (newSizes: number[]): number[] => {
@@ -117,11 +109,23 @@ export function ResizablePanels({
       newSizes[isDragging] = newLeftSize
       newSizes[isDragging + 1] = newRightSize
 
-      setSizes(normalizeSizes(newSizes))
+      const normalized = normalizeSizes(newSizes)
+      setSizes(normalized)
+      // Garder les tailles à sauvegarder pour handleMouseUp
+      sizesToSaveRef.current = normalized
     }
 
     const handleMouseUp = () => {
       setIsDragging(null)
+      // Sauvegarder immédiatement à la fin du drag
+      if (storageKey && sizesToSaveRef.current) {
+        try {
+          localStorage.setItem(`resizable_${storageKey}`, JSON.stringify(sizesToSaveRef.current))
+          sizesToSaveRef.current = null
+        } catch (err) {
+          console.error('Erreur lors de la sauvegarde des tailles de panneaux:', err)
+        }
+      }
     }
 
     document.addEventListener('mousemove', handleMouseMove)
@@ -131,7 +135,7 @@ export function ResizablePanels({
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [isDragging, startPos, startSizes, direction, minSizes, normalizeSizes])
+  }, [isDragging, startPos, startSizes, direction, minSizes, normalizeSizes, storageKey])
 
   const isHorizontal = direction === 'horizontal'
 

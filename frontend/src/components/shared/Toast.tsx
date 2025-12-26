@@ -195,8 +195,8 @@ export function ToastContainer() {
 // Hook pour utiliser les toasts facilement
 export function useToast() {
   return useCallback(
-    (message: string, type: ToastType = 'info', duration?: number) => {
-      toastManager.show(message, type, duration)
+    (message: string, type: ToastType = 'info', duration?: number): string => {
+      return toastManager.show(message, type, duration)
     },
     []
   )

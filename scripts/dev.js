@@ -95,50 +95,126 @@ function waitForBackend(port, maxAttempts = 30, delay = 1000) {
   });
 }
 
-// Fonction pour vérifier si un port est utilisé (Windows)
+// Fonction pour vérifier si un port est utilisé (toutes plateformes)
+// Utilise une tentative de connexion socket pour une détection plus fiable
 async function isPortInUse(port) {
-  if (process.platform === 'win32') {
-    try {
-      const { stdout } = await execAsync(`netstat -ano | findstr :${port} | findstr LISTENING`);
-      return stdout.trim().length > 0;
-    } catch (error) {
-      // Si netstat échoue, le port est probablement libre
-      return false;
-    }
-  } else {
-    // Pour Linux/Mac, utiliser une approche différente
-    return new Promise((resolve) => {
-      const server = http.createServer();
-      server.listen(port, '127.0.0.1', () => {
-        server.once('close', () => resolve(false));
-        server.close();
-      });
-      server.on('error', (err) => {
-        if (err.code === 'EADDRINUSE') {
-          resolve(true);
-        } else {
-          resolve(false);
-        }
-      });
+  return new Promise((resolve) => {
+    const server = http.createServer();
+    server.listen(port, '127.0.0.1', () => {
+      // Si on peut écouter, le port est libre
+      server.once('close', () => resolve(false));
+      server.close();
     });
-  }
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE' || err.code === 'EACCES') {
+        // Port vraiment occupé ou accès refusé
+        resolve(true);
+      } else {
+        // Autre erreur, considérer comme libre
+        resolve(false);
+      }
+    });
+    
+    // Timeout de sécurité
+    setTimeout(() => {
+      server.removeAllListeners();
+      server.close();
+      resolve(false);
+    }, 1000);
+  });
 }
 
-// Fonction pour obtenir le PID du processus utilisant un port (Windows)
-async function getPidUsingPort(port) {
-  try {
-    const { stdout } = await execAsync(`netstat -ano | findstr :${port} | findstr LISTENING`);
-    const lines = stdout.trim().split('\n');
-    for (const line of lines) {
-      const parts = line.trim().split(/\s+/);
-      const pid = parts[parts.length - 1];
-      if (pid && !isNaN(pid)) {
-        return parseInt(pid, 10);
+// Fonction pour obtenir tous les PIDs des processus utilisant un port (Windows)
+// Utilise PowerShell Get-NetTCPConnection qui est plus fiable que netstat
+async function getPidsUsingPort(port) {
+  if (process.platform === 'win32') {
+    try {
+      // Utiliser PowerShell pour obtenir les processus actifs uniquement
+      const { stdout } = await execAsync(
+        `powershell -Command "Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique"`
+      );
+      const rawPids = stdout.trim().split('\n')
+        .filter(line => line.trim() && !isNaN(line.trim()))
+        .map(line => parseInt(line.trim(), 10));
+      
+      // Filtrer immédiatement les processus qui n'existent plus
+      // (Get-NetTCPConnection peut retourner des PIDs de processus récemment terminés)
+      const existingPids = [];
+      for (const pid of rawPids) {
+        if (await processExists(pid)) {
+          existingPids.push(pid);
+        }
+      }
+      
+      return existingPids;
+    } catch (error) {
+      // Fallback sur netstat si PowerShell échoue
+      try {
+        const { stdout } = await execAsync(`netstat -ano | findstr :${port} | findstr LISTENING`);
+        const lines = stdout.trim().split('\n').filter(line => line.trim());
+        const pids = new Set();
+        for (const line of lines) {
+          const parts = line.trim().split(/\s+/);
+          const pid = parts[parts.length - 1];
+          if (pid && !isNaN(pid)) {
+            pids.add(parseInt(pid, 10));
+          }
+        }
+        // Filtrer les processus qui n'existent plus
+        const existingPids = [];
+        for (const pid of Array.from(pids)) {
+          if (await processExists(pid)) {
+            existingPids.push(pid);
+          }
+        }
+        return existingPids;
+      } catch (fallbackError) {
+        return [];
       }
     }
-    return null;
+  }
+  return [];
+}
+
+// Fonction pour vérifier si un processus existe (Windows)
+async function processExists(pid) {
+  if (process.platform === 'win32') {
+    try {
+      const { stdout } = await execAsync(`tasklist /FI "PID eq ${pid}" /FO CSV /NH`);
+      // tasklist peut réussir mais retourner un message d'information si le processus n'existe pas
+      // Vérifier que la sortie contient réellement un PID (format CSV avec guillemets)
+      if (stdout && stdout.trim() && !stdout.includes('aucune tâche') && !stdout.includes('no tasks')) {
+        // Vérifier que la ligne contient bien le PID
+        const lines = stdout.trim().split('\n').filter(line => line.trim());
+        for (const line of lines) {
+          // Format CSV: "Nom","PID","..."
+          const pidMatch = line.match(/,"(\d+)",/);
+          if (pidMatch && parseInt(pidMatch[1], 10) === pid) {
+            return true;
+          }
+        }
+      }
+      return false;
+    } catch (error) {
+      // Si tasklist échoue, le processus n'existe pas
+      return false;
+    }
+  }
+  return false;
+}
+
+// Fonction pour obtenir le nom d'un processus par PID (Windows)
+async function getProcessName(pid) {
+  try {
+    const { stdout } = await execAsync(`tasklist /FI "PID eq ${pid}" /FO CSV /NH`);
+    if (stdout && stdout.trim() && !stdout.includes('aucune tâche')) {
+      // Format CSV: "Nom","PID","Nom de session","# de session","Utilisation mémoire"
+      const match = stdout.match(/"([^"]+)"/);
+      return match ? match[1] : `PID ${pid}`;
+    }
+    return null; // Processus n'existe pas
   } catch (error) {
-    return null;
+    return null; // Processus n'existe pas
   }
 }
 
@@ -158,23 +234,102 @@ async function ensurePortFree(port, portName) {
     console.log(`⚠️  Le port ${port} (${portName}) est déjà utilisé.`);
     
     if (process.platform === 'win32') {
-      const pid = await getPidUsingPort(port);
-      if (pid) {
-        console.log(`   Tentative de libération du port (PID: ${pid})...`);
-        const killed = await killProcess(pid);
-        if (killed) {
-          console.log(`   ✅ Port ${port} libéré.\n`);
-          // Attendre un peu que le port soit vraiment libéré
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          return true;
-        } else {
-          console.log(`   ❌ Impossible de libérer le port ${port}.`);
-          console.log(`   Veuillez arrêter manuellement le processus (PID: ${pid}) ou utiliser un autre port.\n`);
-          return false;
+      const pids = await getPidsUsingPort(port);
+      if (pids.length > 0) {
+        console.log(`   Tentative de libération du port (${pids.length} processus trouvé${pids.length > 1 ? 's' : ''})...`);
+        
+        // Filtrer et afficher uniquement les processus qui existent vraiment
+        const existingPids = [];
+        const deadPids = [];
+        
+        for (const pid of pids) {
+          const exists = await processExists(pid);
+          if (exists) {
+            existingPids.push(pid);
+            const name = await getProcessName(pid);
+            console.log(`   - ${name} (PID: ${pid})`);
+          } else {
+            deadPids.push(pid);
+          }
         }
+        
+        // Informer sur les processus déjà terminés
+        if (deadPids.length > 0) {
+          console.log(`   ℹ️  ${deadPids.length} processus déjà terminé${deadPids.length > 1 ? 's' : ''} (port en cours de libération)...`);
+        }
+        
+        // Si tous les processus sont morts, attendre que le port soit libéré naturellement
+        if (existingPids.length === 0) {
+          console.log(`   ℹ️  Tous les processus sont déjà terminés. Le port devrait être libéré sous peu...`);
+          // Attendre plus longtemps car Windows peut mettre du temps à libérer le port
+          const waitTime = 6000; // 6 secondes
+          console.log(`   ⏳ Attente de libération naturelle du port (${waitTime/1000}s)...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          
+          // Vérifier que le port est libéré
+          const stillInUse = await isPortInUse(port);
+          if (stillInUse) {
+            console.log(`   ⏳ Le port est toujours occupé, attente supplémentaire (5s)...`);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            const stillInUseAfterWait = await isPortInUse(port);
+            if (stillInUseAfterWait) {
+              console.log(`   ❌ Le port ${port} est toujours occupé après l'attente.`);
+              console.log(`   Windows peut mettre plusieurs minutes à libérer un port.`);
+              console.log(`   Vous pouvez essayer de redémarrer votre machine ou attendre quelques minutes.\n`);
+              return false;
+            }
+          }
+          console.log(`   ✅ Port ${port} libéré.\n`);
+          return true;
+        }
+        
+        // Tuer uniquement les processus qui existent
+        let allKilled = true;
+        for (const pid of existingPids) {
+          const name = await getProcessName(pid);
+          const killed = await killProcess(pid);
+          if (killed) {
+            console.log(`   ✅ Processus ${name} (PID: ${pid}) arrêté.`);
+          } else {
+            console.log(`   ⚠️  Impossible d'arrêter le processus ${name} (PID: ${pid}).`);
+            allKilled = false;
+          }
+        }
+        
+        // Attendre que le port soit libéré (plus longtemps si des processus étaient déjà morts)
+        const waitTime = deadPids.length > 0 ? 4000 : 2000;
+        console.log(`   ⏳ Attente de libération du port (${waitTime/1000}s)...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        
+        // Vérifier que le port est vraiment libéré
+        const stillInUse = await isPortInUse(port);
+        if (stillInUse) {
+          if (allKilled) {
+            console.log(`   ⏳ Attente supplémentaire...`);
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            const stillInUseAfterWait = await isPortInUse(port);
+            if (stillInUseAfterWait) {
+              console.log(`   ❌ Le port ${port} est toujours occupé.`);
+              console.log(`   Vous devrez peut-être arrêter manuellement les processus.\n`);
+              return false;
+            }
+          } else {
+            console.log(`   ⚠️  Certains processus n'ont pas pu être arrêtés.`);
+            console.log(`   Le port ${port} pourrait encore être utilisé.\n`);
+            return false;
+          }
+        }
+        
+        console.log(`   ✅ Port ${port} libéré.\n`);
+        return true;
       } else {
-        console.log(`   ❌ Impossible d'identifier le processus utilisant le port ${port}.\n`);
-        return false;
+        // Aucun processus trouvé mais le port semble utilisé
+        // Cela peut être un état TIME_WAIT ou une réservation Windows
+        // On va essayer quand même de démarrer - le serveur échouera clairement si le port est vraiment occupé
+        console.log(`   ℹ️  Aucun processus actif trouvé.`);
+        console.log(`   ⚠️  Le port ${port} semble réservé (peut-être en état TIME_WAIT).`);
+        console.log(`   💡 Tentative de démarrage quand même - le serveur échouera clairement si le port est vraiment occupé.\n`);
+        return true; // Permettre le démarrage, le serveur gérera l'erreur
       }
     } else {
       console.log(`   ❌ Veuillez arrêter manuellement le processus utilisant le port ${port}.\n`);
@@ -220,9 +375,30 @@ async function startServers() {
     env: { ...process.env }
   });
 
+  // Capturer les erreurs de démarrage (notamment port occupé)
+  let backendStartupError = null;
+  const errorTimeout = setTimeout(() => {
+    if (!backendStartupError) {
+      // Si après 5 secondes on n'a pas d'erreur, on considère que ça démarre
+      // waitForBackend va gérer le reste
+    }
+  }, 5000);
+
+  backend.on('error', (err) => {
+    backendStartupError = err;
+    clearTimeout(errorTimeout);
+    console.error(`\n❌ Erreur lors du démarrage du backend: ${err.message}`);
+    if (err.message && err.message.includes('EADDRINUSE')) {
+      console.error(`   Le port ${apiPort} est vraiment occupé.`);
+      console.error(`   Arrêtez le processus utilisant ce port ou changez le port avec API_PORT=<autre_port>.\n`);
+    }
+    process.exit(1);
+  });
+
   // Attendre que le backend soit prêt
   waitForBackend(apiPort)
     .then(() => {
+      clearTimeout(errorTimeout);
       // Démarrer le frontend une fois le backend prêt
       console.log('🔄 Démarrage du frontend...\n');
       const frontend = spawn('npm', ['run', 'dev'], {

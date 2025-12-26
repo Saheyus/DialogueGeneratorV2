@@ -54,6 +54,7 @@ class GenerateDialogueVariantsRequest(BaseModel):
         structured_output: Générer en format structuré.
         system_prompt_override: Surcharge du system prompt (optionnel).
         llm_model_identifier: Identifiant du modèle LLM à utiliser.
+        npc_speaker_id: ID du PNJ interlocuteur (si None, utiliser le premier personnage sélectionné).
     """
     k_variants: int = Field(default=1, ge=1, le=10, description="Nombre de variantes à générer")
     user_instructions: str = Field(..., min_length=1, description="Instructions spécifiques pour la scène")
@@ -62,6 +63,7 @@ class GenerateDialogueVariantsRequest(BaseModel):
     structured_output: bool = Field(default=False, description="Générer en format structuré")
     system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
     llm_model_identifier: str = Field(default="gpt-4o-mini", description="Identifiant du modèle LLM")
+    npc_speaker_id: Optional[str] = Field(None, description="ID du PNJ interlocuteur (si None, utiliser le premier personnage sélectionné)")
 
 
 class GenerateInteractionVariantsRequest(BaseModel):
@@ -107,10 +109,12 @@ class GenerateDialogueVariantsResponse(BaseModel):
         variants: Liste des variantes générées.
         prompt_used: Le prompt complet utilisé pour la génération.
         estimated_tokens: Nombre estimé de tokens utilisés.
+        warning: Avertissement si DummyLLMClient a été utilisé.
     """
     variants: List[DialogueVariantResponse] = Field(..., description="Liste des variantes générées")
     prompt_used: Optional[str] = Field(None, description="Prompt complet utilisé")
     estimated_tokens: int = Field(..., description="Nombre estimé de tokens")
+    warning: Optional[str] = Field(None, description="Avertissement (ex: DummyLLMClient utilisé)")
 
 
 class EstimateTokensRequest(BaseModel):
@@ -139,4 +143,38 @@ class EstimateTokensResponse(BaseModel):
     context_tokens: int = Field(..., description="Nombre de tokens du contexte")
     total_estimated_tokens: int = Field(..., description="Nombre total estimé de tokens")
     estimated_prompt: str | None = Field(default=None, description="Le prompt estimé complet")
+
+
+class GenerateUnityDialogueRequest(BaseModel):
+    """Requête pour générer un nœud de dialogue au format Unity JSON.
+    
+    Attributes:
+        user_instructions: Instructions spécifiques de l'utilisateur.
+        context_selections: Sélections de contexte GDD (doit contenir au moins un personnage).
+        npc_speaker_id: ID du PNJ interlocuteur (si None, utiliser le premier personnage sélectionné).
+        max_context_tokens: Nombre maximum de tokens pour le contexte.
+        system_prompt_override: Surcharge du system prompt (optionnel).
+        llm_model_identifier: Identifiant du modèle LLM à utiliser.
+    """
+    user_instructions: str = Field(..., min_length=1, description="Instructions spécifiques pour la scène")
+    context_selections: ContextSelection = Field(..., description="Sélections de contexte GDD")
+    npc_speaker_id: Optional[str] = Field(None, description="ID du PNJ interlocuteur (si None, utiliser le premier personnage sélectionné)")
+    max_context_tokens: int = Field(default=1500, ge=100, le=50000, description="Nombre maximum de tokens pour le contexte")
+    system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
+    llm_model_identifier: str = Field(default="gpt-4o-mini", description="Identifiant du modèle LLM")
+
+
+class GenerateUnityDialogueResponse(BaseModel):
+    """Réponse pour la génération d'un nœud de dialogue Unity JSON.
+    
+    Attributes:
+        json_content: Contenu JSON du dialogue au format Unity (tableau de nœuds).
+        prompt_used: Le prompt complet utilisé pour la génération.
+        estimated_tokens: Nombre estimé de tokens utilisés.
+        warning: Avertissement si DummyLLMClient a été utilisé.
+    """
+    json_content: str = Field(..., description="Contenu JSON du dialogue au format Unity")
+    prompt_used: Optional[str] = Field(None, description="Prompt complet utilisé")
+    estimated_tokens: int = Field(..., description="Nombre estimé de tokens")
+    warning: Optional[str] = Field(None, description="Avertissement (ex: DummyLLMClient utilisé)")
 

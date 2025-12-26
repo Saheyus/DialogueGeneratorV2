@@ -3,6 +3,7 @@
  */
 import { create } from 'zustand'
 import type { SceneSelection } from '../types/generation'
+import type { GenerateDialogueVariantsResponse, InteractionResponse } from '../types/api'
 
 interface GenerationState {
   // Sélection de scène
@@ -20,6 +21,11 @@ interface GenerationState {
   estimatedTokens: number | null
   isEstimating: boolean
   
+  // Résultats de génération
+  variantsResponse: GenerateDialogueVariantsResponse | null
+  interactionsResponse: InteractionResponse[] | null
+  tokensUsed: number | null
+  
   // Actions
   setSceneSelection: (selection: Partial<SceneSelection>) => void
   setDialogueStructure: (structure: string[]) => void
@@ -27,6 +33,10 @@ interface GenerationState {
   setDefaultSystemPrompt: (prompt: string | null) => void
   resetSystemPrompt: () => void
   setEstimatedPrompt: (prompt: string | null, tokens: number | null, isEstimating: boolean) => void
+  setVariantsResponse: (response: GenerateDialogueVariantsResponse | null) => void
+  setInteractionsResponse: (response: InteractionResponse[] | null) => void
+  setTokensUsed: (tokens: number | null) => void
+  clearGenerationResults: () => void
 }
 
 const defaultSceneSelection: SceneSelection = {
@@ -46,6 +56,9 @@ export const useGenerationStore = create<GenerationState>((set) => ({
   estimatedPrompt: null,
   estimatedTokens: null,
   isEstimating: false,
+  variantsResponse: null,
+  interactionsResponse: null,
+  tokensUsed: null,
 
   setSceneSelection: (selection) =>
     set((state) => ({
@@ -68,5 +81,17 @@ export const useGenerationStore = create<GenerationState>((set) => ({
 
   setEstimatedPrompt: (prompt, tokens, isEstimating) =>
     set({ estimatedPrompt: prompt, estimatedTokens: tokens, isEstimating }),
+
+  setVariantsResponse: (response) =>
+    set({ variantsResponse: response }),
+
+  setInteractionsResponse: (response) =>
+    set({ interactionsResponse: response }),
+
+  setTokensUsed: (tokens) =>
+    set({ tokensUsed: tokens }),
+
+  clearGenerationResults: () =>
+    set({ variantsResponse: null, interactionsResponse: null, tokensUsed: null }),
 }))
 

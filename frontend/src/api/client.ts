@@ -56,6 +56,14 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true
 
+      // Si pas de token dans localStorage, c'est normal (utilisateur non connecté)
+      // Ne pas essayer de refresh, rejeter silencieusement
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        // Pas de token, erreur 401 normale - ne pas logger
+        return Promise.reject(error)
+      }
+
       try {
         // Si un refresh est déjà en cours, attendre cette Promise
         if (refreshTokenPromise) {
@@ -98,8 +106,15 @@ apiClient.interceptors.response.use(
         localStorage.removeItem('access_token')
         // Le refresh_token est dans un cookie, on ne peut pas le supprimer côté client
         // Le serveur le supprimera lors de la redirection vers /login
-        window.location.href = '/login'
+        // Ne pas rediriger automatiquement, laisser l'app gérer
         return Promise.reject(refreshError)
+      }
+    }
+
+    // Pour les erreurs de connexion (ERR_CONNECTION_REFUSED), logger seulement en dev
+    if (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED') {
+      if (import.meta.env.DEV) {
+        console.warn('[API Client] Erreur de connexion:', error.message)
       }
     }
 

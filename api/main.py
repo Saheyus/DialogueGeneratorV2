@@ -211,25 +211,19 @@ if is_production_env:
 
 if __name__ == "__main__":
     import uvicorn
-    import webbrowser
-    import threading
-    import time
     
-    def open_browser():
-        """Ouvre le navigateur après un court délai pour laisser le serveur démarrer."""
-        time.sleep(1.5)  # Attendre que le serveur démarre
-        port = int(os.getenv("API_PORT", "4242"))
-        webbrowser.open(f"http://localhost:{port}/api/docs")
+    # L'ouverture automatique du navigateur est désactivée
+    # Le script dev.js gère l'ouverture du navigateur pour le frontend
     
-    # Lancer l'ouverture du navigateur dans un thread séparé
-    browser_thread = threading.Thread(target=open_browser, daemon=True)
-    browser_thread.start()
+    # Désactiver le reload automatique si RELOAD=false dans l'environnement
+    # Par défaut, reload=True en développement pour recharger automatiquement
+    enable_reload = os.getenv("RELOAD", "true").lower() not in ("false", "0", "no", "off")
     
     uvicorn.run(
         "api.main:app",
         host="0.0.0.0",
         port=int(os.getenv("API_PORT", "4242")),
-        reload=True,
+        reload=enable_reload,
         log_level="info"
     )
 

@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import os
+import time
 from abc import ABC, abstractmethod
 from openai import AsyncOpenAI, APIError, NOT_GIVEN
 import json # Ajout pour charger la config
@@ -87,9 +88,25 @@ class DummyLLMClient(ILLMClient):
                     logger.error(f"DummyLLMClient: Erreur générique lors de la simulation de variante structurée: {e_generic_dummy}")
                     variants.append(f"// Erreur Dummy LLM: {e_generic_dummy}")
             else:
-                variant_text = f"---title: TitreDummy_Variant{i+1}_{k}\n---\n// Corps de variante {i+1} de DummyLLMClient.\n==="
+                # #region agent log
+                log_data = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "A",
+                    "location": "llm_client.py:90",
+                    "message": "DummyLLMClient génération variante texte",
+                    "data": {"variant_index": i+1, "k_variants": k, "response_model": None},
+                    "timestamp": int(time.time() * 1000)
+                }
+                try:
+                    with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                        log_file.write(json.dumps(log_data) + "\n")
+                except: pass
+                # #endregion
+                # Format texte libre au lieu de Yarn (Yarn n'est plus utilisé)
+                variant_text = f"Texte de dialogue variante {i+1} généré par DummyLLMClient.\n\nLe personnage A dit : \"Bonjour, je suis une variante de test.\"\n\nLe personnage B répond : \"Moi aussi, c'est pour tester le système sans format Yarn.\""
                 variants.append(variant_text)
-                logger.info(f"DummyLLMClient: Variante textuelle {i+1} générée.")
+                logger.info(f"DummyLLMClient: Variante textuelle {i+1} générée (format texte libre, pas Yarn).")
         return variants
 
     def get_max_tokens(self) -> int:
@@ -187,6 +204,26 @@ class OpenAIClient(ILLMClient):
         for i in range(k):
             try:
                 logger.info(f"Début de la génération de la variante {i+1}/{k} pour le prompt.")
+                # #region agent log
+                log_data = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "B",
+                    "location": "llm_client.py:190",
+                    "message": "OpenAIClient génération variante - messages envoyés",
+                    "data": {
+                        "variant_index": i+1,
+                        "system_message_preview": messages[0]["content"][:200] if messages else None,
+                        "user_message_preview": messages[-1]["content"][:200] if messages else None,
+                        "has_response_model": response_model is not None
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }
+                try:
+                    with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                        log_file.write(json.dumps(log_data) + "\n")
+                except: pass
+                # #endregion
                 response = await self.client.chat.completions.create(
                     model=self.model_name,
                     messages=messages,
@@ -217,6 +254,26 @@ class OpenAIClient(ILLMClient):
 
                 elif response.choices and response.choices[0].message and response.choices[0].message.content:
                     text_output = response.choices[0].message.content.strip()
+                    # #region agent log
+                    log_data = {
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "B",
+                        "location": "llm_client.py:221",
+                        "message": "OpenAIClient réponse texte reçue",
+                        "data": {
+                            "variant_index": i+1,
+                            "output_preview": text_output[:300],
+                            "contains_yarn_title": "---title:" in text_output,
+                            "contains_yarn_separator": "===" in text_output
+                        },
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    try:
+                        with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                            log_file.write(json.dumps(log_data) + "\n")
+                    except: pass
+                    # #endregion
                     generated_results.append(text_output)
                     logger.info(f"Variante {i+1} générée avec succès (texte simple).")
                 else:

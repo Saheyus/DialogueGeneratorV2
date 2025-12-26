@@ -173,13 +173,13 @@ export const SystemPromptEditor = memo(function SystemPromptEditor({
         border: `1px solid ${theme.border.primary}`,
         borderRadius: '4px',
         backgroundColor: theme.background.panel,
-        height: '100%',
       }}
     >
       <Tabs
         tabs={tabs}
         activeTabId={activeTabId}
         onTabChange={setActiveTabId}
+        style={{ flex: 'none' }}
       />
     </div>
   )

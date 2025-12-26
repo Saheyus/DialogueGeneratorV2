@@ -3,7 +3,6 @@
  */
 import { memo, useCallback, useState } from 'react'
 import { Tabs, type Tab } from '../shared/Tabs'
-import { usePromptPreview } from '../../hooks/usePromptPreview'
 import { theme } from '../../theme'
 import type { DialogueVariantResponse, GenerateDialogueVariantsResponse } from '../../types/api'
 
@@ -16,8 +15,6 @@ export const VariantsTabsView = memo(function VariantsTabsView({
   response,
   onValidateAsInteraction,
 }: VariantsTabsViewProps) {
-  const { formattedPrompt } = usePromptPreview(response?.prompt_used || null)
-
   const handleValidate = useCallback(
     (variant: DialogueVariantResponse) => {
       onValidateAsInteraction?.(variant)
@@ -40,31 +37,6 @@ export const VariantsTabsView = memo(function VariantsTabsView({
   }
 
   const tabs: Tab[] = [
-    {
-      id: 'prompt',
-      label: 'Prompt Estimé',
-      content: (
-        <div style={{ padding: '1rem', height: '100%', overflow: 'auto' }}>
-          <pre
-            style={{
-              fontFamily: 'monospace',
-              fontSize: '0.85rem',
-              lineHeight: '1.6',
-              color: theme.text.secondary,
-              backgroundColor: theme.background.secondary,
-              padding: '1rem',
-              borderRadius: '4px',
-              border: `1px solid ${theme.border.primary}`,
-              whiteSpace: 'pre-wrap',
-              wordWrap: 'break-word',
-              margin: 0,
-            }}
-          >
-            {formattedPrompt || 'Aucun prompt disponible'}
-          </pre>
-        </div>
-      ),
-    },
     ...response.variants.map((variant, index) => ({
       id: `variant-${variant.id}`,
       label: `Variante ${index + 1}`,

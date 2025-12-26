@@ -300,4 +300,38 @@ class UnityJsonRenderer:
                         )
         
         return (len(errors) == 0, errors)
+    
+    def render_unity_nodes(
+        self,
+        nodes: List[Dict[str, Any]],
+        normalize: bool = True
+    ) -> str:
+        """Rend une liste de nœuds Unity en JSON normalisé.
+        
+        Cette méthode accepte directement des nœuds enrichis (avec IDs) et les normalise
+        selon les règles Unity.
+        
+        Args:
+            nodes: Liste de dictionnaires représentant les nœuds Unity (avec IDs).
+            normalize: Si True, normalise le JSON (supprime champs vides, etc.).
+            
+        Returns:
+            Chaîne JSON formatée (indentée de 2 espaces).
+            
+        Raises:
+            ValueError: Si la validation échoue.
+        """
+        # Valider les nœuds avant rendu
+        is_valid, errors = self.validate_nodes(nodes)
+        if not is_valid:
+            error_msg = "Erreurs de validation avant rendu :\n" + "\n".join(errors)
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        # Normaliser si demandé
+        if normalize:
+            nodes = [self._normalize_node(node) for node in nodes]
+        
+        # Rendre en JSON
+        return json.dumps(nodes, indent=2, ensure_ascii=False)
 

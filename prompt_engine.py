@@ -1,5 +1,5 @@
 import logging
-from typing import Tuple, Optional, Dict, Any
+from typing import Tuple, Optional, Dict, Any, List
 import time
 
 # Essayer d'importer tiktoken, mais continuer si non disponible
@@ -57,6 +57,13 @@ class PromptEngine:
 Tu es un assistant expert en écriture de dialogues pour jeux de rôle (RPG).
 Ta tâche est de générer un dialogue cohérent avec le contexte fourni et l'instruction utilisateur.
 Si une structure de dialogue spécifique est demandée (ex: PNJ suivi d'un choix PJ), respecte cette structure.
+
+IMPORTANT - FORMAT DE SORTIE :
+- Génère le dialogue en texte libre narratif, naturel et lisible
+- N'utilise PAS le format Yarn (pas de ---title, pas de ===, pas de nœuds Yarn)
+- N'utilise PAS de format de balisage spécial (pas de markdown complexe, pas de JSON sauf indication contraire)
+- Écris simplement le dialogue comme un texte narratif normal, avec des guillemets pour les répliques si nécessaire
+- Indique clairement qui parle (nom du personnage ou indication narrative)
 """
 
     def _get_interaction_system_prompt_reference(self) -> str:
@@ -212,6 +219,12 @@ RÈGLES À SUIVRE:
         if "tone" in generation_params:
             prompt_parts.append("\n--- TON ATTENDU ---")
             prompt_parts.append(str(generation_params["tone"]))
+        
+        # Pour les générations de texte libre (non structurées), rappeler le format attendu
+        structured_output = generation_params.get("structured_generation_request", False)
+        if not structured_output:
+            prompt_parts.append("\n--- FORMAT DE SORTIE ATTENDU ---")
+            prompt_parts.append("Génère le dialogue en texte libre narratif. N'utilise PAS le format Yarn (pas de ---title, pas de ===). Écris simplement le dialogue naturellement avec des répliques claires et des indications de qui parle.")
             
         # Plus besoin de rappels sur le format JSON si on utilise le function calling.
         # Le client LLM s'en charge via la définition de l'outil.
@@ -220,6 +233,92 @@ RÈGLES À SUIVRE:
         num_tokens = self._count_tokens(full_prompt) 
         
         self._throttled_info_log('prompt_llm', f"Prompt construit pour le LLM. Longueur estimée: {num_tokens} tokens.")
+        return full_prompt, num_tokens
+    
+    def build_unity_dialogue_prompt(
+        self,
+        user_instructions: str,
+        npc_speaker_id: str,
+        player_character_id: str = "URESAIR",
+        skills_list: Optional[List[str]] = None,
+        context_summary: Optional[str] = None,
+        scene_location: Optional[Dict[str, str]] = None
+    ) -> Tuple[str, int]:
+        """Construit le prompt pour génération Unity JSON.
+        
+        Args:
+            user_instructions: Instructions spécifiques de l'utilisateur.
+            npc_speaker_id: ID du PNJ interlocuteur.
+            player_character_id: ID du personnage joueur (par défaut "URESAIR").
+            skills_list: Liste des compétences disponibles (optionnel).
+            context_summary: Résumé du contexte GDD (optionnel).
+            scene_location: Dictionnaire du lieu de la scène (optionnel).
+            
+        Returns:
+            Tuple contenant le prompt complet et une estimation du nombre de tokens.
+        """
+        prompt_parts = []
+        
+        # Instructions sur le format Unity JSON
+        prompt_parts.append("--- FORMAT DE SORTIE ATTENDU ---")
+        prompt_parts.append(
+            "Tu dois générer un nœud de dialogue au format Unity JSON. "
+            "Le format sera géré automatiquement via Structured Output, mais voici les règles importantes :"
+        )
+        prompt_parts.append(
+            "- Le speaker doit être l'ID du personnage qui parle (contrôlé par l'auteur). "
+            "Pour cette génération, le PNJ interlocuteur est : " + npc_speaker_id
+        )
+        prompt_parts.append(
+            "- Le personnage joueur est : " + player_character_id + " (Seigneuresse Uresaïr). "
+            "Les choix (choices) sont toujours les options du joueur."
+        )
+        prompt_parts.append(
+            "- Les tests d'attributs utilisent le format : 'AttributeType+SkillId:DD' "
+            "(ex: 'Raison+Rhétorique:8'). La compétence est obligatoire."
+        )
+        prompt_parts.append(
+            "- Ne génère PAS d'IDs de nœuds (id, targetNode, successNode, etc.). "
+            "Le système les ajoutera automatiquement."
+        )
+        prompt_parts.append(
+            "- Si un nœud n'a ni choices ni nextNode, il termine le dialogue."
+        )
+        
+        # Liste des compétences disponibles
+        if skills_list:
+            skills_text = ", ".join(skills_list[:50])  # Limiter à 50 pour éviter un prompt trop long
+            if len(skills_list) > 50:
+                skills_text += f" (et {len(skills_list) - 50} autres compétences)"
+            prompt_parts.append("\n--- COMPÉTENCES DISPONIBLES ---")
+            prompt_parts.append(f"Compétences disponibles: {skills_text}")
+            prompt_parts.append(
+                "Utilise ces compétences dans les tests d'attributs (format: 'AttributeType+NomCompétence:DD')."
+            )
+        
+        # Contexte de la scène
+        if scene_location:
+            prompt_parts.append("\n--- LIEU DE LA SCÈNE ---")
+            lieu = scene_location.get("lieu", "Non spécifié")
+            sous_lieu = scene_location.get("sous_lieu")
+            prompt_parts.append(f"Lieu : {lieu}")
+            if sous_lieu:
+                prompt_parts.append(f"Sous-Lieu : {sous_lieu}")
+        
+        # Contexte GDD
+        if context_summary:
+            prompt_parts.append("\n--- CONTEXTE GÉNÉRAL DE LA SCÈNE ---")
+            prompt_parts.append(context_summary)
+        
+        # Instructions utilisateur
+        if user_instructions and user_instructions.strip():
+            prompt_parts.append("\n--- OBJECTIF DE LA SCÈNE (Instruction Utilisateur) ---")
+            prompt_parts.append(user_instructions)
+        
+        full_prompt = "\n".join(prompt_parts)
+        num_tokens = self._count_tokens(full_prompt)
+        
+        self._throttled_info_log('prompt_unity', f"Prompt Unity construit. Longueur estimée: {num_tokens} tokens.")
         return full_prompt, num_tokens
 
 # Pour des tests rapides
