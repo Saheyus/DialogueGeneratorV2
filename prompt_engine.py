@@ -241,6 +241,7 @@ RÈGLES À SUIVRE:
         npc_speaker_id: str,
         player_character_id: str = "URESAIR",
         skills_list: Optional[List[str]] = None,
+        traits_list: Optional[List[str]] = None,
         context_summary: Optional[str] = None,
         scene_location: Optional[Dict[str, str]] = None
     ) -> Tuple[str, int]:
@@ -251,6 +252,7 @@ RÈGLES À SUIVRE:
             npc_speaker_id: ID du PNJ interlocuteur.
             player_character_id: ID du personnage joueur (par défaut "URESAIR").
             skills_list: Liste des compétences disponibles (optionnel).
+            traits_list: Liste des labels de traits disponibles (optionnel).
             context_summary: Résumé du contexte GDD (optionnel).
             scene_location: Dictionnaire du lieu de la scène (optionnel).
             
@@ -294,6 +296,18 @@ RÈGLES À SUIVRE:
             prompt_parts.append(f"Compétences disponibles: {skills_text}")
             prompt_parts.append(
                 "Utilise ces compétences dans les tests d'attributs (format: 'AttributeType+NomCompétence:DD')."
+            )
+        
+        # Liste des traits disponibles
+        if traits_list:
+            traits_text = ", ".join(traits_list[:30])  # Limiter à 30 pour éviter un prompt trop long
+            if len(traits_list) > 30:
+                traits_text += f" (et {len(traits_list) - 30} autres traits)"
+            prompt_parts.append("\n--- TRAITS DISPONIBLES ---")
+            prompt_parts.append(f"Traits disponibles: {traits_text}")
+            prompt_parts.append(
+                "Utilise ces traits dans traitRequirements des choix (format: [{'trait': 'NomTrait', 'minValue': 5}]). "
+                "Les traits peuvent être positifs (ex: 'Courageux') ou négatifs (ex: 'Lâche')."
             )
         
         # Contexte de la scène

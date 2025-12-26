@@ -526,7 +526,17 @@ async def generate_unity_dialogue(
             logger.warning(f"Impossible de charger le catalogue des compétences: {e}. Continuation sans liste de compétences.")
             skills_list = []
         
-        # 4. Construire le contexte GDD
+        # 4. Charger le catalogue des traits
+        trait_service = TraitCatalogService()
+        try:
+            traits_data = trait_service.load_traits()
+            traits_list = trait_service.get_trait_labels()
+            logger.info(f"Chargement réussi: {len(traits_list)} traits disponibles")
+        except Exception as e:
+            logger.warning(f"Impossible de charger le catalogue des traits: {e}. Continuation sans liste de traits.")
+            traits_list = []
+        
+        # 5. Construire le contexte GDD
         context_builder = dialogue_service.context_builder
         context_selections_dict = request_data.context_selections.to_service_dict()
         
@@ -540,19 +550,20 @@ async def generate_unity_dialogue(
         if request_data.context_selections.scene_location:
             scene_location = request_data.context_selections.scene_location
         
-        # 5. Construire le prompt Unity
+        # 6. Construire le prompt Unity
         prompt, prompt_tokens = prompt_engine.build_unity_dialogue_prompt(
             user_instructions=request_data.user_instructions,
             npc_speaker_id=npc_speaker_id,
             player_character_id="URESAIR",  # Seigneuresse Uresaïr par défaut
             skills_list=skills_list,
+            traits_list=traits_list,
             context_summary=context_summary,
             scene_location=scene_location
         )
         
         estimated_tokens = context_tokens + prompt_tokens
         
-        # 6. Créer le client LLM
+        # 7. Créer le client LLM
         from api.dependencies import get_config_service
         config_service = get_config_service()
         from factories.llm_factory import LLMClientFactory
@@ -572,7 +583,7 @@ async def generate_unity_dialogue(
             warning = "ATTENTION: DummyLLMClient utilisé au lieu d'OpenAI"
             logger.warning(warning)
         
-        # 7. Générer le nœud via Structured Output
+        # 8. Générer le nœud via Structured Output
         unity_service = UnityDialogueGenerationService()
         generation_response = await unity_service.generate_dialogue_node(
             llm_client=llm_client,
@@ -580,13 +591,13 @@ async def generate_unity_dialogue(
             system_prompt_override=request_data.system_prompt_override
         )
         
-        # 8. Enrichir avec IDs
+        # 9. Enrichir avec IDs
         enriched_nodes = unity_service.enrich_with_ids(
             content=generation_response,
             start_id="START"
         )
         
-        # 9. Normaliser et rendre en JSON
+        # 10. Normaliser et rendre en JSON
         renderer = UnityJsonRenderer()
         json_content = renderer.render_unity_nodes(
             nodes=enriched_nodes,
