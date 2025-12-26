@@ -51,25 +51,47 @@ export const SystemPromptEditor = memo(function SystemPromptEditor({
             label="Instructions"
             htmlFor="user-instructions-textarea"
           >
-            <textarea
-              id="user-instructions-textarea"
-              value={userInstructions}
-              onChange={(e) => onUserInstructionsChange(e.target.value)}
-              rows={8}
-              placeholder="Ex: Bob doit annoncer à Alice qu'il part à l'aventure. Ton désiré: Héroïque. Inclure une condition sur la compétence 'Charisme' de Bob."
-              style={{
-                width: '100%',
-                padding: '0.5rem',
-                boxSizing: 'border-box',
-                backgroundColor: theme.input.background,
-                border: `1px solid ${theme.input.border}`,
-                color: theme.input.color,
-                borderRadius: '4px',
-                fontFamily: 'inherit',
-                fontSize: '0.9rem',
-                resize: 'vertical',
-              }}
-            />
+            <div style={{ position: 'relative' }}>
+              <textarea
+                id="user-instructions-textarea"
+                value={userInstructions}
+                onChange={(e) => onUserInstructionsChange(e.target.value)}
+                rows={8}
+                placeholder="Ex: Bob doit annoncer à Alice qu'il part à l'aventure. Ton désiré: Héroïque. Inclure une condition sur la compétence 'Charisme' de Bob."
+                style={{
+                  width: '100%',
+                  padding: '0.5rem',
+                  paddingBottom: '2rem',
+                  boxSizing: 'border-box',
+                  backgroundColor: theme.input.background,
+                  border: `1px solid ${theme.input.border}`,
+                  color: theme.input.color,
+                  borderRadius: '4px',
+                  fontFamily: 'inherit',
+                  fontSize: '0.9rem',
+                  resize: 'vertical',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '0.5rem',
+                  right: '0.5rem',
+                  fontSize: '0.75rem',
+                  color: theme.text.secondary,
+                  backgroundColor: theme.background.panel,
+                  padding: '0.25rem 0.5rem',
+                  borderRadius: '4px',
+                }}
+              >
+                {userInstructions.length} caractères
+                {userInstructions.length > 0 && (
+                  <span style={{ marginLeft: '0.5rem' }}>
+                    (~{Math.ceil(userInstructions.length / 4)} tokens)
+                  </span>
+                )}
+              </div>
+            </div>
           </FormField>
         </div>
       ),

@@ -579,4 +579,3 @@ pydantic-settings>=2.0.0
 - API RESTful complète et documentée
 - Frontend fonctionnel avec toutes les fonctionnalités desktop
 - Authentification sécurisée
-- Tests avec bonne couverture

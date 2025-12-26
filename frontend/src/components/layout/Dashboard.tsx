@@ -29,7 +29,6 @@ export function Dashboard() {
       {/* Panneau gauche: Sélection de contexte */}
       <div
         style={{
-          borderRight: `1px solid ${theme.border.primary}`,
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
@@ -52,7 +51,6 @@ export function Dashboard() {
       {/* Panneau central: Génération */}
       <div
         style={{
-          borderRight: `1px solid ${theme.border.primary}`,
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',

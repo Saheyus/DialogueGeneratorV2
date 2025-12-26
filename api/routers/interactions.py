@@ -163,6 +163,14 @@ async def create_interaction(
         
         return InteractionResponse.from_model(interaction)
         
+    except ValueError as e:
+        # ValueError peut être levé pour cycles ou références cassées
+        logger.warning(f"Erreur de validation lors de la création de l'interaction (request_id: {request_id}): {e}")
+        raise ValidationException(
+            message=str(e),
+            details={"error": str(e)},
+            request_id=request_id
+        )
     except Exception as e:
         logger.exception(f"Erreur lors de la création de l'interaction (request_id: {request_id})")
         raise ValidationException(
@@ -229,11 +237,19 @@ async def update_interaction(
         if "next_interaction_id_if_no_choices" in update_data:
             existing.next_interaction_id_if_no_choices = update_data["next_interaction_id_if_no_choices"]
         
-        # Sauvegarder
+        # Sauvegarder (valide les cycles et références)
         interaction_service.save(existing)
         
         return InteractionResponse.from_model(existing)
         
+    except ValueError as e:
+        # ValueError peut être levé pour cycles ou références cassées
+        logger.warning(f"Erreur de validation lors de la mise à jour de l'interaction (request_id: {request_id}): {e}")
+        raise ValidationException(
+            message=str(e),
+            details={"error": str(e)},
+            request_id=request_id
+        )
     except Exception as e:
         logger.exception(f"Erreur lors de la mise à jour de l'interaction (request_id: {request_id})")
         raise ValidationException(
@@ -271,8 +287,17 @@ async def delete_interaction(
             request_id=request_id
         )
     
-    interaction_service.delete(interaction_id)
-    logger.info(f"Interaction '{interaction_id}' supprimée (request_id: {request_id})")
+    try:
+        interaction_service.delete(interaction_id)
+        logger.info(f"Interaction '{interaction_id}' supprimée (request_id: {request_id})")
+    except ValueError as e:
+        # ValueError levé si l'interaction a des enfants
+        logger.warning(f"Impossible de supprimer l'interaction '{interaction_id}' (request_id: {request_id}): {e}")
+        raise ValidationException(
+            message=str(e),
+            details={"error": str(e)},
+            request_id=request_id
+        )
 
 
 @router.get(

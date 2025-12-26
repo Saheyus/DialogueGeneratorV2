@@ -16,15 +16,61 @@ from api.dependencies import (
     get_interaction_service,
     get_request_id
 )
-from api.exceptions import InternalServerException, ValidationException, NotFoundException
+from api.exceptions import InternalServerException, ValidationException, NotFoundException, OpenAIException
 from services.dialogue_generation_service import DialogueGenerationService
 from services.interaction_service import InteractionService
 from llm_client import ILLMClient
 from models.dialogue_structure.interaction import Interaction
+from models.dialogue_structure.dialogue_elements import PlayerChoicesBlockElement
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _transform_openai_error(error: Exception, request_id: str) -> OpenAIException:
+    """Transforme une erreur OpenAI en exception API standardisée.
+    
+    Args:
+        error: L'exception OpenAI.
+        request_id: ID de la requête.
+        
+    Returns:
+        OpenAIException avec code et message appropriés.
+    """
+    error_str = str(error).lower()
+    error_type = type(error).__name__
+    
+    # Détecter le type d'erreur OpenAI
+    if "rate limit" in error_str or "429" in error_str:
+        return OpenAIException(
+            code="OPENAI_RATE_LIMIT",
+            message="Limite de taux OpenAI atteinte. Veuillez réessayer plus tard.",
+            details={"error_type": error_type, "error_message": str(error)},
+            request_id=request_id
+        )
+    elif "timeout" in error_str or "timed out" in error_str:
+        return OpenAIException(
+            code="OPENAI_TIMEOUT",
+            message="Délai d'attente OpenAI dépassé. Veuillez réessayer.",
+            details={"error_type": error_type, "error_message": str(error)},
+            request_id=request_id
+        )
+    elif "invalid" in error_str or "400" in error_str:
+        return OpenAIException(
+            code="OPENAI_INVALID_REQUEST",
+            message="Requête invalide vers OpenAI. Vérifiez les paramètres.",
+            details={"error_type": error_type, "error_message": str(error)},
+            request_id=request_id
+        )
+    else:
+        # Erreur générique OpenAI
+        return OpenAIException(
+            code="OPENAI_ERROR",
+            message="Erreur lors de l'appel à OpenAI",
+            details={"error_type": error_type, "error_message": str(error)},
+            request_id=request_id
+        )
 
 
 @router.post(
@@ -104,6 +150,12 @@ async def generate_dialogue_variants(
         )
         
     except Exception as e:
+        # Vérifier si c'est une erreur OpenAI
+        from openai import APIError
+        if isinstance(e, APIError):
+            logger.error(f"Erreur OpenAI lors de la génération de variantes (request_id: {request_id}): {e}")
+            raise _transform_openai_error(e, request_id)
+        
         logger.exception(f"Erreur lors de la génération de variantes (request_id: {request_id})")
         raise InternalServerException(
             message="Erreur lors de la génération de variantes",
@@ -183,16 +235,95 @@ async def generate_interaction_variants(
             current_llm_model_identifier=request_data.llm_model_identifier
         )
         
-        if interactions is None:
+        if interactions is None or len(interactions) == 0:
             raise InternalServerException(
                 message="Échec de la génération d'interactions",
                 request_id=request_id
             )
         
-        # Convertir en format de réponse
-        return [InteractionResponse.from_model(interaction) for interaction in interactions]
+        # Valider les références dans les interactions générées
+        # Collecter tous les IDs des interactions générées
+        generated_ids = {interaction.interaction_id for interaction in interactions}
+        valid_ids = set(generated_ids)
         
+        # Ajouter les IDs existants dans le système (pour références vers interactions existantes)
+        all_existing = interaction_service.get_all()
+        for existing_interaction in all_existing:
+            valid_ids.add(existing_interaction.interaction_id)
+        
+        # Valider chaque interaction générée
+        validated_interactions = []
+        validation_errors = []
+        
+        for interaction in interactions:
+            try:
+                # Collecter tous les IDs référencés dans cette interaction
+                referenced_ids = []
+                if interaction.next_interaction_id_if_no_choices:
+                    referenced_ids.append(interaction.next_interaction_id_if_no_choices)
+                
+                for element in interaction.elements:
+                    if isinstance(element, PlayerChoicesBlockElement):
+                        for choice in element.choices:
+                            if choice.next_interaction_id:
+                                referenced_ids.append(choice.next_interaction_id)
+                
+                # Vérifier que tous les IDs référencés existent (dans les interactions générées OU existantes)
+                invalid_refs = [ref_id for ref_id in referenced_ids if ref_id not in valid_ids]
+                
+                if invalid_refs:
+                    logger.warning(
+                        f"Interaction générée '{interaction.interaction_id}' a des références cassées: {invalid_refs} "
+                        f"(request_id: {request_id})"
+                    )
+                    # Option: supprimer les références cassées plutôt que de rejeter l'interaction
+                    # Pour l'instant, on log juste un warning et on garde l'interaction
+                    validation_errors.append({
+                        "interaction_id": interaction.interaction_id,
+                        "invalid_references": invalid_refs
+                    })
+                
+                validated_interactions.append(interaction)
+                
+            except Exception as e:
+                logger.error(
+                    f"Erreur lors de la validation de l'interaction générée '{interaction.interaction_id}': {e} "
+                    f"(request_id: {request_id})"
+                )
+                validation_errors.append({
+                    "interaction_id": interaction.interaction_id,
+                    "error": str(e)
+                })
+                # On continue avec les autres interactions même si une échoue
+        
+        # Si toutes les interactions ont échoué, lever une exception
+        if len(validated_interactions) == 0:
+            raise InternalServerException(
+                message="Aucune interaction valide générée",
+                details={"errors": validation_errors},
+                request_id=request_id
+            )
+        
+        # Si certaines interactions ont échoué, logger un warning mais retourner les valides
+        if validation_errors:
+            logger.warning(
+                f"Génération partielle: {len(validated_interactions)}/{len(interactions)} interactions valides, "
+                f"{len(validation_errors)} erreurs (request_id: {request_id})"
+            )
+        
+        # Convertir en format de réponse
+        return [InteractionResponse.from_model(interaction) for interaction in validated_interactions]
+        
+    except NotFoundException:
+        # Re-propager NotFoundException (déjà gérée)
+        raise
     except Exception as e:
+        # Vérifier si c'est une erreur OpenAI
+        from openai import APIError
+        if isinstance(e, APIError):
+            logger.error(f"Erreur OpenAI lors de la génération d'interactions (request_id: {request_id}): {e}")
+            raise _transform_openai_error(e, request_id)
+        
         logger.exception(f"Erreur lors de la génération d'interactions (request_id: {request_id})")
         raise InternalServerException(
             message="Erreur lors de la génération d'interactions",

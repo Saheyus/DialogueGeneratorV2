@@ -28,11 +28,15 @@ export async function logout(): Promise<void> {
 
 /**
  * Rafraîchir le token d'accès.
+ * Note: Le refresh_token est maintenant dans un cookie httpOnly,
+ * il n'est plus nécessaire de le passer en paramètre.
+ * 
+ * @deprecated Cette fonction n'est plus utilisée directement.
+ * Le refresh est géré automatiquement par l'intercepteur axios.
  */
-export async function refreshToken(refreshToken: string): Promise<TokenResponse> {
-  const response = await apiClient.post<TokenResponse>('/api/v1/auth/refresh', {
-    refresh_token: refreshToken,
-  })
+export async function refreshToken(): Promise<TokenResponse> {
+  // Body vide, le cookie refresh_token est envoyé automatiquement avec withCredentials
+  const response = await apiClient.post<TokenResponse>('/api/v1/auth/refresh', {})
   
   const { access_token } = response.data
   localStorage.setItem('access_token', access_token)

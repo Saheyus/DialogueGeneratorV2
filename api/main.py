@@ -4,10 +4,12 @@ import logging
 from datetime import datetime
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware as FastAPICORSMiddleware
 from fastapi.responses import JSONResponse
 from api.middleware import RequestIDMiddleware, LoggingMiddleware
-from api.exceptions import APIException
+from api.exceptions import APIException, ValidationException
+from api.dependencies import get_request_id
 
 # Configuration du logging
 logging.basicConfig(
@@ -64,6 +66,46 @@ app.add_middleware(
 # Middleware personnalisés
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(LoggingMiddleware)
+
+
+# Handler pour les erreurs de validation FastAPI/Pydantic
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Gère les erreurs de validation FastAPI/Pydantic.
+    
+    Transforme le format natif FastAPI en format API standardisé.
+    
+    Args:
+        request: La requête HTTP.
+        exc: L'exception de validation.
+        
+    Returns:
+        Réponse JSON avec format d'erreur standardisé.
+    """
+    request_id = getattr(request.state, "request_id", "unknown")
+    
+    # Transformer les erreurs Pydantic en format simple : {champ: message}
+    errors = exc.errors()
+    details = {}
+    for err in errors:
+        # err["loc"] est une liste comme ("body", "field_name") ou ("query", "param")
+        # On prend le dernier élément comme nom de champ
+        field_path = ".".join(str(loc) for loc in err["loc"] if loc != "body" and loc != "query")
+        if not field_path:
+            field_path = ".".join(str(loc) for loc in err["loc"])
+        details[field_path] = err["msg"]
+    
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": "Erreur de validation des données",
+                "details": details,
+                "request_id": request_id
+            }
+        }
+    )
 
 
 # Handler global d'exceptions

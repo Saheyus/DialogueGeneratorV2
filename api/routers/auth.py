@@ -1,4 +1,5 @@
 """Router pour l'authentification."""
+import os
 import logging
 from typing import Annotated
 from fastapi import APIRouter, Depends, Request, Response, status
@@ -19,6 +20,12 @@ router = APIRouter()
 security = HTTPBearer()
 auth_service = AuthService()
 
+# Configuration cookies
+_is_production = os.getenv("ENVIRONMENT", "development") == "production"
+_cookie_domain = os.getenv("COOKIE_DOMAIN", None)
+_cookie_secure = _is_production  # Secure=True en production uniquement
+_cookie_same_site = "none" if _is_production and _cookie_domain else "lax"  # none nécessite Secure=True
+
 
 def get_auth_service() -> AuthService:
     """Retourne le service d'authentification.
@@ -27,6 +34,40 @@ def get_auth_service() -> AuthService:
         Instance de AuthService.
     """
     return auth_service
+
+
+def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
+    """Configure et définit le cookie refresh_token.
+    
+    Args:
+        response: La réponse HTTP.
+        refresh_token: Le token de rafraîchissement à stocker.
+    """
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,  # Pas accessible via JavaScript
+        secure=_cookie_secure,  # HTTPS uniquement en production
+        samesite=_cookie_same_site,  # Protection CSRF
+        path="/api/v1/auth",  # Cookie disponible uniquement sur les routes auth
+        domain=_cookie_domain,  # Domaine spécifique en production (optionnel)
+        max_age=7 * 24 * 60 * 60,  # 7 jours en secondes
+    )
+
+
+def _delete_refresh_cookie(response: Response) -> None:
+    """Supprime le cookie refresh_token.
+    
+    Args:
+        response: La réponse HTTP.
+    """
+    response.delete_cookie(
+        key="refresh_token",
+        path="/api/v1/auth",
+        domain=_cookie_domain,
+        samesite=_cookie_same_site,
+        secure=_cookie_secure,
+    )
 
 
 async def get_current_user(
@@ -75,16 +116,18 @@ async def get_current_user(
 @router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
 async def login(
     login_data: LoginRequest,
-    request: Request
+    request: Request,
+    response: Response
 ) -> TokenResponse:
     """Endpoint de connexion.
     
     Args:
         login_data: Données de connexion (username, password).
         request: La requête HTTP.
+        response: La réponse HTTP.
         
     Returns:
-        Tokens d'authentification (access + refresh).
+        Tokens d'authentification (access dans body, refresh dans cookie).
         
     Raises:
         AuthenticationException: Si les identifiants sont invalides.
@@ -101,6 +144,9 @@ async def login(
     # Créer les tokens
     access_token = auth_service.create_access_token(data={"sub": user["username"]})
     refresh_token = auth_service.create_refresh_token(data={"sub": user["username"]})
+    
+    # Définir le cookie refresh_token (httpOnly, sécurisé)
+    _set_refresh_cookie(response, refresh_token)
     
     logger.info(f"Utilisateur '{user['username']}' connecté (request_id: {request_id})")
     
@@ -120,7 +166,7 @@ async def refresh_token(
     """Endpoint de rafraîchissement de token.
     
     Args:
-        refresh_data: Données de rafraîchissement (peut être dans cookie).
+        refresh_data: Données de rafraîchissement (peut être dans cookie, body conservé pour compatibilité dev).
         request: La requête HTTP.
         response: La réponse HTTP.
         
@@ -132,10 +178,10 @@ async def refresh_token(
     """
     request_id = getattr(request.state, "request_id", "unknown")
     
-    # Chercher le refresh token dans les cookies ou dans le body
-    refresh_token = refresh_data.refresh_token
+    # Chercher le refresh token dans les cookies en priorité, puis dans le body (fallback pour dev)
+    refresh_token = request.cookies.get("refresh_token")
     if not refresh_token:
-        refresh_token = request.cookies.get("refresh_token")
+        refresh_token = refresh_data.refresh_token
     
     if not refresh_token:
         raise AuthenticationException(
@@ -201,6 +247,6 @@ async def logout(
         En production, on pourrait invalider le token côté serveur (blacklist).
         Pour l'instant, on supprime juste le cookie refresh_token.
     """
-    response.delete_cookie("refresh_token")
+    _delete_refresh_cookie(response)
     logger.info(f"Utilisateur '{current_user['username']}' déconnecté")
 

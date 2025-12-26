@@ -160,3 +160,29 @@ class InternalServerException(APIException):
             request_id=request_id
         )
 
+
+class OpenAIException(APIException):
+    """Exception levée lors d'erreurs OpenAI avec codes spécifiques."""
+    
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        details: Optional[Dict[str, Any]] = None,
+        request_id: Optional[str] = None
+    ):
+        """Initialise une exception OpenAI.
+        
+        Args:
+            code: Code d'erreur OpenAI (OPENAI_RATE_LIMIT, OPENAI_TIMEOUT, etc.).
+            message: Message d'erreur lisible.
+            details: Détails de l'erreur.
+            request_id: ID de la requête.
+        """
+        super().__init__(
+            status_code=status.HTTP_502_BAD_GATEWAY,  # 502 car c'est une erreur du service externe
+            code=code,
+            message=message,
+            details=details,
+            request_id=request_id
+        )

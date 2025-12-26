@@ -19,6 +19,16 @@ export function ContextDetail({ item }: ContextDetailProps) {
     )
   }
 
+  // Extraction des champs importants pour les personnages
+  const isCharacter = 'name' in item
+  const data = item.data as Record<string, unknown>
+  
+  const getField = (key: string) => data[key] as string | undefined
+  const getArrayField = (key: string) => {
+    const val = data[key]
+    return Array.isArray(val) ? val : undefined
+  }
+
   const renderData = (data: Record<string, unknown>, depth = 0): React.ReactNode => {
     if (depth > 3) {
       return <span style={{ color: theme.text.tertiary }}>...</span>
@@ -63,8 +73,54 @@ export function ContextDetail({ item }: ContextDetailProps) {
   return (
     <div style={{ padding: '1rem', height: '100%', overflowY: 'auto' }}>
       <h3 style={{ marginTop: 0, marginBottom: '1rem', color: theme.text.primary }}>{item.name}</h3>
+      
+      {isCharacter && (
+        <>
+          {/* Section résumé pour personnages */}
+          <div style={{ 
+            marginBottom: '1rem', 
+            padding: '0.75rem', 
+            backgroundColor: theme.background.tertiary, 
+            borderRadius: '4px',
+            border: `1px solid ${theme.border.primary}`,
+          }}>
+            {getField('portrait') && (
+              <div style={{ marginBottom: '0.5rem', fontSize: '0.85rem' }}>
+                <strong style={{ color: theme.text.primary }}>Portrait:</strong>{' '}
+                <span style={{ color: theme.text.secondary }}>{getField('portrait')}</span>
+              </div>
+            )}
+            {getArrayField('tags') && getArrayField('tags')!.length > 0 && (
+              <div style={{ marginBottom: '0.5rem', fontSize: '0.85rem' }}>
+                <strong style={{ color: theme.text.primary }}>Tags:</strong>{' '}
+                <span style={{ color: theme.text.secondary }}>
+                  {getArrayField('tags')!.join(', ')}
+                </span>
+              </div>
+            )}
+            {getArrayField('traits') && getArrayField('traits')!.length > 0 && (
+              <div style={{ marginBottom: '0.5rem', fontSize: '0.85rem' }}>
+                <strong style={{ color: theme.text.primary }}>Traits:</strong>{' '}
+                <span style={{ color: theme.text.secondary }}>
+                  {getArrayField('traits')!.join(', ')}
+                </span>
+              </div>
+            )}
+            {getField('rôle_narratif') && (
+              <div style={{ marginBottom: '0.5rem', fontSize: '0.85rem' }}>
+                <strong style={{ color: theme.text.primary }}>Rôle narratif:</strong>{' '}
+                <span style={{ color: theme.text.secondary }}>{getField('rôle_narratif')}</span>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       <div style={{ borderTop: `1px solid ${theme.border.primary}`, paddingTop: '1rem' }}>
-        {renderData(item.data)}
+        <h4 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '0.9rem', color: theme.text.primary }}>
+          Détails complets
+        </h4>
+        {renderData(data)}
       </div>
     </div>
   )

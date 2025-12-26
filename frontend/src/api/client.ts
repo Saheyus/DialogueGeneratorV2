@@ -14,6 +14,7 @@ const apiClient: AxiosInstance = axios.create({
     'Content-Type': 'application/json',
   },
   timeout: 30000, // 30 secondes
+  withCredentials: true, // Nécessaire pour envoyer/recevoir les cookies (refresh_token)
 })
 
 /**
@@ -33,6 +34,13 @@ apiClient.interceptors.request.use(
 )
 
 /**
+ * Verrou anti-tempête pour le refresh token.
+ * Si plusieurs requêtes partent simultanément avec token expiré,
+ * une seule Promise de refresh est créée et partagée.
+ */
+let refreshTokenPromise: Promise<string> | null = null
+
+/**
  * Intercepteur pour gérer les erreurs et le rafraîchissement de token.
  */
 apiClient.interceptors.response.use(
@@ -45,26 +53,47 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true
 
       try {
-        // Tenter de rafraîchir le token
-        const refreshToken = localStorage.getItem('refresh_token')
-        if (refreshToken) {
-          const response = await axios.post(`${API_BASE_URL}/api/v1/auth/refresh`, {
-            refresh_token: refreshToken,
-          })
-
-          const { access_token } = response.data
-          localStorage.setItem('access_token', access_token)
-
-          // Réessayer la requête originale
+        // Si un refresh est déjà en cours, attendre cette Promise
+        if (refreshTokenPromise) {
+          const newAccessToken = await refreshTokenPromise
           if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${access_token}`
+            originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
           }
           return apiClient(originalRequest)
         }
+
+        // Sinon, créer une nouvelle Promise de refresh
+        refreshTokenPromise = (async () => {
+          try {
+            // Le refresh token est maintenant dans un cookie httpOnly, pas besoin de le passer dans le body
+            const response = await axios.post(
+              `${API_BASE_URL}/api/v1/auth/refresh`,
+              {}, // Body vide, le cookie est envoyé automatiquement avec withCredentials
+              { withCredentials: true }
+            )
+
+            const { access_token } = response.data
+            localStorage.setItem('access_token', access_token)
+            return access_token
+          } finally {
+            // Nettoyer la Promise après utilisation (succès ou échec)
+            refreshTokenPromise = null
+          }
+        })()
+
+        const newAccessToken = await refreshTokenPromise
+
+        // Réessayer la requête originale avec le nouveau token
+        if (originalRequest.headers) {
+          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
+        }
+        return apiClient(originalRequest)
       } catch (refreshError) {
-        // Échec du rafraîchissement, déconnexion
+        // Échec du rafraîchissement, nettoyer et déconnexion
+        refreshTokenPromise = null
         localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
+        // Le refresh_token est dans un cookie, on ne peut pas le supprimer côté client
+        // Le serveur le supprimera lors de la redirection vers /login
         window.location.href = '/login'
         return Promise.reject(refreshError)
       }
