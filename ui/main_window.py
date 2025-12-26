@@ -60,6 +60,9 @@ from factories.llm_factory import LLMClientFactory
 class MainWindow(QMainWindow):
     """Main window of the DialogueGenerator application.
 
+    ⚠️ DÉPRÉCIÉ : Cette interface desktop PySide6 est dépréciée.
+    Utiliser l'interface web React à la place : npm run dev
+
     This class manages the main UI structure, including the LeftSelectionPanel
     for GDD element browsing and selection, the DetailsPanel for displaying
     item details, and the GenerationPanel for configuring and triggering

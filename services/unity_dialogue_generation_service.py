@@ -27,7 +27,8 @@ class UnityDialogueGenerationService:
         self,
         llm_client: ILLMClient,
         prompt: str,
-        system_prompt_override: Optional[str] = None
+        system_prompt_override: Optional[str] = None,
+        max_choices: Optional[int] = None
     ) -> UnityDialogueGenerationResponse:
         """Génère un nœud de dialogue via Structured Output.
         
@@ -35,6 +36,7 @@ class UnityDialogueGenerationService:
             llm_client: Client LLM pour la génération.
             prompt: Prompt utilisateur pour la génération.
             system_prompt_override: Surcharge du system prompt (optionnel).
+            max_choices: Nombre maximum de choix à générer (0-8, ou None pour laisser l'IA décider).
             
         Returns:
             Réponse contenant les nœuds générés par l'IA (sans IDs techniques).
@@ -54,8 +56,34 @@ class UnityDialogueGenerationService:
         
         result = variants[0]
         
+        # Gérer le cas où DummyLLMClient retourne un dict au lieu d'un modèle Pydantic
+        if isinstance(result, dict):
+            logger.warning("DummyLLMClient a retourné un dict, conversion en UnityDialogueGenerationResponse")
+            try:
+                result = UnityDialogueGenerationResponse.model_validate(result)
+            except Exception as e:
+                logger.error(f"Erreur lors de la conversion du dict en UnityDialogueGenerationResponse: {e}")
+                raise ValueError(f"Impossible de convertir le résultat en UnityDialogueGenerationResponse: {e}")
+        
         if not isinstance(result, UnityDialogueGenerationResponse):
             raise ValueError(f"Type de réponse inattendu: {type(result)}. Attendu: UnityDialogueGenerationResponse")
+        
+        # Valider et limiter le nombre de choix si max_choices est spécifié
+        if max_choices is not None:
+            for node in result.nodes:
+                if node.choices:
+                    if max_choices == 0:
+                        logger.warning(
+                            f"max_choices=0 mais le nœud a {len(node.choices)} choix. "
+                            "Suppression des choix."
+                        )
+                        node.choices = None
+                    elif len(node.choices) > max_choices:
+                        logger.warning(
+                            f"Le nœud a {len(node.choices)} choix, mais max_choices={max_choices}. "
+                            f"Troncature à {max_choices} choix."
+                        )
+                        node.choices = node.choices[:max_choices]
         
         logger.info(f"Nœud généré avec succès: {len(result.nodes)} nœud(s)")
         return result

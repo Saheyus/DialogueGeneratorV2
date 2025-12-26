@@ -1,5 +1,7 @@
 # Fonctionnalités manquantes dans l'API REST
 
+⚠️ **Note** : L'interface Python (UI desktop PySide6) est **dépréciée**. Utiliser l'interface web React (`npm run dev`) qui est l'interface principale.
+
 Ce document liste les fonctionnalités présentes dans l'interface Python (UI desktop) mais absentes de l'API REST.
 
 ## Résumé exécutif

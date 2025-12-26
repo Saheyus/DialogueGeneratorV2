@@ -1,5 +1,7 @@
 # Fonctionnalités manquantes dans l'API REST
 
+⚠️ **Note** : L'interface Python (UI desktop PySide6) est **dépréciée**. Utiliser l'interface web React (`npm run dev`) qui est l'interface principale.
+
 Ce document liste les fonctionnalités présentes dans l'interface Python (UI desktop) mais absentes de l'API REST.
 
 **Note** : Ce document a été mis à jour le 2025-12-25. Unity n'utilise plus le format Yarn (.yarn) mais le format JSON (voir spécification dans ce dossier).

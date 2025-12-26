@@ -211,7 +211,10 @@ if is_production_env:
 
 if __name__ == "__main__":
     import uvicorn
+    from pathlib import Path
     
+    # ⚠️ AVERTISSEMENT : Pour le développement, utiliser 'npm run dev' à la racine du projet
+    # Ce script lance uniquement le backend. Pour lancer backend + frontend ensemble, utiliser 'npm run dev'
     # L'ouverture automatique du navigateur est désactivée
     # Le script dev.js gère l'ouverture du navigateur pour le frontend
     
@@ -219,11 +222,34 @@ if __name__ == "__main__":
     # Par défaut, reload=True en développement pour recharger automatiquement
     enable_reload = os.getenv("RELOAD", "true").lower() not in ("false", "0", "no", "off")
     
+    # Configuration du reload pour éviter les redémarrages trop fréquents
+    reload_config = {}
+    if enable_reload:
+        # Limiter la surveillance aux dossiers pertinents (évite les redémarrages
+        # lors de modifications dans frontend/, tests/, docs/, etc.)
+        project_root = Path(__file__).parent.parent
+        reload_dirs = [
+            str(project_root / "api"),
+            str(project_root / "services"),
+            str(project_root / "core"),
+            str(project_root / "domain"),
+        ]
+        # Vérifier que les dossiers existent
+        reload_dirs = [d for d in reload_dirs if Path(d).exists()]
+        
+        reload_config = {
+            "reload": True,
+            "reload_dirs": reload_dirs,
+            "reload_delay": 1.0,  # Délai de 1 seconde pour éviter les redémarrages trop fréquents
+        }
+    else:
+        reload_config = {"reload": False}
+    
     uvicorn.run(
         "api.main:app",
         host="0.0.0.0",
         port=int(os.getenv("API_PORT", "4242")),
-        reload=enable_reload,
-        log_level="info"
+        log_level="info",
+        **reload_config
     )
 

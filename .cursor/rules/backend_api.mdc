@@ -4,7 +4,7 @@ globs: ["api/**/*.py", "backend/**/*.py", "server/**/*.py"]
 alwaysApply: false
 ---
 
-- **Architecture**: API REST FastAPI dans `api/`. La logique métier reste dans `services/` (réutilisable UI desktop + API + tests).
+- **Architecture**: API REST FastAPI dans `api/`. La logique métier reste dans `services/` (réutilisable pour l'API web + tests). ⚠️ L'UI desktop PySide6 est dépréciée, utiliser l'interface web React.
 - **Structure**: `api/routers/` (routes HTTP), `api/schemas/` (DTOs Pydantic), `api/services/` (adaptateurs), `api/dependencies.py` (injection).
 - **SOLID**: Routers = routes uniquement, Services API = adaptation, Services métier = logique pure, Repositories = données.
 - **RESTful**: Versioning `/api/v1/`, méthodes HTTP appropriées, codes de statut corrects, format de réponse standardisé.

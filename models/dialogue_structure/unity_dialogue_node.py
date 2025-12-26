@@ -63,6 +63,10 @@ class UnityDialogueGenerationResponse(BaseModel):
     Pour commencer, on génère un nœud à la fois, donc nodes contiendra un seul élément.
     Les IDs seront ajoutés automatiquement par le système.
     """
+    title: str = Field(
+        ...,
+        description="Titre descriptif du dialogue (ex: 'Rencontre avec le tavernier', 'Discussion sur la quête')"
+    )
     nodes: List[UnityDialogueNodeContent] = Field(
         ..., 
         min_length=1,

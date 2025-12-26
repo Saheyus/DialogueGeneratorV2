@@ -18,8 +18,8 @@ alwaysApply: true
     - Build check détecte erreurs TypeScript
     - Lint check détecte erreurs de code
     - Tests Vitest vérifient les composants
-  - **UI desktop** : `python main_app.py` (boucle Qt, nécessite arrêt manuel)
-  - **Interface web** : `npm run dev` (démarre tout sur localhost:3000)
+  - ⚠️ **UI desktop (DÉPRÉCIÉE)** : `python main_app.py` — Ne plus utiliser, interface dépréciée
+  - **Interface web (PRINCIPALE)** : `npm run dev` (démarre tout sur localhost:3000)
 
 - **Tests** :
   - Commande standard : `pytest tests/` (tous les tests)

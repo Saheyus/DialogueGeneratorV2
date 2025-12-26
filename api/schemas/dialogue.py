@@ -155,6 +155,7 @@ class GenerateUnityDialogueRequest(BaseModel):
         max_context_tokens: Nombre maximum de tokens pour le contexte.
         system_prompt_override: Surcharge du system prompt (optionnel).
         llm_model_identifier: Identifiant du modèle LLM à utiliser.
+        max_choices: Nombre maximum de choix à générer (0-8, ou None pour laisser l'IA décider).
     """
     user_instructions: str = Field(..., min_length=1, description="Instructions spécifiques pour la scène")
     context_selections: ContextSelection = Field(..., description="Sélections de contexte GDD")
@@ -162,6 +163,7 @@ class GenerateUnityDialogueRequest(BaseModel):
     max_context_tokens: int = Field(default=1500, ge=100, le=50000, description="Nombre maximum de tokens pour le contexte")
     system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
     llm_model_identifier: str = Field(default="gpt-4o-mini", description="Identifiant du modèle LLM")
+    max_choices: Optional[int] = Field(None, ge=0, le=8, description="Nombre maximum de choix à générer (0-8, ou None pour laisser l'IA décider librement)")
 
 
 class GenerateUnityDialogueResponse(BaseModel):
@@ -169,11 +171,13 @@ class GenerateUnityDialogueResponse(BaseModel):
     
     Attributes:
         json_content: Contenu JSON du dialogue au format Unity (tableau de nœuds).
+        title: Titre descriptif du dialogue généré par l'IA.
         prompt_used: Le prompt complet utilisé pour la génération.
         estimated_tokens: Nombre estimé de tokens utilisés.
         warning: Avertissement si DummyLLMClient a été utilisé.
     """
     json_content: str = Field(..., description="Contenu JSON du dialogue au format Unity")
+    title: Optional[str] = Field(None, description="Titre descriptif du dialogue généré par l'IA")
     prompt_used: Optional[str] = Field(None, description="Prompt complet utilisé")
     estimated_tokens: int = Field(..., description="Nombre estimé de tokens")
     warning: Optional[str] = Field(None, description="Avertissement (ex: DummyLLMClient utilisé)")

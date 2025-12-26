@@ -1,7 +1,7 @@
 /**
  * Composant Dashboard avec layout 3 panneaux redimensionnables.
  */
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { ContextSelector } from '../context/ContextSelector'
 import { GenerationPanel } from '../generation/GenerationPanel'
 import { InteractionDetails } from '../interactions/InteractionDetails'
@@ -10,7 +10,6 @@ import { ContextDetail } from '../context/ContextDetail'
 import { UnityConfigDialog } from '../config/UnityConfigDialog'
 import { ResizablePanels } from '../shared/ResizablePanels'
 import { Tabs, type Tab } from '../shared/Tabs'
-import { VariantsTabsView } from '../generation/VariantsTabsView'
 import { useGenerationStore } from '../../store/generationStore'
 import { useGenerationActionsStore } from '../../store/generationActionsStore'
 import type { InteractionResponse, CharacterResponse, LocationResponse, ItemResponse, SpeciesResponse, CommunityResponse } from '../../types/api'
@@ -22,23 +21,9 @@ export function Dashboard() {
   const [selectedInteraction, setSelectedInteraction] = useState<InteractionResponse | null>(null)
   const [selectedContextItem, setSelectedContextItem] = useState<ContextItem | null>(null)
   const [isUnityConfigOpen, setIsUnityConfigOpen] = useState(false)
-  const [rightPanelTab, setRightPanelTab] = useState<'prompt' | 'details' | 'results'>('prompt')
-  const { 
-    estimatedPrompt, 
-    estimatedTokens, 
-    isEstimating,
-    variantsResponse,
-    interactionsResponse,
-    tokensUsed,
-  } = useGenerationStore()
+  const [rightPanelTab, setRightPanelTab] = useState<'prompt' | 'details'>('prompt')
+  const { estimatedPrompt, estimatedTokens, isEstimating } = useGenerationStore()
   const { actions } = useGenerationActionsStore()
-
-  // Ouvrir automatiquement l'onglet Résultats quand une génération est terminée
-  useEffect(() => {
-    if (variantsResponse || (interactionsResponse && interactionsResponse.length > 0)) {
-      setRightPanelTab('results')
-    }
-  }, [variantsResponse, interactionsResponse])
 
   const rightPanelTabs: Tab[] = [
     {
@@ -51,86 +36,6 @@ export function Dashboard() {
             isEstimating={isEstimating}
             estimatedTokens={estimatedTokens}
           />
-        </div>
-      ),
-    },
-    {
-      id: 'results',
-      label: 'Résultats',
-      content: (
-        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          {variantsResponse && variantsResponse.variants.length > 0 ? (
-            <VariantsTabsView
-              response={variantsResponse}
-              onValidateAsInteraction={async (variant) => {
-                // TODO: Implémenter la validation comme interaction
-                console.log('Valider comme interaction:', variant)
-              }}
-            />
-          ) : interactionsResponse && interactionsResponse.length > 0 ? (
-            <div style={{ padding: '1rem', height: '100%', overflow: 'auto' }}>
-              <h3 style={{ color: theme.text.primary, marginTop: 0 }}>
-                Interactions générées ({interactionsResponse.length})
-              </h3>
-              {tokensUsed && (
-                <div style={{ 
-                  marginBottom: '1rem', 
-                  padding: '0.5rem', 
-                  backgroundColor: theme.background.secondary,
-                  borderRadius: '4px',
-                  fontSize: '0.9rem',
-                  color: theme.text.secondary,
-                }}>
-                  Tokens utilisés: {tokensUsed.toLocaleString()}
-                </div>
-              )}
-              {interactionsResponse.map((interaction) => (
-                <div
-                  key={interaction.interaction_id}
-                  style={{
-                    marginBottom: '1rem',
-                    padding: '1rem',
-                    border: `1px solid ${theme.border.primary}`,
-                    borderRadius: '4px',
-                    backgroundColor: theme.background.tertiary,
-                  }}
-                >
-                  <h4 style={{ marginTop: 0, color: theme.text.primary }}>{interaction.title}</h4>
-                  <div style={{ fontSize: '0.9rem', color: theme.text.secondary, marginBottom: '0.5rem' }}>
-                    ID: {interaction.interaction_id}
-                    {interaction.header_tags.length > 0 && (
-                      <span style={{ marginLeft: '1rem' }}>
-                        Tags: {interaction.header_tags.join(', ')}
-                      </span>
-                    )}
-                  </div>
-                  <pre style={{ 
-                    whiteSpace: 'pre-wrap', 
-                    fontSize: '0.9rem', 
-                    backgroundColor: theme.background.secondary, 
-                    color: theme.text.secondary,
-                    padding: '0.5rem', 
-                    borderRadius: '4px',
-                    border: `1px solid ${theme.border.primary}`,
-                  }}>
-                    {JSON.stringify(interaction.elements, null, 2)}
-                  </pre>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ 
-              padding: '2rem', 
-              textAlign: 'center', 
-              color: theme.text.secondary,
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              Aucun résultat de génération disponible
-            </div>
-          )}
         </div>
       ),
     },
@@ -170,7 +75,7 @@ export function Dashboard() {
   return (
     <ResizablePanels
       storageKey="dashboard_panels"
-      defaultSizes={[25, 45, 30]}
+      defaultSizes={[20, 50, 30]}
       minSizes={[200, 400, 250]}
       direction="horizontal"
       style={{
@@ -330,7 +235,7 @@ export function Dashboard() {
           <Tabs
             tabs={rightPanelTabs}
             activeTabId={rightPanelTab}
-            onTabChange={(tabId) => setRightPanelTab(tabId as 'prompt' | 'details' | 'results')}
+            onTabChange={(tabId) => setRightPanelTab(tabId as 'prompt' | 'details')}
             style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}
           />
         </div>
@@ -348,50 +253,6 @@ export function Dashboard() {
               zIndex: 10,
             }}
           >
-            {/* Barre de progression */}
-            {actions.isLoading && (
-              <div
-                style={{
-                  width: '100%',
-                  height: '4px',
-                  backgroundColor: theme.background.secondary,
-                  borderRadius: '2px',
-                  marginBottom: '0.75rem',
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    backgroundColor: theme.button.primary.background,
-                    animation: 'progress 1.5s ease-in-out infinite',
-                  }}
-                />
-                <style>
-                  {`
-                    @keyframes progress {
-                      0% { transform: translateX(-100%); }
-                      50% { transform: translateX(0%); }
-                      100% { transform: translateX(100%); }
-                    }
-                  `}
-                </style>
-              </div>
-            )}
-            {/* Affichage des tokens pendant la génération */}
-            {actions.isLoading && tokensUsed && (
-              <div
-                style={{
-                  fontSize: '0.85rem',
-                  color: theme.text.secondary,
-                  marginBottom: '0.5rem',
-                  textAlign: 'center',
-                }}
-              >
-                Tokens envoyés: {tokensUsed.toLocaleString()}
-              </div>
-            )}
             <button
               onClick={actions.handleGenerate}
               disabled={actions.isLoading}
@@ -415,18 +276,16 @@ export function Dashboard() {
               }}
               title="Générer (Ctrl+Enter)"
             >
-              <span>{actions.isLoading ? 'Génération en cours...' : 'Générer'}</span>
-              {!actions.isLoading && (
-                <span
-                  style={{
-                    fontSize: '0.75rem',
-                    opacity: 0.8,
-                    fontWeight: 'normal',
-                  }}
-                >
-                  Ctrl+Enter
-                </span>
-              )}
+              <span>Générer</span>
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  opacity: 0.8,
+                  fontWeight: 'normal',
+                }}
+              >
+                Ctrl+Enter
+              </span>
             </button>
           </div>
         )}

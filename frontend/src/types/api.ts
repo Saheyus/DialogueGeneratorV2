@@ -209,10 +209,12 @@ export interface GenerateUnityDialogueRequest {
   max_context_tokens: number
   system_prompt_override?: string
   llm_model_identifier: string
+  max_choices?: number | null
 }
 
 export interface GenerateUnityDialogueResponse {
   json_content: string
+  title?: string
   prompt_used?: string
   estimated_tokens: number
   warning?: string

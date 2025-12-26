@@ -243,7 +243,8 @@ RÈGLES À SUIVRE:
         skills_list: Optional[List[str]] = None,
         traits_list: Optional[List[str]] = None,
         context_summary: Optional[str] = None,
-        scene_location: Optional[Dict[str, str]] = None
+        scene_location: Optional[Dict[str, str]] = None,
+        max_choices: Optional[int] = None
     ) -> Tuple[str, int]:
         """Construit le prompt pour génération Unity JSON.
         
@@ -255,6 +256,7 @@ RÈGLES À SUIVRE:
             traits_list: Liste des labels de traits disponibles (optionnel).
             context_summary: Résumé du contexte GDD (optionnel).
             scene_location: Dictionnaire du lieu de la scène (optionnel).
+            max_choices: Nombre maximum de choix à générer (0-8, ou None pour laisser l'IA décider).
             
         Returns:
             Tuple contenant le prompt complet et une estimation du nombre de tokens.
@@ -266,6 +268,11 @@ RÈGLES À SUIVRE:
         prompt_parts.append(
             "Tu dois générer un nœud de dialogue au format Unity JSON. "
             "Le format sera géré automatiquement via Structured Output, mais voici les règles importantes :"
+        )
+        prompt_parts.append(
+            "- IMPORTANT : Génère un titre descriptif et reconnaissable pour ce dialogue "
+            "(ex: 'Rencontre avec le tavernier', 'Discussion sur la quête principale', 'Confrontation avec le bandit'). "
+            "Ce titre sera utilisé pour identifier l'interaction, pas dans le dialogue lui-même."
         )
         prompt_parts.append(
             "- Le speaker doit être l'ID du personnage qui parle (contrôlé par l'auteur). "
@@ -286,6 +293,25 @@ RÈGLES À SUIVRE:
         prompt_parts.append(
             "- Si un nœud n'a ni choices ni nextNode, il termine le dialogue."
         )
+        
+        # Instructions sur le nombre de choix
+        if max_choices is not None:
+            if max_choices == 0:
+                prompt_parts.append(
+                    "- IMPORTANT : Ce nœud ne doit PAS avoir de choix (choices). "
+                    "Utilise nextNode pour la navigation linéaire ou laisse vide pour terminer le dialogue."
+                )
+            else:
+                prompt_parts.append(
+                    f"- IMPORTANT : Ce nœud doit avoir exactement {max_choices} choix (choices) au maximum. "
+                    f"Génère entre 1 et {max_choices} choix selon ce qui est approprié pour la scène."
+                )
+        else:
+            prompt_parts.append(
+                "- Tu peux générer des choix (choices) si cela est approprié pour la scène. "
+                "Le nombre de choix est libre, mais reste raisonnable (généralement entre 0 et 8 choix). "
+                "Si aucun choix n'est nécessaire, utilise nextNode pour la navigation linéaire."
+            )
         
         # Liste des compétences disponibles
         if skills_list:

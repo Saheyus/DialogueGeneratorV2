@@ -63,20 +63,38 @@ class DummyLLMClient(ILLMClient):
                 await asyncio.sleep(self.delay_seconds)
             
             if response_model:
-                dummy_data: Dict[str, Any] = {
-                    "interaction_id": f"dummy_id_{i+1}",
-                    "title": f"Dummy Title {i+1}",
-                }
-                if hasattr(response_model, "model_fields"):
-                    phase_idx = 1
-                    while f"phase_{phase_idx}" in response_model.model_fields:
-                        field_info = response_model.model_fields[f"phase_{phase_idx}"]
-                        field_type_name = str(field_info.annotation)
-                        if "DialogueLineElement" in field_type_name: 
-                             dummy_data[f"phase_{phase_idx}"] = {"element_type": "dialogue_line", "speaker":"DummyPNJ", "text":f"Ligne PNJ phase {phase_idx} var {i+1}"}
-                        elif "PlayerChoicesBlockElement" in field_type_name:
-                             dummy_data[f"phase_{phase_idx}"] = {"element_type": "player_choices_block", "choices":[{"text":f"Choix {c_idx+1}", "next_interaction_id":f"next_dummy_{i+1}_{phase_idx}_{c_idx+1}"} for c_idx in range(2)]}
-                        phase_idx += 1
+                # Cas spécial pour UnityDialogueGenerationResponse
+                if response_model.__name__ == "UnityDialogueGenerationResponse":
+                    dummy_data = {
+                        "nodes": [
+                            {
+                                "line": "Texte de test généré par DummyLLMClient pour Unity JSON.",
+                                "choices": [
+                                    {
+                                        "text": "Choix de test",
+                                        "targetNode": ""
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                else:
+                    # Pour les autres modèles (Interaction, etc.)
+                    dummy_data: Dict[str, Any] = {
+                        "interaction_id": f"dummy_id_{i+1}",
+                        "title": f"Dummy Title {i+1}",
+                    }
+                    if hasattr(response_model, "model_fields"):
+                        phase_idx = 1
+                        while f"phase_{phase_idx}" in response_model.model_fields:
+                            field_info = response_model.model_fields[f"phase_{phase_idx}"]
+                            field_type_name = str(field_info.annotation)
+                            if "DialogueLineElement" in field_type_name: 
+                                 dummy_data[f"phase_{phase_idx}"] = {"element_type": "dialogue_line", "speaker":"DummyPNJ", "text":f"Ligne PNJ phase {phase_idx} var {i+1}"}
+                            elif "PlayerChoicesBlockElement" in field_type_name:
+                                 dummy_data[f"phase_{phase_idx}"] = {"element_type": "player_choices_block", "choices":[{"text":f"Choix {c_idx+1}", "next_interaction_id":f"next_dummy_{i+1}_{phase_idx}_{c_idx+1}"} for c_idx in range(2)]}
+                            phase_idx += 1
+                
                 try:
                     parsed_dummy = response_model.model_validate(dummy_data) 
                     variants.append(parsed_dummy)

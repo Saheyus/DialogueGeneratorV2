@@ -2,6 +2,8 @@
 
 API REST FastAPI pour la génération de dialogues IA pour jeux de rôle.
 
+⚠️ **IMPORTANT** : Cette API est utilisée par l'**interface web React** (interface principale). L'ancienne interface desktop PySide6 est **dépréciée** et ne doit plus être utilisée.
+
 ## Démarrage rapide
 
 ### Installation
@@ -117,5 +119,7 @@ L'API suit les principes SOLID et RESTful :
 
 ## Frontend
 
-Le frontend React est dans le dossier `frontend/`. Voir `frontend/README.md` pour plus d'informations.
+Le frontend React est dans le dossier `frontend/`. **C'est l'interface principale du projet.** Voir `frontend/README.md` pour plus d'informations.
+
+⚠️ **Note** : L'ancienne interface desktop PySide6 (`ui/`, `main_app.py`) est dépréciée et ne doit plus être utilisée.
 

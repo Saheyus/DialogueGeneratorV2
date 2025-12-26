@@ -1,11 +1,20 @@
 # DialogueGenerator/main_app.py
+"""
+⚠️ DÉPRÉCIÉ : Cette interface desktop PySide6 est dépréciée.
+
+Utiliser l'interface web React à la place :
+    npm run dev
+
+Cette interface est maintenue uniquement pour compatibilité mais ne doit plus être utilisée.
+"""
 import sys
 import logging
 import os
+import warnings
 from pathlib import Path
 from datetime import datetime
 # from PySide6.QtWidgets import QApplication # Remplacé par QAsyncApplication
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 from qasync import QEventLoop
 from constants import UIText, FilePaths, Defaults
 
@@ -56,8 +65,32 @@ def main():
     configure_logging(debug=_is_debug_enabled())
     logger = logging.getLogger(__name__) # Obtenir un logger spécifique au module
 
+    # ⚠️ Avertissement de dépréciation
+    deprecation_warning = (
+        "⚠️ DÉPRÉCIÉ : L'interface desktop PySide6 est dépréciée.\n\n"
+        "Utiliser l'interface web React à la place :\n"
+        "  npm run dev\n\n"
+        "Cette interface est maintenue uniquement pour compatibilité."
+    )
+    warnings.warn(deprecation_warning, DeprecationWarning, stacklevel=2)
+    logger.warning("⚠️ DÉPRÉCIÉ : Interface desktop PySide6 dépréciée. Utiliser 'npm run dev' pour l'interface web.")
+
     logger.info("Démarrage de l'application DialogueGenerator...")
     app = QApplication(sys.argv)  # Création de l'application Qt standard
+    
+    # Afficher un message box d'avertissement (une seule fois au démarrage)
+    msg = QMessageBox()
+    msg.setIcon(QMessageBox.Warning)
+    msg.setWindowTitle("Interface Dépréciée")
+    msg.setText("⚠️ Interface Desktop Dépréciée")
+    msg.setInformativeText(
+        "Cette interface desktop PySide6 est dépréciée.\n\n"
+        "Utiliser l'interface web React à la place :\n"
+        "  npm run dev\n\n"
+        "L'application continuera de fonctionner mais cette interface n'est plus maintenue activement."
+    )
+    msg.setStandardButtons(QMessageBox.Ok)
+    msg.exec()
 
     logger.info("Initialisation du ContextBuilder...")
     context_builder_instance = ContextBuilder()

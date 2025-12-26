@@ -19,6 +19,8 @@ import type {
   InteractionListResponse,
   ContextSelection,
   GenerateDialogueVariantsResponse,
+  GenerateUnityDialogueRequest,
+  GenerateUnityDialogueResponse,
 } from '../../types/api'
 import { DialogueStructureWidget } from './DialogueStructureWidget'
 import { SystemPromptEditor } from './SystemPromptEditor'
@@ -29,11 +31,18 @@ import { Tabs, type Tab } from '../shared/Tabs'
 import { ContextActions } from '../context/ContextActions'
 import { ContextSummaryChips, useToast, toastManager } from '../shared'
 
-type GenerationMode = 'variants' | 'interactions'
+type GenerationMode = 'variants' | 'interactions' | 'unity'
 type PanelTab = 'generation' | 'interactions'
 
 export function GenerationPanel() {
-  const { selections } = useContextStore()
+  const { 
+    selections, 
+    selectedRegion, 
+    selectedSubLocations,
+    setSelections,
+    setRegion,
+    restoreState: restoreContextState,
+  } = useContextStore()
   const {
     sceneSelection,
     dialogueStructure,
@@ -47,11 +56,12 @@ export function GenerationPanel() {
     setTokensUsed,
   } = useGenerationStore()
   
-  const [generationMode, setGenerationMode] = useState<GenerationMode>('variants')
+  const [generationMode, setGenerationMode] = useState<GenerationMode>('unity')
   const [userInstructions, setUserInstructions] = useState('')
   const [kVariants, setKVariants] = useState(2)
   const [maxContextTokens, setMaxContextTokens] = useState(1500)
   const [llmModel, setLlmModel] = useState('gpt-4o-mini')
+  const [maxChoices, setMaxChoices] = useState<number | null>(null)
   const [availableModels, setAvailableModels] = useState<LLMModelResponse[]>([])
   const [variantsResponse, setVariantsResponse] = useState<GenerateDialogueVariantsResponse | null>(null)
   const [interactions, setInteractions] = useState<InteractionResponse[]>([])
@@ -81,6 +91,10 @@ export function GenerationPanel() {
       generationMode,
       previousInteractionId,
       npcSpeakerId,
+      maxChoices,
+      contextSelections: selections,
+      selectedRegion,
+      selectedSubLocations,
       timestamp: Date.now(),
     }
     try {
@@ -89,9 +103,9 @@ export function GenerationPanel() {
     } catch (err) {
       console.error('Erreur lors de la sauvegarde automatique:', err)
     }
-  }, [userInstructions, systemPromptOverride, dialogueStructure, sceneSelection, kVariants, maxContextTokens, llmModel, generationMode, previousInteractionId, npcSpeakerId])
+  }, [userInstructions, systemPromptOverride, dialogueStructure, sceneSelection, kVariants, maxContextTokens, llmModel, maxChoices, generationMode, previousInteractionId, npcSpeakerId, selections, selectedRegion, selectedSubLocations])
 
-  // Charger le brouillon au démarrage
+  // Charger le brouillon au démarrage (AVANT loadModels pour préserver le modèle sauvegardé)
   useEffect(() => {
     try {
       const saved = localStorage.getItem(DRAFT_STORAGE_KEY)
@@ -106,15 +120,29 @@ export function GenerationPanel() {
         if (draft.kVariants !== undefined) setKVariants(draft.kVariants)
         if (draft.maxContextTokens !== undefined) setMaxContextTokens(draft.maxContextTokens)
         if (draft.llmModel !== undefined) setLlmModel(draft.llmModel)
-        if (draft.generationMode !== undefined) setGenerationMode(draft.generationMode)
+        if (draft.maxChoices !== undefined) setMaxChoices(draft.maxChoices)
+        if (draft.generationMode !== undefined) {
+          setGenerationMode(draft.generationMode)
+        } else {
+          // Mode par défaut : Unity
+          setGenerationMode('unity')
+        }
         if (draft.previousInteractionId !== undefined) setPreviousInteractionId(draft.previousInteractionId)
         if (draft.npcSpeakerId !== undefined) setNpcSpeakerId(draft.npcSpeakerId)
+        // Charger les sélections de contexte
+        if (draft.contextSelections !== undefined) {
+          const savedRegion = draft.selectedRegion !== undefined ? draft.selectedRegion : null
+          const savedSubLocations = draft.selectedSubLocations !== undefined && Array.isArray(draft.selectedSubLocations) 
+            ? draft.selectedSubLocations 
+            : []
+          restoreContextState(draft.contextSelections, savedRegion, savedSubLocations)
+        }
         setIsDirty(false)
       }
     } catch (err) {
       console.error('Erreur lors du chargement du brouillon:', err)
     }
-  }, [setDialogueStructure, setSystemPromptOverride, setSceneSelection]) // Charger une seule fois au montage
+  }, [setDialogueStructure, setSystemPromptOverride, setSceneSelection, restoreContextState]) // Charger une seule fois au montage
 
   // Détecter les changements de sceneSelection pour déclencher la sauvegarde
   // (sauf au chargement initial)
@@ -124,6 +152,13 @@ export function GenerationPanel() {
       setIsDirty(true)
     }
   }, [sceneSelection, isInitialLoad])
+
+  // Détecter les changements dans les sélections de contexte pour déclencher la sauvegarde
+  useEffect(() => {
+    if (!isInitialLoad) {
+      setIsDirty(true)
+    }
+  }, [selections, selectedRegion, selectedSubLocations, isInitialLoad])
   
   useEffect(() => {
     // Marquer la fin du chargement initial après un court délai
@@ -146,13 +181,27 @@ export function GenerationPanel() {
     try {
       const response = await configAPI.listLLMModels()
       setAvailableModels(response.models)
-      if (response.models.length > 0) {
+      // Ne pas écraser le modèle si un draft existe avec un modèle sauvegardé
+      const saved = localStorage.getItem(DRAFT_STORAGE_KEY)
+      if (saved) {
+        try {
+          const draft = JSON.parse(saved)
+          if (draft.llmModel && response.models.some(m => m.model_identifier === draft.llmModel)) {
+            // Le modèle sauvegardé existe toujours, on le garde (déjà chargé par le useEffect du draft)
+            return
+          }
+        } catch {
+          // Ignorer les erreurs de parsing, continuer avec le modèle par défaut
+        }
+      }
+      // Sinon, utiliser le premier modèle disponible seulement si aucun modèle n'est déjà défini
+      if (response.models.length > 0 && !llmModel) {
         setLlmModel(response.models[0].model_identifier)
       }
     } catch (err) {
       console.error('Erreur lors du chargement des modèles:', err)
     }
-  }, [])
+  }, [llmModel])
 
   useEffect(() => {
     loadModels()
@@ -350,7 +399,7 @@ export function GenerationPanel() {
         if (!response.warning) {
           toast('Génération réussie!', 'success')
         }
-      } else {
+      } else if (generationMode === 'interactions') {
         const request: GenerateInteractionVariantsRequest = {
           k_variants: kVariants,
           user_instructions: userInstructions,
@@ -373,6 +422,70 @@ export function GenerationPanel() {
           toastManager.remove(toastId)
         }
         toast('Génération réussie!', 'success')
+      } else if (generationMode === 'unity') {
+        // Validation : au moins un personnage requis pour Unity
+        if (!contextSelections.characters || contextSelections.characters.length === 0) {
+          toast('Au moins un personnage doit être sélectionné pour générer un dialogue Unity', 'error')
+          if (toastId) {
+            toastManager.remove(toastId)
+          }
+          setIsLoading(false)
+          return
+        }
+        
+        const request: GenerateUnityDialogueRequest = {
+          user_instructions: userInstructions,
+          context_selections: contextSelections,
+          npc_speaker_id: npcSpeakerId || undefined,
+          max_context_tokens: maxContextTokens,
+          system_prompt_override: systemPromptOverride || undefined,
+          llm_model_identifier: llmModel,
+          max_choices: maxChoices ?? undefined,
+        }
+
+        const response = await dialoguesAPI.generateUnityDialogue(request)
+        
+        // Afficher un avertissement si DummyLLMClient a été utilisé
+        if (response.warning) {
+          toast(response.warning, 'error', 10000)
+        }
+        
+        // Pour Unity, on affiche le JSON dans une variante
+        const unityVariant: DialogueVariantResponse = {
+          id: 'unity-1',
+          title: response.title || 'Dialogue Unity JSON',
+          content: response.json_content,
+          is_new: true
+        }
+        
+        const unityResponse: GenerateDialogueVariantsResponse = {
+          variants: [unityVariant],
+          prompt_used: response.prompt_used || undefined,
+          estimated_tokens: response.estimated_tokens,
+          warning: response.warning || undefined
+        }
+        
+        // Stocker dans le store pour affichage
+        setStoreVariantsResponse(unityResponse)
+        setStoreInteractionsResponse(null)
+        setVariantsResponse(unityResponse)
+        setInteractions([])
+        setIsDirty(false)
+        
+        if (response.prompt_used) {
+          setEstimatedPrompt(response.prompt_used, response.estimated_tokens, false)
+        }
+        if (response.estimated_tokens) {
+          setTokensUsed(response.estimated_tokens)
+        }
+        
+        // Fermer le toast de génération en cours et afficher le succès
+        if (toastId) {
+          toastManager.remove(toastId)
+        }
+        if (!response.warning) {
+          toast('Génération Unity JSON réussie!', 'success')
+        }
       }
     } catch (err) {
       const errorMsg = getErrorMessage(err)
@@ -478,6 +591,24 @@ export function GenerationPanel() {
             <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
         <button
           onClick={() => {
+            setGenerationMode('unity')
+            setVariantsResponse(null)
+            setInteractions([])
+            setIsDirty(true)
+          }}
+          style={{
+            padding: '0.5rem 1rem',
+            border: `1px solid ${theme.border.primary}`,
+            borderRadius: '4px',
+            backgroundColor: generationMode === 'unity' ? theme.button.primary.background : theme.button.default.background,
+            color: generationMode === 'unity' ? theme.button.primary.color : theme.button.default.color,
+            cursor: 'pointer',
+          }}
+        >
+          Dialogue Unity
+        </button>
+        <button
+          onClick={() => {
             setGenerationMode('variants')
             setVariantsResponse(null)
             setInteractions([])
@@ -492,7 +623,7 @@ export function GenerationPanel() {
             cursor: 'pointer',
           }}
         >
-          Variantes texte
+          Texte libre
         </button>
         <button
           onClick={() => {
@@ -661,6 +792,66 @@ export function GenerationPanel() {
           />
         </label>
       </div>
+
+      {generationMode === 'unity' && (
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            <label style={{ color: theme.text.primary, margin: 0 }}>
+              Nombre max de choix:
+            </label>
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+              <button
+                type="button"
+                style={{
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '12px',
+                  border: `1px solid ${theme.border.primary}`,
+                  backgroundColor: theme.background.secondary,
+                  color: theme.text.secondary,
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0,
+                }}
+                title="0 = aucun choix (dialogue linéaire), 1-8 = nombre max de choix, vide = l'IA décide"
+              >
+                ?
+              </button>
+            </div>
+          </div>
+          <input
+            type="number"
+            value={maxChoices ?? ''}
+            onChange={(e) => {
+              const value = e.target.value
+              if (value === '') {
+                setMaxChoices(null)
+              } else {
+                const num = parseInt(value)
+                if (!isNaN(num) && num >= 0 && num <= 8) {
+                  setMaxChoices(num)
+                }
+              }
+              setIsDirty(true)
+            }}
+            min={0}
+            max={8}
+            placeholder="Libre"
+            style={{ 
+              width: '100%', 
+              padding: '0.5rem', 
+              boxSizing: 'border-box',
+              backgroundColor: theme.input.background,
+              border: `1px solid ${theme.input.border}`,
+              color: theme.input.color,
+            }}
+          />
+        </div>
+      )}
 
       {estimatedTokens !== null && (
         <div style={{ 

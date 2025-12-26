@@ -18,6 +18,7 @@ interface ContextState {
   toggleSubLocation: (name: string) => void
   applyLinkedElements: (elements: string[]) => void
   clearSelections: () => void
+  restoreState: (selections: ContextSelection, region: string | null, subLocations: string[]) => void
 }
 
 const defaultSelections: ContextSelection = {
@@ -169,6 +170,14 @@ export const useContextStore = create<ContextState>((set) => ({
       selections: defaultSelections,
       selectedRegion: null,
       selectedSubLocations: [],
+    })
+  },
+
+  restoreState: (selections: ContextSelection, region: string | null, subLocations: string[]) => {
+    set({
+      selections,
+      selectedRegion: region,
+      selectedSubLocations: subLocations,
     })
   },
 }))

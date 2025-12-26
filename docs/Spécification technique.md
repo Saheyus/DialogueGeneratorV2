@@ -118,7 +118,7 @@ Implémentations :
 
 ### 3.8 UI/UX
 
-- **Stack :** Qt (PySide6) ou Avalonia (.NET).
+- **Stack :** ⚠️ Qt (PySide6) déprécié — Utiliser l'interface web React (`npm run dev`) qui est l'interface principale.
 
 - Écrans :
   
@@ -175,7 +175,7 @@ Total clics : ≃ 6.
 
 ## 7. Points d'incertitude / à trancher
 
-1. **UI tech** : PySide6 (licence LGPL, ok) ou Avalonia ?
+1. **UI tech** : ⚠️ PySide6 déprécié — L'interface web React est maintenant l'interface principale.
 
 2. **Cache Notion** : rafraîchir à chaque ouverture ou bouton *Sync* ?
 
@@ -189,6 +189,6 @@ Total clics : ≃ 6.
 
 ## 9. Conclusion
 
-Cette architecture isole la **génération IA** dans un outil léger, diff‑friendly, et compatible avec votre pipeline Unity (format JSON custom). Elle laisse la porte ouverte à des extensions (auto‑critique, modèle local, version web) sans perturber `main.py`/`filter.py`. Les choix techniques (JSON pivot, UI desktop autonome) visent à minimiser les clics et les erreurs, tout en préservant votre contrôle rédactionnel.
+Cette architecture isole la **génération IA** dans un outil léger, diff‑friendly, et compatible avec votre pipeline Unity (format JSON custom). Elle laisse la porte ouverte à des extensions (auto‑critique, modèle local, version web) sans perturber `main.py`/`filter.py`. ⚠️ **Note** : L'interface desktop PySide6 est dépréciée. L'interface web React (`npm run dev`) est maintenant l'interface principale et doit être utilisée pour le développement.
 
 > **Doutes restants :** quelle granularité pour les presets de contexte ? faut‑il une prévisualisation RichText du Yarn ? Ces points peuvent être affinés lors du premier sprint.

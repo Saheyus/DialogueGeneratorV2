@@ -149,31 +149,6 @@ export const DialogueStructureWidget = memo(function DialogueStructureWidget({
           La structure doit avoir au moins un élément avant "Stop"
         </div>
       )}
-
-      <details
-        style={{
-          marginTop: '0.5rem',
-          fontSize: '0.85rem',
-          color: theme.text.secondary,
-        }}
-      >
-        <summary style={{ cursor: 'pointer', userSelect: 'none' }}>
-          Aide
-        </summary>
-        <pre
-          style={{
-            marginTop: '0.5rem',
-            padding: '0.5rem',
-            backgroundColor: theme.background.secondary,
-            borderRadius: '4px',
-            whiteSpace: 'pre-wrap',
-            fontFamily: 'inherit',
-            fontSize: '0.85rem',
-          }}
-        >
-          {HELP_TEXT}
-        </pre>
-      </details>
     </div>
   )
 })

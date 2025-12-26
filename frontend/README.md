@@ -2,6 +2,10 @@
 
 Application React TypeScript pour l'interface web de DialogueGenerator.
 
+✅ **Interface principale du projet** — Utiliser cette interface pour le développement et la production.
+
+⚠️ **Note** : L'ancienne interface desktop PySide6 est dépréciée et ne doit plus être utilisée.
+
 ## Installation
 
 ```bash

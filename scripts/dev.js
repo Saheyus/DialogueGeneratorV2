@@ -54,7 +54,7 @@ async function main() {
 }
 
 // Fonction pour vérifier si le serveur backend est prêt
-function waitForBackend(port, maxAttempts = 30, delay = 1000) {
+function waitForBackend(port, maxAttempts = 45, delay = 1000) {
   return new Promise((resolve, reject) => {
     let attempts = 0;
     
@@ -62,11 +62,10 @@ function waitForBackend(port, maxAttempts = 30, delay = 1000) {
       attempts++;
       const req = http.get(`http://localhost:${port}/health`, (res) => {
         if (res.statusCode === 200) {
-          console.log('✅ Backend prêt!\n');
           resolve();
         } else {
           if (attempts >= maxAttempts) {
-            reject(new Error(`Backend n'a pas répondu après ${maxAttempts} tentatives`));
+            reject(new Error(`Le backend n'a pas répondu correctement après ${maxAttempts} tentatives (${maxAttempts * delay / 1000}s)`));
           } else {
             setTimeout(check, delay);
           }
@@ -75,7 +74,7 @@ function waitForBackend(port, maxAttempts = 30, delay = 1000) {
       
       req.on('error', () => {
         if (attempts >= maxAttempts) {
-          reject(new Error(`Backend n'a pas démarré après ${maxAttempts} tentatives`));
+          reject(new Error(`Le backend n'a pas démarré après ${maxAttempts} tentatives (${maxAttempts * delay / 1000}s). Vérifiez les logs ci-dessus.`));
         } else {
           setTimeout(check, delay);
         }
@@ -84,7 +83,7 @@ function waitForBackend(port, maxAttempts = 30, delay = 1000) {
       req.setTimeout(500, () => {
         req.destroy();
         if (attempts >= maxAttempts) {
-          reject(new Error(`Backend n'a pas démarré après ${maxAttempts} tentatives`));
+          reject(new Error(`Le backend n'a pas démarré après ${maxAttempts} tentatives (${maxAttempts * delay / 1000}s). Vérifiez les logs ci-dessus.`));
         } else {
           setTimeout(check, delay);
         }
@@ -368,80 +367,175 @@ async function startServers() {
 
   // Démarrer le backend
   console.log('🔄 Démarrage du backend...');
-  const backend = spawn('python', ['-m', 'api.main'], {
+  let backend = null;
+  let frontend = null;
+  let startupTimeout = null;
+  let isShuttingDown = false;
+
+  // Fonction d'arrêt propre
+  function shutdown(exitCode = 0, message = null) {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+
+    if (startupTimeout) {
+      clearTimeout(startupTimeout);
+    }
+
+    if (message) {
+      console.error(`\n${message}`);
+    }
+
+    console.log('\n🛑 Arrêt des serveurs...');
+    
+    if (backend) {
+      try {
+        backend.kill('SIGTERM');
+        // Force kill après 3 secondes si nécessaire
+        setTimeout(() => {
+          if (backend && !backend.killed) {
+            backend.kill('SIGKILL');
+          }
+        }, 3000);
+      } catch (err) {
+        // Ignorer les erreurs lors de l'arrêt
+      }
+    }
+
+    if (frontend) {
+      try {
+        frontend.kill('SIGTERM');
+        setTimeout(() => {
+          if (frontend && !frontend.killed) {
+            frontend.kill('SIGKILL');
+          }
+        }, 3000);
+      } catch (err) {
+        // Ignorer les erreurs lors de l'arrêt
+      }
+    }
+
+    setTimeout(() => {
+      process.exit(exitCode);
+    }, 1000);
+  }
+
+  // Gérer l'arrêt propre avec Ctrl+C
+  process.on('SIGINT', () => {
+    shutdown(0);
+  });
+
+  process.on('SIGTERM', () => {
+    shutdown(0);
+  });
+
+  // Démarrer le backend
+  backend = spawn('python', ['-m', 'api.main'], {
     cwd: path.join(__dirname, '..'),
     stdio: 'inherit',
     shell: true,
-    env: { ...process.env }
+    env: Object.assign({}, process.env, { RELOAD: 'true' }) // Force le hot reload
   });
 
-  // Capturer les erreurs de démarrage (notamment port occupé)
-  let backendStartupError = null;
-  const errorTimeout = setTimeout(() => {
-    if (!backendStartupError) {
-      // Si après 5 secondes on n'a pas d'erreur, on considère que ça démarre
-      // waitForBackend va gérer le reste
-    }
-  }, 5000);
-
+  // Capturer les erreurs de démarrage immédiates
   backend.on('error', (err) => {
-    backendStartupError = err;
-    clearTimeout(errorTimeout);
-    console.error(`\n❌ Erreur lors du démarrage du backend: ${err.message}`);
-    if (err.message && err.message.includes('EADDRINUSE')) {
-      console.error(`   Le port ${apiPort} est vraiment occupé.`);
-      console.error(`   Arrêtez le processus utilisant ce port ou changez le port avec API_PORT=<autre_port>.\n`);
+    let errorMsg = `\n❌ ERREUR: Impossible de démarrer le backend\n`;
+    errorMsg += `   Cause: ${err.message}\n\n`;
+    
+    if (err.code === 'ENOENT') {
+      errorMsg += `   💡 Python n'est pas trouvé dans le PATH.\n`;
+      errorMsg += `   Vérifiez que Python est installé et accessible.\n`;
+    } else if (err.message && err.message.includes('EADDRINUSE')) {
+      errorMsg += `   💡 Le port ${apiPort} est occupé.\n`;
+      errorMsg += `   Arrêtez le processus utilisant ce port ou changez avec: API_PORT=<autre_port>\n`;
+    } else {
+      errorMsg += `   💡 Vérifiez les logs ci-dessus pour plus de détails.\n`;
     }
-    process.exit(1);
+    
+    shutdown(1, errorMsg);
   });
+
+  // Timeout de démarrage : si le backend ne répond pas après 45 secondes, arrêter
+  startupTimeout = setTimeout(() => {
+    if (!isShuttingDown) {
+      shutdown(1, `\n❌ ERREUR: Le backend n'a pas démarré dans les 45 secondes\n   💡 Vérifiez les logs ci-dessus pour identifier le problème.\n`);
+    }
+  }, 45000);
 
   // Attendre que le backend soit prêt
   waitForBackend(apiPort)
     .then(() => {
-      clearTimeout(errorTimeout);
+      if (isShuttingDown) return;
+      
+      clearTimeout(startupTimeout);
+      console.log('✅ Backend démarré et prêt!\n');
+      
       // Démarrer le frontend une fois le backend prêt
       console.log('🔄 Démarrage du frontend...\n');
-      const frontend = spawn('npm', ['run', 'dev'], {
+      frontend = spawn('npm', ['run', 'dev'], {
         cwd: path.join(__dirname, '..', 'frontend'),
         stdio: 'inherit',
         shell: true,
-        env: { ...process.env }
+        env: Object.assign({}, process.env)
+      });
+
+      // Capturer les erreurs de démarrage du frontend
+      frontend.on('error', (err) => {
+        let errorMsg = `\n❌ ERREUR: Impossible de démarrer le frontend\n`;
+        errorMsg += `   Cause: ${err.message}\n\n`;
+        
+        if (err.code === 'ENOENT') {
+          errorMsg += `   💡 Node.js ou npm n'est pas trouvé dans le PATH.\n`;
+          errorMsg += `   Vérifiez que Node.js est installé et accessible.\n`;
+        } else {
+          errorMsg += `   💡 Vérifiez les logs ci-dessus pour plus de détails.\n`;
+        }
+        
+        shutdown(1, errorMsg);
       });
 
       // Attendre un peu que le frontend démarre, puis ouvrir le navigateur
       setTimeout(() => {
-        console.log(`\n🌐 Ouverture du navigateur sur ${frontendUrl}...\n`);
-        openBrowser(frontendUrl);
+        if (!isShuttingDown) {
+          console.log(`\n🌐 Ouverture du navigateur sur ${frontendUrl}...\n`);
+          openBrowser(frontendUrl);
+        }
       }, 3000);
 
-      // Gérer l'arrêt propre
-      process.on('SIGINT', () => {
-        console.log('\n\n🛑 Arrêt des serveurs...');
-        backend.kill();
-        frontend.kill();
-        process.exit(0);
-      });
-
+      // Surveiller l'arrêt du backend
       backend.on('close', (code) => {
+        if (isShuttingDown) return;
+        
         if (code !== 0 && code !== null) {
-          console.error('\n❌ Backend arrêté avec erreur');
-          frontend.kill();
-          process.exit(1);
+          shutdown(1, '\n❌ ERREUR: Le backend s\'est arrêté de manière inattendue\n   💡 Vérifiez les logs ci-dessus pour identifier le problème.\n');
+        } else {
+          // Arrêt normal
+          shutdown(0);
         }
       });
 
+      // Surveiller l'arrêt du frontend
       frontend.on('close', (code) => {
+        if (isShuttingDown) return;
+        
         if (code !== 0 && code !== null) {
-          console.error('\n❌ Frontend arrêté avec erreur');
-          backend.kill();
-          process.exit(1);
+          shutdown(1, '\n❌ ERREUR: Le frontend s\'est arrêté de manière inattendue\n   💡 Vérifiez les logs ci-dessus pour identifier le problème.\n');
+        } else {
+          // Arrêt normal
+          shutdown(0);
         }
       });
     })
     .catch((err) => {
-      console.error(`\n❌ ${err.message}`);
-      backend.kill();
-      process.exit(1);
+      if (isShuttingDown) return;
+      
+      let errorMsg = `\n❌ ERREUR: Le backend n'a pas démarré correctement\n`;
+      errorMsg += `   Cause: ${err.message}\n\n`;
+      errorMsg += `   💡 Vérifiez que:\n`;
+      errorMsg += `      - Le port ${apiPort} est libre\n`;
+      errorMsg += `      - Les dépendances Python sont installées (pip install -r requirements.txt)\n`;
+      errorMsg += `      - Aucune erreur dans les logs ci-dessus\n`;
+      
+      shutdown(1, errorMsg);
     });
 }
 

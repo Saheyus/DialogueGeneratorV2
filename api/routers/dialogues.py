@@ -25,6 +25,7 @@ from services.dialogue_generation_service import DialogueGenerationService
 from services.interaction_service import InteractionService
 from services.unity_dialogue_generation_service import UnityDialogueGenerationService
 from services.skill_catalog_service import SkillCatalogService
+from services.trait_catalog_service import TraitCatalogService
 from services.json_renderer.unity_json_renderer import UnityJsonRenderer
 from llm_client import ILLMClient
 from models.dialogue_structure.interaction import Interaction
@@ -540,10 +541,12 @@ async def generate_unity_dialogue(
         context_builder = dialogue_service.context_builder
         context_selections_dict = request_data.context_selections.to_service_dict()
         
-        context_summary, context_tokens = context_builder.build_context(
-            max_tokens=request_data.max_context_tokens,
-            **context_selections_dict
+        context_summary = context_builder.build_context(
+            selected_elements=context_selections_dict,
+            scene_instruction=request_data.user_instructions,
+            max_tokens=request_data.max_context_tokens
         )
+        context_tokens = context_builder._count_tokens(context_summary)
         
         # Extraire le lieu de la scène
         scene_location = None
@@ -558,7 +561,8 @@ async def generate_unity_dialogue(
             skills_list=skills_list,
             traits_list=traits_list,
             context_summary=context_summary,
-            scene_location=scene_location
+            scene_location=scene_location,
+            max_choices=request_data.max_choices
         )
         
         estimated_tokens = context_tokens + prompt_tokens
@@ -588,7 +592,8 @@ async def generate_unity_dialogue(
         generation_response = await unity_service.generate_dialogue_node(
             llm_client=llm_client,
             prompt=prompt,
-            system_prompt_override=request_data.system_prompt_override
+            system_prompt_override=request_data.system_prompt_override,
+            max_choices=request_data.max_choices
         )
         
         # 9. Enrichir avec IDs
@@ -604,10 +609,14 @@ async def generate_unity_dialogue(
             normalize=True
         )
         
-        logger.info(f"Génération Unity JSON réussie: {len(enriched_nodes)} nœud(s)")
+        # 11. Extraire le titre depuis la réponse de génération
+        dialogue_title = generation_response.title if hasattr(generation_response, 'title') and generation_response.title else None
+        
+        logger.info(f"Génération Unity JSON réussie: {len(enriched_nodes)} nœud(s), titre: {dialogue_title}")
         
         return GenerateUnityDialogueResponse(
             json_content=json_content,
+            title=dialogue_title,
             prompt_used=prompt,
             estimated_tokens=estimated_tokens,
             warning=warning

@@ -11,9 +11,9 @@ npm run dev          # Lance backend + frontend automatiquement
 
 **L'app sera accessible sur http://localhost:3000**
 
-L'application propose **deux interfaces** :
-- **Interface Desktop** (PySide6) : `python main_app.py`
-- **Interface Web** (React + FastAPI) : `npm run dev`
+⚠️ **IMPORTANT** : L'application utilise désormais **uniquement l'interface web** (React + FastAPI).
+- **Interface Web (PRINCIPALE)** : `npm run dev` — ✅ **Utiliser cette interface**
+- ⚠️ **Interface Desktop (DÉPRÉCIÉE)** : `python main_app.py` — Ne plus utiliser, maintenue uniquement pour compatibilité
 
 ## Objectif Principal (Rappel des Spécifications)
 
@@ -31,7 +31,8 @@ L'application est en cours de développement actif. Les fonctionnalités suivant
     *   Lecture des fichiers JSON générés par les scripts `filter.py` et `main.py` (situés dans `../GDD/categories/`).
     *   Chargement de `Vision.json` depuis `../import/Bible_Narrative/`.
     *   Les données (personnages, lieux, objets, espèces, communautés, dialogues exemples, structures narratives/macro/micro) sont stockées en mémoire.
-*   **Interface Utilisateur (`PySide6`)** :
+*   ⚠️ **Interface Utilisateur Desktop (`PySide6`) — DÉPRÉCIÉE** :
+    *   ⚠️ Cette interface est dépréciée. Utiliser l'interface web React à la place (`npm run dev`).
     *   Fenêtre principale avec plusieurs panneaux redimensionnables (`QSplitter`).
     *   **Panneau de Sélection du Contexte (Gauche)** :
         *   Listes distinctes pour les personnages, lieux, objets, espèces, communautés et exemples de dialogues.
@@ -125,16 +126,17 @@ Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux m
     *   Si aucune clé n'est configurée, l'application utilisera `DummyLLMClient` qui simule les réponses.
 
 3.  **Lancement** :
-    *   Ouvrez un terminal à la racine du dossier `DialogueGenerator/`.
-    *   Exécutez la commande :
+    *   ⚠️ **IMPORTANT** : Utiliser l'interface web React, pas l'interface desktop Python.
+    *   **Interface Web (RECOMMANDÉE)** :
+        ```bash
+        npm run dev
+        ```
+        L'application sera accessible sur http://localhost:3000
+    *   ⚠️ **Interface Desktop (DÉPRÉCIÉE)** — Ne plus utiliser :
         ```bash
         python main_app.py
         ```
-    *   Alternativement, si vous êtes dans le dossier parent (`Parent_Folder` dans l'exemple ci-dessus), vous pouvez lancer l'application en tant que module (bien que cela nécessite que les chemins relatifs dans `context_config.json` soient ajustés en conséquence ou que les chemins soient absolus) :
-        ```bash
-        python -m DialogueGenerator
-        ```
-        (Note: Le lancement direct de `main_app.py` depuis le dossier `DialogueGenerator` est la méthode testée et recommandée actuellement.)
+        Cette interface est maintenue uniquement pour compatibilité mais ne doit plus être utilisée pour le développement.
 
 ## Prochaines Étapes Prévues
 
