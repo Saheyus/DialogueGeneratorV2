@@ -86,7 +86,11 @@ describe('Dashboard', () => {
 
     // Le composant ResizablePanels devrait être présent
     // On vérifie indirectement en cherchant les composants enfants
-    expect(screen.getByText(/sélectionnez un élément/i)).toBeInTheDocument()
+    expect(screen.getByTestId('context-selector')).toBeInTheDocument()
+    expect(screen.getByTestId('generation-panel')).toBeInTheDocument()
+    // Les onglets devraient être présents
+    expect(screen.getAllByText(/prompt estimé/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/détails/i)).toBeInTheDocument()
   })
 
   it('affiche le panneau de sélection de contexte à gauche', () => {
@@ -111,27 +115,34 @@ describe('Dashboard', () => {
     expect(screen.getByTestId('generation-panel')).toBeInTheDocument()
   })
 
-  it('affiche les onglets dans le panneau de droite', async () => {
+  it('affiche les onglets dans le panneau de droite', () => {
     render(
       <BrowserRouter>
         <Dashboard />
       </BrowserRouter>
     )
 
-    await waitFor(() => {
-      expect(screen.getByText(/prompt estimé/i)).toBeInTheDocument()
-      expect(screen.getByText(/détails/i)).toBeInTheDocument()
-    })
+    // Il y a plusieurs éléments avec "prompt estimé" (bouton et contenu)
+    expect(screen.getAllByText(/prompt estimé/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/détails/i)).toBeInTheDocument()
   })
 
-  it('affiche le message par défaut dans l\'onglet Détails', () => {
+  it('affiche le message par défaut dans l\'onglet Détails', async () => {
+    const user = userEvent.setup()
     render(
       <BrowserRouter>
         <Dashboard />
       </BrowserRouter>
     )
 
-    expect(screen.getByText(/sélectionnez un élément de contexte ou une interaction/i)).toBeInTheDocument()
+    // Cliquer sur l'onglet Détails pour l'activer
+    const detailsTab = screen.getByText(/détails/i)
+    await user.click(detailsTab)
+
+    // Maintenant le message devrait être visible
+    await waitFor(() => {
+      expect(screen.getByText(/sélectionnez un élément de contexte ou une interaction pour voir ses détails/i)).toBeInTheDocument()
+    })
   })
 
   it('permet de changer d\'onglet dans le panneau de droite', async () => {
@@ -202,7 +213,7 @@ describe('Dashboard', () => {
     })
   })
 
-  it('affiche le prompt estimé dans l\'onglet Prompt', () => {
+  it('affiche le prompt estimé dans l\'onglet Prompt', async () => {
     const testPrompt = 'Test prompt content'
     mockUseGenerationStore.mockReturnValue({
       estimatedPrompt: testPrompt,
@@ -229,8 +240,9 @@ describe('Dashboard', () => {
     )
 
     // Le EstimatedPromptPanel devrait afficher le prompt
-    // On vérifie indirectement
-    expect(screen.getByText(/sélectionnez un élément/i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText(testPrompt)).toBeInTheDocument()
+    })
   })
 })
 
