@@ -3,7 +3,11 @@
  */
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4242'
+// En développement, utiliser le proxy Vite (/api) au lieu de l'URL directe
+// En production, utiliser VITE_API_BASE_URL ou l'URL par défaut
+// Note: Le proxy Vite redirige /api vers http://localhost:4242, donc on utilise '' comme baseURL
+// et les endpoints commencent déjà par /api/v1/...
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? '' : 'http://localhost:4242')
 
 /**
  * Instance axios configurée pour l'API.
@@ -66,10 +70,10 @@ apiClient.interceptors.response.use(
         refreshTokenPromise = (async () => {
           try {
             // Le refresh token est maintenant dans un cookie httpOnly, pas besoin de le passer dans le body
-            const response = await axios.post(
-              `${API_BASE_URL}/api/v1/auth/refresh`,
-              {}, // Body vide, le cookie est envoyé automatiquement avec withCredentials
-              { withCredentials: true }
+            // Utiliser apiClient pour bénéficier du proxy Vite en dev
+            const response = await apiClient.post(
+              '/api/v1/auth/refresh',
+              {} // Body vide, le cookie est envoyé automatiquement avec withCredentials
             )
 
             const { access_token } = response.data

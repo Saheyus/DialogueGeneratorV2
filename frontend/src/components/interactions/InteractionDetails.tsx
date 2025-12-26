@@ -130,7 +130,13 @@ export function InteractionDetails({ interactionId, onClose }: InteractionDetail
   }
 
   return (
-    <div style={{ padding: '1rem', height: '100%', overflowY: 'auto' }}>
+    <div style={{ 
+      padding: '1rem', 
+      height: '100%', 
+      minHeight: 0,
+      overflowY: 'auto',
+      boxSizing: 'border-box',
+    }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h3 style={{ margin: 0, color: theme.text.primary }}>{interaction.title}</h3>
         <button

@@ -24,13 +24,19 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
   return (
     <div
       style={{
-        height: '100%',
+        flex: 1,
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
         backgroundColor: theme.background.panel,
+        overflow: 'hidden',
       }}
     >
-      <div style={{ padding: '1rem', borderBottom: `1px solid ${theme.border.primary}` }}>
+      <div style={{ 
+        padding: '1rem', 
+        borderBottom: `1px solid ${theme.border.primary}`,
+        flexShrink: 0,
+      }}>
         {isEstimating ? (
           <div style={{ color: theme.text.secondary }}>Estimation en cours...</div>
         ) : estimatedTokens !== null && estimatedTokens !== undefined ? (
@@ -39,7 +45,13 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
           </div>
         ) : null}
       </div>
-      <div style={{ flex: 1, overflow: 'auto', padding: '1rem' }}>
+      <div style={{ 
+        flex: 1, 
+        minHeight: 0,
+        overflow: 'auto', 
+        padding: '1rem',
+        boxSizing: 'border-box',
+      }}>
         {formattedPrompt ? (
           <pre
             style={{

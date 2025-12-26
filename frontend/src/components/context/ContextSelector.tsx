@@ -136,8 +136,20 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ display: 'flex', borderBottom: `1px solid ${theme.border.primary}` }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        maxHeight: '100%',
+        minHeight: 0,
+        overflow: 'hidden',
+        boxSizing: 'border-box',
+        // Évite les troncatures de 1–2px dues aux arrondis (100vh/calc/zoom) quand un parent clippe.
+        paddingBottom: 4,
+      }}
+    >
+      <div style={{ flexShrink: 0, display: 'flex', borderBottom: `1px solid ${theme.border.primary}` }}>
         <button
           onClick={() => {
             setActiveTab('characters')
@@ -237,6 +249,7 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
 
       {error && (
         <div style={{ 
+          flexShrink: 0,
           padding: '0.5rem', 
           backgroundColor: theme.state.error.background, 
           color: theme.state.error.color, 
@@ -246,18 +259,18 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
         </div>
       )}
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ flex: 1, overflow: 'hidden' }}>
-          <ContextList
-            items={getCurrentItems()}
-            selectedItems={getSelectedItems()}
-            onItemClick={handleItemClick}
-            onItemToggle={handleItemToggle}
-            selectedDetail={selectedDetail}
-            onSelectDetail={setSelectedDetail}
-            isLoading={isLoading}
-          />
-        </div>
+      <div style={{ flex: '1 1 0', overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
+        <ContextList
+          items={getCurrentItems()}
+          selectedItems={getSelectedItems()}
+          onItemClick={handleItemClick}
+          onItemToggle={handleItemToggle}
+          selectedDetail={selectedDetail}
+          onSelectDetail={setSelectedDetail}
+          isLoading={isLoading}
+        />
+      </div>
+      <div style={{ flex: '0 0 auto' }}>
         <SelectedContextSummary selections={selections} onClear={clearSelections} />
       </div>
     </div>

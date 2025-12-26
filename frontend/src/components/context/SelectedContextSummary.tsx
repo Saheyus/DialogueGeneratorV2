@@ -31,7 +31,7 @@ export const SelectedContextSummary = memo(function SelectedContextSummary({
   }
 
   return (
-    <div style={{ padding: '1rem', borderTop: `1px solid ${theme.border.primary}` }}>
+    <div style={{ padding: '1rem', paddingBottom: '1.5rem', borderTop: `1px solid ${theme.border.primary}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
         <strong style={{ fontSize: '0.9rem', color: theme.text.primary }}>Sélections actives ({totalSelected})</strong>
         <button

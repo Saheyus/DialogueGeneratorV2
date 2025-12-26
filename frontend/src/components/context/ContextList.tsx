@@ -41,8 +41,8 @@ export function ContextList({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ padding: '0.5rem', borderBottom: `1px solid ${theme.border.primary}` }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+      <div style={{ flexShrink: 0, padding: '0.5rem', borderBottom: `1px solid ${theme.border.primary}` }}>
         <input
           type="text"
           placeholder="Rechercher..."
@@ -58,7 +58,7 @@ export function ContextList({
           }}
         />
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0.5rem' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0.5rem', minHeight: 0 }}>
         {filteredItems.length === 0 ? (
           <div style={{ padding: '1rem', textAlign: 'center', color: theme.text.secondary }}>
             {searchQuery ? 'Aucun résultat' : 'Aucun élément'}

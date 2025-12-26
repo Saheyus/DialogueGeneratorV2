@@ -30,7 +30,7 @@ export function Dashboard() {
       id: 'prompt',
       label: 'Prompt Estimé',
       content: (
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <EstimatedPromptPanel
             estimatedPrompt={estimatedPrompt}
             isEstimating={isEstimating}
@@ -43,7 +43,7 @@ export function Dashboard() {
       id: 'details',
       label: 'Détails',
       content: (
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {selectedInteraction ? (
             <InteractionDetails
               interactionId={selectedInteraction.interaction_id}
@@ -79,18 +79,19 @@ export function Dashboard() {
       minSizes={[200, 400, 250]}
       direction="horizontal"
       style={{
-        height: 'calc(100vh - 60px)',
+        height: '100%',
         backgroundColor: theme.background.primary,
       }}
     >
       {/* Panneau gauche: Sélection du contexte */}
       <div
         style={{
-          overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
           backgroundColor: theme.background.panel,
           height: '100%',
+          minHeight: 0,
+          position: 'relative',
         }}
       >
         <ContextSelector 
@@ -120,11 +121,13 @@ export function Dashboard() {
       {/* Panneau droit: Prompt Estimé / Détails */}
       <div
         style={{
-          overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
           backgroundColor: theme.background.panel,
           height: '100%',
+          minHeight: 0,
+          maxHeight: '100%',
+          overflow: 'hidden',
         }}
       >
         {/* Barre d'options en haut (toujours visible) */}
@@ -138,6 +141,8 @@ export function Dashboard() {
               gap: '0.5rem',
               flexWrap: 'wrap',
               alignItems: 'center',
+              flexShrink: 0,
+              boxSizing: 'border-box',
             }}
           >
             <button
@@ -216,18 +221,36 @@ export function Dashboard() {
             )}
           </div>
         )}
-        <Tabs
-          tabs={rightPanelTabs}
-          activeTabId={rightPanelTab}
-          onTabChange={(tabId) => setRightPanelTab(tabId as 'prompt' | 'details')}
-        />
-        {/* Gros bouton Générer en bas (uniquement pour l'onglet Prompt) */}
+        {/* Zone de contenu avec scroll (prend l'espace restant, mais laisse toujours de la place pour le bouton) */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            position: 'relative',
+          }}
+        >
+          <Tabs
+            tabs={rightPanelTabs}
+            activeTabId={rightPanelTab}
+            onTabChange={(tabId) => setRightPanelTab(tabId as 'prompt' | 'details')}
+            style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}
+          />
+        </div>
+        {/* Gros bouton Générer en bas (toujours visible quand sur l'onglet Prompt) */}
         {actions.handleGenerate && rightPanelTab === 'prompt' && (
           <div
             style={{
-              padding: '1rem',
+              padding: '0.75rem 1rem',
               borderTop: `2px solid ${theme.border.primary}`,
               backgroundColor: theme.background.panelHeader,
+              flexShrink: 0,
+              flexGrow: 0,
+              boxSizing: 'border-box',
+              position: 'relative',
+              zIndex: 10,
             }}
           >
             <button
@@ -235,7 +258,7 @@ export function Dashboard() {
               disabled={actions.isLoading}
               style={{
                 width: '100%',
-                padding: '1rem',
+                padding: '0.875rem 1rem',
                 fontSize: '1.1rem',
                 fontWeight: 'bold',
                 backgroundColor: theme.button.primary.background,
@@ -249,6 +272,7 @@ export function Dashboard() {
                 justifyContent: 'center',
                 gap: '0.5rem',
                 transition: 'all 0.2s',
+                boxSizing: 'border-box',
               }}
               title="Générer (Ctrl+Enter)"
             >

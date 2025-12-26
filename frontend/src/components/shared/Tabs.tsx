@@ -26,7 +26,9 @@ export function Tabs({ tabs, activeTabId, onTabChange, style }: TabsProps) {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        height: '100%',
+        flex: 1,
+        minHeight: 0,
+        overflow: 'hidden',
         ...style,
       }}
     >
@@ -35,6 +37,7 @@ export function Tabs({ tabs, activeTabId, onTabChange, style }: TabsProps) {
           display: 'flex',
           borderBottom: `2px solid ${theme.border.primary}`,
           backgroundColor: theme.background.panel,
+          flexShrink: 0,
         }}
       >
         {tabs.map((tab) => (
@@ -79,6 +82,7 @@ export function Tabs({ tabs, activeTabId, onTabChange, style }: TabsProps) {
       <div
         style={{
           flex: 1,
+          minHeight: 0,
           overflow: 'auto',
           backgroundColor: theme.background.panel,
         }}

@@ -77,7 +77,13 @@ export function ContextDetail({ item }: ContextDetailProps) {
   }
 
   return (
-    <div style={{ padding: '1rem', height: '100%', overflowY: 'auto' }}>
+    <div style={{ 
+      padding: '1rem', 
+      height: '100%', 
+      minHeight: 0,
+      overflowY: 'auto',
+      boxSizing: 'border-box',
+    }}>
       <h3 style={{ marginTop: 0, marginBottom: '1rem', color: theme.text.primary }}>{item.name}</h3>
       
       {isCharacter && (
