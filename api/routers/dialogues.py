@@ -366,18 +366,52 @@ async def estimate_tokens(
             max_tokens=request_data.max_context_tokens
         )
         
+        # S'assurer que context_text n'est jamais None
+        if context_text is None:
+            context_text = ""
+        
         context_tokens = context_builder._count_tokens(context_text)
         
         # Estimer le prompt complet
         prompt_engine = dialogue_service.prompt_engine
-        full_prompt, total_tokens = prompt_engine.build_prompt(
-            context_summary=context_text,
-            user_specific_goal=request_data.user_instructions
-        )
+        original_system_prompt = None
+        
+        # Appliquer le system_prompt_override s'il est fourni
+        if request_data.system_prompt_override is not None and prompt_engine.system_prompt_template != request_data.system_prompt_override:
+            original_system_prompt = prompt_engine.system_prompt_template
+            prompt_engine.system_prompt_template = request_data.system_prompt_override
+            logger.info(f"System prompt temporarily set for estimation: '{request_data.system_prompt_override[:100]}...'")
+        
+        try:
+            # Extraire les informations de scène pour PromptEngine depuis context_selections
+            scene_protagonists_dict = context_selections_dict.pop("_scene_protagonists", {})
+            scene_location_dict = context_selections_dict.pop("_scene_location", {})
+            
+            # Extraire generation_settings si présent
+            generation_settings = context_selections_dict.pop("generation_settings", {})
+            dialogue_structure = generation_settings.get("dialogue_structure", []) if generation_settings else []
+            
+            generation_params_for_prompt_build = {}
+            if dialogue_structure:
+                # Convertir la structure en description narrative pour le prompt
+                generation_params_for_prompt_build["dialogue_structure_narrative"] = "Structure: " + " → ".join(dialogue_structure)
+            
+            full_prompt, total_tokens = prompt_engine.build_prompt(
+                context_summary=context_text,
+                user_specific_goal=request_data.user_instructions,
+                scene_protagonists=scene_protagonists_dict if scene_protagonists_dict else None,
+                scene_location=scene_location_dict if scene_location_dict else None,
+                generation_params=generation_params_for_prompt_build if generation_params_for_prompt_build else None
+            )
+        finally:
+            # Restaurer le system prompt original si on l'a modifié
+            if original_system_prompt is not None:
+                prompt_engine.system_prompt_template = original_system_prompt
         
         return EstimateTokensResponse(
             context_tokens=context_tokens,
-            total_estimated_tokens=total_tokens
+            total_estimated_tokens=total_tokens,
+            estimated_prompt=full_prompt
         )
         
     except Exception as e:

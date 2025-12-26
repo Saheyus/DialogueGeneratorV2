@@ -15,12 +15,18 @@ interface GenerationState {
   systemPromptOverride: string | null
   defaultSystemPrompt: string | null
   
+  // Prompt estimé
+  estimatedPrompt: string | null
+  estimatedTokens: number | null
+  isEstimating: boolean
+  
   // Actions
   setSceneSelection: (selection: Partial<SceneSelection>) => void
   setDialogueStructure: (structure: string[]) => void
   setSystemPromptOverride: (prompt: string | null) => void
   setDefaultSystemPrompt: (prompt: string | null) => void
   resetSystemPrompt: () => void
+  setEstimatedPrompt: (prompt: string | null, tokens: number | null, isEstimating: boolean) => void
 }
 
 const defaultSceneSelection: SceneSelection = {
@@ -37,6 +43,9 @@ export const useGenerationStore = create<GenerationState>((set) => ({
   dialogueStructure: defaultDialogueStructure,
   systemPromptOverride: null,
   defaultSystemPrompt: null,
+  estimatedPrompt: null,
+  estimatedTokens: null,
+  isEstimating: false,
 
   setSceneSelection: (selection) =>
     set((state) => ({
@@ -56,5 +65,8 @@ export const useGenerationStore = create<GenerationState>((set) => ({
     set((state) => ({
       systemPromptOverride: state.defaultSystemPrompt,
     })),
+
+  setEstimatedPrompt: (prompt, tokens, isEstimating) =>
+    set({ estimatedPrompt: prompt, estimatedTokens: tokens, isEstimating }),
 }))
 

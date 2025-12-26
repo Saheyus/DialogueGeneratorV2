@@ -56,6 +56,12 @@ export interface GenerateDialogueVariantsResponse {
   estimated_tokens: number
 }
 
+export interface EstimateTokensResponse {
+  context_tokens: number
+  total_estimated_tokens: number
+  estimated_prompt?: string | null
+}
+
 export interface GenerateInteractionVariantsRequest {
   k_variants: number
   user_instructions: string

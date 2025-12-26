@@ -1,12 +1,13 @@
 /**
  * Panneau de génération de dialogues.
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import * as dialoguesAPI from '../../api/dialogues'
 import * as configAPI from '../../api/config'
 import * as interactionsAPI from '../../api/interactions'
 import { useContextStore } from '../../store/contextStore'
 import { useGenerationStore } from '../../store/generationStore'
+import { useGenerationActionsStore } from '../../store/generationActionsStore'
 import { getErrorMessage } from '../../types/errors'
 import { theme } from '../../theme'
 import type {
@@ -26,7 +27,7 @@ import { VariantsTabsView } from './VariantsTabsView'
 import { InteractionsTab } from './InteractionsTab'
 import { Tabs, type Tab } from '../shared/Tabs'
 import { ContextActions } from '../context/ContextActions'
-import { ActionBar, ContextSummaryChips, useToast } from '../shared'
+import { ContextSummaryChips, useToast } from '../shared'
 
 type GenerationMode = 'variants' | 'interactions'
 type PanelTab = 'generation' | 'interactions'
@@ -39,6 +40,8 @@ export function GenerationPanel() {
     systemPromptOverride,
     setDialogueStructure,
     setSystemPromptOverride,
+    setEstimatedPrompt,
+    setSceneSelection,
   } = useGenerationStore()
   
   const [generationMode, setGenerationMode] = useState<GenerationMode>('variants')
@@ -58,6 +61,80 @@ export function GenerationPanel() {
   const [activePanelTab, setActivePanelTab] = useState<PanelTab>('generation')
   const [isDirty, setIsDirty] = useState(false)
   const toast = useToast()
+
+  // Sauvegarde automatique très fréquente (toutes les 2 secondes)
+  const DRAFT_STORAGE_KEY = 'generation_draft'
+  
+  const saveDraft = useCallback(() => {
+    const draft = {
+      userInstructions,
+      systemPromptOverride,
+      dialogueStructure,
+      sceneSelection,
+      kVariants,
+      maxContextTokens,
+      llmModel,
+      generationMode,
+      previousInteractionId,
+      timestamp: Date.now(),
+    }
+    try {
+      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft))
+      setIsDirty(false)
+    } catch (err) {
+      console.error('Erreur lors de la sauvegarde automatique:', err)
+    }
+  }, [userInstructions, systemPromptOverride, dialogueStructure, sceneSelection, kVariants, maxContextTokens, llmModel, generationMode, previousInteractionId])
+
+  // Charger le brouillon au démarrage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DRAFT_STORAGE_KEY)
+      if (saved) {
+        const draft = JSON.parse(saved)
+        if (draft.userInstructions !== undefined) setUserInstructions(draft.userInstructions)
+        if (draft.systemPromptOverride !== undefined) setSystemPromptOverride(draft.systemPromptOverride)
+        if (draft.dialogueStructure !== undefined) setDialogueStructure(draft.dialogueStructure)
+        if (draft.sceneSelection !== undefined) {
+          setSceneSelection(draft.sceneSelection)
+        }
+        if (draft.kVariants !== undefined) setKVariants(draft.kVariants)
+        if (draft.maxContextTokens !== undefined) setMaxContextTokens(draft.maxContextTokens)
+        if (draft.llmModel !== undefined) setLlmModel(draft.llmModel)
+        if (draft.generationMode !== undefined) setGenerationMode(draft.generationMode)
+        if (draft.previousInteractionId !== undefined) setPreviousInteractionId(draft.previousInteractionId)
+        setIsDirty(false)
+      }
+    } catch (err) {
+      console.error('Erreur lors du chargement du brouillon:', err)
+    }
+  }, [setDialogueStructure, setSystemPromptOverride, setSceneSelection]) // Charger une seule fois au montage
+
+  // Détecter les changements de sceneSelection pour déclencher la sauvegarde
+  // (sauf au chargement initial)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
+  useEffect(() => {
+    if (!isInitialLoad) {
+      setIsDirty(true)
+    }
+  }, [sceneSelection, isInitialLoad])
+  
+  useEffect(() => {
+    // Marquer la fin du chargement initial après un court délai
+    const timer = setTimeout(() => setIsInitialLoad(false), 1000)
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Sauvegarde automatique avec debounce (toutes les 2 secondes)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (isDirty) {
+        saveDraft()
+      }
+    }, 2000) // Sauvegarder 2 secondes après le dernier changement
+
+    return () => clearTimeout(timeoutId)
+  }, [isDirty, saveDraft])
 
   const loadModels = useCallback(async () => {
     try {
@@ -137,40 +214,58 @@ export function GenerationPanel() {
   }, [selections, sceneSelection, dialogueStructure])
 
   const estimateTokens = useCallback(async () => {
-    if (!userInstructions.trim() && !hasSelections()) {
+    // Permettre l'estimation si on a au moins : instructions, sélections, ou un system prompt
+    const hasSystemPrompt = systemPromptOverride && systemPromptOverride.trim().length > 0
+    if (!userInstructions.trim() && !hasSelections() && !hasSystemPrompt) {
       setEstimatedTokens(null)
+      setEstimatedPrompt(null, null, false)
       return
     }
 
     setIsEstimating(true)
+    setEstimatedPrompt(null, null, true)
     try {
       const contextSelections = buildContextSelections()
       const response = await dialoguesAPI.estimateTokens(
         contextSelections,
         userInstructions,
-        maxContextTokens
+        maxContextTokens,
+        systemPromptOverride
       )
       setEstimatedTokens(response.total_estimated_tokens)
+      setEstimatedPrompt(response.estimated_prompt || null, response.total_estimated_tokens, false)
     } catch (err) {
       console.error('Erreur lors de l\'estimation:', err)
       setEstimatedTokens(null)
+      setEstimatedPrompt(null, null, false)
     } finally {
       setIsEstimating(false)
     }
-  }, [userInstructions, hasSelections, maxContextTokens, buildContextSelections])
+  }, [userInstructions, hasSelections, maxContextTokens, buildContextSelections, setEstimatedPrompt, systemPromptOverride])
 
   useEffect(() => {
-    // Estimer les tokens quand les sélections ou les instructions changent
+    // Estimer les tokens quand les sélections, les instructions ou le system prompt changent
+    const hasAnySelections = 
+      selections.characters.length > 0 ||
+      selections.locations.length > 0 ||
+      selections.items.length > 0 ||
+      selections.species.length > 0 ||
+      selections.communities.length > 0 ||
+      selections.dialogues_examples.length > 0
+    
+    const hasSystemPrompt = systemPromptOverride && systemPromptOverride.trim().length > 0
+    
     const timeoutId = setTimeout(() => {
-      if (userInstructions.trim() || hasSelections()) {
+      if (userInstructions.trim() || hasAnySelections || hasSystemPrompt) {
         estimateTokens()
       } else {
         setEstimatedTokens(null)
+        setEstimatedPrompt(null, null, false)
       }
     }, 500)
 
     return () => clearTimeout(timeoutId)
-  }, [userInstructions, selections, maxContextTokens, estimateTokens, hasSelections, sceneSelection, dialogueStructure])
+  }, [userInstructions, selections.characters, selections.locations, selections.items, selections.species, selections.communities, selections.dialogues_examples, maxContextTokens, estimateTokens, sceneSelection, dialogueStructure, systemPromptOverride, setEstimatedPrompt])
 
   const handleGenerate = useCallback(async () => {
     // Validation minimale
@@ -201,6 +296,10 @@ export function GenerationPanel() {
         setVariantsResponse(response)
         setInteractions([])
         setIsDirty(false)
+        // Mettre à jour le prompt estimé avec le prompt utilisé
+        if (response.prompt_used) {
+          setEstimatedPrompt(response.prompt_used, response.estimated_tokens, false)
+        }
         toast('Génération réussie!', 'success')
       } else {
         const request: GenerateInteractionVariantsRequest = {
@@ -244,11 +343,6 @@ export function GenerationPanel() {
     toast('Prévisualisation à implémenter', 'info')
   }
 
-  const handleSaveDraft = () => {
-    // TODO: Implémenter sauvegarde brouillon
-    toast('Sauvegarde brouillon à implémenter', 'info')
-    setIsDirty(false)
-  }
 
   const handleExportUnity = () => {
     // TODO: Implémenter export Unity
@@ -309,48 +403,6 @@ export function GenerationPanel() {
       label: 'Génération',
       content: (
         <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: theme.background.panel }}>
-          <ActionBar
-            actions={[
-              {
-                id: 'generate',
-                label: 'Générer',
-                onClick: handleGenerate,
-                variant: 'primary',
-                disabled: isLoading,
-                shortcut: 'Ctrl+Enter',
-              },
-              {
-                id: 'preview',
-                label: 'Prévisualiser',
-                onClick: handlePreview,
-                variant: 'secondary',
-                disabled: isLoading,
-              },
-              {
-                id: 'save-draft',
-                label: 'Sauvegarder brouillon',
-                onClick: handleSaveDraft,
-                variant: 'secondary',
-                disabled: isLoading,
-              },
-              {
-                id: 'export-unity',
-                label: 'Exporter (Unity)',
-                onClick: handleExportUnity,
-                variant: 'secondary',
-                disabled: isLoading,
-              },
-              {
-                id: 'reset',
-                label: 'Reset',
-                onClick: handleReset,
-                variant: 'secondary',
-                disabled: isLoading,
-              },
-            ]}
-            isDirty={isDirty}
-          />
-
           <div style={{ padding: '1.5rem', flex: 1, overflowY: 'auto' }}>
             <h2 style={{ marginTop: 0, color: theme.text.primary }}>Génération de Dialogues</h2>
 
@@ -365,6 +417,7 @@ export function GenerationPanel() {
             setGenerationMode('variants')
             setVariantsResponse(null)
             setInteractions([])
+            setIsDirty(true)
           }}
           style={{
             padding: '0.5rem 1rem',
@@ -382,6 +435,7 @@ export function GenerationPanel() {
             setGenerationMode('interactions')
             setVariantsResponse(null)
             setInteractions([])
+            setIsDirty(true)
           }}
           style={{
             padding: '0.5rem 1rem',
@@ -421,7 +475,10 @@ export function GenerationPanel() {
 
       <DialogueStructureWidget
         value={dialogueStructure}
-        onChange={setDialogueStructure}
+        onChange={(value) => {
+          setDialogueStructure(value)
+          setIsDirty(true)
+        }}
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
@@ -431,7 +488,10 @@ export function GenerationPanel() {
             <input
               type="number"
               value={kVariants}
-              onChange={(e) => setKVariants(parseInt(e.target.value) || 1)}
+              onChange={(e) => {
+                setKVariants(parseInt(e.target.value) || 1)
+                setIsDirty(true)
+              }}
               min={1}
               max={10}
               style={{ 
@@ -452,7 +512,10 @@ export function GenerationPanel() {
             Modèle LLM:
             <select
               value={llmModel}
-              onChange={(e) => setLlmModel(e.target.value)}
+              onChange={(e) => {
+                setLlmModel(e.target.value)
+                setIsDirty(true)
+              }}
               style={{ 
                 width: '100%', 
                 padding: '0.5rem', 
@@ -476,12 +539,15 @@ export function GenerationPanel() {
       <div style={{ marginBottom: '1rem' }}>
         <label style={{ color: theme.text.primary }}>
           Max tokens contexte:
-          <input
-            type="number"
-            value={maxContextTokens}
-            onChange={(e) => setMaxContextTokens(parseInt(e.target.value) || 1500)}
-            min={100}
-            max={8000}
+            <input
+              type="number"
+              value={maxContextTokens}
+              onChange={(e) => {
+                setMaxContextTokens(parseInt(e.target.value) || 1500)
+                setIsDirty(true)
+              }}
+              min={100}
+              max={8000}
             style={{ 
               width: '100%', 
               padding: '0.5rem', 
@@ -521,7 +587,10 @@ export function GenerationPanel() {
           </h3>
           <select
             value={previousInteractionId}
-            onChange={(e) => setPreviousInteractionId(e.target.value)}
+            onChange={(e) => {
+              setPreviousInteractionId(e.target.value)
+              setIsDirty(true)
+            }}
             style={{ 
               width: '100%', 
               padding: '0.5rem', 
@@ -618,6 +687,39 @@ export function GenerationPanel() {
       ),
     },
   ]
+
+  const { setActions } = useGenerationActionsStore()
+  
+  // Utiliser useRef pour stocker les handlers et éviter les boucles infinies
+  const handlersRef = useRef({
+    handleGenerate,
+    handlePreview,
+    handleExportUnity,
+    handleReset,
+  })
+  
+  // Mettre à jour la ref quand les handlers changent
+  useEffect(() => {
+    handlersRef.current = {
+      handleGenerate,
+      handlePreview,
+      handleExportUnity,
+      handleReset,
+    }
+  }, [handleGenerate, handlePreview, handleExportUnity, handleReset])
+
+  // Exposer les handlers via le store pour Dashboard
+  // Ne mettre à jour que quand isLoading ou isDirty changent
+  useEffect(() => {
+    setActions({
+      handleGenerate: handlersRef.current.handleGenerate,
+      handlePreview: handlersRef.current.handlePreview,
+      handleExportUnity: handlersRef.current.handleExportUnity,
+      handleReset: handlersRef.current.handleReset,
+      isLoading,
+      isDirty,
+    })
+  }, [isLoading, isDirty, setActions])
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: theme.background.panel }}>

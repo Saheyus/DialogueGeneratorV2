@@ -11,19 +11,20 @@ import type {
   CommunityResponse,
 } from '../../types/api'
 import { ContextList } from './ContextList'
-import { ContextDetail } from './ContextDetail'
 import { SelectedContextSummary } from './SelectedContextSummary'
-import { ContinuityTab } from './ContinuityTab'
-import { Tabs, type Tab } from '../shared/Tabs'
 import { useContextStore } from '../../store/contextStore'
 import { getErrorMessage } from '../../types/errors'
 import { theme } from '../../theme'
 
 type TabType = 'characters' | 'locations' | 'items' | 'species' | 'communities'
-type MainTabType = 'selection' | 'details' | 'continuity'
 
-export function ContextSelector() {
-  const [mainTab, setMainTab] = useState<MainTabType>('selection')
+type ContextItem = CharacterResponse | LocationResponse | ItemResponse | SpeciesResponse | CommunityResponse
+
+interface ContextSelectorProps {
+  onItemSelected?: (item: ContextItem | null) => void
+}
+
+export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
   const [activeTab, setActiveTab] = useState<TabType>('characters')
   const [characters, setCharacters] = useState<CharacterResponse[]>([])
   const [locations, setLocations] = useState<LocationResponse[]>([])
@@ -88,8 +89,10 @@ export function ContextSelector() {
 
       if (item && selectedDetail === name) {
         setSelectedDetail(null)
+        onItemSelected?.(null)
       } else if (item) {
         setSelectedDetail(name)
+        onItemSelected?.(item)
       }
     } catch (err) {
       setError(getErrorMessage(err))
@@ -110,6 +113,7 @@ export function ContextSelector() {
     }
     if (selectedDetail === name) {
       setSelectedDetail(null)
+      onItemSelected?.(null)
     }
   }
 
@@ -131,181 +135,131 @@ export function ContextSelector() {
     return []
   }
 
-  const getSelectedDetailItem = ():
-    | CharacterResponse
-    | LocationResponse
-    | ItemResponse
-    | SpeciesResponse
-    | CommunityResponse
-    | null => {
-    if (!selectedDetail) return null
-    const allItems = [...characters, ...locations, ...items, ...species, ...communities]
-    return allItems.find((item) => item.name === selectedDetail) || null
-  }
-
-  const mainTabs: Tab[] = [
-    {
-      id: 'selection',
-      label: 'Sélection GDD',
-      content: (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-          <div style={{ display: 'flex', borderBottom: `1px solid ${theme.border.primary}` }}>
-            <button
-              onClick={() => {
-                setActiveTab('characters')
-                setSelectedDetail(null)
-              }}
-              style={{
-                flex: 1,
-                padding: '0.75rem',
-                border: 'none',
-                borderBottom: activeTab === 'characters' ? `2px solid ${theme.button.primary.background}` : 'none',
-                backgroundColor: activeTab === 'characters' ? theme.background.tertiary : 'transparent',
-                color: theme.text.primary,
-                cursor: 'pointer',
-                fontWeight: activeTab === 'characters' ? 'bold' : 'normal',
-              }}
-            >
-              Personnages ({characters.length})
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('locations')
-                setSelectedDetail(null)
-              }}
-              style={{
-                flex: 1,
-                padding: '0.75rem',
-                border: 'none',
-                borderBottom: activeTab === 'locations' ? `2px solid ${theme.button.primary.background}` : 'none',
-                backgroundColor: activeTab === 'locations' ? theme.background.tertiary : 'transparent',
-                color: theme.text.primary,
-                cursor: 'pointer',
-                fontWeight: activeTab === 'locations' ? 'bold' : 'normal',
-              }}
-            >
-              Lieux ({locations.length})
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('items')
-                setSelectedDetail(null)
-              }}
-              style={{
-                flex: 1,
-                padding: '0.75rem',
-                border: 'none',
-                borderBottom: activeTab === 'items' ? `2px solid ${theme.button.primary.background}` : 'none',
-                backgroundColor: activeTab === 'items' ? theme.background.tertiary : 'transparent',
-                color: theme.text.primary,
-                cursor: 'pointer',
-                fontWeight: activeTab === 'items' ? 'bold' : 'normal',
-              }}
-            >
-              Objets ({items.length})
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('species')
-                setSelectedDetail(null)
-              }}
-              style={{
-                flex: 1,
-                padding: '0.75rem',
-                border: 'none',
-                borderBottom: activeTab === 'species' ? `2px solid ${theme.button.primary.background}` : 'none',
-                backgroundColor: activeTab === 'species' ? theme.background.tertiary : 'transparent',
-                color: theme.text.primary,
-                cursor: 'pointer',
-                fontWeight: activeTab === 'species' ? 'bold' : 'normal',
-              }}
-            >
-              Espèces ({species.length})
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('communities')
-                setSelectedDetail(null)
-              }}
-              style={{
-                flex: 1,
-                padding: '0.75rem',
-                border: 'none',
-                borderBottom: activeTab === 'communities' ? `2px solid ${theme.button.primary.background}` : 'none',
-                backgroundColor: activeTab === 'communities' ? theme.background.tertiary : 'transparent',
-                color: theme.text.primary,
-                cursor: 'pointer',
-                fontWeight: activeTab === 'communities' ? 'bold' : 'normal',
-              }}
-            >
-              Communautés ({communities.length})
-            </button>
-          </div>
-
-          {error && (
-            <div style={{ 
-              padding: '0.5rem', 
-              backgroundColor: theme.state.error.background, 
-              color: theme.state.error.color, 
-              fontSize: '0.9rem' 
-            }}>
-              {error}
-            </div>
-          )}
-
-          <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-            <div style={{ 
-              width: '50%', 
-              borderRight: `1px solid ${theme.border.primary}`, 
-              display: 'flex', 
-              flexDirection: 'column' 
-            }}>
-              <ContextList
-                items={getCurrentItems()}
-                selectedItems={getSelectedItems()}
-                onItemClick={handleItemClick}
-                onItemToggle={handleItemToggle}
-                selectedDetail={selectedDetail}
-                onSelectDetail={setSelectedDetail}
-                isLoading={isLoading}
-              />
-            </div>
-            <div style={{ width: '50%', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ flex: 1, overflowY: 'auto' }}>
-                <ContextDetail item={getSelectedDetailItem()} />
-              </div>
-              <SelectedContextSummary selections={selections} onClear={clearSelections} />
-            </div>
-          </div>
-        </div>
-      ),
-    },
-    {
-      id: 'details',
-      label: 'Détails',
-      content: (
-        <div style={{ padding: '1rem', height: '100%', overflowY: 'auto' }}>
-          <ContextDetail item={getSelectedDetailItem()} />
-        </div>
-      ),
-    },
-    {
-      id: 'continuity',
-      label: 'Continuité',
-      content: (
-        <ContinuityTab
-          onSelectContext={() => {
-            // Le contexte de continuité est géré par le ContinuityTab lui-même
-            // et peut être utilisé dans GenerationPanel via previousInteractionId
-          }}
-        />
-      ),
-    },
-  ]
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Tabs tabs={mainTabs} activeTabId={mainTab} onTabChange={(tabId) => setMainTab(tabId as MainTabType)} />
+      <div style={{ display: 'flex', borderBottom: `1px solid ${theme.border.primary}` }}>
+        <button
+          onClick={() => {
+            setActiveTab('characters')
+            setSelectedDetail(null)
+            onItemSelected?.(null)
+          }}
+          style={{
+            flex: 1,
+            padding: '0.75rem',
+            border: 'none',
+            borderBottom: activeTab === 'characters' ? `2px solid ${theme.button.primary.background}` : 'none',
+            backgroundColor: activeTab === 'characters' ? theme.background.tertiary : 'transparent',
+            color: theme.text.primary,
+            cursor: 'pointer',
+            fontWeight: activeTab === 'characters' ? 'bold' : 'normal',
+          }}
+        >
+          Personnages ({characters.length})
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('locations')
+            setSelectedDetail(null)
+            onItemSelected?.(null)
+          }}
+          style={{
+            flex: 1,
+            padding: '0.75rem',
+            border: 'none',
+            borderBottom: activeTab === 'locations' ? `2px solid ${theme.button.primary.background}` : 'none',
+            backgroundColor: activeTab === 'locations' ? theme.background.tertiary : 'transparent',
+            color: theme.text.primary,
+            cursor: 'pointer',
+            fontWeight: activeTab === 'locations' ? 'bold' : 'normal',
+          }}
+        >
+          Lieux ({locations.length})
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('items')
+            setSelectedDetail(null)
+            onItemSelected?.(null)
+          }}
+          style={{
+            flex: 1,
+            padding: '0.75rem',
+            border: 'none',
+            borderBottom: activeTab === 'items' ? `2px solid ${theme.button.primary.background}` : 'none',
+            backgroundColor: activeTab === 'items' ? theme.background.tertiary : 'transparent',
+            color: theme.text.primary,
+            cursor: 'pointer',
+            fontWeight: activeTab === 'items' ? 'bold' : 'normal',
+          }}
+        >
+          Objets ({items.length})
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('species')
+            setSelectedDetail(null)
+            onItemSelected?.(null)
+          }}
+          style={{
+            flex: 1,
+            padding: '0.75rem',
+            border: 'none',
+            borderBottom: activeTab === 'species' ? `2px solid ${theme.button.primary.background}` : 'none',
+            backgroundColor: activeTab === 'species' ? theme.background.tertiary : 'transparent',
+            color: theme.text.primary,
+            cursor: 'pointer',
+            fontWeight: activeTab === 'species' ? 'bold' : 'normal',
+          }}
+        >
+          Espèces ({species.length})
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('communities')
+            setSelectedDetail(null)
+            onItemSelected?.(null)
+          }}
+          style={{
+            flex: 1,
+            padding: '0.75rem',
+            border: 'none',
+            borderBottom: activeTab === 'communities' ? `2px solid ${theme.button.primary.background}` : 'none',
+            backgroundColor: activeTab === 'communities' ? theme.background.tertiary : 'transparent',
+            color: theme.text.primary,
+            cursor: 'pointer',
+            fontWeight: activeTab === 'communities' ? 'bold' : 'normal',
+          }}
+        >
+          Communautés ({communities.length})
+        </button>
+      </div>
+
+      {error && (
+        <div style={{ 
+          padding: '0.5rem', 
+          backgroundColor: theme.state.error.background, 
+          color: theme.state.error.color, 
+          fontSize: '0.9rem' 
+        }}>
+          {error}
+        </div>
+      )}
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <ContextList
+            items={getCurrentItems()}
+            selectedItems={getSelectedItems()}
+            onItemClick={handleItemClick}
+            onItemToggle={handleItemToggle}
+            selectedDetail={selectedDetail}
+            onSelectDetail={setSelectedDetail}
+            isLoading={isLoading}
+          />
+        </div>
+        <SelectedContextSummary selections={selections} onClear={clearSelections} />
+      </div>
     </div>
   )
 }

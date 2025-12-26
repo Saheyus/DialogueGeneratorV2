@@ -42,12 +42,14 @@ export async function generateInteractionVariants(
 export async function estimateTokens(
   contextSelections: ContextSelection,
   userInstructions: string,
-  maxContextTokens: number
-): Promise<{ context_tokens: number; total_estimated_tokens: number }> {
+  maxContextTokens: number,
+  systemPromptOverride?: string | null
+): Promise<{ context_tokens: number; total_estimated_tokens: number; estimated_prompt?: string | null }> {
   const response = await apiClient.post('/api/v1/dialogues/estimate-tokens', {
     context_selections: contextSelections,
     user_instructions: userInstructions,
     max_context_tokens: maxContextTokens,
+    system_prompt_override: systemPromptOverride || undefined,
   })
   return response.data
 }

@@ -205,8 +205,9 @@ RÈGLES À SUIVRE:
             prompt_parts.append("\n--- SÉQUENCE NARRATIVE ATTENDUE ---")
             prompt_parts.append(dialogue_structure_narrative)
         
-        prompt_parts.append("\n--- OBJECTIF DE LA SCÈNE (Instruction Utilisateur) ---")
-        prompt_parts.append(user_specific_goal)
+        if user_specific_goal and user_specific_goal.strip():
+            prompt_parts.append("\n--- OBJECTIF DE LA SCÈNE (Instruction Utilisateur) ---")
+            prompt_parts.append(user_specific_goal)
         
         if "tone" in generation_params:
             prompt_parts.append("\n--- TON ATTENDU ---")

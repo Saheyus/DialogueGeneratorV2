@@ -1,10 +1,16 @@
 /**
  * Composant pour afficher les détails d'un élément de contexte.
  */
-import type { CharacterResponse, LocationResponse, ItemResponse } from '../../types/api'
+import type { 
+  CharacterResponse, 
+  LocationResponse, 
+  ItemResponse,
+  SpeciesResponse,
+  CommunityResponse,
+} from '../../types/api'
 import { theme } from '../../theme'
 
-type ContextItem = CharacterResponse | LocationResponse | ItemResponse
+type ContextItem = CharacterResponse | LocationResponse | ItemResponse | SpeciesResponse | CommunityResponse
 
 interface ContextDetailProps {
   item: ContextItem | null

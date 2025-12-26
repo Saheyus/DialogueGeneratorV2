@@ -118,12 +118,14 @@ class EstimateTokensRequest(BaseModel):
     
     Attributes:
         context_selections: Sélections de contexte GDD.
-        user_instructions: Instructions utilisateur.
+        user_instructions: Instructions utilisateur (peut être vide si des sélections existent).
         max_context_tokens: Nombre maximum de tokens pour le contexte.
+        system_prompt_override: Surcharge du system prompt (optionnel).
     """
     context_selections: ContextSelection = Field(..., description="Sélections de contexte GDD")
-    user_instructions: str = Field(..., min_length=1, description="Instructions utilisateur")
+    user_instructions: str = Field(default="", description="Instructions utilisateur")
     max_context_tokens: int = Field(default=1500, ge=100, le=50000, description="Nombre maximum de tokens pour le contexte")
+    system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
 
 
 class EstimateTokensResponse(BaseModel):
@@ -132,7 +134,9 @@ class EstimateTokensResponse(BaseModel):
     Attributes:
         context_tokens: Nombre de tokens du contexte.
         total_estimated_tokens: Nombre total estimé de tokens (contexte + prompt).
+        estimated_prompt: Le prompt estimé complet.
     """
     context_tokens: int = Field(..., description="Nombre de tokens du contexte")
     total_estimated_tokens: int = Field(..., description="Nombre total estimé de tokens")
+    estimated_prompt: str | None = Field(default=None, description="Le prompt estimé complet")
 
