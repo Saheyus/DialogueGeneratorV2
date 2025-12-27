@@ -1,17 +1,15 @@
 """Service d'authentification pour l'API."""
-import os
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 import bcrypt
-from fastapi import HTTPException, status
 from api.exceptions import AuthenticationException
+from api.config.security_config import get_security_config
 
 logger = logging.getLogger(__name__)
 
 # Configuration JWT
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 7
@@ -22,7 +20,8 @@ class AuthService:
     
     def __init__(self):
         """Initialise le service d'authentification."""
-        self.secret_key = SECRET_KEY
+        security_config = get_security_config()
+        self.secret_key = security_config.jwt_secret_key
         self.algorithm = ALGORITHM
         self.access_token_expire = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         self.refresh_token_expire = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)

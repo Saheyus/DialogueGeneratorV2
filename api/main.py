@@ -7,16 +7,40 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware as FastAPICORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 from api.middleware import RequestIDMiddleware, LoggingMiddleware
 from api.exceptions import APIException, ValidationException
 from api.dependencies import get_request_id
+from api.config.security_config import get_security_config
+from api.middleware.rate_limiter import get_limiter, rate_limit_exception_handler
 
-# Configuration du logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Configuration du logging structuré
+from api.utils.logging_config import setup_logging
+setup_logging()
+
+# Initialiser Sentry si configuré (doit être fait après le logging)
+from api.utils.sentry_config import init_sentry
+init_sentry()
+
 logger = logging.getLogger(__name__)
+
+# Créer le limiter global (peut être None si désactivé)
+limiter = get_limiter()
+
+
+def _validate_security_config() -> None:
+    """Valide la configuration de sécurité au démarrage.
+    
+    Raises:
+        ValueError: Si la configuration est invalide en production.
+    """
+    try:
+        security_config = get_security_config()
+        security_config.validate_config()
+        # Validation réussie (pas de log nécessaire, seulement les erreurs sont loggées)
+    except ValueError as e:
+        logger.critical(f"Configuration de sécurité invalide: {e}")
+        raise
 
 
 @asynccontextmanager
@@ -29,6 +53,14 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Démarrage de l'API DialogueGenerator...")
     logger.info(f"Timestamp: {datetime.utcnow().isoformat()}Z")
+    
+    # Valider la configuration de sécurité
+    try:
+        _validate_security_config()
+    except ValueError:
+        logger.critical("L'application ne peut pas démarrer avec une configuration de sécurité invalide.")
+        raise
+    
     yield
     # Shutdown
     logger.info("Arrêt de l'API DialogueGenerator...")
@@ -44,6 +76,10 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
     lifespan=lifespan
 )
+
+# Attacher le limiter à l'app si activé (requis pour que slowapi fonctionne)
+if limiter is not None:
+    app.state.limiter = limiter
 
 # Configuration CORS
 cors_origins_env = os.getenv("CORS_ORIGINS", "")
@@ -66,6 +102,14 @@ app.add_middleware(
 # Middleware personnalisés
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(LoggingMiddleware)
+
+# Middleware de cache HTTP (doit être après RequestID et Logging pour avoir les headers)
+from api.middleware.http_cache import setup_http_cache
+setup_http_cache(app)
+
+# Métriques Prometheus (optionnel)
+from api.utils.metrics import setup_prometheus_metrics
+prometheus_instrumentator = setup_prometheus_metrics(app)
 
 
 # Handler pour les erreurs de validation FastAPI/Pydantic
@@ -106,6 +150,22 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             }
         }
     )
+
+
+# Handler pour les erreurs de rate limiting (seulement si le limiter est activé)
+if limiter is not None:
+    @app.exception_handler(RateLimitExceeded)
+    async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+        """Gère les erreurs de rate limiting.
+        
+        Args:
+            request: La requête HTTP.
+            exc: L'exception RateLimitExceeded.
+            
+        Returns:
+            Réponse JSON avec erreur 429.
+        """
+        return await rate_limit_exception_handler(request, exc)
 
 
 # Handler global d'exceptions
@@ -167,17 +227,47 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 
 # Health check endpoint
 @app.get("/health", tags=["Health"])
-async def health_check() -> dict:
-    """Endpoint de vérification de santé de l'API.
+async def health_check() -> JSONResponse:
+    """Endpoint de vérification de santé basique de l'API.
     
     Returns:
-        Statut de santé de l'API.
+        Statut de santé basique de l'API (200 si healthy, 503 si unhealthy).
     """
-    return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "service": "DialogueGenerator API"
-    }
+    from api.utils.health_check import perform_health_checks
+    
+    health_result = perform_health_checks(detailed=False)
+    health_result["timestamp"] = datetime.utcnow().isoformat() + "Z"
+    health_result["service"] = "DialogueGenerator API"
+    
+    # Retourner 503 si unhealthy
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE if health_result["status"] == "unhealthy" else status.HTTP_200_OK
+    
+    return JSONResponse(
+        status_code=status_code,
+        content=health_result
+    )
+
+
+@app.get("/health/detailed", tags=["Health"])
+async def health_check_detailed() -> JSONResponse:
+    """Endpoint de vérification de santé détaillé avec toutes les dépendances.
+    
+    Returns:
+        Statut de santé détaillé avec vérification de toutes les dépendances (200 si healthy, 503 si unhealthy).
+    """
+    from api.utils.health_check import perform_health_checks
+    
+    health_result = perform_health_checks(detailed=True)
+    health_result["timestamp"] = datetime.utcnow().isoformat() + "Z"
+    health_result["service"] = "DialogueGenerator API"
+    
+    # Retourner 503 si unhealthy, 200 même si degraded (l'app fonctionne mais avec limitations)
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE if health_result["status"] == "unhealthy" else status.HTTP_200_OK
+    
+    return JSONResponse(
+        status_code=status_code,
+        content=health_result
+    )
 
 
 # Inclusion des routers

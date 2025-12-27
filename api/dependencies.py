@@ -1,6 +1,7 @@
 """Injection de dépendances pour l'API FastAPI."""
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import Annotated
 from fastapi import Depends, Request
@@ -24,6 +25,7 @@ DEFAULT_INTERACTIONS_STORAGE_DIR = DIALOGUE_GENERATOR_DIR / FilePaths.INTERACTIO
 
 # Instances globales (singletons) pour les services qui peuvent être partagés
 _context_builder: ContextBuilder | None = None
+_context_builder_lock = threading.Lock()  # Verrou pour éviter les race conditions
 _config_service: ConfigurationService | None = None
 _prompt_engine: PromptEngine | None = None
 
@@ -45,16 +47,20 @@ def get_context_builder() -> ContextBuilder:
     """Retourne le ContextBuilder (singleton).
     
     Le ContextBuilder charge les fichiers GDD au premier accès.
+    Utilise un verrou pour éviter les race conditions lors d'appels simultanés.
     
     Returns:
         Instance de ContextBuilder avec données GDD chargées.
     """
     global _context_builder
     if _context_builder is None:
-        _context_builder = ContextBuilder()
-        logger.info("Chargement des fichiers GDD...")
-        _context_builder.load_gdd_files()
-        logger.info("ContextBuilder initialisé avec données GDD chargées (singleton).")
+        with _context_builder_lock:
+            # Double-check après avoir acquis le lock pour éviter les initialisations multiples
+            if _context_builder is None:
+                _context_builder = ContextBuilder()
+                logger.info("Chargement des fichiers GDD...")
+                _context_builder.load_gdd_files()
+                logger.info("ContextBuilder initialisé avec données GDD chargées (singleton).")
     return _context_builder
 
 

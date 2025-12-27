@@ -19,3 +19,11 @@ bcrypt>=4.0.0
 python-multipart>=0.0.6
 pydantic-settings>=2.0.0
 email-validator>=2.0.0
+python-dotenv>=1.0.0
+slowapi>=0.1.9
+# Observabilité et monitoring
+prometheus-fastapi-instrumentator>=6.0.0
+tenacity>=8.2.0
+pybreaker>=1.0.0
+sentry-sdk[fastapi]>=1.32.0
+cachetools>=5.3.0

@@ -82,9 +82,15 @@ class InteractionListResponse(BaseModel):
     Attributes:
         interactions: Liste des interactions.
         total: Nombre total d'interactions.
+        page: Numéro de page actuelle (1-indexed, None si pas de pagination).
+        page_size: Taille de la page (None si pas de pagination).
+        total_pages: Nombre total de pages (None si pas de pagination).
     """
     interactions: List[InteractionResponse] = Field(..., description="Liste des interactions")
     total: int = Field(..., description="Nombre total d'interactions")
+    page: Optional[int] = Field(None, description="Numéro de page actuelle (1-indexed)")
+    page_size: Optional[int] = Field(None, description="Taille de la page")
+    total_pages: Optional[int] = Field(None, description="Nombre total de pages")
 
 
 class InteractionRelationsResponse(BaseModel):

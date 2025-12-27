@@ -72,6 +72,8 @@ export interface GenerateInteractionVariantsRequest {
   system_prompt_override?: string
   llm_model_identifier: string
   previous_interaction_id?: string
+  field_configs?: Record<string, string[]>
+  organization_mode?: string
 }
 
 // Interaction

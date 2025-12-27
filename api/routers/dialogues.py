@@ -276,7 +276,9 @@ async def generate_interaction_variants(
             user_instructions=request_data.user_instructions,
             system_prompt_override=request_data.system_prompt_override,
             context_selections=context_selections_dict,
-            current_llm_model_identifier=request_data.llm_model_identifier
+            current_llm_model_identifier=request_data.llm_model_identifier,
+            field_configs=request_data.field_configs,
+            organization_mode=request_data.organization_mode
         )
         
         if interactions is None or len(interactions) == 0:
@@ -404,11 +406,21 @@ async def estimate_tokens(
         
         # Construire le contexte via le service
         context_builder = dialogue_service.context_builder
-        context_text = context_builder.build_context(
-            selected_elements=context_selections_dict,
-            scene_instruction=request_data.user_instructions,
-            max_tokens=request_data.max_context_tokens
-        )
+        # Utiliser build_context_with_custom_fields si field_configs est fourni
+        if request_data.field_configs and hasattr(context_builder, 'build_context_with_custom_fields'):
+            context_text = context_builder.build_context_with_custom_fields(
+                selected_elements=context_selections_dict,
+                scene_instruction=request_data.user_instructions,
+                field_configs=request_data.field_configs,
+                organization_mode=request_data.organization_mode or "default",
+                max_tokens=request_data.max_context_tokens
+            )
+        else:
+            context_text = context_builder.build_context(
+                selected_elements=context_selections_dict,
+                scene_instruction=request_data.user_instructions,
+                max_tokens=request_data.max_context_tokens
+            )
         
         # S'assurer que context_text n'est jamais None
         if context_text is None:

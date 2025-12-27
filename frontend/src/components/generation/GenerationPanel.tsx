@@ -8,6 +8,7 @@ import * as interactionsAPI from '../../api/interactions'
 import { useContextStore } from '../../store/contextStore'
 import { useGenerationStore } from '../../store/generationStore'
 import { useGenerationActionsStore } from '../../store/generationActionsStore'
+import { useContextConfigStore } from '../../store/contextConfigStore'
 import { getErrorMessage } from '../../types/errors'
 import { theme } from '../../theme'
 import type {
@@ -281,11 +282,24 @@ export function GenerationPanel() {
     setEstimatedPrompt(null, null, true)
     try {
       const contextSelections = buildContextSelections()
+      
+      // Récupérer les fieldConfigs et organization depuis le store
+      const { fieldConfigs, essentialFields, organization } = useContextConfigStore.getState()
+      
+      // Inclure les champs essentiels dans la config
+      const fieldConfigsWithEssential: Record<string, string[]> = {}
+      for (const [elementType, fields] of Object.entries(fieldConfigs)) {
+        const essential = essentialFields[elementType] || []
+        fieldConfigsWithEssential[elementType] = [...new Set([...essential, ...fields])]
+      }
+      
       const response = await dialoguesAPI.estimateTokens(
         contextSelections,
         userInstructions,
         maxContextTokens,
-        systemPromptOverride
+        systemPromptOverride,
+        Object.keys(fieldConfigsWithEssential).length > 0 ? fieldConfigsWithEssential : undefined,
+        organization
       )
       setEstimatedTokens(response.total_estimated_tokens)
       setEstimatedPrompt(response.estimated_prompt || null, response.total_estimated_tokens, false)
@@ -302,8 +316,11 @@ export function GenerationPanel() {
     }
   }, [userInstructions, hasSelections, maxContextTokens, buildContextSelections, setEstimatedPrompt, systemPromptOverride])
 
+  // Récupérer fieldConfigs et organization depuis le store pour les inclure dans les dépendances
+  const { fieldConfigs, organization } = useContextConfigStore()
+  
   useEffect(() => {
-    // Estimer les tokens quand les sélections, les instructions ou le system prompt changent
+    // Estimer les tokens quand les sélections, les instructions, le system prompt, ou les fieldConfigs changent
     const hasAnySelections = 
       selections.characters.length > 0 ||
       selections.locations.length > 0 ||
@@ -324,7 +341,7 @@ export function GenerationPanel() {
     }, 500)
 
     return () => clearTimeout(timeoutId)
-  }, [userInstructions, selections.characters, selections.locations, selections.items, selections.species, selections.communities, selections.dialogues_examples, maxContextTokens, estimateTokens, sceneSelection, dialogueStructure, systemPromptOverride, setEstimatedPrompt])
+  }, [userInstructions, selections.characters, selections.locations, selections.items, selections.species, selections.communities, selections.dialogues_examples, maxContextTokens, estimateTokens, sceneSelection, dialogueStructure, systemPromptOverride, setEstimatedPrompt, fieldConfigs, organization])
 
   const handleGenerate = useCallback(async () => {
     // Validation minimale
@@ -400,6 +417,16 @@ export function GenerationPanel() {
           toast('Génération réussie!', 'success')
         }
       } else if (generationMode === 'interactions') {
+        // Récupérer les fieldConfigs et organization depuis le store
+        const { fieldConfigs, essentialFields, organization } = useContextConfigStore.getState()
+        
+        // Inclure les champs essentiels dans la config
+        const fieldConfigsWithEssential: Record<string, string[]> = {}
+        for (const [elementType, fields] of Object.entries(fieldConfigs)) {
+          const essential = essentialFields[elementType] || []
+          fieldConfigsWithEssential[elementType] = [...new Set([...essential, ...fields])]
+        }
+        
         const request: GenerateInteractionVariantsRequest = {
           k_variants: kVariants,
           user_instructions: userInstructions,
@@ -408,6 +435,8 @@ export function GenerationPanel() {
           system_prompt_override: systemPromptOverride || undefined,
           llm_model_identifier: llmModel,
           previous_interaction_id: previousInteractionId || undefined,
+          field_configs: Object.keys(fieldConfigsWithEssential).length > 0 ? fieldConfigsWithEssential : undefined,
+          organization_mode: organization,
         }
 
         const response = await dialoguesAPI.generateInteractionVariants(request)

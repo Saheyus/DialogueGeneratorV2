@@ -1,6 +1,6 @@
 """Router pour le contexte GDD."""
 import logging
-from typing import Annotated
+from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, Request, status
 from api.schemas.context import (
     CharacterListResponse,
@@ -43,28 +43,54 @@ router = APIRouter()
 async def list_characters(
     request: Request,
     context_builder: Annotated[ContextBuilder, Depends(get_context_builder)],
-    request_id: Annotated[str, Depends(get_request_id)]
+    request_id: Annotated[str, Depends(get_request_id)],
+    page: Optional[int] = None,
+    page_size: Optional[int] = None
 ) -> CharacterListResponse:
-    """Liste tous les personnages disponibles.
+    """Liste tous les personnages disponibles avec pagination optionnelle.
     
     Args:
         request: La requête HTTP.
         context_builder: ContextBuilder injecté.
         request_id: ID de la requête.
+        page: Numéro de page (1-indexed). Si None, retourne tous les personnages.
+        page_size: Taille de page. Si None, utilise la valeur par défaut (50).
         
     Returns:
-        Liste des personnages.
+        Liste des personnages (paginée si page fourni, sinon tous).
     """
+    from api.utils.pagination import get_pagination_params, paginate_list
+    
     characters = context_builder.characters
     character_responses = [
         CharacterResponse(name=char.get("Nom", "Unknown"), data=char)
         for char in characters
     ]
+    total = len(character_responses)
     
-    return CharacterListResponse(
-        characters=character_responses,
-        total=len(character_responses)
-    )
+    # Appliquer la pagination si demandée
+    pagination_params = get_pagination_params(page=page, page_size=page_size)
+    paginated_responses = paginate_list(character_responses, pagination_params)
+    
+    # Construire la réponse avec métadonnées de pagination
+    if pagination_params.is_enabled:
+        total_pages = (total + pagination_params.page_size - 1) // pagination_params.page_size
+        return CharacterListResponse(
+            characters=paginated_responses,
+            total=total,
+            page=pagination_params.page,
+            page_size=pagination_params.page_size,
+            total_pages=total_pages
+        )
+    else:
+        # Rétrocompatibilité : pas de pagination
+        return CharacterListResponse(
+            characters=paginated_responses,
+            total=total,
+            page=None,
+            page_size=None,
+            total_pages=None
+        )
 
 
 @router.get(
@@ -111,28 +137,54 @@ async def get_character(
 async def list_locations(
     request: Request,
     context_builder: Annotated[ContextBuilder, Depends(get_context_builder)],
-    request_id: Annotated[str, Depends(get_request_id)]
+    request_id: Annotated[str, Depends(get_request_id)],
+    page: Optional[int] = None,
+    page_size: Optional[int] = None
 ) -> LocationListResponse:
-    """Liste tous les lieux disponibles.
+    """Liste tous les lieux disponibles avec pagination optionnelle.
     
     Args:
         request: La requête HTTP.
         context_builder: ContextBuilder injecté.
         request_id: ID de la requête.
+        page: Numéro de page (1-indexed). Si None, retourne tous les lieux.
+        page_size: Taille de page. Si None, utilise la valeur par défaut (50).
         
     Returns:
-        Liste des lieux.
+        Liste des lieux (paginée si page fourni, sinon tous).
     """
+    from api.utils.pagination import get_pagination_params, paginate_list
+    
     locations = context_builder.locations
     location_responses = [
         LocationResponse(name=loc.get("Nom", "Unknown"), data=loc)
         for loc in locations
     ]
+    total = len(location_responses)
     
-    return LocationListResponse(
-        locations=location_responses,
-        total=len(location_responses)
-    )
+    # Appliquer la pagination si demandée
+    pagination_params = get_pagination_params(page=page, page_size=page_size)
+    paginated_responses = paginate_list(location_responses, pagination_params)
+    
+    # Construire la réponse avec métadonnées de pagination
+    if pagination_params.is_enabled:
+        total_pages = (total + pagination_params.page_size - 1) // pagination_params.page_size
+        return LocationListResponse(
+            locations=paginated_responses,
+            total=total,
+            page=pagination_params.page,
+            page_size=pagination_params.page_size,
+            total_pages=total_pages
+        )
+    else:
+        # Rétrocompatibilité : pas de pagination
+        return LocationListResponse(
+            locations=paginated_responses,
+            total=total,
+            page=None,
+            page_size=None,
+            total_pages=None
+        )
 
 
 @router.get(
@@ -250,28 +302,54 @@ async def get_location(
 async def list_items(
     request: Request,
     context_builder: Annotated[ContextBuilder, Depends(get_context_builder)],
-    request_id: Annotated[str, Depends(get_request_id)]
+    request_id: Annotated[str, Depends(get_request_id)],
+    page: Optional[int] = None,
+    page_size: Optional[int] = None
 ) -> ItemListResponse:
-    """Liste tous les objets disponibles.
+    """Liste tous les objets disponibles avec pagination optionnelle.
     
     Args:
         request: La requête HTTP.
         context_builder: ContextBuilder injecté.
         request_id: ID de la requête.
+        page: Numéro de page (1-indexed). Si None, retourne tous les objets.
+        page_size: Taille de page. Si None, utilise la valeur par défaut (50).
         
     Returns:
-        Liste des objets.
+        Liste des objets (paginée si page fourni, sinon tous).
     """
+    from api.utils.pagination import get_pagination_params, paginate_list
+    
     items = context_builder.items
     item_responses = [
         ItemResponse(name=item.get("Nom", "Unknown"), data=item)
         for item in items
     ]
+    total = len(item_responses)
     
-    return ItemListResponse(
-        items=item_responses,
-        total=len(item_responses)
-    )
+    # Appliquer la pagination si demandée
+    pagination_params = get_pagination_params(page=page, page_size=page_size)
+    paginated_responses = paginate_list(item_responses, pagination_params)
+    
+    # Construire la réponse avec métadonnées de pagination
+    if pagination_params.is_enabled:
+        total_pages = (total + pagination_params.page_size - 1) // pagination_params.page_size
+        return ItemListResponse(
+            items=paginated_responses,
+            total=total,
+            page=pagination_params.page,
+            page_size=pagination_params.page_size,
+            total_pages=total_pages
+        )
+    else:
+        # Rétrocompatibilité : pas de pagination
+        return ItemListResponse(
+            items=paginated_responses,
+            total=total,
+            page=None,
+            page_size=None,
+            total_pages=None
+        )
 
 
 @router.post(
@@ -447,28 +525,54 @@ async def get_species(
 async def list_communities(
     request: Request,
     context_builder: Annotated[ContextBuilder, Depends(get_context_builder)],
-    request_id: Annotated[str, Depends(get_request_id)]
+    request_id: Annotated[str, Depends(get_request_id)],
+    page: Optional[int] = None,
+    page_size: Optional[int] = None
 ) -> CommunityListResponse:
-    """Liste toutes les communautés disponibles.
+    """Liste toutes les communautés disponibles avec pagination optionnelle.
     
     Args:
         request: La requête HTTP.
         context_builder: ContextBuilder injecté.
         request_id: ID de la requête.
+        page: Numéro de page (1-indexed). Si None, retourne toutes les communautés.
+        page_size: Taille de page. Si None, utilise la valeur par défaut (50).
         
     Returns:
-        Liste des communautés.
+        Liste des communautés (paginée si page fourni, sinon toutes).
     """
+    from api.utils.pagination import get_pagination_params, paginate_list
+    
     communities = context_builder.communities
     community_responses = [
         CommunityResponse(name=comm.get("Nom", "Unknown"), data=comm)
         for comm in communities
     ]
+    total = len(community_responses)
     
-    return CommunityListResponse(
-        communities=community_responses,
-        total=len(community_responses)
-    )
+    # Appliquer la pagination si demandée
+    pagination_params = get_pagination_params(page=page, page_size=page_size)
+    paginated_responses = paginate_list(community_responses, pagination_params)
+    
+    # Construire la réponse avec métadonnées de pagination
+    if pagination_params.is_enabled:
+        total_pages = (total + pagination_params.page_size - 1) // pagination_params.page_size
+        return CommunityListResponse(
+            communities=paginated_responses,
+            total=total,
+            page=pagination_params.page,
+            page_size=pagination_params.page_size,
+            total_pages=total_pages
+        )
+    else:
+        # Rétrocompatibilité : pas de pagination
+        return CommunityListResponse(
+            communities=paginated_responses,
+            total=total,
+            page=None,
+            page_size=None,
+            total_pages=None
+        )
 
 
 @router.get(

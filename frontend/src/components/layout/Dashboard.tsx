@@ -4,10 +4,10 @@
 import { useState } from 'react'
 import { ContextSelector } from '../context/ContextSelector'
 import { GenerationPanel } from '../generation/GenerationPanel'
+import { GenerationOptionsModal } from '../generation/GenerationOptionsModal'
 import { InteractionDetails } from '../interactions/InteractionDetails'
 import { EstimatedPromptPanel } from '../generation/EstimatedPromptPanel'
 import { ContextDetail } from '../context/ContextDetail'
-import { UnityConfigDialog } from '../config/UnityConfigDialog'
 import { ResizablePanels } from '../shared/ResizablePanels'
 import { Tabs, type Tab } from '../shared/Tabs'
 import { useGenerationStore } from '../../store/generationStore'
@@ -20,7 +20,7 @@ type ContextItem = CharacterResponse | LocationResponse | ItemResponse | Species
 export function Dashboard() {
   const [selectedInteraction, setSelectedInteraction] = useState<InteractionResponse | null>(null)
   const [selectedContextItem, setSelectedContextItem] = useState<ContextItem | null>(null)
-  const [isUnityConfigOpen, setIsUnityConfigOpen] = useState(false)
+  const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false)
   const [rightPanelTab, setRightPanelTab] = useState<'prompt' | 'details'>('prompt')
   const { estimatedPrompt, estimatedTokens, isEstimating } = useGenerationStore()
   const { actions } = useGenerationActionsStore()
@@ -146,8 +146,7 @@ export function Dashboard() {
             }}
           >
             <button
-              onClick={actions.handlePreview || (() => {})}
-              disabled={actions.isLoading}
+              onClick={() => setIsOptionsModalOpen(true)}
               style={{
                 padding: '0.4rem 0.8rem',
                 fontSize: '0.85rem',
@@ -155,11 +154,10 @@ export function Dashboard() {
                 color: theme.button.default.color,
                 border: `1px solid ${theme.border.primary}`,
                 borderRadius: '4px',
-                cursor: actions.isLoading ? 'not-allowed' : 'pointer',
-                opacity: actions.isLoading ? 0.6 : 1,
+                cursor: 'pointer',
               }}
             >
-              Prévisualiser
+              Options
             </button>
             <button
               onClick={actions.handleExportUnity || (() => {})}
@@ -176,20 +174,6 @@ export function Dashboard() {
               }}
             >
               Exporter (Unity)
-            </button>
-            <button
-              onClick={() => setIsUnityConfigOpen(true)}
-              style={{
-                padding: '0.4rem 0.8rem',
-                fontSize: '0.85rem',
-                backgroundColor: theme.button.default.background,
-                color: theme.button.default.color,
-                border: `1px solid ${theme.border.primary}`,
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              Config Unity
             </button>
             <button
               onClick={actions.handleReset || (() => {})}
@@ -291,9 +275,9 @@ export function Dashboard() {
         )}
       </div>
 
-      <UnityConfigDialog
-        isOpen={isUnityConfigOpen}
-        onClose={() => setIsUnityConfigOpen(false)}
+      <GenerationOptionsModal
+        isOpen={isOptionsModalOpen}
+        onClose={() => setIsOptionsModalOpen(false)}
       />
     </ResizablePanels>
   )

@@ -1,9 +1,10 @@
 """Router pour l'authentification."""
-import os
 import logging
-from typing import Annotated
+from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from api.schemas.auth import (
     LoginRequest,
     TokenResponse,
@@ -13,6 +14,8 @@ from api.schemas.auth import (
 from api.services.auth_service import AuthService
 from api.exceptions import AuthenticationException
 from api.dependencies import get_request_id
+from api.config.security_config import get_security_config
+from api.middleware.rate_limiter import get_limiter, get_rate_limit_string
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +23,37 @@ router = APIRouter()
 security = HTTPBearer()
 auth_service = AuthService()
 
-# Configuration cookies
-_is_production = os.getenv("ENVIRONMENT", "development") == "production"
-_cookie_domain = os.getenv("COOKIE_DOMAIN", None)
+# Configuration cookies (utilise SecurityConfig)
+security_config = get_security_config()
+_is_production = security_config.is_production
+_cookie_domain = None  # Peut être étendu via config si nécessaire
 _cookie_secure = _is_production  # Secure=True en production uniquement
 _cookie_same_site = "none" if _is_production and _cookie_domain else "lax"  # none nécessite Secure=True
+
+
+def apply_rate_limit(func):
+    """Applique le rate limiting si activé.
+    
+    Le limiter doit être attaché à app.state.limiter dans main.py.
+    Si le rate limiting est désactivé, cette fonction retourne la fonction telle quelle.
+    
+    Args:
+        func: La fonction à décorer.
+        
+    Returns:
+        La fonction décorée avec rate limiting ou la fonction originale.
+    """
+    # Vérifier si le rate limiting est activé
+    if not security_config.auth_rate_limit_enabled:
+        return func
+    
+    # Utiliser le limiter global (doit être attaché à app.state.limiter dans main.py)
+    limiter = get_limiter()
+    if limiter is None:
+        return func
+    
+    rate_limit_str = get_rate_limit_string()
+    return limiter.limit(rate_limit_str)(func)
 
 
 def get_auth_service() -> AuthService:
@@ -114,12 +143,13 @@ async def get_current_user(
 
 
 @router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
+@apply_rate_limit
 async def login(
     login_data: LoginRequest,
     request: Request,
     response: Response
 ) -> TokenResponse:
-    """Endpoint de connexion.
+    """Endpoint de connexion avec rate limiting.
     
     Args:
         login_data: Données de connexion (username, password).
@@ -131,6 +161,7 @@ async def login(
         
     Raises:
         AuthenticationException: Si les identifiants sont invalides.
+        RateLimitExceeded: Si le rate limit est dépassé.
     """
     request_id = getattr(request.state, "request_id", "unknown")
     
@@ -158,11 +189,26 @@ async def login(
 
 
 @router.post("/refresh", response_model=TokenResponse, status_code=status.HTTP_200_OK)
+@apply_rate_limit
 async def refresh_token(
     refresh_data: RefreshTokenRequest,
     request: Request,
     response: Response
 ) -> TokenResponse:
+    """Endpoint de rafraîchissement de token avec rate limiting.
+    
+    Args:
+        refresh_data: Données de rafraîchissement (peut être dans cookie, body conservé pour compatibilité dev).
+        request: La requête HTTP.
+        response: La réponse HTTP.
+        
+    Returns:
+        Nouveau token d'accès.
+        
+    Raises:
+        AuthenticationException: Si le refresh token est invalide.
+        RateLimitExceeded: Si le rate limit est dépassé.
+    """
     """Endpoint de rafraîchissement de token.
     
     Args:

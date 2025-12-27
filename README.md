@@ -101,6 +101,17 @@ Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux m
     ```
     Ce fichier inclut `PySide6`, `openai`, et d'autres bibliothèques nécessaires.
 
+3.  **Configuration des variables d'environnement** :
+    *   Copier `.env.example` vers `.env` :
+        ```bash
+        cp .env.example .env
+        ```
+    *   Modifier `.env` et définir les variables nécessaires :
+        *   `OPENAI_API_KEY` : Clé API OpenAI (requis pour la génération de dialogues)
+        *   `JWT_SECRET_KEY` : Clé secrète pour JWT (valeur par défaut acceptée en dev, **doit être changée en production**)
+        *   `ENVIRONMENT` : Environnement (`development` ou `production`)
+    *   Pour plus de détails, voir [README_API.md](README_API.md) et [docs/SECURITY.md](docs/SECURITY.md).
+
 ## Comment Lancer l'Application
 
 1.  **Positionnement des Données du GDD** :
@@ -121,11 +132,7 @@ Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux m
         ```
     *   Le chemin d'accès aux données du GDD est configurable dans `context_config.json`.
 
-2.  **Clé API OpenAI (Optionnel mais recommandé)** :
-    *   Pour utiliser le client OpenAI, assurez-vous que la variable d'environnement `OPENAI_API_KEY` est définie, ou que votre clé est présente dans `config/llm_config.json`.
-    *   Si aucune clé n'est configurée, l'application utilisera `DummyLLMClient` qui simule les réponses.
-
-3.  **Lancement** :
+2.  **Lancement** :
     *   ⚠️ **IMPORTANT** : Utiliser l'interface web React, pas l'interface desktop Python.
     *   **Interface Web (RECOMMANDÉE)** :
         ```bash

@@ -59,26 +59,53 @@ def _parse_elements(elements_data: list[dict]) -> list:
 async def list_interactions(
     request: Request,
     interaction_service: Annotated[InteractionService, Depends(get_interaction_service)],
-    request_id: Annotated[str, Depends(get_request_id)]
+    request_id: Annotated[str, Depends(get_request_id)],
+    page: Optional[int] = None,
+    page_size: Optional[int] = None
 ) -> InteractionListResponse:
-    """Liste toutes les interactions.
+    """Liste toutes les interactions avec pagination optionnelle.
     
     Args:
         request: La requête HTTP.
         interaction_service: Service d'interactions injecté.
         request_id: ID de la requête.
+        page: Numéro de page (1-indexed). Si None, retourne toutes les interactions.
+        page_size: Taille de page. Si None, utilise la valeur par défaut (50).
         
     Returns:
-        Liste des interactions.
+        Liste des interactions (paginée si page fourni, sinon toutes).
     """
     try:
+        from api.utils.pagination import get_pagination_params, paginate_list
+        
+        # Récupérer toutes les interactions
         interactions = interaction_service.get_all()
         interaction_responses = [InteractionResponse.from_model(interaction) for interaction in interactions]
+        total = len(interaction_responses)
         
-        return InteractionListResponse(
-            interactions=interaction_responses,
-            total=len(interaction_responses)
-        )
+        # Appliquer la pagination si demandée
+        pagination_params = get_pagination_params(page=page, page_size=page_size)
+        paginated_responses = paginate_list(interaction_responses, pagination_params)
+        
+        # Construire la réponse avec métadonnées de pagination
+        if pagination_params.is_enabled:
+            total_pages = (total + pagination_params.page_size - 1) // pagination_params.page_size
+            return InteractionListResponse(
+                interactions=paginated_responses,
+                total=total,
+                page=pagination_params.page,
+                page_size=pagination_params.page_size,
+                total_pages=total_pages
+            )
+        else:
+            # Rétrocompatibilité : pas de pagination
+            return InteractionListResponse(
+                interactions=paginated_responses,
+                total=total,
+                page=None,
+                page_size=None,
+                total_pages=None
+            )
     except Exception as e:
         logger.exception(f"Erreur lors de la récupération des interactions (request_id: {request_id})")
         raise InternalServerException(

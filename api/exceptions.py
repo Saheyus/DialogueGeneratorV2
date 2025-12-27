@@ -36,6 +36,14 @@ class APIException(HTTPException):
         
         super().__init__(status_code=status_code, detail=message)
         logger.error(f"APIException [{code}]: {message} (request_id: {request_id})")
+        
+        # Envoyer à Sentry si disponible (seulement pour les erreurs 500+)
+        if status_code >= 500:
+            try:
+                from api.utils.sentry_config import capture_exception
+                capture_exception(self, request_id=request_id, error_code=code)
+            except Exception:
+                pass  # Ne pas échouer si Sentry n'est pas disponible
 
 
 class ValidationException(APIException):

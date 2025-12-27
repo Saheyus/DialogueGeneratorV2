@@ -179,7 +179,9 @@ class DialogueGenerationService(IDialogueGenerationService):
                                             user_instructions: str, # Devrait inclure la description de la structure
                                             system_prompt_override: Optional[str],
                                             context_selections: Dict[str, Any],
-                                            current_llm_model_identifier: str
+                                            current_llm_model_identifier: str,
+                                            field_configs: Optional[Dict[str, List[str]]] = None,
+                                            organization_mode: Optional[str] = None
                                             ) -> Tuple[Optional[List[Interaction]], Optional[str], Optional[int]]:
         logger.info(f"Service: Starting INTERACTION generation. Model: {current_llm_model_identifier}, K: {k_variants}")
         original_system_prompt = None
@@ -193,7 +195,9 @@ class DialogueGenerationService(IDialogueGenerationService):
             # context_selections déjà enrichi avec _scene_protagonists, _scene_location, generate_interaction=True
             # et generation_settings.dialogue_structure par GenerationPanel
             context_summary_text = self._build_context_summary(
-                current_context_selections, user_instructions, max_context_tokens_for_context_builder # Utilise la copie
+                current_context_selections, user_instructions, max_context_tokens_for_context_builder, # Utilise la copie
+                field_configs=field_configs,
+                organization_mode=organization_mode
             )
 
             if system_prompt_override is not None and self.prompt_engine.system_prompt_template != system_prompt_override:
@@ -260,17 +264,36 @@ class DialogueGenerationService(IDialogueGenerationService):
             self._restore_prompt_on_error(original_system_prompt)
             return None, final_prompt_str if final_prompt_str else "Error during INTERACTION generation.", estimated_tokens
 
-    def _build_context_summary(self, context_selections: Dict[str, Any], user_instructions: str, max_tokens: int, no_limit: bool = False) -> str:
+    def _build_context_summary(self, context_selections: Dict[str, Any], user_instructions: str, max_tokens: int, no_limit: bool = False, field_configs: Optional[Dict[str, List[str]]] = None, organization_mode: Optional[str] = None) -> str:
         """
         Construit le résumé contextuel à partir des sélections et instructions utilisateur.
         Si no_limit est True, max_tokens est ignoré (valeur très haute transmise).
+        
+        Args:
+            context_selections: Sélections de contexte GDD.
+            user_instructions: Instructions utilisateur.
+            max_tokens: Nombre maximum de tokens.
+            no_limit: Si True, ignore la limite de tokens.
+            field_configs: Configuration des champs à inclure (optionnel).
+            organization_mode: Mode d'organisation du contexte (optionnel).
         """
         if no_limit:
             max_tokens = 999999
         # Log pour déboguer les personnages sélectionnés
         logger.debug(f"[_build_context_summary] context_selections reçu: {context_selections}")
         logger.debug(f"[_build_context_summary] characters dans context_selections: {context_selections.get('characters', [])}")
-        return self.context_builder.build_context(context_selections, user_instructions, max_tokens=max_tokens)
+        
+        # Utiliser build_context_with_custom_fields si field_configs est fourni
+        if field_configs and hasattr(self.context_builder, 'build_context_with_custom_fields'):
+            return self.context_builder.build_context_with_custom_fields(
+                selected_elements=context_selections,
+                scene_instruction=user_instructions,
+                field_configs=field_configs,
+                organization_mode=organization_mode or "default",
+                max_tokens=max_tokens
+            )
+        else:
+            return self.context_builder.build_context(context_selections, user_instructions, max_tokens=max_tokens)
 
     def _restore_prompt_on_error(self, original_system_prompt: Optional[str]):
         if original_system_prompt is not None:

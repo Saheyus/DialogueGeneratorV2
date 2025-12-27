@@ -3,9 +3,22 @@
  */
 import apiClient from './client'
 import type { LLMModelsListResponse, UnityDialoguesPathResponse } from '../types/api'
+import type {
+  ContextFieldsResponse,
+  ContextFieldSuggestionsResponse,
+  ContextPreviewResponse,
+} from '../store/contextConfigStore'
 
 export interface DefaultSystemPromptResponse {
   prompt: string
+}
+
+export interface ContextPreviewRequest {
+  selected_elements: Record<string, string[]>
+  field_configs: Record<string, string[]>
+  organization_mode?: string
+  scene_instruction?: string
+  max_tokens?: number
 }
 
 /**
@@ -42,5 +55,67 @@ export async function getDefaultSystemPrompt(): Promise<DefaultSystemPromptRespo
   return {
     prompt: "Tu es un assistant expert en écriture de dialogues pour jeux de rôle (RPG).\nTa tâche est de générer un dialogue cohérent avec le contexte fourni et l'instruction utilisateur.\nSi une structure de dialogue spécifique est demandée (ex: PNJ suivi d'un choix PJ), respecte cette structure."
   }
+}
+
+/**
+ * Récupère les champs disponibles pour un type d'élément.
+ */
+export async function getContextFields(elementType: string): Promise<ContextFieldsResponse> {
+  const response = await apiClient.get<ContextFieldsResponse>(`/api/v1/config/context-fields/${elementType}`)
+  return response.data
+}
+
+/**
+ * Récupère les suggestions de champs selon le contexte.
+ */
+export async function getFieldSuggestions(
+  elementType: string,
+  context?: string
+): Promise<ContextFieldSuggestionsResponse> {
+  const response = await apiClient.post<ContextFieldSuggestionsResponse>(
+    '/api/v1/config/context-fields/suggestions',
+    {
+      element_type: elementType,
+      context: context || null,
+    }
+  )
+  return response.data
+}
+
+/**
+ * Prévisualise le contexte avec une configuration personnalisée.
+ */
+export async function previewContext(
+  request: ContextPreviewRequest
+): Promise<ContextPreviewResponse> {
+  const response = await apiClient.post<ContextPreviewResponse>(
+    '/api/v1/config/context-fields/preview',
+    request
+  )
+  return response.data
+}
+
+/**
+ * Récupère la configuration par défaut des champs.
+ */
+export async function getDefaultFieldConfig(): Promise<{
+  essential_fields: Record<string, string[]>
+  default_fields: Record<string, string[]>
+}> {
+  const response = await apiClient.get<{
+    essential_fields: Record<string, string[]>
+    default_fields: Record<string, string[]>
+  }>('/api/v1/config/context-fields/default')
+  return response.data
+}
+
+/**
+ * Invalide le cache des champs de contexte.
+ */
+export async function invalidateContextFieldsCache(elementType?: string): Promise<void> {
+  const url = elementType
+    ? `/api/v1/config/context-fields/invalidate-cache?element_type=${elementType}`
+    : '/api/v1/config/context-fields/invalidate-cache'
+  await apiClient.post(url)
 }
 

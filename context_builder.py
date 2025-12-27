@@ -4,7 +4,7 @@ from pathlib import Path
 import logging
 import re
 import os
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 import traceback
 import time
 
@@ -78,23 +78,44 @@ class ContextBuilder:
         Charge les fichiers JSON du GDD depuis les chemins relatifs au projet.
         Se concentre sur les fichiers non-Mini dans GDD/categories/
         et charge également Vision.json depuis import/Bible_Narrative/
+        
+        Utilise un cache intelligent avec vérification mtime pour éviter les rechargements inutiles.
         """
+        # Essayer d'importer le cache GDD (peut ne pas être disponible dans tous les contextes)
+        gdd_cache = None
+        try:
+            from api.utils.gdd_cache import get_gdd_cache
+            gdd_cache = get_gdd_cache()
+        except (ImportError, AttributeError):
+            logger.debug("Cache GDD non disponible. Chargement direct depuis fichiers.")
+        
         gdd_base_path = PROJECT_ROOT_DIR / "GDD"
         categories_path = gdd_base_path / "categories"
         import_base_path = PROJECT_ROOT_DIR / "import"
 
         logger.info(f"Début du chargement des données du GDD depuis {categories_path} et {import_base_path}.")
 
+        # Charger Vision.json avec cache
         vision_file_path = import_base_path / "Bible_Narrative" / "Vision.json"
         if vision_file_path.exists() and vision_file_path.is_file():
-            try:
-                with open(vision_file_path, "r", encoding="utf-8") as f:
-                    self.vision_data = json.load(f)
-                logger.info(f"Fichier {vision_file_path.name} chargé avec succès.")
-            except json.JSONDecodeError as e:
-                logger.error(f"Erreur de décodage JSON pour {vision_file_path.name}: {e}")
-            except Exception as e:
-                logger.error(f"Erreur inattendue lors du chargement de {vision_file_path.name}: {e}")
+            # Vérifier le cache
+            cached_vision = gdd_cache.get("vision", vision_file_path) if gdd_cache else None
+            
+            if cached_vision is not None:
+                self.vision_data = cached_vision
+                logger.debug(f"Fichier {vision_file_path.name} chargé depuis le cache.")
+            else:
+                try:
+                    with open(vision_file_path, "r", encoding="utf-8") as f:
+                        self.vision_data = json.load(f)
+                    logger.info(f"Fichier {vision_file_path.name} chargé avec succès.")
+                    # Mettre en cache
+                    if gdd_cache:
+                        gdd_cache.set("vision", self.vision_data, vision_file_path)
+                except json.JSONDecodeError as e:
+                    logger.error(f"Erreur de décodage JSON pour {vision_file_path.name}: {e}")
+                except Exception as e:
+                    logger.error(f"Erreur inattendue lors du chargement de {vision_file_path.name}: {e}")
         else:
             logger.warning(f"Fichier {vision_file_path.name} non trouvé ou n'est pas un fichier.")
 
@@ -121,6 +142,21 @@ class ContextBuilder:
             setattr(self, attribute_name, default_value)
 
             if file_path.exists() and file_path.is_file():
+                # Vérifier le cache
+                cached_data = gdd_cache.get(file_key, file_path) if gdd_cache else None
+                
+                if cached_data is not None:
+                    # Utiliser les données en cache
+                    if file_key in ["structure_macro", "structure_micro"]:
+                        setattr(self, attribute_name, cached_data)
+                        logger.debug(f"Fichier {file_path.name} chargé depuis le cache (objet unique).")
+                    else:
+                        setattr(self, attribute_name, cached_data)
+                        count = len(cached_data) if expected_type == list else 1
+                        logger.debug(f"Fichier {file_path.name} chargé depuis le cache. {count} élément(s) pour '{json_main_key}'.")
+                    continue
+                
+                # Charger depuis le fichier
                 try:
                     with open(file_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
@@ -135,6 +171,9 @@ class ContextBuilder:
                     elif file_key in ["structure_macro", "structure_micro"] and isinstance(data, dict):
                         setattr(self, attribute_name, data)
                         logger.info(f"Fichier {file_path.name} chargé comme objet unique.")
+                        # Mettre en cache
+                        if gdd_cache:
+                            gdd_cache.set(file_key, data, file_path)
                         continue
                     
                     if data_to_set is not None:
@@ -142,6 +181,9 @@ class ContextBuilder:
                             setattr(self, attribute_name, data_to_set)
                             count = len(data_to_set) if expected_type == list else 1
                             logger.info(f"Fichier {file_path.name} chargé. {count} élément(s) pour '{json_main_key}'.")
+                            # Mettre en cache
+                            if gdd_cache:
+                                gdd_cache.set(file_key, data_to_set, file_path)
                         else:
                             logger.warning(f"Type de données inattendu pour {json_main_key} dans {file_path.name}. Attendu {expected_type}, obtenu {type(data_to_set)}.")
                     else:
@@ -418,6 +460,136 @@ class ContextBuilder:
         if now - last_time > ContextBuilder._info_log_interval:
             logger.info(message)
             ContextBuilder._last_info_log_time[log_key] = now
+
+    def build_context_with_custom_fields(
+        self,
+        selected_elements: dict[str, list[str]],
+        scene_instruction: str,
+        field_configs: Optional[Dict[str, List[str]]] = None,
+        organization_mode: str = "default",
+        max_tokens: int = 70000,
+        include_dialogue_type: bool = True
+    ) -> str:
+        """Construit un contexte avec une configuration personnalisée de champs.
+        
+        Args:
+            selected_elements: Éléments sélectionnés par type.
+            scene_instruction: Instruction de scène.
+            field_configs: Configuration des champs par type d'élément (ex: {"character": ["Nom", "Dialogue Type"]}).
+            organization_mode: Mode d'organisation ("default", "narrative", "minimal").
+            max_tokens: Nombre maximum de tokens.
+            include_dialogue_type: Inclure le type de dialogue.
+            
+        Returns:
+            Résumé du contexte formaté.
+        """
+        from services.context_organizer import ContextOrganizer
+        
+        self._throttled_info_log('start_build_custom', f"Début de la construction du contexte avec champs personnalisés (mode: {organization_mode}).")
+        
+        context_parts = []
+        organizer = ContextOrganizer()
+        
+        # Contexte du dialogue précédent
+        previous_dialogue_formatted = self._format_previous_dialogue_for_context(max_tokens)
+        if previous_dialogue_formatted:
+            context_parts.append(previous_dialogue_formatted)
+            logger.info(f"Historique du dialogue précédent ajouté au contexte.")
+        
+        # Objectif de la scène
+        if scene_instruction and scene_instruction.strip():
+            context_parts.append("\n--- OBJECTIF DE LA SCÈNE (Instruction Utilisateur) ---\n" + scene_instruction.strip())
+        
+        # Informations sur le GDD avec champs personnalisés
+        element_categories_order = ["characters", "species", "communities", "locations", "items", "quests"]
+        prioritized_elements_for_context = {}
+        for category_key in element_categories_order:
+            if category_key in selected_elements:
+                prioritized_elements_for_context[category_key] = selected_elements[category_key]
+        for category_key in selected_elements:
+            if category_key not in prioritized_elements_for_context:
+                prioritized_elements_for_context[category_key] = selected_elements[category_key]
+        
+        gdd_context_parts = []
+        for category_key, names_list in prioritized_elements_for_context.items():
+            if not isinstance(names_list, list) or not names_list:
+                continue
+            
+            category_title = category_key.replace('_', ' ').capitalize()
+            gdd_context_parts.append(f"\n--- {category_title.upper()} ---")
+            
+            # Déterminer le type d'élément pour l'organisateur
+            element_type_map = {
+                "characters": "character",
+                "locations": "location",
+                "items": "item",
+                "species": "species",
+                "communities": "community",
+            }
+            element_type = element_type_map.get(category_key, category_key)
+            
+            # Récupérer la configuration de champs pour ce type
+            fields_to_include = None
+            if field_configs and element_type in field_configs:
+                fields_to_include = field_configs[element_type]
+            
+            for name in names_list:
+                element_data = None
+                if category_key == "characters":
+                    element_data = self.get_character_details_by_name(name)
+                elif category_key == "locations":
+                    element_data = self.get_location_details_by_name(name)
+                elif category_key == "items":
+                    element_data = self.get_item_details_by_name(name)
+                elif category_key == "species":
+                    element_data = self.get_species_details_by_name(name)
+                elif category_key == "communities":
+                    element_data = self.get_community_details_by_name(name)
+                elif category_key == "quests":
+                    element_data = self.get_quest_details_by_name(name)
+                
+                if element_data:
+                    if fields_to_include:
+                        # Utiliser l'organisateur avec les champs personnalisés
+                        info_str = organizer.organize_context(
+                            element_data=element_data,
+                            element_type=element_type,
+                            fields_to_include=fields_to_include,
+                            organization_mode=organization_mode
+                        )
+                    else:
+                        # Fallback: utiliser la méthode standard
+                        info_str = self._get_prioritized_info(
+                            element_data, 
+                            category_key, 
+                            3,  # level max
+                            include_dialogue_type=include_dialogue_type
+                        )
+                    gdd_context_parts.append(info_str)
+                else:
+                    logger.warning(f"Aucune donnée trouvée pour l'élément '{name}' dans la catégorie '{category_key}'.")
+        
+        if gdd_context_parts:
+            context_parts.extend(gdd_context_parts)
+        
+        # Construction finale
+        context_summary = "\n".join(context_parts).strip()
+        final_tokens = self._count_tokens(context_summary)
+        self._throttled_info_log('context_summary_custom', f"Résumé du contexte construit (mode: {organization_mode}). Total tokens: {final_tokens}")
+        
+        if final_tokens > max_tokens:
+            logger.warning(f"ATTENTION : Le contexte final ({final_tokens} tokens) dépasse la limite max_tokens ({max_tokens}). Le contenu sera tronqué.")
+            try:
+                enc = tiktoken.get_encoding("cl100k_base")
+                tokens = enc.encode(context_summary)
+                truncated_tokens = tokens[:max_tokens]
+                truncated_text = enc.decode(truncated_tokens)
+            except Exception:
+                words = context_summary.split()
+                truncated_text = " ".join(words[:max_tokens])
+            context_summary = truncated_text + "\n... (contexte tronqué)"
+        
+        return context_summary
 
     def build_context(self, selected_elements: dict[str, list[str]], scene_instruction: str, max_tokens: int = 70000, include_dialogue_type: bool = True) -> str:
         """

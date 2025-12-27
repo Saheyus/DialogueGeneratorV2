@@ -14,9 +14,27 @@ pip install -r requirements.txt
 
 ### Configuration
 
-1. Créer un fichier `.env` (optionnel) ou configurer les variables d'environnement :
-   - `OPENAI_API_KEY`: Clé API OpenAI
-   - `JWT_SECRET_KEY`: Clé secrète pour JWT (par défaut: "your-secret-key-change-in-production")
+1. **Créer le fichier `.env`** :
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Modifier `.env`** et définir les variables d'environnement :
+   - `OPENAI_API_KEY`: Clé API OpenAI (requis)
+   - `JWT_SECRET_KEY`: Clé secrète pour JWT (requis en production, valeur par défaut acceptée en dev)
+   - `ENVIRONMENT`: Environnement (`development` ou `production`)
+   - `AUTH_RATE_LIMIT_ENABLED`: Activer le rate limiting (par défaut: `true`)
+   - `AUTH_RATE_LIMIT_REQUESTS`: Nombre de requêtes par fenêtre (par défaut: `5`)
+   - `AUTH_RATE_LIMIT_WINDOW`: Fenêtre en secondes (par défaut: `60`)
+
+   **Note** : Voir `.env.example` pour la liste complète des variables. En production, `JWT_SECRET_KEY` **doit** être changée et ne peut pas être la valeur par défaut.
+
+3. **Générer une clé secrète JWT sécurisée** (recommandé) :
+   ```bash
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+
+Pour plus de détails sur la sécurité, voir [docs/SECURITY.md](docs/SECURITY.md).
 
 ### Lancer l'API
 

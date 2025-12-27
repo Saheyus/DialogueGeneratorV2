@@ -1,13 +1,6 @@
 """Tests pour l'authentification API."""
 import pytest
 from fastapi.testclient import TestClient
-from api.main import app
-
-
-@pytest.fixture
-def client():
-    """Fixture pour créer un client de test FastAPI."""
-    return TestClient(app)
 
 
 def test_login_success(client: TestClient):

@@ -107,3 +107,5 @@ class SkillCatalogService:
         self._skills = None
         logger.info("Rechargement forcé du catalogue des compétences")
 
+
+

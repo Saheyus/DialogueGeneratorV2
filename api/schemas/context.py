@@ -43,9 +43,15 @@ class CharacterListResponse(BaseModel):
     Attributes:
         characters: Liste des personnages.
         total: Nombre total de personnages.
+        page: Numéro de page actuelle (1-indexed, None si pas de pagination).
+        page_size: Taille de la page (None si pas de pagination).
+        total_pages: Nombre total de pages (None si pas de pagination).
     """
     characters: List[CharacterResponse] = Field(..., description="Liste des personnages")
     total: int = Field(..., description="Nombre total de personnages")
+    page: Optional[int] = Field(None, description="Numéro de page actuelle (1-indexed)")
+    page_size: Optional[int] = Field(None, description="Taille de la page")
+    total_pages: Optional[int] = Field(None, description="Nombre total de pages")
 
 
 class LocationListResponse(BaseModel):
@@ -54,9 +60,15 @@ class LocationListResponse(BaseModel):
     Attributes:
         locations: Liste des lieux.
         total: Nombre total de lieux.
+        page: Numéro de page actuelle (1-indexed, None si pas de pagination).
+        page_size: Taille de la page (None si pas de pagination).
+        total_pages: Nombre total de pages (None si pas de pagination).
     """
     locations: List[LocationResponse] = Field(..., description="Liste des lieux")
     total: int = Field(..., description="Nombre total de lieux")
+    page: Optional[int] = Field(None, description="Numéro de page actuelle (1-indexed)")
+    page_size: Optional[int] = Field(None, description="Taille de la page")
+    total_pages: Optional[int] = Field(None, description="Nombre total de pages")
 
 
 class ItemListResponse(BaseModel):
@@ -65,9 +77,15 @@ class ItemListResponse(BaseModel):
     Attributes:
         items: Liste des objets.
         total: Nombre total d'objets.
+        page: Numéro de page actuelle (1-indexed, None si pas de pagination).
+        page_size: Taille de la page (None si pas de pagination).
+        total_pages: Nombre total de pages (None si pas de pagination).
     """
     items: List[ItemResponse] = Field(..., description="Liste des objets")
     total: int = Field(..., description="Nombre total d'objets")
+    page: Optional[int] = Field(None, description="Numéro de page actuelle (1-indexed)")
+    page_size: Optional[int] = Field(None, description="Taille de la page")
+    total_pages: Optional[int] = Field(None, description="Nombre total de pages")
 
 
 class SpeciesResponse(BaseModel):
@@ -87,9 +105,15 @@ class SpeciesListResponse(BaseModel):
     Attributes:
         species: Liste des espèces.
         total: Nombre total d'espèces.
+        page: Numéro de page actuelle (1-indexed, None si pas de pagination).
+        page_size: Taille de la page (None si pas de pagination).
+        total_pages: Nombre total de pages (None si pas de pagination).
     """
     species: List[SpeciesResponse] = Field(..., description="Liste des espèces")
     total: int = Field(..., description="Nombre total d'espèces")
+    page: Optional[int] = Field(None, description="Numéro de page actuelle (1-indexed)")
+    page_size: Optional[int] = Field(None, description="Taille de la page")
+    total_pages: Optional[int] = Field(None, description="Nombre total de pages")
 
 
 class CommunityResponse(BaseModel):

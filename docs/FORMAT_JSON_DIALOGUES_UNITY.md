@@ -153,3 +153,5 @@ L'outil produit un format enrichi (métadonnées, commentaires, format libre), U
 - **Normalisation** : Unity normalise automatiquement les fichiers JSON lors de l'import, mais l'outil devrait produire un format déjà normalisé pour éviter les diffs inutiles.
 - **Validation** : L'outil doit valider les références de nœuds avant export pour éviter les erreurs runtime.
 
+
+

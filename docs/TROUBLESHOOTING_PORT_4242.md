@@ -109,3 +109,5 @@ Pour éviter ce problème à l'avenir :
 2. **Vérification** : Vérifier que les ports sont libres avant de relancer
 3. **Scripts de nettoyage** : Utiliser `npm run dev` qui gère automatiquement la libération
 
+
+

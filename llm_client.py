@@ -148,6 +148,23 @@ class OpenAIClient(ILLMClient):
             "system_prompt_template", 
             "Tu es un assistant expert en écriture de dialogues pour jeux de rôle (RPG)."
         )
+        
+        # Initialiser retry et circuit breaker (optionnel, peut ne pas être disponible dans tous les contextes)
+        self._retry_with_backoff = None
+        self._circuit_breaker = None
+        try:
+            from api.utils.retry import retry_with_backoff
+            from api.utils.circuit_breaker import get_llm_circuit_breaker
+            self._retry_with_backoff = retry_with_backoff
+            self._circuit_breaker = get_llm_circuit_breaker()
+            if self._circuit_breaker:
+                logger.info("Circuit breaker LLM activé")
+            if self._retry_with_backoff:
+                logger.info("Retry avec exponential backoff activé pour les appels LLM")
+        except (ImportError, AttributeError):
+            # Si les modules ne sont pas disponibles (ex: tests, imports circulaires), continuer sans retry/circuit breaker
+            logger.debug("Modules retry/circuit_breaker non disponibles. Continuation sans protection.")
+        
         logger.info(f"OpenAIClient initialisé avec le modèle: {self.model_name}, API Key présente: {'Oui' if api_key else 'Non'}.")
         logger.info(f"System prompt template utilisé: '{self.system_prompt_template}'")
 
@@ -242,15 +259,36 @@ class OpenAIClient(ILLMClient):
                         log_file.write(json.dumps(log_data) + "\n")
                 except: pass
                 # #endregion
-                response = await self.client.chat.completions.create(
-                    model=self.model_name,
-                    messages=messages,
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens,
-                    n=1,
-                    tools=[tool_definition] if tool_definition else NOT_GIVEN,
-                    tool_choice=tool_choice_option,
-                )
+                
+                # Créer une fonction wrapper pour l'appel API avec retry et circuit breaker
+                async def _make_api_call():
+                    return await self.client.chat.completions.create(
+                        model=self.model_name,
+                        messages=messages,
+                        temperature=self.temperature,
+                        max_tokens=self.max_tokens,
+                        n=1,
+                        tools=[tool_definition] if tool_definition else NOT_GIVEN,
+                        tool_choice=tool_choice_option,
+                    )
+                
+                # Appliquer retry et circuit breaker si disponibles
+                # Le retry doit envelopper le circuit breaker
+                if self._retry_with_backoff and self._circuit_breaker:
+                    # Les deux sont disponibles: retry enveloppe circuit breaker
+                    async def _make_api_call_with_circuit_breaker():
+                        return await self._circuit_breaker.call_async(_make_api_call)
+                    response = await self._retry_with_backoff(_make_api_call_with_circuit_breaker)
+                elif self._circuit_breaker:
+                    # Circuit breaker seul
+                    response = await self._circuit_breaker.call_async(_make_api_call)
+                elif self._retry_with_backoff:
+                    # Retry seul
+                    response = await self._retry_with_backoff(_make_api_call)
+                else:
+                    # Pas de protection
+                    response = await _make_api_call()
+                
                 logger.info(f"Réponse BRUTE de l'API OpenAI reçue pour la variante {i+1}:\n{response.model_dump_json(indent=2)}")
 
                 if response_model and response.choices[0].message.tool_calls:
