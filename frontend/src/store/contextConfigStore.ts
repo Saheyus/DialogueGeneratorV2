@@ -101,10 +101,12 @@ export const useContextConfigStore = create<ContextConfigState>((set, get) => ({
 
   toggleField: (elementType, fieldPath) => {
     set((state) => {
-      // Ne pas permettre la désélection des champs essentiels
-      const essentialFields = state.essentialFields[elementType] || []
-      if (essentialFields.includes(fieldPath)) {
-        // Champ essentiel, ne pas permettre la désélection
+      // Ne pas permettre la désélection des champs essentiels du contexte narratif
+      // (is_essential concerne uniquement les champs essentiels pour génération minimale)
+      const availableFieldsForType = state.availableFields[elementType] || {}
+      const fieldInfo = availableFieldsForType[fieldPath]
+      if (fieldInfo?.is_essential === true) {
+        // Champ essentiel du contexte narratif, ne pas permettre la désélection
         return state
       }
       

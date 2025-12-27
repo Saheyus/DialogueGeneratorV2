@@ -336,23 +336,19 @@ function ContextTab({
   
   const handleSelectAll = useCallback(() => {
     if (showOnlyEssential) {
-      // Dans l'onglet Métadonnées : sélectionner tous les champs essentiels
-      selectEssentialFields(selectedElementType)
+      // Dans l'onglet Métadonnées : sélectionner tous les champs métadonnées
+      selectAllFields(selectedElementType)
     } else {
-      // Dans l'onglet Contexte : sélectionner tous les champs (essentiels + non-essentiels)
+      // Dans l'onglet Contexte : sélectionner tous les champs du contexte narratif
       selectAllFields(selectedElementType)
     }
-  }, [selectedElementType, selectAllFields, selectEssentialFields, showOnlyEssential])
+  }, [selectedElementType, selectAllFields, showOnlyEssential])
 
   const handleSelectEssential = useCallback(() => {
-    if (showOnlyEssential) {
-      // Dans l'onglet Métadonnées : "Sélectionner essentiels" = sélectionner tous les essentiels (déjà fait par handleSelectAll)
-      selectEssentialFields(selectedElementType)
-    } else {
-      // Dans l'onglet Contexte : "Sélectionner essentiels" = sélectionner uniquement les essentiels
-      selectEssentialFields(selectedElementType)
-    }
-  }, [selectedElementType, selectEssentialFields, showOnlyEssential])
+    // "Sélectionner essentiels" = sélectionner uniquement les champs essentiels du contexte narratif
+    // (définis dans MINIMAL_FIELDS, marqués avec is_essential=true)
+    selectEssentialFields(selectedElementType)
+  }, [selectedElementType, selectEssentialFields])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

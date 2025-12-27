@@ -27,7 +27,6 @@ export function ContextFieldSelector({
   const {
     availableFields,
     fieldConfigs,
-    essentialFields,
     suggestions,
     toggleField,
     detectFields,
@@ -56,10 +55,10 @@ export function ContextFieldSelector({
     // showOnlyEssential=false affiche le contexte narratif (is_metadata=false)
     const filteredFields = showOnlyEssential
       ? Object.fromEntries(
-          Object.entries(fields).filter(([path, fieldInfo]: [string, any]) => fieldInfo.is_metadata === true)
+          Object.entries(fields).filter(([, fieldInfo]: [string, any]) => fieldInfo.is_metadata === true)
         )
       : Object.fromEntries(
-          Object.entries(fields).filter(([path, fieldInfo]: [string, any]) => fieldInfo.is_metadata !== true)
+          Object.entries(fields).filter(([, fieldInfo]: [string, any]) => fieldInfo.is_metadata !== true)
         )
     
     // Créer tous les nœuds
@@ -134,15 +133,10 @@ export function ContextFieldSelector({
   }, [fieldTree, searchQuery])
 
   const selectedFields = fieldConfigs[elementType] || []
-  const essentialFieldsForType = essentialFields[elementType] || []
   const suggestedFields = suggestions[elementType] || []
 
   const handleToggleField = useCallback((fieldPath: string) => {
-    // Ne pas permettre la désélection des champs essentiels
-    if (essentialFieldsForType.includes(fieldPath)) {
-      return
-    }
-    
+    // La logique de désélection des champs essentiels est gérée dans toggleField du store
     toggleField(elementType, fieldPath)
     const newSelection = selectedFields.includes(fieldPath)
       ? selectedFields.filter(f => f !== fieldPath)
