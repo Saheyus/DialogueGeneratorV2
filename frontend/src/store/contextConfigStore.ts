@@ -13,6 +13,8 @@ export interface FieldInfo {
   suggested: boolean
   category?: string | null
   importance?: string | null
+  is_metadata?: boolean  // Si le champ est une métadonnée (avant "Introduction" dans le JSON)
+  is_essential?: boolean  // Si le champ est essentiel pour génération minimale (défini dans MINIMAL_FIELDS)
 }
 
 export interface ContextFieldsResponse {
@@ -135,13 +137,15 @@ export const useContextConfigStore = create<ContextConfigState>((set, get) => ({
 
   selectEssentialFields: (elementType) => {
     set((state) => {
-      // Récupérer les champs essentiels depuis availableFields (détectés dynamiquement avec is_essential: true)
-      // plutôt que depuis essentialFields du store (qui vient de context_config.json)
+      // Récupérer les champs essentiels du CONTEXTE NARRATIF depuis availableFields
+      // (is_essential: true concerne uniquement les champs essentiels pour génération minimale)
       const availableFieldsForType = state.availableFields[elementType] || {}
       const essentialFieldsFromDetection = Object.entries(availableFieldsForType)
         .filter(([path, fieldInfo]: [string, any]) => {
+          // Ne prendre que les champs essentiels du contexte narratif (pas les métadonnées)
           const isEssential = fieldInfo.is_essential === true || fieldInfo.is_essential === 'true'
-          return isEssential
+          const isMetadata = fieldInfo.is_metadata === true || fieldInfo.is_metadata === 'true'
+          return isEssential && !isMetadata
         })
         .map(([path]) => path)
       
@@ -150,7 +154,7 @@ export const useContextConfigStore = create<ContextConfigState>((set, get) => ({
         ? essentialFieldsFromDetection
         : (state.essentialFields[elementType] || [])
       
-      // Sélectionner uniquement les champs essentiels
+      // Sélectionner uniquement les champs essentiels du contexte narratif
       const newFieldConfigs = {
         ...state.fieldConfigs,
         [elementType]: [...essentialFieldsForType],

@@ -1,0 +1,41 @@
+{
+  "templates": [
+    {
+      "id": "conversation",
+      "name": "Conversation",
+      "description": "Ton équilibré, répliques naturelles, dialogue classique. Idéal pour les conversations quotidiennes, échanges normaux, interactions standards.",
+      "instructions": "Ton naturel et équilibré. Varie la longueur des répliques pour créer un rythme naturel (1-3 phrases). Les répliques courtes créent de la dynamique, les longues développent l'information. Alterne entre répliques courtes et moyennes pour maintenir un rythme conversationnel fluide. Évite les monologues trop longs (max 3-4 phrases par réplique)."
+    },
+    {
+      "id": "action_scene",
+      "name": "Scène d'action",
+      "description": "Ton rapide, répliques courtes, tension élevée. Idéal pour les combats, poursuites, moments intenses.",
+      "instructions": "Ton tendu et dynamique. Privilégie les répliques COURTES et PERCUTANTES (1-2 phrases maximum). Crée de la tension avec des échanges rapides. Les répliques longues sont rares et réservées aux moments de révélation ou d'émotion intense. Alterne entre répliques très courtes pour l'action et légèrement plus longues pour les moments clés."
+    },
+    {
+      "id": "intimate_moment",
+      "name": "Moment intime",
+      "description": "Ton calme, répliques longues, émotion profonde. Idéal pour les conversations personnelles, révélations émotionnelles, moments de vulnérabilité.",
+      "instructions": "Ton calme et émotionnel. Privilégie les répliques LONGUES et DÉVELOPPÉES (2-4 phrases). Laisse le temps aux émotions de s'exprimer. Les répliques courtes sont rares et réservées aux moments de silence éloquent ou d'hésitation. Alterne entre répliques développées pour l'émotion et pauses courtes pour la réflexion."
+    },
+    {
+      "id": "revelation",
+      "name": "Révélation",
+      "description": "Ton dramatique, progression graduelle, tension narrative. Idéal pour les révélations de plot, découvertes importantes, moments de bascule.",
+      "instructions": "Ton dramatique et tendu. Construis la tension avec une PROGRESSION GRADUELLE. Commence par des répliques de longueur moyenne, puis alterne entre courtes (tension) et longues (révélation). Les répliques les plus longues doivent être réservées au moment de la révélation elle-même. Crée un crescendo narratif jusqu'à la révélation."
+    },
+    {
+      "id": "humor",
+      "name": "Humour",
+      "description": "Ton léger, répliques vives, moments de détente. Idéal pour les interactions comiques, moments de répit, dialogues légers.",
+      "instructions": "Ton léger et vif. Privilégie les répliques VIVES et RAPIDES (1-3 phrases). Les répliques courtes créent du rythme comique. Les répliques plus longues sont réservées aux blagues développées ou aux moments de comédie de situation. Alterne entre répliques courtes (punchlines) et moyennes (setup)."
+    },
+    {
+      "id": "confrontation",
+      "name": "Confrontation",
+      "description": "Ton tendu, répliques percutantes, tension conflictuelle. Idéal pour les disputes, négociations tendues, moments de conflit.",
+      "instructions": "Ton tendu et conflictuel. Privilégie les répliques PERCUTANTES et MESURÉES (1-3 phrases). Les répliques courtes créent de la tension conflictuelle. Les répliques plus longues sont réservées aux arguments développés ou aux moments de révélation dans le conflit. Alterne entre répliques courtes (attaques) et moyennes (défenses, arguments)."
+    }
+  ]
+}
+

@@ -21,6 +21,7 @@ class InteractionResponse(BaseModel):
     header_commands: List[str] = Field(default_factory=list, description="Commandes à exécuter au début")
     header_tags: List[str] = Field(default_factory=list, description="Tags de l'en-tête")
     next_interaction_id_if_no_choices: Optional[str] = Field(None, description="ID de l'interaction suivante si pas de choix")
+    narrative_warnings: List[str] = Field(default_factory=list, description="Avertissements narratifs (longueur, répétitions, caractérisation)")
     
     @classmethod
     def from_model(cls, interaction: InteractionModel) -> "InteractionResponse":
@@ -38,7 +39,8 @@ class InteractionResponse(BaseModel):
             elements=[elem.model_dump() for elem in interaction.elements],
             header_commands=interaction.header_commands,
             header_tags=interaction.header_tags,
-            next_interaction_id_if_no_choices=interaction.next_interaction_id_if_no_choices
+            next_interaction_id_if_no_choices=interaction.next_interaction_id_if_no_choices,
+            narrative_warnings=[]  # Sera rempli par le router après validation narrative
         )
 
 

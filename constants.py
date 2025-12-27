@@ -24,6 +24,7 @@ class FilePaths:
     CONFIG_DIR = Path("config")
     DATA_DIR = Path("data")
     INTERACTIONS_DIR = DATA_DIR / "interactions"
+    LLM_USAGE_DIR = DATA_DIR / "llm_usage"
     LLM_CONFIG = "llm_config.json"
 
 class Defaults:

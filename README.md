@@ -115,22 +115,27 @@ Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux m
 ## Comment Lancer l'Application
 
 1.  **Positionnement des Données du GDD** :
-    *   Les fichiers JSON du Game Design Document (GDD) doivent être accessibles. Par défaut, l'application s'attend à les trouver dans un dossier `GDD/categories/` et `import/Bible_Narrative/` situés **au même niveau que le dossier `DialogueGenerator`**.
+    *   Les fichiers JSON du Game Design Document (GDD) doivent être accessibles via un lien symbolique.
+    *   **Fichiers de catégories** : L'application utilise le chemin `DialogueGenerator/data/GDD_categories/` qui doit être un lien symbolique pointant vers le répertoire réel contenant les fichiers JSON (personnages.json, lieux.json, etc.).
+    *   **Vision.json** : Toujours depuis `PROJECT_ROOT_DIR/import/Bible_Narrative/Vision.json` (répertoire parent de DialogueGenerator).
     *   Exemple de structure attendue :
         ```
         Parent_Folder/
         ├── DialogueGenerator/  <-- Racine du projet de l'application
+        │   ├── data/
+        │   │   └── GDD_categories/  <-- Lien symbolique vers le vrai répertoire
+        │   │       ├── personnages.json
+        │   │       ├── lieux.json
+        │   │       └── ... (autres fichiers JSON du GDD)
         │   ├── main_app.py
         │   └── ... (autres fichiers et dossiers du projet)
-        ├── GDD/
-        │   └── categories/
-        │       ├── personnages.json
-        │       └── ... (autres fichiers JSON du GDD)
         └── import/
             └── Bible_Narrative/
                 └── Vision.json
         ```
-    *   Le chemin d'accès aux données du GDD est configurable dans `context_config.json`.
+    *   **Créer le lien symbolique** :
+        *   Windows : `mklink /D data\GDD_categories <chemin_vers_repertoire_GDD>`
+        *   Linux/Mac : `ln -s <chemin_vers_repertoire_GDD> data/GDD_categories`
 
 2.  **Lancement** :
     *   ⚠️ **IMPORTANT** : Utiliser l'interface web React, pas l'interface desktop Python.

@@ -17,6 +17,12 @@ from api.schemas.config import (
     ContextPreviewRequest,
     ContextPreviewResponse,
     DefaultFieldConfigResponse,
+    PromptTemplate,
+    PromptTemplatesResponse,
+    SceneInstructionTemplate,
+    SceneInstructionTemplatesResponse,
+    AuthorProfileTemplate,
+    AuthorProfileTemplatesResponse,
 )
 from services.configuration_service import ConfigurationService
 from services.context_field_detector import ContextFieldDetector, FieldInfo as DetectorFieldInfo
@@ -479,6 +485,7 @@ async def get_context_fields(
                         suggested=field_info.suggested,
                         category=field_info.category,
                         importance=ContextFieldDetector(None).classify_field_importance(field_info.frequency),
+                        is_metadata=getattr(field_info, 'is_metadata', False),
                         is_essential=getattr(field_info, 'is_essential', False)
                     )
             
@@ -513,10 +520,14 @@ async def get_context_fields(
         # Convertir en schémas API
         fields_dict = {}
         essential_in_response = 0
+        metadata_in_response = 0
         for path, field_info in detected_fields.items():
             is_essential = field_info.is_essential
+            is_metadata = field_info.is_metadata
             if is_essential:
                 essential_in_response += 1
+            if is_metadata:
+                metadata_in_response += 1
             fields_dict[path] = FieldInfo(
                 path=field_info.path,
                 label=field_info.label,
@@ -526,6 +537,7 @@ async def get_context_fields(
                 suggested=field_info.suggested,
                 category=field_info.category,
                 importance=detector.classify_field_importance(field_info.frequency),
+                is_metadata=is_metadata,
                 is_essential=is_essential
             )
         
@@ -645,6 +657,138 @@ async def preview_context(
         logger.exception(f"Erreur lors de la prévisualisation du contexte (request_id: {request_id})")
         raise InternalServerException(
             message="Erreur lors de la prévisualisation du contexte",
+            details={"error": str(e)},
+            request_id=request_id
+        )
+
+
+@router.get(
+    "/prompt-templates",
+    response_model=PromptTemplatesResponse,
+    status_code=status.HTTP_200_OK
+)
+async def get_prompt_templates(
+    request: Request,
+    config_service: Annotated[ConfigurationService, Depends(get_config_service)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> PromptTemplatesResponse:
+    """Récupère la liste des templates de prompts disponibles.
+    
+    Args:
+        request: La requête HTTP.
+        config_service: Service de configuration injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        Liste des templates de prompts disponibles.
+    """
+    try:
+        templates_data = config_service.get_prompt_templates()
+        templates = [
+            PromptTemplate(
+                id=template.get("id", ""),
+                name=template.get("name", ""),
+                description=template.get("description", ""),
+                prompt=template.get("prompt", "")
+            )
+            for template in templates_data
+        ]
+        return PromptTemplatesResponse(
+            templates=templates,
+            total=len(templates)
+        )
+    except Exception as e:
+        logger.exception(f"Erreur lors de la récupération des templates de prompts (request_id: {request_id})")
+        raise InternalServerException(
+            message="Erreur lors de la récupération des templates de prompts",
+            details={"error": str(e)},
+            request_id=request_id
+        )
+
+
+@router.get(
+    "/scene-instruction-templates",
+    response_model=SceneInstructionTemplatesResponse,
+    status_code=status.HTTP_200_OK
+)
+async def get_scene_instruction_templates(
+    request: Request,
+    config_service: Annotated[ConfigurationService, Depends(get_config_service)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> SceneInstructionTemplatesResponse:
+    """Récupère la liste des templates d'instructions de scène disponibles.
+    
+    Args:
+        request: La requête HTTP.
+        config_service: Service de configuration injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        Liste des templates d'instructions de scène disponibles.
+    """
+    try:
+        templates_data = config_service.get_scene_instruction_templates()
+        templates = [
+            SceneInstructionTemplate(
+                id=template.get("id", ""),
+                name=template.get("name", ""),
+                description=template.get("description", ""),
+                instructions=template.get("instructions", "")
+            )
+            for template in templates_data
+        ]
+        return SceneInstructionTemplatesResponse(
+            templates=templates,
+            total=len(templates)
+        )
+    except Exception as e:
+        logger.exception(f"Erreur lors de la récupération des templates d'instructions de scène (request_id: {request_id})")
+        raise InternalServerException(
+            message="Erreur lors de la récupération des templates d'instructions de scène",
+            details={"error": str(e)},
+            request_id=request_id
+        )
+
+
+@router.get(
+    "/author-profile-templates",
+    response_model=AuthorProfileTemplatesResponse,
+    status_code=status.HTTP_200_OK
+)
+async def get_author_profile_templates(
+    request: Request,
+    config_service: Annotated[ConfigurationService, Depends(get_config_service)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> AuthorProfileTemplatesResponse:
+    """Récupère la liste des templates de profils d'auteur disponibles.
+    
+    Args:
+        request: La requête HTTP.
+        config_service: Service de configuration injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        Liste des templates de profils d'auteur disponibles.
+    """
+    try:
+        templates_data = config_service.get_author_profile_templates()
+        templates = [
+            AuthorProfileTemplate(
+                id=template.get("id", ""),
+                name=template.get("name", ""),
+                description=template.get("description", ""),
+                profile=template.get("profile", "")
+            )
+            for template in templates_data
+        ]
+        return AuthorProfileTemplatesResponse(
+            templates=templates,
+            total=len(templates)
+        )
+    except Exception as e:
+        logger.exception(f"Erreur lors de la récupération des templates de profils d'auteur (request_id: {request_id})")
+        raise InternalServerException(
+            message="Erreur lors de la récupération des templates de profils d'auteur",
             details={"error": str(e)},
             request_id=request_id
         )

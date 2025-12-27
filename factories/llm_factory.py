@@ -1,12 +1,20 @@
 import os
 import logging
+from typing import Optional, Any
 from llm_client import ILLMClient, OpenAIClient, DummyLLMClient
 
 logger = logging.getLogger(__name__)
 
 class LLMClientFactory:
     @staticmethod
-    def create_client(model_id: str, config: dict, available_models: list[dict]) -> ILLMClient:
+    def create_client(
+        model_id: str,
+        config: dict,
+        available_models: list[dict],
+        usage_service: Optional[Any] = None,
+        request_id: Optional[str] = None,
+        endpoint: Optional[str] = None
+    ) -> ILLMClient:
         """
         Crée un client LLM basé sur model_id et la configuration.
 
@@ -66,7 +74,13 @@ class LLMClientFactory:
                     if "max_tokens" in model_config["parameters"]:
                         client_config["max_tokens"] = model_config["parameters"]["max_tokens"]
                 logger.info(f"Création d'un OpenAIClient pour model_id: {model_id} (default_model: {model_identifier})")
-                return OpenAIClient(api_key=api_key, config=client_config)
+                return OpenAIClient(
+                    api_key=api_key,
+                    config=client_config,
+                    usage_service=usage_service,
+                    request_id=request_id,
+                    endpoint=endpoint
+                )
             except Exception as e:
                 logger.error(f"Erreur lors de la création de OpenAIClient pour '{model_id}': {e}. Utilisation de DummyLLMClient.")
                 return DummyLLMClient()

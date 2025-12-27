@@ -13,6 +13,9 @@ from services.interaction_service import InteractionService
 from services.dialogue_generation_service import DialogueGenerationService
 from services.linked_selector import LinkedSelectorService
 from services.repositories.file_repository import FileInteractionRepository
+from services.repositories.llm_usage_repository import FileLLMUsageRepository
+from services.llm_usage_service import LLMUsageService
+from services.llm_pricing_service import LLMPricingService
 from factories.llm_factory import LLMClientFactory
 from constants import FilePaths, Defaults
 
@@ -158,6 +161,31 @@ def get_linked_selector_service(
         Instance de LinkedSelectorService.
     """
     return LinkedSelectorService(context_builder=context_builder)
+
+
+def get_llm_usage_repository() -> FileLLMUsageRepository:
+    """Crée un repository d'utilisation LLM basé sur fichiers.
+    
+    Returns:
+        Instance de FileLLMUsageRepository.
+    """
+    storage_dir = str(DIALOGUE_GENERATOR_DIR / FilePaths.LLM_USAGE_DIR)
+    os.makedirs(storage_dir, exist_ok=True)
+    return FileLLMUsageRepository(storage_dir=storage_dir)
+
+
+def get_llm_usage_service(
+    repository: Annotated[FileLLMUsageRepository, Depends(get_llm_usage_repository)]
+) -> LLMUsageService:
+    """Retourne le service de tracking d'utilisation LLM.
+    
+    Args:
+        repository: Repository injecté via dépendance.
+        
+    Returns:
+        Instance de LLMUsageService.
+    """
+    return LLMUsageService(repository=repository)
 
 
 def get_request_id(request: Request) -> str:

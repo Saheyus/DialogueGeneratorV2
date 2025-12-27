@@ -73,6 +73,10 @@ export const theme = {
       background: '#1a2a3a',
       color: '#74c0fc',
     },
+    warning: {
+      background: '#3a3a1a',
+      color: '#ffd43b',
+    },
     selected: {
       background: '#1a3a5a',
       color: '#74c0fc',

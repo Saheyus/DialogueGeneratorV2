@@ -241,8 +241,9 @@ async def generate_interaction_variants(
             context_builder.set_previous_dialogue_context(path_interactions)
         
         # Créer le client LLM via la factory
-        from api.dependencies import get_config_service
+        from api.dependencies import get_config_service, get_llm_usage_service
         config_service = get_config_service()
+        usage_service = get_llm_usage_service()
         from factories.llm_factory import LLMClientFactory
         llm_config = config_service.get_llm_config()
         available_models = config_service.get_available_llm_models()
@@ -251,7 +252,10 @@ async def generate_interaction_variants(
         llm_client = LLMClientFactory.create_client(
             model_id=request_data.llm_model_identifier,
             config=llm_config,
-            available_models=available_models
+            available_models=available_models,
+            usage_service=usage_service,
+            request_id=request_id,
+            endpoint="generate/interactions"
         )
         from llm_client import DummyLLMClient, OpenAIClient
         is_dummy_client = isinstance(llm_client, DummyLLMClient)
@@ -278,7 +282,8 @@ async def generate_interaction_variants(
             context_selections=context_selections_dict,
             current_llm_model_identifier=request_data.llm_model_identifier,
             field_configs=request_data.field_configs,
-            organization_mode=request_data.organization_mode
+            organization_mode=request_data.organization_mode,
+            narrative_tags=request_data.narrative_tags
         )
         
         if interactions is None or len(interactions) == 0:
@@ -357,8 +362,38 @@ async def generate_interaction_variants(
                 f"{len(validation_errors)} erreurs (request_id: {request_id})"
             )
         
+        # Validation narrative (non-bloquante)
+        from services.narrative_validator import NarrativeValidator
+        narrative_validator = NarrativeValidator()
+        narrative_warnings: Dict[str, List[str]] = {}
+        
+        # Récupérer le contexte pour la validation de caractérisation
+        context_builder = dialogue_service.context_builder
+        context_selections_dict = request_data.context_selections.to_service_dict()
+        context_summary = context_builder.build_context(
+            selected_elements=context_selections_dict,
+            scene_instruction=request_data.user_instructions,
+            max_tokens=5000  # Limiter pour la validation
+        )
+        
+        for interaction in validated_interactions:
+            warnings = narrative_validator.validate_interaction(interaction, context_summary)
+            if warnings:
+                narrative_warnings[interaction.interaction_id] = warnings
+                logger.info(
+                    f"Warnings narratifs pour '{interaction.interaction_id}': {len(warnings)} avertissements "
+                    f"(request_id: {request_id})"
+                )
+        
         # Convertir en format de réponse
-        return [InteractionResponse.from_model(interaction) for interaction in validated_interactions]
+        responses = [InteractionResponse.from_model(interaction) for interaction in validated_interactions]
+        
+        # Ajouter les warnings narratifs aux réponses
+        for response in responses:
+            if response.interaction_id in narrative_warnings:
+                response.narrative_warnings = narrative_warnings[response.interaction_id]
+        
+        return responses
         
     except NotFoundException:
         # Re-propager NotFoundException (déjà gérée)
@@ -574,14 +609,17 @@ async def generate_unity_dialogue(
             traits_list=traits_list,
             context_summary=context_summary,
             scene_location=scene_location,
-            max_choices=request_data.max_choices
+            max_choices=request_data.max_choices,
+            narrative_tags=request_data.narrative_tags,
+            author_profile=request_data.author_profile
         )
         
         estimated_tokens = context_tokens + prompt_tokens
         
         # 7. Créer le client LLM
-        from api.dependencies import get_config_service
+        from api.dependencies import get_config_service, get_llm_usage_service
         config_service = get_config_service()
+        usage_service = get_llm_usage_service()
         from factories.llm_factory import LLMClientFactory
         llm_config = config_service.get_llm_config()
         available_models = config_service.get_available_llm_models()
@@ -589,7 +627,10 @@ async def generate_unity_dialogue(
         llm_client = LLMClientFactory.create_client(
             model_id=request_data.llm_model_identifier,
             config=llm_config,
-            available_models=available_models
+            available_models=available_models,
+            usage_service=usage_service,
+            request_id=request_id,
+            endpoint="generate/unity-dialogue"
         )
         
         from llm_client import DummyLLMClient, OpenAIClient
@@ -620,6 +661,30 @@ async def generate_unity_dialogue(
             nodes=enriched_nodes,
             normalize=True
         )
+        
+        # 10.1 Validation optionnelle contre le schéma Unity (si activée)
+        from api.config.validation_config import get_validation_config
+        from api.config.security_config import get_security_config
+        from api.utils.unity_schema_validator import validate_unity_json
+        import json
+        
+        validation_config = get_validation_config()
+        security_config = get_security_config()
+        
+        if validation_config.should_validate_unity_schema(security_config):
+            try:
+                json_data = json.loads(json_content)
+                is_valid, schema_errors = validate_unity_json(json_data)
+                
+                if not is_valid:
+                    error_msg = f"Validation Unity Schema échouée ({len(schema_errors)} erreur(s)): " + "; ".join(schema_errors[:3])
+                    if security_config.is_development:
+                        logger.warning(error_msg)
+                    else:
+                        logger.error(error_msg)
+                    # Note: On ne bloque pas l'export, juste un warning/error dans les logs
+            except Exception as e:
+                logger.warning(f"Erreur lors de la validation Unity Schema (non bloquante): {e}")
         
         # 11. Extraire le titre depuis la réponse de génération
         dialogue_title = generation_response.title if hasattr(generation_response, 'title') and generation_response.title else None

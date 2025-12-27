@@ -1,0 +1,22 @@
+{
+  "models": {
+    "gpt-4o": {
+      "input_price_per_1M": 2.50,
+      "output_price_per_1M": 10.00,
+      "description": "GPT-4 Optimized - Modèle le plus récent et performant"
+    },
+    "gpt-4-turbo": {
+      "input_price_per_1M": 10.00,
+      "output_price_per_1M": 30.00,
+      "description": "GPT-4 Turbo - Version haute performance"
+    },
+    "gpt-3.5-turbo": {
+      "input_price_per_1M": 0.50,
+      "output_price_per_1M": 1.50,
+      "description": "GPT-3.5 Turbo - Modèle économique"
+    }
+  },
+  "last_updated": "2024-01-15",
+  "note": "Les prix sont en USD par million de tokens. Les prix peuvent varier selon les mises à jour d'OpenAI."
+}
+

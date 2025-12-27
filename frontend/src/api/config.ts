@@ -96,6 +96,26 @@ export async function previewContext(
 }
 
 /**
+ * Récupère les templates de prompts disponibles.
+ */
+export interface PromptTemplate {
+  id: string
+  name: string
+  description: string
+  prompt: string
+}
+
+export interface PromptTemplatesResponse {
+  templates: PromptTemplate[]
+  total: number
+}
+
+export async function getPromptTemplates(): Promise<PromptTemplatesResponse> {
+  const response = await apiClient.get<PromptTemplatesResponse>('/api/v1/config/prompt-templates')
+  return response.data
+}
+
+/**
  * Récupère la configuration par défaut des champs.
  */
 export async function getDefaultFieldConfig(): Promise<{
@@ -117,5 +137,45 @@ export async function invalidateContextFieldsCache(elementType?: string): Promis
     ? `/api/v1/config/context-fields/invalidate-cache?element_type=${elementType}`
     : '/api/v1/config/context-fields/invalidate-cache'
   await apiClient.post(url)
+}
+
+/**
+ * Récupère les templates d'instructions de scène disponibles.
+ */
+export interface SceneInstructionTemplate {
+  id: string
+  name: string
+  description: string
+  instructions: string
+}
+
+export interface SceneInstructionTemplatesResponse {
+  templates: SceneInstructionTemplate[]
+  total: number
+}
+
+export async function getSceneInstructionTemplates(): Promise<SceneInstructionTemplatesResponse> {
+  const response = await apiClient.get<SceneInstructionTemplatesResponse>('/api/v1/config/scene-instruction-templates')
+  return response.data
+}
+
+/**
+ * Récupère les templates de profils d'auteur disponibles.
+ */
+export interface AuthorProfileTemplate {
+  id: string
+  name: string
+  description: string
+  profile: string
+}
+
+export interface AuthorProfileTemplatesResponse {
+  templates: AuthorProfileTemplate[]
+  total: number
+}
+
+export async function getAuthorProfileTemplates(): Promise<AuthorProfileTemplatesResponse> {
+  const response = await apiClient.get<AuthorProfileTemplatesResponse>('/api/v1/config/author-profile-templates')
+  return response.data
 }
 

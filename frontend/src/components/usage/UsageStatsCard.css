@@ -1,0 +1,41 @@
+.usage-stats-card {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.2s;
+}
+
+.usage-stats-card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.usage-stats-card__title {
+  font-size: 0.875rem;
+  color: #666;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.usage-stats-card__value {
+  font-size: 2rem;
+  font-weight: 600;
+  color: #333;
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.usage-stats-card__unit {
+  font-size: 1rem;
+  font-weight: 400;
+  color: #666;
+}
+
+.usage-stats-card__subtitle {
+  font-size: 0.75rem;
+  color: #999;
+  margin-top: 0.5rem;
+}
+

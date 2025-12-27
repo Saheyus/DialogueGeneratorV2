@@ -58,16 +58,16 @@ def check_gdd_files() -> HealthCheckResult:
         HealthCheckResult avec le statut de vérification.
     """
     try:
-        # Utiliser PROJECT_ROOT_DIR depuis context_builder pour les chemins par défaut
+        # Utiliser le chemin DialogueGenerator/data/GDD_categories (lien symbolique)
+        # project_root correspond au répertoire DialogueGenerator
         project_root = Path(__file__).resolve().parent.parent.parent
         
-        # Essayer les chemins par défaut (utilisés par ContextBuilder)
+        # Utiliser le lien symbolique data/GDD_categories/ au lieu de PROJECT_ROOT_DIR/GDD/categories
+        gdd_base_path = project_root / "data" / "GDD_categories"
+        # Le chemin import reste au niveau parent (PROJECT_ROOT_DIR) s'il existe, sinon on essaie parent
         if PROJECT_ROOT_DIR:
-            gdd_base_path = PROJECT_ROOT_DIR / "GDD" / "categories"
             import_base_path = PROJECT_ROOT_DIR / "import" / "Bible_Narrative"
         else:
-            # Fallback: répertoire parent de DialogueGenerator
-            gdd_base_path = project_root.parent / "GDD" / "categories"
             import_base_path = project_root.parent / "import" / "Bible_Narrative"
         
         # Vérifier que les répertoires existent

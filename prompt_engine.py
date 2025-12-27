@@ -54,9 +54,32 @@ class PromptEngine:
         """
         return \
 """
-Tu es un assistant expert en écriture de dialogues pour jeux de rôle (RPG).
-Ta tâche est de générer un dialogue cohérent avec le contexte fourni et l'instruction utilisateur.
-Si une structure de dialogue spécifique est demandée (ex: PNJ suivi d'un choix PJ), respecte cette structure.
+Tu es un dialoguiste expert en jeux de rôle narratifs.
+
+RÈGLES DE CARACTÉRISATION :
+- Chaque personnage a une voix unique définie dans le contexte (registre, vocabulaire, expressions)
+- Si une section "VOIX ET STYLE" est présente dans le contexte, respecte strictement le profil de voix fourni
+- Utilise les expressions courantes et champs lexicaux spécifiés pour chaque personnage
+- Les répliques doivent révéler la personnalité, pas juste transmettre de l'information
+- Si une section "CARACTÉRISATION" est présente, exploite les qualités, défauts, désirs et faiblesses pour enrichir les dialogues
+
+RÈGLES DE RYTHME :
+- Varie la longueur des répliques pour créer du rythme
+- Les répliques courtes créent de la tension, les longues développent l'émotion
+- Évite les monologues trop longs (max 3-4 phrases par réplique)
+- Alterne entre répliques courtes et longues pour maintenir l'attention
+
+RÈGLES DE PROGRESSION NARRATIVE :
+- Chaque dialogue doit faire avancer l'histoire ou développer les personnages
+- Les choix du joueur doivent avoir un impact narratif clair
+- Évite les dialogues "filler" qui ne servent à rien
+- Chaque réplique doit apporter quelque chose : information, émotion, tension, ou développement de personnage
+
+RÈGLES DE TON :
+- Adapte le ton au contexte (lieu, relation, état émotionnel)
+- Les dialogues doivent être immersifs et naturels
+- Évite les formulations trop "gamey" ou mécaniques
+- Utilise le contexte fourni (lieu, relations, historique) pour adapter le ton
 
 IMPORTANT - FORMAT DE SORTIE :
 - Génère le dialogue en texte libre narratif, naturel et lisible
@@ -78,9 +101,35 @@ IMPORTANT - FORMAT DE SORTIE :
         """
         return \
 """
-Tu es un assistant expert en écriture de dialogues pour jeux de rôle (RPG).
-Ta tâche est de générer une interaction structurée au format JSON.
-L'interaction doit être cohérente avec le contexte fourni (personnages, lieu, quête).
+Tu es un dialoguiste expert en jeux de rôle narratifs.
+
+RÈGLES DE CARACTÉRISATION :
+- Chaque personnage a une voix unique définie dans le contexte (registre, vocabulaire, expressions)
+- Si une section "VOIX ET STYLE" est présente dans le contexte, respecte strictement le profil de voix fourni
+- Utilise les expressions courantes et champs lexicaux spécifiés pour chaque personnage
+- Les répliques doivent révéler la personnalité, pas juste transmettre de l'information
+- Si une section "CARACTÉRISATION" est présente, exploite les qualités, défauts, désirs et faiblesses pour enrichir les dialogues
+
+RÈGLES DE RYTHME :
+- Varie la longueur des répliques pour créer du rythme
+- Les répliques courtes créent de la tension, les longues développent l'émotion
+- Évite les monologues trop longs (max 3-4 phrases par réplique)
+- Alterne entre répliques courtes et longues pour maintenir l'attention
+
+RÈGLES DE PROGRESSION NARRATIVE :
+- Chaque dialogue doit faire avancer l'histoire ou développer les personnages
+- Les choix du joueur doivent avoir un impact narratif clair
+- Évite les dialogues "filler" qui ne servent à rien
+- Chaque réplique doit apporter quelque chose : information, émotion, tension, ou développement de personnage
+
+RÈGLES DE TON :
+- Adapte le ton au contexte (lieu, relation, état émotionnel)
+- Les dialogues doivent être immersifs et naturels
+- Évite les formulations trop "gamey" ou mécaniques
+- Utilise le contexte fourni (lieu, relations, historique) pour adapter le ton
+
+TA TÂCHE :
+Générer une interaction structurée au format JSON cohérente avec le contexte fourni (personnages, lieu, quête).
 L'interaction doit suivre l'instruction utilisateur concernant l'objectif de la scène.
 
 SI UN HISTORIQUE DE DIALOGUE PRÉCÉDENT EST FOURNI DANS LE CONTEXTE, ASSURE-TOI QUE LA NOUVELLE INTERACTION EN SOIT LA SUITE LOGIQUE.
@@ -120,7 +169,7 @@ FORMAT JSON À RESPECTER STRICTEMENT:
 }
 ```
 
-RÈGLES À SUIVRE:
+RÈGLES TECHNIQUES À SUIVRE:
 1. L'interaction doit être complète et autonome
 2. L'ordre des éléments est important et sera respecté lors du rendu
 3. Ne fournis que la structure JSON, sans explication ni commentaire
@@ -220,6 +269,16 @@ RÈGLES À SUIVRE:
             prompt_parts.append("\n--- TON ATTENDU ---")
             prompt_parts.append(str(generation_params["tone"]))
         
+        # Tags narratifs pour guider le ton
+        narrative_tags = generation_params.get("narrative_tags", [])
+        if narrative_tags:
+            prompt_parts.append("\n--- TON NARRATIF ---")
+            tags_text = ", ".join([f"#{tag}" for tag in narrative_tags])
+            prompt_parts.append(
+                f"Le dialogue doit avoir un ton {tags_text}. "
+                f"Adapte le style, le rythme et l'intensité émotionnelle en fonction de ces tags."
+            )
+        
         # Pour les générations de texte libre (non structurées), rappeler le format attendu
         structured_output = generation_params.get("structured_generation_request", False)
         if not structured_output:
@@ -244,7 +303,9 @@ RÈGLES À SUIVRE:
         traits_list: Optional[List[str]] = None,
         context_summary: Optional[str] = None,
         scene_location: Optional[Dict[str, str]] = None,
-        max_choices: Optional[int] = None
+        max_choices: Optional[int] = None,
+        narrative_tags: Optional[List[str]] = None,
+        author_profile: Optional[str] = None
     ) -> Tuple[str, int]:
         """Construit le prompt pour génération Unity JSON.
         
@@ -262,6 +323,34 @@ RÈGLES À SUIVRE:
             Tuple contenant le prompt complet et une estimation du nombre de tokens.
         """
         prompt_parts = []
+        
+        # Guidance narrative (avant les instructions techniques)
+        prompt_parts.append("--- GUIDANCE NARRATIVE ---")
+        prompt_parts.append(
+            "Tu es un dialoguiste expert en jeux de rôle narratifs. "
+            "Génère des dialogues immersifs et naturels qui font avancer l'histoire."
+        )
+        prompt_parts.append(
+            "RÈGLES DE CARACTÉRISATION : "
+            "Si une section 'VOIX ET STYLE' est présente dans le contexte, respecte strictement le profil de voix fourni "
+            "(registre, vocabulaire, expressions courantes). Les répliques doivent révéler la personnalité du personnage."
+        )
+        prompt_parts.append(
+            "RÈGLES DE RYTHME : "
+            "Varie la longueur des répliques (courtes pour la tension, longues pour l'émotion). "
+            "Évite les monologues trop longs (max 3-4 phrases par réplique)."
+        )
+        prompt_parts.append(
+            "RÈGLES DE PROGRESSION NARRATIVE : "
+            "Chaque dialogue doit faire avancer l'histoire ou développer les personnages. "
+            "Évite les dialogues 'filler' qui ne servent à rien."
+        )
+        prompt_parts.append(
+            "RÈGLES DE TON : "
+            "Adapte le ton au contexte (lieu, relation, état émotionnel). "
+            "Les dialogues doivent être immersifs et naturels, pas mécaniques."
+        )
+        prompt_parts.append("")
         
         # Instructions sur le format Unity JSON
         prompt_parts.append("--- FORMAT DE SORTIE ATTENDU ---")
@@ -350,10 +439,24 @@ RÈGLES À SUIVRE:
             prompt_parts.append("\n--- CONTEXTE GÉNÉRAL DE LA SCÈNE ---")
             prompt_parts.append(context_summary)
         
+        # Profil d'auteur (global, réutilisable)
+        if author_profile and author_profile.strip():
+            prompt_parts.append("\n--- DIRECTIVES D'AUTEUR (GLOBAL) ---")
+            prompt_parts.append(author_profile)
+        
         # Instructions utilisateur
         if user_instructions and user_instructions.strip():
-            prompt_parts.append("\n--- OBJECTIF DE LA SCÈNE (Instruction Utilisateur) ---")
+            prompt_parts.append("\n--- BRIEF DE SCÈNE (LOCAL) ---")
             prompt_parts.append(user_instructions)
+        
+        # Tags narratifs pour guider le ton
+        if narrative_tags:
+            prompt_parts.append("\n--- TON NARRATIF ---")
+            tags_text = ", ".join([f"#{tag}" for tag in narrative_tags])
+            prompt_parts.append(
+                f"Le dialogue doit avoir un ton {tags_text}. "
+                f"Adapte le style, le rythme et l'intensité émotionnelle en fonction de ces tags."
+            )
         
         full_prompt = "\n".join(prompt_parts)
         num_tokens = self._count_tokens(full_prompt)

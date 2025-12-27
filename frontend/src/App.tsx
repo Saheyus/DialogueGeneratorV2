@@ -5,6 +5,7 @@ import { LoginForm } from './components/auth/LoginForm'
 import { Dashboard } from './components/layout/Dashboard'
 import { InteractionsPage } from './components/interactions/InteractionsPage'
 import { InteractionDetails } from './components/interactions/InteractionDetails'
+import { UsageDashboard } from './components/usage/UsageDashboard'
 import { useAuthStore } from './store/authStore'
 import { ToastContainer } from './components/shared'
 import './App.css'
@@ -80,6 +81,16 @@ function App() {
             <ProtectedRoute>
               <MainLayout fullWidth>
                 <InteractionDetailRoute />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/usage"
+          element={
+            <ProtectedRoute>
+              <MainLayout>
+                <UsageDashboard />
               </MainLayout>
             </ProtectedRoute>
           }

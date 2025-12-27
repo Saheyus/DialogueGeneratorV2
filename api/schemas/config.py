@@ -6,6 +6,10 @@ from pydantic import BaseModel, Field
 class FieldInfo(BaseModel):
     """Informations sur un champ détecté.
     
+    Deux critères distincts :
+    - is_metadata : Si le champ est une métadonnée (tous les champs AVANT "Introduction" dans le JSON)
+    - is_essential : Si le champ est essentiel pour la génération minimale (défini dans MINIMAL_FIELDS)
+    
     Attributes:
         path: Chemin du champ (ex: "Background.Relations")
         label: Label lisible du champ
@@ -15,7 +19,8 @@ class FieldInfo(BaseModel):
         suggested: Si le champ est suggéré pour le type de génération
         category: Catégorie du champ ("identity", "characterization", "voice", "background", "mechanics")
         importance: Importance du champ ("essential", "common", "rare")
-        is_essential: Si le champ est essentiel (court, toujours sélectionné, non désélectionnable)
+        is_metadata: Si le champ est une métadonnée (avant "Introduction" dans le JSON)
+        is_essential: Si le champ est essentiel pour génération minimale (défini dans MINIMAL_FIELDS)
     """
     path: str = Field(..., description="Chemin du champ")
     label: str = Field(..., description="Label lisible du champ")
@@ -25,7 +30,8 @@ class FieldInfo(BaseModel):
     suggested: bool = Field(default=False, description="Champ suggéré")
     category: Optional[str] = Field(None, description="Catégorie du champ")
     importance: Optional[str] = Field(None, description="Importance du champ")
-    is_essential: bool = Field(default=False, description="Champ essentiel (non désélectionnable)")
+    is_metadata: bool = Field(default=False, description="Champ métadonnée (avant 'Introduction' dans le JSON)")
+    is_essential: bool = Field(default=False, description="Champ essentiel pour génération minimale (défini dans MINIMAL_FIELDS)")
 
 
 class ContextFieldConfig(BaseModel):
@@ -122,3 +128,80 @@ class DefaultFieldConfigResponse(BaseModel):
     essential_fields: Dict[str, List[str]] = Field(..., description="Champs essentiels par type")
     default_fields: Dict[str, List[str]] = Field(..., description="Tous les champs par défaut par type")
 
+
+class PromptTemplate(BaseModel):
+    """Template de prompt prédéfini.
+    
+    Attributes:
+        id: Identifiant unique du template
+        name: Nom du template
+        description: Description du template
+        prompt: Contenu du prompt
+    """
+    id: str = Field(..., description="Identifiant unique du template")
+    name: str = Field(..., description="Nom du template")
+    description: str = Field(..., description="Description du template")
+    prompt: str = Field(..., description="Contenu du prompt")
+
+
+class PromptTemplatesResponse(BaseModel):
+    """Réponse contenant la liste des templates de prompts disponibles.
+    
+    Attributes:
+        templates: Liste des templates disponibles
+        total: Nombre total de templates
+    """
+    templates: List[PromptTemplate] = Field(..., description="Liste des templates")
+    total: int = Field(..., description="Nombre total de templates")
+
+
+class SceneInstructionTemplate(BaseModel):
+    """Template d'instructions de scène.
+    
+    Attributes:
+        id: Identifiant unique du template
+        name: Nom du template
+        description: Description du template
+        instructions: Instructions de scène (ton, rythme, style)
+    """
+    id: str = Field(..., description="Identifiant unique du template")
+    name: str = Field(..., description="Nom du template")
+    description: str = Field(..., description="Description du template")
+    instructions: str = Field(..., description="Instructions de scène")
+
+
+class SceneInstructionTemplatesResponse(BaseModel):
+    """Réponse contenant la liste des templates d'instructions de scène.
+    
+    Attributes:
+        templates: Liste des templates disponibles
+        total: Nombre total de templates
+    """
+    templates: List[SceneInstructionTemplate] = Field(..., description="Liste des templates")
+    total: int = Field(..., description="Nombre total de templates")
+
+
+class AuthorProfileTemplate(BaseModel):
+    """Template de profil d'auteur.
+    
+    Attributes:
+        id: Identifiant unique du template
+        name: Nom du template
+        description: Description du template
+        profile: Profil d'auteur (style global, réutilisable)
+    """
+    id: str = Field(..., description="Identifiant unique du template")
+    name: str = Field(..., description="Nom du template")
+    description: str = Field(..., description="Description du template")
+    profile: str = Field(..., description="Profil d'auteur")
+
+
+class AuthorProfileTemplatesResponse(BaseModel):
+    """Réponse contenant la liste des templates de profils d'auteur.
+    
+    Attributes:
+        templates: Liste des templates disponibles
+        total: Nombre total de templates
+    """
+    templates: List[AuthorProfileTemplate] = Field(..., description="Liste des templates")
+    total: int = Field(..., description="Nombre total de templates")

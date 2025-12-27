@@ -181,7 +181,8 @@ class DialogueGenerationService(IDialogueGenerationService):
                                             context_selections: Dict[str, Any],
                                             current_llm_model_identifier: str,
                                             field_configs: Optional[Dict[str, List[str]]] = None,
-                                            organization_mode: Optional[str] = None
+                                            organization_mode: Optional[str] = None,
+                                            narrative_tags: Optional[List[str]] = None
                                             ) -> Tuple[Optional[List[Interaction]], Optional[str], Optional[int]]:
         logger.info(f"Service: Starting INTERACTION generation. Model: {current_llm_model_identifier}, K: {k_variants}")
         original_system_prompt = None
@@ -215,6 +216,8 @@ class DialogueGenerationService(IDialogueGenerationService):
                 "generate_interaction": True,
                 "dialogue_structure_description": dialogue_structure_description
             }
+            if narrative_tags:
+                generation_params_for_prompt_build["narrative_tags"] = narrative_tags
 
             final_prompt_str, estimated_tokens = self.prompt_engine.build_prompt(
                 context_summary=context_summary_text,

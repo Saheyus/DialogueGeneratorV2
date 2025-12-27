@@ -35,7 +35,15 @@ export const InteractionEditor = memo(function InteractionEditor({
     setIsSaving(true)
     setError(null)
     try {
-      const updated = await interactionsAPI.updateInteraction(interaction.interaction_id, interaction)
+      // S'assurer que tous les champs sont explicitement envoyés, notamment les éléments
+      const updateData: Partial<InteractionResponse> = {
+        title: interaction.title,
+        elements: interaction.elements || [],
+        header_commands: interaction.header_commands || [],
+        header_tags: interaction.header_tags || [],
+        next_interaction_id_if_no_choices: interaction.next_interaction_id_if_no_choices,
+      }
+      const updated = await interactionsAPI.updateInteraction(interaction.interaction_id, updateData)
       onSave?.(updated)
     } catch (err) {
       setError(getErrorMessage(err))
@@ -94,6 +102,30 @@ export const InteractionEditor = memo(function InteractionEditor({
           }}
         >
           {error}
+        </div>
+      )}
+
+      {interaction.narrative_warnings && interaction.narrative_warnings.length > 0 && (
+        <div
+          style={{
+            padding: '0.75rem',
+            marginBottom: '1rem',
+            backgroundColor: theme.state.warning.background,
+            color: theme.state.warning.color,
+            borderRadius: '4px',
+            border: `1px solid ${theme.border.primary}`,
+          }}
+        >
+          <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>
+            ⚠️ Avertissements narratifs
+          </div>
+          <ul style={{ margin: 0, paddingLeft: '1.5rem' }}>
+            {interaction.narrative_warnings.map((warning, index) => (
+              <li key={index} style={{ marginBottom: '0.25rem' }}>
+                {warning}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

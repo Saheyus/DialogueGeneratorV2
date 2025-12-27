@@ -1,18 +1,21 @@
 /**
  * Composant Dashboard avec layout 3 panneaux redimensionnables.
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ContextSelector } from '../context/ContextSelector'
 import { GenerationPanel } from '../generation/GenerationPanel'
 import { GenerationOptionsModal } from '../generation/GenerationOptionsModal'
 import { InteractionDetails } from '../interactions/InteractionDetails'
 import { EstimatedPromptPanel } from '../generation/EstimatedPromptPanel'
+import { VariantsTabsView } from '../generation/VariantsTabsView'
 import { ContextDetail } from '../context/ContextDetail'
 import { ResizablePanels } from '../shared/ResizablePanels'
 import { Tabs, type Tab } from '../shared/Tabs'
 import { useGenerationStore } from '../../store/generationStore'
 import { useGenerationActionsStore } from '../../store/generationActionsStore'
-import type { InteractionResponse, CharacterResponse, LocationResponse, ItemResponse, SpeciesResponse, CommunityResponse } from '../../types/api'
+import * as interactionsAPI from '../../api/interactions'
+import { getErrorMessage } from '../../types/errors'
+import type { InteractionResponse, CharacterResponse, LocationResponse, ItemResponse, SpeciesResponse, CommunityResponse, DialogueVariantResponse } from '../../types/api'
 import { theme } from '../../theme'
 
 type ContextItem = CharacterResponse | LocationResponse | ItemResponse | SpeciesResponse | CommunityResponse
@@ -21,9 +24,44 @@ export function Dashboard() {
   const [selectedInteraction, setSelectedInteraction] = useState<InteractionResponse | null>(null)
   const [selectedContextItem, setSelectedContextItem] = useState<ContextItem | null>(null)
   const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false)
-  const [rightPanelTab, setRightPanelTab] = useState<'prompt' | 'details'>('prompt')
-  const { estimatedPrompt, estimatedTokens, isEstimating } = useGenerationStore()
+  const [rightPanelTab, setRightPanelTab] = useState<'prompt' | 'variants' | 'details'>('prompt')
+  const { estimatedPrompt, estimatedTokens, isEstimating, variantsResponse } = useGenerationStore()
   const { actions } = useGenerationActionsStore()
+  
+  // Basculer automatiquement vers l'onglet Variantes quand des variantes sont générées
+  useEffect(() => {
+    if (variantsResponse && variantsResponse.variants.length > 0 && rightPanelTab === 'prompt') {
+      setRightPanelTab('variants')
+    }
+  }, [variantsResponse, rightPanelTab])
+
+  const handleSaveAsInteraction = async (variant: DialogueVariantResponse) => {
+    try {
+      // Convertir une variante en interaction (structure basique)
+      // Le backend attend element_type: 'dialogue_line' avec text, pas type: 'dialogue' avec content
+      const interaction: Partial<InteractionResponse> = {
+        title: variant.title,
+        elements: [
+          {
+            element_type: 'dialogue_line',
+            text: variant.content,
+            speaker: null,
+            tags: [],
+            pre_line_commands: [],
+            post_line_commands: [],
+          },
+        ],
+        header_commands: [],
+        header_tags: ['generated'],
+      }
+
+      await interactionsAPI.createInteraction(interaction)
+      alert('Interaction sauvegardée avec succès!')
+      // Optionnel: recharger les interactions si nécessaire
+    } catch (err) {
+      alert(getErrorMessage(err))
+    }
+  }
 
   const rightPanelTabs: Tab[] = [
     {
@@ -35,6 +73,18 @@ export function Dashboard() {
             estimatedPrompt={estimatedPrompt}
             isEstimating={isEstimating}
             estimatedTokens={estimatedTokens}
+          />
+        </div>
+      ),
+    },
+    {
+      id: 'variants',
+      label: 'Variantes',
+      content: (
+        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <VariantsTabsView
+            response={variantsResponse}
+            onValidateAsInteraction={handleSaveAsInteraction}
           />
         </div>
       ),
@@ -219,12 +269,12 @@ export function Dashboard() {
           <Tabs
             tabs={rightPanelTabs}
             activeTabId={rightPanelTab}
-            onTabChange={(tabId) => setRightPanelTab(tabId as 'prompt' | 'details')}
+            onTabChange={(tabId) => setRightPanelTab(tabId as 'prompt' | 'variants' | 'details')}
             style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}
           />
         </div>
-        {/* Gros bouton Générer en bas (toujours visible quand sur l'onglet Prompt) */}
-        {actions.handleGenerate && rightPanelTab === 'prompt' && (
+        {/* Gros bouton Générer en bas (visible sur Prompt et Variantes) */}
+        {actions.handleGenerate && (rightPanelTab === 'prompt' || rightPanelTab === 'variants') && (
           <div
             style={{
               padding: '0.75rem 1rem',

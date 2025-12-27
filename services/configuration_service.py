@@ -12,6 +12,9 @@ DIALOGUE_GENERATOR_DIR = Path(__file__).resolve().parent.parent
 UI_SETTINGS_FILE = DIALOGUE_GENERATOR_DIR / "ui_settings.json"
 LLM_CONFIG_FILE_PATH = DIALOGUE_GENERATOR_DIR / "llm_config.json"
 CONTEXT_CONFIG_FILE_PATH = DIALOGUE_GENERATOR_DIR / "context_config.json"
+PROMPT_TEMPLATES_FILE_PATH = DIALOGUE_GENERATOR_DIR / "config" / "prompt_templates.json"
+SCENE_INSTRUCTION_TEMPLATES_FILE_PATH = DIALOGUE_GENERATOR_DIR / "config" / "scene_instruction_templates.json"
+AUTHOR_PROFILE_TEMPLATES_FILE_PATH = DIALOGUE_GENERATOR_DIR / "config" / "author_profile_templates.json"
 
 # Chemin par défaut pour les dialogues Unity - pourrait être une constante de classe ou globale
 DEFAULT_UNITY_DIALOGUES_PATH = Path("F:/Unity/Alteir/Alteir_Cursor/Assets/Dialogue/generated")
@@ -21,6 +24,9 @@ class ConfigurationService:
         self.ui_settings: Dict[str, Any] = self._load_json_file(UI_SETTINGS_FILE, default={})
         self.llm_config: Dict[str, Any] = self._load_json_file(LLM_CONFIG_FILE_PATH, default={})
         self.context_config: Dict[str, Any] = self._load_json_file(CONTEXT_CONFIG_FILE_PATH, default={})
+        self.prompt_templates: Dict[str, Any] = self._load_json_file(PROMPT_TEMPLATES_FILE_PATH, default={"templates": []})
+        self.scene_instruction_templates: Dict[str, Any] = self._load_json_file(SCENE_INSTRUCTION_TEMPLATES_FILE_PATH, default={"templates": []})
+        self.author_profile_templates: Dict[str, Any] = self._load_json_file(AUTHOR_PROFILE_TEMPLATES_FILE_PATH, default={"templates": []})
 
         # Initialiser les chemins importants lors de l'instanciation
         # Ou les récupérer dynamiquement via des getters
@@ -120,6 +126,31 @@ class ConfigurationService:
         """Saves context configuration to the file."""
         self.context_config = config.copy()
         return self._save_json_file(CONTEXT_CONFIG_FILE_PATH, self.context_config)
+
+    # --- Prompt Templates specific methods ---
+    def get_prompt_templates(self) -> List[Dict[str, Any]]:
+        """Gets the list of prompt templates.
+        
+        Returns:
+            List of template dictionaries, each containing id, name, description, and prompt.
+        """
+        return self.prompt_templates.get("templates", [])
+    
+    def get_scene_instruction_templates(self) -> List[Dict[str, Any]]:
+        """Gets the list of scene instruction templates.
+        
+        Returns:
+            List of template dictionaries, each containing id, name, description, and instructions.
+        """
+        return self.scene_instruction_templates.get("templates", [])
+    
+    def get_author_profile_templates(self) -> List[Dict[str, Any]]:
+        """Gets the list of author profile templates.
+        
+        Returns:
+            List of template dictionaries, each containing id, name, description, and profile.
+        """
+        return self.author_profile_templates.get("templates", [])
 
     # --- File Path Getters ---
     def get_ui_settings_file_path(self) -> Path:

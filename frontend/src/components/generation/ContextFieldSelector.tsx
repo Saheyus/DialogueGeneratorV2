@@ -48,18 +48,18 @@ export function ContextFieldSelector({
   // Construire l'arbre hiérarchique
   const fieldTree = useMemo(() => {
     const fields = availableFields[elementType] || {}
-    const essentialFieldsForType = essentialFields[elementType] || []
     const root: FieldNode[] = []
     const nodeMap = new Map<string, FieldNode>()
 
     // Filtrer les champs selon showOnlyEssential
-    // Utiliser is_essential des champs détectés plutôt que essentialFields du store
+    // showOnlyEssential=true affiche les métadonnées (is_metadata=true)
+    // showOnlyEssential=false affiche le contexte narratif (is_metadata=false)
     const filteredFields = showOnlyEssential
       ? Object.fromEntries(
-          Object.entries(fields).filter(([path, fieldInfo]: [string, any]) => fieldInfo.is_essential === true)
+          Object.entries(fields).filter(([path, fieldInfo]: [string, any]) => fieldInfo.is_metadata === true)
         )
       : Object.fromEntries(
-          Object.entries(fields).filter(([path, fieldInfo]: [string, any]) => fieldInfo.is_essential !== true)
+          Object.entries(fields).filter(([path, fieldInfo]: [string, any]) => fieldInfo.is_metadata !== true)
         )
     
     // Créer tous les nœuds
@@ -103,7 +103,7 @@ export function ContextFieldSelector({
     }
 
     return root
-  }, [availableFields, elementType, essentialFields, showOnlyEssential])
+  }, [availableFields, elementType, showOnlyEssential])
 
   // Filtrer l'arbre selon la recherche
   const filteredTree = useMemo(() => {
@@ -148,7 +148,7 @@ export function ContextFieldSelector({
       ? selectedFields.filter(f => f !== fieldPath)
       : [...selectedFields, fieldPath]
     onFieldsChange?.(newSelection)
-  }, [elementType, selectedFields, essentialFieldsForType, toggleField, onFieldsChange])
+  }, [elementType, selectedFields, availableFields, toggleField, onFieldsChange])
 
   const toggleExpanded = useCallback((path: string) => {
     setExpandedPaths(prev => {
@@ -187,7 +187,8 @@ export function ContextFieldSelector({
   const renderFieldNode = (node: FieldNode, depth: number = 0): JSX.Element => {
     const isExpanded = expandedPaths.has(node.path)
     const hasChildren = node.children.length > 0
-    const isEssential = essentialFieldsForType.includes(node.path)
+    // is_essential concerne uniquement les champs essentiels du contexte narratif (pour génération minimale)
+    const isEssential = node.fieldInfo.is_essential === true
     const isSelected = isEssential || selectedFields.includes(node.path)
     const isLeaf = node.fieldInfo.type !== 'dict'
     const indicator = getFieldIndicator(node.fieldInfo)
@@ -340,37 +341,29 @@ export function ContextFieldSelector({
   }
 
   // Compter les champs visibles (filtrés) et sélectionnés
-  // Utiliser is_essential des champs détectés plutôt que essentialFields du store
+  // showOnlyEssential=true : afficher les métadonnées (is_metadata=true)
+  // showOnlyEssential=false : afficher le contexte narratif (is_metadata=false)
   const fields = availableFields[elementType] || {}
   const visibleFields = showOnlyEssential
-    ? Object.keys(fields).filter(path => fields[path]?.is_essential === true)
-    : Object.keys(fields).filter(path => fields[path]?.is_essential !== true)
+    ? Object.keys(fields).filter(path => fields[path]?.is_metadata === true)
+    : Object.keys(fields).filter(path => fields[path]?.is_metadata !== true)
   
   const totalFields = visibleFields.length
   
-  // Compter le total des champs sélectionnés (essentiels + non-essentiels), pas seulement ceux visibles
-  const allFields = Object.keys(fields)
-  const totalSelectedCount = allFields.filter(path => {
-    const isEssential = fields[path]?.is_essential === true
-    if (isEssential) {
-      return true  // Les essentiels sont toujours sélectionnés
-    }
-    return selectedFields.includes(path)
-  }).length
-  
-  // Compter aussi les champs visibles sélectionnés pour l'affichage contextuel
+  // Compter uniquement les champs sélectionnés parmi ceux visibles dans l'onglet actuel
+  // Note: is_essential concerne les champs essentiels du contexte narratif (pour génération minimale)
   const visibleSelectedFields = visibleFields.filter(path => {
     const isEssential = fields[path]?.is_essential === true
     if (isEssential) {
-      return true  // Les essentiels sont toujours sélectionnés
+      return true  // Les champs essentiels du contexte narratif sont toujours sélectionnés
     }
     return selectedFields.includes(path)
   })
   const visibleSelectedCount = visibleSelectedFields.length
   
-  // Afficher le total des champs sélectionnés, pas seulement ceux visibles
-  const selectedCount = totalSelectedCount
-  const totalFieldsToDisplay = allFields.length
+  // Afficher le comptage pour l'onglet actuel uniquement
+  const selectedCount = visibleSelectedCount
+  const totalFieldsToDisplay = totalFields
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

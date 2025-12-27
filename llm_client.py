@@ -131,7 +131,7 @@ class DummyLLMClient(ILLMClient):
         return 16000
 
 class OpenAIClient(ILLMClient):
-    def __init__(self, api_key: Optional[str] = None, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, api_key: Optional[str] = None, config: Optional[Dict[str, Any]] = None, usage_service: Optional[Any] = None, request_id: Optional[str] = None, endpoint: Optional[str] = None):
         if api_key is None:
             api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
@@ -148,6 +148,11 @@ class OpenAIClient(ILLMClient):
             "system_prompt_template", 
             "Tu es un assistant expert en écriture de dialogues pour jeux de rôle (RPG)."
         )
+        
+        # Service de tracking (optionnel)
+        self.usage_service = usage_service
+        self.request_id = request_id or "unknown"
+        self.endpoint = endpoint or "unknown"
         
         # Initialiser retry et circuit breaker (optionnel, peut ne pas être disponible dans tous les contextes)
         self._retry_with_backoff = None
@@ -237,6 +242,13 @@ class OpenAIClient(ILLMClient):
 
 
         for i in range(k):
+            start_time = time.time()
+            success = False
+            error_message = None
+            prompt_tokens = 0
+            completion_tokens = 0
+            total_tokens = 0
+            
             try:
                 logger.info(f"Début de la génération de la variante {i+1}/{k} pour le prompt.")
                 # #region agent log
@@ -289,6 +301,12 @@ class OpenAIClient(ILLMClient):
                     # Pas de protection
                     response = await _make_api_call()
                 
+                # Extraire les métriques d'utilisation
+                if hasattr(response, 'usage') and response.usage:
+                    prompt_tokens = response.usage.prompt_tokens or 0
+                    completion_tokens = response.usage.completion_tokens or 0
+                    total_tokens = response.usage.total_tokens or 0
+                
                 logger.info(f"Réponse BRUTE de l'API OpenAI reçue pour la variante {i+1}:\n{response.model_dump_json(indent=2)}")
 
                 if response_model and response.choices[0].message.tool_calls:
@@ -300,13 +318,16 @@ class OpenAIClient(ILLMClient):
                             parsed_output = response_model.model_validate_json(function_args_raw)
                             generated_results.append(parsed_output)
                             logger.info(f"Variante {i+1} générée et validée avec succès (structured).")
+                            success = True
                         except Exception as e:
                             logger.error(f"Erreur de validation Pydantic pour la variante {i+1}: {e}")
                             logger.error(f"Données JSON qui ont échoué à la validation: {function_args_raw}")
                             generated_results.append(f"Erreur de validation: {e} - Données: {function_args_raw}")
+                            error_message = f"Validation error: {e}"
                     else:
                         logger.warning(f"Outil inattendu appelé: {tool_call.function.name}")
                         generated_results.append(f"Erreur: Outil inattendu {tool_call.function.name}")
+                        error_message = f"Unexpected tool: {tool_call.function.name}"
 
                 elif response.choices and response.choices[0].message and response.choices[0].message.content:
                     text_output = response.choices[0].message.content.strip()
@@ -332,16 +353,42 @@ class OpenAIClient(ILLMClient):
                     # #endregion
                     generated_results.append(text_output)
                     logger.info(f"Variante {i+1} générée avec succès (texte simple).")
+                    success = True
                 else:
                     logger.warning(f"Aucun contenu ou appel de fonction dans la réponse pour la variante {i+1}.")
                     generated_results.append(f"Erreur: Réponse vide ou inattendue pour la variante {i+1}")
+                    error_message = "Empty or unexpected response"
             
             except APIError as e:
                 logger.error(f"Erreur API OpenAI lors de la génération de la variante {i+1}: {e}")
                 generated_results.append(f"Erreur API: {e}")
+                error_message = str(e)
             except Exception as e:
                 logger.error(f"Erreur inattendue lors de la génération de la variante {i+1}: {e}", exc_info=True)
                 generated_results.append(f"Erreur: {e}")
+                error_message = str(e)
+            finally:
+                # Calculer la durée
+                duration_ms = int((time.time() - start_time) * 1000)
+                
+                # Enregistrer l'utilisation si le service est disponible
+                if self.usage_service:
+                    try:
+                        self.usage_service.track_usage(
+                            request_id=self.request_id,
+                            model_name=self.model_name,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            total_tokens=total_tokens,
+                            duration_ms=duration_ms,
+                            success=success,
+                            endpoint=self.endpoint,
+                            k_variants=k,
+                            error_message=error_message
+                        )
+                    except Exception as tracking_error:
+                        # Ne pas faire échouer l'appel LLM si le tracking échoue
+                        logger.error(f"Erreur lors du tracking de l'usage LLM: {tracking_error}", exc_info=True)
         
         return generated_results
 

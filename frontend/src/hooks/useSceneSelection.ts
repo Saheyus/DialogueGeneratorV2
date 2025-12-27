@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import * as contextAPI from '../api/context'
 import type { SceneSelection } from '../types/generation'
+import { useContextStore } from '../store/contextStore'
 
 export interface SceneSelectionData {
   characters: string[]
@@ -20,6 +21,10 @@ export interface UseSceneSelectionReturn {
 }
 
 export function useSceneSelection() {
+  const contextSelections = useContextStore((state) => state.selections)
+  const contextRegion = useContextStore((state) => state.selectedRegion)
+  const contextSubLocations = useContextStore((state) => state.selectedSubLocations)
+  
   const [data, setData] = useState<SceneSelectionData>({
     characters: [],
     regions: [],
@@ -90,6 +95,56 @@ export function useSceneSelection() {
       setSelection((prev) => ({ ...prev, subLocation: null }))
     }
   }, [selection.sceneRegion, loadSubLocations])
+
+  // Synchronisation avec contextStore : mapper les sélections de contexte vers la sélection de scène
+  useEffect(() => {
+    setSelection((prevSelection) => {
+      // Ne synchroniser que si la sélection de scène est vide (pour éviter d'écraser les sélections manuelles)
+      const hasSceneSelection = prevSelection.characterA || prevSelection.characterB || prevSelection.sceneRegion
+      
+      if (hasSceneSelection) {
+        return prevSelection
+      }
+      
+      // Mapper les personnages : les 2 premiers deviennent characterA et characterB
+      const characterA = contextSelections.characters[0] || null
+      const characterB = contextSelections.characters[1] || null
+      
+      // Mapper les lieux : le premier lieu devient sceneRegion ou subLocation
+      let sceneRegion: string | null = null
+      let subLocation: string | null = null
+      
+      // Si une région est sélectionnée dans contextStore, l'utiliser
+      if (contextRegion) {
+        sceneRegion = contextRegion
+        // Si des sous-lieux sont sélectionnés, utiliser le premier
+        if (contextSubLocations.length > 0) {
+          subLocation = contextSubLocations[0]
+        }
+      } else if (contextSelections.locations.length > 0) {
+        // Sinon, utiliser le premier lieu de la liste
+        // On suppose que c'est une région (pas un sous-lieu)
+        sceneRegion = contextSelections.locations[0]
+      }
+      
+      // Mettre à jour seulement si quelque chose a changé
+      if (
+        characterA !== prevSelection.characterA ||
+        characterB !== prevSelection.characterB ||
+        sceneRegion !== prevSelection.sceneRegion ||
+        subLocation !== prevSelection.subLocation
+      ) {
+        return {
+          characterA,
+          characterB,
+          sceneRegion,
+          subLocation,
+        }
+      }
+      
+      return prevSelection
+    })
+  }, [contextSelections, contextRegion, contextSubLocations])
 
   const updateSelection = useCallback((updates: Partial<SceneSelection>) => {
     setSelection((prev) => ({ ...prev, ...updates }))

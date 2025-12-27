@@ -26,7 +26,6 @@ import type {
 import { DialogueStructureWidget } from './DialogueStructureWidget'
 import { SystemPromptEditor } from './SystemPromptEditor'
 import { SceneSelectionWidget } from './SceneSelectionWidget'
-import { VariantsTabsView } from './VariantsTabsView'
 import { InteractionsTab } from './InteractionsTab'
 import { Tabs, type Tab } from '../shared/Tabs'
 import { ContextActions } from '../context/ContextActions'
@@ -59,6 +58,7 @@ export function GenerationPanel() {
   
   const [generationMode, setGenerationMode] = useState<GenerationMode>('unity')
   const [userInstructions, setUserInstructions] = useState('')
+  const [authorProfile, setAuthorProfile] = useState('')
   const [kVariants, setKVariants] = useState(2)
   const [maxContextTokens, setMaxContextTokens] = useState(1500)
   const [llmModel, setLlmModel] = useState('gpt-4o-mini')
@@ -73,9 +73,19 @@ export function GenerationPanel() {
   const [previousInteractionId, setPreviousInteractionId] = useState<string>('')
   const [availableInteractions, setAvailableInteractions] = useState<InteractionResponse[]>([])
   const [activePanelTab, setActivePanelTab] = useState<PanelTab>('generation')
+  
+  // Basculer automatiquement vers l'onglet Interactions quand des interactions sont générées
+  useEffect(() => {
+    if (interactions && interactions.length > 0 && activePanelTab === 'generation') {
+      setActivePanelTab('interactions')
+    }
+  }, [interactions, activePanelTab])
   const [isDirty, setIsDirty] = useState(false)
   const [npcSpeakerId, setNpcSpeakerId] = useState<string>('')
+  const [narrativeTags, setNarrativeTags] = useState<string[]>([])
   const toast = useToast()
+
+  const availableNarrativeTags = ['tension', 'humour', 'dramatique', 'intime', 'révélation']
 
   // Sauvegarde automatique très fréquente (toutes les 2 secondes)
   const DRAFT_STORAGE_KEY = 'generation_draft'
@@ -93,6 +103,7 @@ export function GenerationPanel() {
       previousInteractionId,
       npcSpeakerId,
       maxChoices,
+      narrativeTags,
       contextSelections: selections,
       selectedRegion,
       selectedSubLocations,
@@ -104,7 +115,7 @@ export function GenerationPanel() {
     } catch (err) {
       console.error('Erreur lors de la sauvegarde automatique:', err)
     }
-  }, [userInstructions, systemPromptOverride, dialogueStructure, sceneSelection, kVariants, maxContextTokens, llmModel, maxChoices, generationMode, previousInteractionId, npcSpeakerId, selections, selectedRegion, selectedSubLocations])
+  }, [userInstructions, systemPromptOverride, dialogueStructure, sceneSelection, kVariants, maxContextTokens, llmModel, maxChoices, narrativeTags, generationMode, previousInteractionId, npcSpeakerId, selections, selectedRegion, selectedSubLocations])
 
   // Charger le brouillon au démarrage (AVANT loadModels pour préserver le modèle sauvegardé)
   useEffect(() => {
@@ -130,6 +141,7 @@ export function GenerationPanel() {
         }
         if (draft.previousInteractionId !== undefined) setPreviousInteractionId(draft.previousInteractionId)
         if (draft.npcSpeakerId !== undefined) setNpcSpeakerId(draft.npcSpeakerId)
+        if (draft.narrativeTags !== undefined) setNarrativeTags(draft.narrativeTags)
         // Charger les sélections de contexte
         if (draft.contextSelections !== undefined) {
           const savedRegion = draft.selectedRegion !== undefined ? draft.selectedRegion : null
@@ -437,6 +449,7 @@ export function GenerationPanel() {
           previous_interaction_id: previousInteractionId || undefined,
           field_configs: Object.keys(fieldConfigsWithEssential).length > 0 ? fieldConfigsWithEssential : undefined,
           organization_mode: organization,
+          narrative_tags: narrativeTags.length > 0 ? narrativeTags : undefined,
         }
 
         const response = await dialoguesAPI.generateInteractionVariants(request)
@@ -468,8 +481,10 @@ export function GenerationPanel() {
           npc_speaker_id: npcSpeakerId || undefined,
           max_context_tokens: maxContextTokens,
           system_prompt_override: systemPromptOverride || undefined,
+          author_profile: authorProfile || undefined,
           llm_model_identifier: llmModel,
           max_choices: maxChoices ?? undefined,
+          narrative_tags: narrativeTags.length > 0 ? narrativeTags : undefined,
         }
 
         const response = await dialoguesAPI.generateUnityDialogue(request)
@@ -582,13 +597,17 @@ export function GenerationPanel() {
   const handleSaveAsInteraction = async (variant: DialogueVariantResponse) => {
     try {
       // Convertir une variante en interaction (structure basique)
-      const interaction: InteractionResponse = {
-        interaction_id: `generated_${Date.now()}`,
+      // Le backend attend element_type: 'dialogue_line' avec text, pas type: 'dialogue' avec content
+      const interaction: Partial<InteractionResponse> = {
         title: variant.title,
         elements: [
           {
-            type: 'dialogue',
-            content: variant.content,
+            element_type: 'dialogue_line',
+            text: variant.content,
+            speaker: null,
+            tags: [],
+            pre_line_commands: [],
+            post_line_commands: [],
           },
         ],
         header_commands: [],
@@ -686,9 +705,14 @@ export function GenerationPanel() {
 
       <SystemPromptEditor
         userInstructions={userInstructions}
+        authorProfile={authorProfile}
         systemPromptOverride={systemPromptOverride}
         onUserInstructionsChange={(value) => {
           setUserInstructions(value)
+          setIsDirty(true)
+        }}
+        onAuthorProfileChange={(value) => {
+          setAuthorProfile(value)
           setIsDirty(true)
         }}
         onSystemPromptChange={(value) => {
@@ -881,6 +905,55 @@ export function GenerationPanel() {
           />
         </div>
       )}
+
+      {/* Tags narratifs */}
+      <div style={{ marginBottom: '1rem' }}>
+        <label style={{ 
+          display: 'block', 
+          marginBottom: '0.5rem', 
+          color: theme.text.primary,
+          fontWeight: 'bold'
+        }}>
+          Tags narratifs
+        </label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+          {availableNarrativeTags.map((tag) => (
+            <label
+              key={tag}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0.5rem 1rem',
+                border: `1px solid ${narrativeTags.includes(tag) ? theme.border.focus : theme.border.primary}`,
+                borderRadius: '4px',
+                backgroundColor: narrativeTags.includes(tag) 
+                  ? theme.button.primary.background 
+                  : theme.button.default.background,
+                color: narrativeTags.includes(tag) 
+                  ? theme.button.primary.color 
+                  : theme.button.default.color,
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={narrativeTags.includes(tag)}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setNarrativeTags([...narrativeTags, tag])
+                  } else {
+                    setNarrativeTags(narrativeTags.filter(t => t !== tag))
+                  }
+                  setIsDirty(true)
+                }}
+                style={{ marginRight: '0.5rem', cursor: 'pointer' }}
+              />
+              #{tag}
+            </label>
+          ))}
+        </div>
+      </div>
 
       {estimatedTokens !== null && (
         <div style={{ 

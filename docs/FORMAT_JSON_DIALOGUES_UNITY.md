@@ -153,5 +153,21 @@ L'outil produit un format enrichi (métadonnées, commentaires, format libre), U
 - **Normalisation** : Unity normalise automatiquement les fichiers JSON lors de l'import, mais l'outil devrait produire un format déjà normalisé pour éviter les diffs inutiles.
 - **Validation** : L'outil doit valider les références de nœuds avant export pour éviter les erreurs runtime.
 
+## Source de vérité : JSON Schema Unity
+
+Le format exact est défini par le **JSON Schema Unity** disponible dans `docs/JsonDocUnity/Documentation/dialogue-format.schema.json`.
+
+Ce schéma est la source de vérité pour :
+- La structure exacte des nœuds et choix
+- Les patterns de validation (IDs SCREAMING_SNAKE_CASE, format des tests, etc.)
+- Les contraintes (maxItems pour choices, champs requis, etc.)
+
+**Utilisation** :
+- Les tests de contrat (`tests/services/test_unity_schema_contract.py`) valident automatiquement les exports contre ce schéma
+- Le schéma n'est disponible qu'en développement (pas en production)
+- Si le schéma est absent, l'outil fonctionne normalement mais sans validation stricte (graceful degradation)
+
+**Version du schéma** : Voir `dialogue-format.schema.json` pour la version actuelle (actuellement `1.0.0`).
+
 
 

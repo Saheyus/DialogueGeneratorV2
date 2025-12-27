@@ -9,7 +9,12 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class FieldInfo:
-    """Informations sur un champ détecté."""
+    """Informations sur un champ détecté.
+    
+    Deux critères distincts :
+    - is_metadata : Si le champ est une métadonnée (tous les champs AVANT "Introduction" dans le JSON)
+    - is_essential : Si le champ est essentiel pour la génération minimale (défini dans MINIMAL_FIELDS)
+    """
     path: str
     label: str
     type: str  # "string", "list", "dict"
@@ -17,7 +22,8 @@ class FieldInfo:
     frequency: float  # % de fiches ayant ce champ (0.0 à 1.0)
     suggested: bool = False  # Suggéré pour le type de génération
     category: Optional[str] = None  # "identity", "characterization", "voice", "background", "mechanics"
-    is_essential: bool = False  # Champ essentiel (court, toujours sélectionné, non désélectionnable)
+    is_metadata: bool = False  # Champ métadonnée (avant "Introduction" dans le JSON)
+    is_essential: bool = False  # Champ essentiel pour génération minimale (défini dans MINIMAL_FIELDS)
 
 
 class ContextFieldDetector:
@@ -80,6 +86,14 @@ class ContextFieldDetector:
         
         total_items = len(sample_data)
         
+        # Déterminer l'ordre des clés racine pour identifier les métadonnées
+        # Les métadonnées sont tous les champs AVANT "Introduction" dans le JSON
+        root_keys_order = []
+        if sample_data:
+            first_item = sample_data[0]
+            if isinstance(first_item, dict):
+                root_keys_order = list(first_item.keys())
+        
         for item in sample_data:
             if not isinstance(item, dict):
                 continue
@@ -107,6 +121,9 @@ class ContextFieldDetector:
             # Déterminer la catégorie
             category = self._categorize_field(path, element_type)
             
+            # Déterminer si c'est une métadonnée (tous les champs avant "Introduction")
+            is_metadata = self._is_metadata_field(path, root_keys_order)
+            
             fields[path] = FieldInfo(
                 path=path,
                 label=label,
@@ -114,7 +131,8 @@ class ContextFieldDetector:
                 depth=stats["max_depth"],
                 frequency=frequency,
                 suggested=False,  # Sera déterminé par FieldSuggestionService
-                category=category
+                category=category,
+                is_metadata=is_metadata
             )
         
         logger.info(f"Détecté {len(fields)} champs pour '{element_type}' sur {total_items} fiches")
@@ -253,124 +271,64 @@ class ContextFieldDetector:
             return "rare"
     
     def _identify_essential_fields(self, element_type: str, context_config: Dict) -> Set[str]:
-        """Identifie les champs essentiels depuis context_config.json et par analyse des données.
+        """Identifie les champs essentiels pour la génération minimale.
         
-        Les champs essentiels sont :
-        1. Ceux avec truncate: -1 ou truncate <= 200 dans context_config.json
-        2. Les champs de catégorie "identity" (Type, État, Espèce, Genre, Âge, etc.)
-        3. Les champs avec des valeurs typiquement courtes (tags, sélecteurs, nombres, dates)
+        Les champs essentiels sont définis dans context_organizer.MINIMAL_FIELDS.
+        Ce sont les champs du CONTEXTE NARRATIF nécessaires pour une génération minimale de qualité.
+        
+        NOTE: Les métadonnées ne sont PAS des champs essentiels. Ce sont deux critères distincts :
+        - is_metadata : indique si un champ est une métadonnée (avant "Introduction" dans le JSON)
+        - is_essential : indique si un champ est essentiel pour la génération (défini dans MINIMAL_FIELDS)
         
         Args:
             element_type: Type d'élément
-            context_config: Configuration depuis context_config.json
+            context_config: Configuration depuis context_config.json (non utilisé pour l'instant)
             
         Returns:
-            Set des chemins de champs essentiels
+            Set des chemins de champs essentiels (du contexte narratif uniquement)
         """
+        from services.context_organizer import ContextOrganizer
+        
         essential_fields = set()
-        ESSENTIAL_TRUNCATE_THRESHOLD = 200
+        minimal_fields = ContextOrganizer.MINIMAL_FIELDS.get(element_type, [])
         
-        # 1. Champs depuis context_config.json
-        element_config = context_config.get(element_type, {})
-        for priority_level, fields in element_config.items():
-            for field_config in fields:
-                path = field_config.get("path", "")
-                if path:
-                    truncate = field_config.get("truncate", -1)
-                    if truncate == -1 or (isinstance(truncate, int) and truncate <= ESSENTIAL_TRUNCATE_THRESHOLD):
-                        essential_fields.add(path)
+        for field_path in minimal_fields:
+            essential_fields.add(field_path)
+            logger.debug(f"Champ essentiel pour '{element_type}': '{field_path}'")
         
-        # 2. Identifier les champs essentiels par analyse des données réelles
-        if self.context_builder:
-            sample_data = self._get_sample_data(element_type)
-            if sample_data:
-                detected_fields = self.detect_available_fields(element_type, sample_data)
-                
-                logger.info(f"Analyse de {len(detected_fields)} champs détectés pour identifier les métadonnées")
-                for path, field_info in detected_fields.items():
-                    # Si déjà dans essential_fields, on skip
-                    if path in essential_fields:
-                        continue
-                    
-                    # Vérifier si c'est une métadonnée Notion typique
-                    is_metadata = self._is_metadata_field(path, field_info, sample_data)
-                    if is_metadata:
-                        essential_fields.add(path)
-                        logger.debug(f"Champ '{path}' identifié comme métadonnée (catégorie: {field_info.category}, type: {field_info.type})")
-        
+        logger.info(f"Champs essentiels identifiés pour '{element_type}': {len(essential_fields)} champs")
         return essential_fields
     
-    def _is_metadata_field(self, path: str, field_info: FieldInfo, sample_data: List[Dict]) -> bool:
-        """Détermine si un champ est une métadonnée Notion (court, essentiel).
+    def _is_metadata_field(self, path: str, root_keys_order: List[str]) -> bool:
+        """Détermine si un champ est une métadonnée selon l'ordre dans le JSON.
         
-        Les métadonnées sont typiquement :
-        - Champs de catégorie "identity" (Type, État, Espèce, Genre, Âge, etc.)
-        - Champs avec valeurs courtes (tags, sélecteurs, nombres, dates)
-        - Relations simples (listes courtes de noms)
-        - Champs booléens
+        Les métadonnées sont tous les champs AVANT "Introduction" dans l'ordre du JSON.
+        "Introduction" et tous les champs qui viennent après sont du contexte narratif.
         
         Args:
-            path: Chemin du champ
-            field_info: Informations sur le champ
-            sample_data: Données d'échantillon pour analyser les valeurs
+            path: Chemin du champ (ex: "Nom", "Espèce", "Introduction.Résumé")
+            root_keys_order: Liste des clés racine dans l'ordre du JSON original
             
         Returns:
-            True si le champ est une métadonnée
+            True si le champ est une métadonnée (avant "Introduction")
         """
-        # 1. Vérifier la catégorie
-        if field_info.category == "identity":
-            return True
+        if not root_keys_order:
+            return False
         
-        # 2. Vérifier les noms de champs typiques des métadonnées Notion
-        path_lower = path.lower()
-        metadata_keywords = [
-            "type", "état", "state", "espèce", "species", "genre", "gender",
-            "âge", "age", "qualités", "qualities", "défauts", "flaws",
-            "archétype", "archetype", "axe", "idéologique", "ideological",
-            "communautés", "communities", "lieux", "places", "relations",
-            "détient", "possesses", "portrait", "référence", "reference",
-            "sprint", "dates", "assets", "scènes", "scenes", "dialogues",
-            "présence", "presence", "feuilles", "sheets"
-        ]
+        root_key = path.split(".")[0]
         
-        for keyword in metadata_keywords:
-            if keyword in path_lower:
-                return True
+        # Si "Introduction" n'est pas dans l'ordre, tout est métadonnée sauf "Introduction" et ses sous-champs
+        if "Introduction" not in root_keys_order:
+            return root_key != "Introduction" and not path.startswith("Introduction.")
         
-        # 3. Analyser les valeurs réelles pour déterminer si elles sont courtes
-        if sample_data:
-            max_value_length = 0
-            total_samples = 0
-            
-            for item in sample_data[:10]:  # Analyser jusqu'à 10 échantillons
-                value = self._extract_field_value(item, path)
-                if value is not None:
-                    total_samples += 1
-                    value_str = self._value_to_string(value)
-                    max_value_length = max(max_value_length, len(value_str))
-            
-            # Si toutes les valeurs sont courtes (< 150 caractères), c'est probablement une métadonnée
-            if total_samples > 0 and max_value_length < 150:
-                # Vérifier aussi le type : listes courtes, nombres, booléens sont des métadonnées
-                if field_info.type in ["list", "number", "boolean"]:
-                    return True
-                # Si c'est une liste de tags courts
-                if field_info.type == "list":
-                    for item in sample_data[:5]:
-                        value = self._extract_field_value(item, path)
-                        if isinstance(value, list) and len(value) > 0:
-                            # Si les éléments de la liste sont courts (tags)
-                            for elem in value[:3]:  # Vérifier les 3 premiers
-                                elem_str = str(elem)
-                                if len(elem_str) > 50:  # Si un élément est long, ce n'est pas une métadonnée
-                                    return False
-                            return True
-            
-            # Si la valeur max est très courte (< 50), c'est sûrement une métadonnée
-            if total_samples > 0 and max_value_length < 50:
-                return True
-        
-        return False
+        # Trouver l'index de "Introduction" et de la clé racine du champ
+        try:
+            cutoff_index = root_keys_order.index("Introduction")
+            key_index = root_keys_order.index(root_key)
+            return key_index < cutoff_index
+        except ValueError:
+            # Si la clé n'est pas dans l'ordre, ne pas la considérer comme métadonnée par défaut
+            return False
     
     def _extract_field_value(self, data: Dict, path: str) -> Optional[Any]:
         """Extrait la valeur d'un champ depuis un chemin."""

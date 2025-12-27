@@ -89,6 +89,7 @@ class GenerateInteractionVariantsRequest(BaseModel):
     previous_interaction_id: Optional[str] = Field(None, description="ID d'une interaction précédente pour la continuité narrative")
     field_configs: Optional[Dict[str, List[str]]] = Field(None, description="Configuration des champs de contexte par type d'élément")
     organization_mode: Optional[str] = Field(None, description="Mode d'organisation du contexte (default, narrative, minimal)")
+    narrative_tags: Optional[List[str]] = Field(None, description="Tags narratifs pour guider le ton (ex: tension, humour, dramatique)")
 
 
 class DialogueVariantResponse(BaseModel):
@@ -170,8 +171,10 @@ class GenerateUnityDialogueRequest(BaseModel):
     npc_speaker_id: Optional[str] = Field(None, description="ID du PNJ interlocuteur (si None, utiliser le premier personnage sélectionné)")
     max_context_tokens: int = Field(default=1500, ge=100, le=50000, description="Nombre maximum de tokens pour le contexte")
     system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
+    author_profile: Optional[str] = Field(None, description="Profil d'auteur global (style réutilisable entre scènes)")
     llm_model_identifier: str = Field(default="gpt-4o-mini", description="Identifiant du modèle LLM")
     max_choices: Optional[int] = Field(None, ge=0, le=8, description="Nombre maximum de choix à générer (0-8, ou None pour laisser l'IA décider librement)")
+    narrative_tags: Optional[List[str]] = Field(None, description="Tags narratifs pour guider le ton (ex: tension, humour, dramatique)")
 
 
 class GenerateUnityDialogueResponse(BaseModel):

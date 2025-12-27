@@ -76,8 +76,8 @@ class ContextBuilder:
     def load_gdd_files(self): # Suppression des arguments gdd_base_path_str et import_base_path_str
         """
         Charge les fichiers JSON du GDD depuis les chemins relatifs au projet.
-        Se concentre sur les fichiers non-Mini dans GDD/categories/
-        et charge également Vision.json depuis import/Bible_Narrative/
+        Utilise le lien symbolique data/GDD_categories/ pour les fichiers de catégories.
+        Charge également Vision.json depuis import/Bible_Narrative/
         
         Utilise un cache intelligent avec vérification mtime pour éviter les rechargements inutiles.
         """
@@ -89,8 +89,9 @@ class ContextBuilder:
         except (ImportError, AttributeError):
             logger.debug("Cache GDD non disponible. Chargement direct depuis fichiers.")
         
-        gdd_base_path = PROJECT_ROOT_DIR / "GDD"
-        categories_path = gdd_base_path / "categories"
+        # Utiliser le lien symbolique data/GDD_categories/ au lieu de PROJECT_ROOT_DIR/GDD/categories
+        # CONTEXT_BUILDER_DIR est DialogueGenerator/, donc data/GDD_categories est relatif à DialogueGenerator
+        categories_path = CONTEXT_BUILDER_DIR / "data" / "GDD_categories"
         import_base_path = PROJECT_ROOT_DIR / "import"
 
         logger.info(f"Début du chargement des données du GDD depuis {categories_path} et {import_base_path}.")

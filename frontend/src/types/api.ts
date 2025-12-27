@@ -74,6 +74,7 @@ export interface GenerateInteractionVariantsRequest {
   previous_interaction_id?: string
   field_configs?: Record<string, string[]>
   organization_mode?: string
+  narrative_tags?: string[]
 }
 
 // Interaction
@@ -100,6 +101,7 @@ export interface InteractionResponse {
   header_commands: string[]
   header_tags: string[]
   next_interaction_id_if_no_choices?: string
+  narrative_warnings?: string[]
 }
 
 export interface InteractionListResponse {
@@ -205,6 +207,7 @@ export interface InteractionContextPathResponse {
 
 // Unity Dialogue
 export interface GenerateUnityDialogueRequest {
+  author_profile?: string
   user_instructions: string
   context_selections: ContextSelection
   npc_speaker_id?: string
@@ -212,6 +215,7 @@ export interface GenerateUnityDialogueRequest {
   system_prompt_override?: string
   llm_model_identifier: string
   max_choices?: number | null
+  narrative_tags?: string[]
 }
 
 export interface GenerateUnityDialogueResponse {
