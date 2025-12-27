@@ -3,7 +3,7 @@
  */
 import { create } from 'zustand'
 import type { SceneSelection } from '../types/generation'
-import type { GenerateDialogueVariantsResponse, InteractionResponse } from '../types/api'
+import type { GenerateUnityDialogueResponse } from '../types/api'
 
 interface GenerationState {
   // Sélection de scène
@@ -22,8 +22,7 @@ interface GenerationState {
   isEstimating: boolean
   
   // Résultats de génération
-  variantsResponse: GenerateDialogueVariantsResponse | null
-  interactionsResponse: InteractionResponse[] | null
+  unityDialogueResponse: GenerateUnityDialogueResponse | null
   tokensUsed: number | null
   
   // Actions
@@ -33,8 +32,7 @@ interface GenerationState {
   setDefaultSystemPrompt: (prompt: string | null) => void
   resetSystemPrompt: () => void
   setEstimatedPrompt: (prompt: string | null, tokens: number | null, isEstimating: boolean) => void
-  setVariantsResponse: (response: GenerateDialogueVariantsResponse | null) => void
-  setInteractionsResponse: (response: InteractionResponse[] | null) => void
+  setUnityDialogueResponse: (response: GenerateUnityDialogueResponse | null) => void
   setTokensUsed: (tokens: number | null) => void
   clearGenerationResults: () => void
 }
@@ -56,8 +54,7 @@ export const useGenerationStore = create<GenerationState>((set) => ({
   estimatedPrompt: null,
   estimatedTokens: null,
   isEstimating: false,
-  variantsResponse: null,
-  interactionsResponse: null,
+  unityDialogueResponse: null,
   tokensUsed: null,
 
   setSceneSelection: (selection) =>
@@ -82,16 +79,13 @@ export const useGenerationStore = create<GenerationState>((set) => ({
   setEstimatedPrompt: (prompt, tokens, isEstimating) =>
     set({ estimatedPrompt: prompt, estimatedTokens: tokens, isEstimating }),
 
-  setVariantsResponse: (response) =>
-    set({ variantsResponse: response }),
-
-  setInteractionsResponse: (response) =>
-    set({ interactionsResponse: response }),
+  setUnityDialogueResponse: (response) =>
+    set({ unityDialogueResponse: response }),
 
   setTokensUsed: (tokens) =>
     set({ tokensUsed: tokens }),
 
   clearGenerationResults: () =>
-    set({ variantsResponse: null, interactionsResponse: null, tokensUsed: null }),
+    set({ unityDialogueResponse: null, tokensUsed: null }),
 }))
 

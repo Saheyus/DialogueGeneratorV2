@@ -182,7 +182,9 @@ class DialogueGenerationService(IDialogueGenerationService):
                                             current_llm_model_identifier: str,
                                             field_configs: Optional[Dict[str, List[str]]] = None,
                                             organization_mode: Optional[str] = None,
-                                            narrative_tags: Optional[List[str]] = None
+                                            narrative_tags: Optional[List[str]] = None,
+                                            vocabulary_min_importance: Optional[str] = None,
+                                            include_narrative_guides: bool = True
                                             ) -> Tuple[Optional[List[Interaction]], Optional[str], Optional[int]]:
         logger.info(f"Service: Starting INTERACTION generation. Model: {current_llm_model_identifier}, K: {k_variants}")
         original_system_prompt = None
@@ -224,7 +226,9 @@ class DialogueGenerationService(IDialogueGenerationService):
                 user_specific_goal=user_instructions, 
                 scene_protagonists=scene_protagonists_dict,
                 scene_location=scene_location_dict,
-                generation_params=generation_params_for_prompt_build
+                generation_params=generation_params_for_prompt_build,
+                vocabulary_min_importance=vocabulary_min_importance,
+                include_narrative_guides=include_narrative_guides
             )
             logger.info(f"Final prompt for INTERACTION built. Estimated tokens: {estimated_tokens}. Length: {len(final_prompt_str)} chars.")
 

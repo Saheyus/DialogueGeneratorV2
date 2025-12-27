@@ -13,7 +13,7 @@ class FieldInfo:
     
     Deux critères distincts :
     - is_metadata : Si le champ est une métadonnée (tous les champs AVANT "Introduction" dans le JSON)
-    - is_essential : Si le champ est essentiel pour la génération minimale (défini dans MINIMAL_FIELDS)
+    - is_essential : Si le champ est essentiel (contexte OU métadonnées) selon ESSENTIAL_*_FIELDS
     """
     path: str
     label: str
@@ -23,7 +23,8 @@ class FieldInfo:
     suggested: bool = False  # Suggéré pour le type de génération
     category: Optional[str] = None  # "identity", "characterization", "voice", "background", "mechanics"
     is_metadata: bool = False  # Champ métadonnée (avant "Introduction" dans le JSON)
-    is_essential: bool = False  # Champ essentiel pour génération minimale (défini dans MINIMAL_FIELDS)
+    is_essential: bool = False  # Champ essentiel (contexte OU métadonnées) défini dans ContextOrganizer.ESSENTIAL_*_FIELDS
+    is_unique: bool = False  # Champ unique (n'apparaît que dans une seule fiche)
 
 
 class ContextFieldDetector:
@@ -76,12 +77,13 @@ class ContextFieldDetector:
             logger.warning(f"Aucune donnée disponible pour le type '{element_type}'")
             return {}
         
-        # Collecter tous les champs avec leur fréquence
+        # Collecter tous les champs avec leur fréquence et les fiches où ils apparaissent
         field_stats: Dict[str, Dict[str, Any]] = defaultdict(lambda: {
             "count": 0,
             "types": set(),
             "max_depth": 0,
-            "paths": set()
+            "paths": set(),
+            "item_names": set()  # Noms des fiches où le champ apparaît
         })
         
         total_items = len(sample_data)
@@ -98,6 +100,9 @@ class ContextFieldDetector:
             if not isinstance(item, dict):
                 continue
             
+            # Identifier la fiche (par son "Nom" ou autre identifiant)
+            item_name = self._get_item_name(item)
+            
             # Extraire tous les chemins de champs (y compris imbriqués)
             paths = self._extract_all_paths(item)
             
@@ -106,11 +111,16 @@ class ContextFieldDetector:
                 field_stats[path]["types"].add(self._get_value_type(value))
                 field_stats[path]["max_depth"] = max(field_stats[path]["max_depth"], depth)
                 field_stats[path]["paths"].add(path)
+                if item_name:
+                    field_stats[path]["item_names"].add(item_name)
         
         # Convertir en FieldInfo
         fields = {}
         for path, stats in field_stats.items():
             frequency = stats["count"] / total_items if total_items > 0 else 0.0
+            
+            # Un champ est unique s'il n'apparaît que dans une seule fiche
+            is_unique = len(stats["item_names"]) == 1
             
             # Déterminer le type principal (le plus fréquent)
             type_str = self._determine_primary_type(stats["types"])
@@ -132,11 +142,95 @@ class ContextFieldDetector:
                 frequency=frequency,
                 suggested=False,  # Sera déterminé par FieldSuggestionService
                 category=category,
-                is_metadata=is_metadata
+                is_metadata=is_metadata,
+                is_unique=is_unique
             )
         
-        logger.info(f"Détecté {len(fields)} champs pour '{element_type}' sur {total_items} fiches")
+        unique_count = sum(1 for f in fields.values() if f.is_unique)
+        logger.info(f"Détecté {len(fields)} champs pour '{element_type}' sur {total_items} fiches ({unique_count} champs uniques)")
         return fields
+    
+    def _get_item_name(self, item: Dict) -> Optional[str]:
+        """Extrait le nom d'une fiche pour l'identifier.
+        
+        Args:
+            item: Dictionnaire représentant une fiche GDD.
+            
+        Returns:
+            Nom de la fiche (depuis "Nom", "Titre", ou autre champ d'identification) ou None.
+        """
+        # Essayer différents champs pour identifier la fiche
+        for key in ["Nom", "Titre", "name", "title", "Name", "Title"]:
+            if key in item:
+                value = item[key]
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+                # Si c'est un dict, essayer d'extraire un nom
+                if isinstance(value, dict):
+                    for sub_key in ["Nom", "Titre", "name", "title"]:
+                        if sub_key in value:
+                            sub_value = value[sub_key]
+                            if isinstance(sub_value, str) and sub_value.strip():
+                                return sub_value.strip()
+        return None
+    
+    def detect_unique_fields_by_item(
+        self,
+        element_type: str,
+        sample_data: Optional[List[Dict]] = None
+    ) -> Dict[str, Dict[str, List[str]]]:
+        """Détecte les champs uniques et les regroupe par fiche.
+        
+        Args:
+            element_type: Type d'élément ("character", "location", "item", "species", "community")
+            sample_data: Données d'échantillon. Si None, utilise les données du ContextBuilder.
+            
+        Returns:
+            Dictionnaire {item_name: {path: label}} pour les champs uniques par fiche.
+        """
+        if sample_data is None:
+            sample_data = self._get_sample_data(element_type)
+        
+        if not sample_data:
+            logger.warning(f"Aucune donnée disponible pour le type '{element_type}'")
+            return {}
+        
+        # D'abord, détecter tous les champs pour identifier les uniques
+        all_fields = self.detect_available_fields(element_type, sample_data)
+        unique_field_paths = {path for path, field_info in all_fields.items() if field_info.is_unique}
+        
+        if not unique_field_paths:
+            return {}
+        
+        # Regrouper les champs uniques par fiche
+        unique_fields_by_item: Dict[str, Dict[str, str]] = defaultdict(dict)
+        
+        # Déterminer l'ordre des clés racine pour identifier les métadonnées
+        root_keys_order = []
+        if sample_data:
+            first_item = sample_data[0]
+            if isinstance(first_item, dict):
+                root_keys_order = list(first_item.keys())
+        
+        for item in sample_data:
+            if not isinstance(item, dict):
+                continue
+            
+            item_name = self._get_item_name(item)
+            if not item_name:
+                continue
+            
+            # Extraire tous les chemins de champs
+            paths = self._extract_all_paths(item)
+            
+            for path, value, depth in paths:
+                if path in unique_field_paths:
+                    # Générer un label lisible
+                    label = self._generate_label(path)
+                    unique_fields_by_item[item_name][path] = label
+        
+        logger.info(f"Détecté {len(unique_fields_by_item)} fiches avec des champs uniques pour '{element_type}'")
+        return dict(unique_fields_by_item)
     
     def _get_sample_data(self, element_type: str) -> List[Dict]:
         """Récupère les données d'échantillon depuis ContextBuilder."""
@@ -271,30 +365,34 @@ class ContextFieldDetector:
             return "rare"
     
     def _identify_essential_fields(self, element_type: str, context_config: Dict) -> Set[str]:
-        """Identifie les champs essentiels pour la génération minimale.
+        """Identifie les champs essentiels (contexte narratif + métadonnées).
         
-        Les champs essentiels sont définis dans context_organizer.MINIMAL_FIELDS.
-        Ce sont les champs du CONTEXTE NARRATIF nécessaires pour une génération minimale de qualité.
+        Deux listes explicites et séparées sont la source de vérité :
+        - ContextOrganizer.ESSENTIAL_CONTEXT_FIELDS : essentiels du CONTEXTE NARRATIF
+        - ContextOrganizer.ESSENTIAL_METADATA_FIELDS : essentiels des MÉTADONNÉES
         
-        NOTE: Les métadonnées ne sont PAS des champs essentiels. Ce sont deux critères distincts :
-        - is_metadata : indique si un champ est une métadonnée (avant "Introduction" dans le JSON)
-        - is_essential : indique si un champ est essentiel pour la génération (défini dans MINIMAL_FIELDS)
+        IMPORTANT: `is_metadata` et `is_essential` sont deux critères indépendants.
+        Un champ peut être métadonnée et essentiel, ou contexte et essentiel.
         
         Args:
             element_type: Type d'élément
             context_config: Configuration depuis context_config.json (non utilisé pour l'instant)
             
         Returns:
-            Set des chemins de champs essentiels (du contexte narratif uniquement)
+            Set des chemins de champs essentiels (contexte + métadonnées)
         """
         from services.context_organizer import ContextOrganizer
         
         essential_fields = set()
-        minimal_fields = ContextOrganizer.MINIMAL_FIELDS.get(element_type, [])
+        context_fields = ContextOrganizer.ESSENTIAL_CONTEXT_FIELDS.get(element_type, [])
+        metadata_fields = ContextOrganizer.ESSENTIAL_METADATA_FIELDS.get(element_type, [])
         
-        for field_path in minimal_fields:
+        for field_path in context_fields:
             essential_fields.add(field_path)
             logger.debug(f"Champ essentiel pour '{element_type}': '{field_path}'")
+        for field_path in metadata_fields:
+            essential_fields.add(field_path)
+            logger.debug(f"Champ essentiel (métadonnée) pour '{element_type}': '{field_path}'")
         
         logger.info(f"Champs essentiels identifiés pour '{element_type}': {len(essential_fields)} champs")
         return essential_fields

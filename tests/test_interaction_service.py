@@ -59,11 +59,11 @@ class TestInteractionService(unittest.TestCase):
             elements=[DialogueLineElement(text="Désolé d'entendre ça.")]
         )
         
-        # Sauvegarder les interactions
-        self.service.save(interaction1)
-        self.service.save(interaction2)
+        # Sauvegarder les interactions (cibles d'abord pour éviter les références cassées)
         self.service.save(interaction3)
         self.service.save(interaction4)
+        self.service.save(interaction2)
+        self.service.save(interaction1)
         
         # Vérifier l'index des parents
         # interaction2 doit avoir interaction1 comme parent (transition auto)
@@ -105,10 +105,10 @@ class TestInteractionService(unittest.TestCase):
             elements=[DialogueLineElement(text="Tant mieux!")]
         )
         
-        # Sauvegarder
-        self.service.save(interaction1)
-        self.service.save(interaction2)
+        # Sauvegarder (cibles d'abord pour éviter les références cassées)
         self.service.save(interaction3)
+        self.service.save(interaction2)
+        self.service.save(interaction1)
         
         # Tester le chemin vers interaction3
         path = self.service.get_dialogue_path("interaction3")
@@ -151,10 +151,10 @@ class TestInteractionService(unittest.TestCase):
             elements=[DialogueLineElement(text="Vous vous reposez...")]
         )
         
-        # Sauvegarder
-        self.service.save(interaction_parent)
+        # Sauvegarder (cibles d'abord pour éviter les références cassées)
         self.service.save(interaction_child1)
         self.service.save(interaction_child2)
+        self.service.save(interaction_parent)
         
         # Tester la récupération du texte de choix
         choice_text1 = self.service.get_choice_text_for_transition("parent", "child1")
@@ -180,9 +180,9 @@ class TestInteractionService(unittest.TestCase):
             elements=[DialogueLineElement(text="Suite automatique")]
         )
         
-        # Sauvegarder
-        self.service.save(interaction_parent)
+        # Sauvegarder (cible d'abord pour éviter les références cassées)
         self.service.save(interaction_child)
+        self.service.save(interaction_parent)
         
         # Tester la transition automatique
         choice_text = self.service.get_choice_text_for_transition("parent", "child")
@@ -202,9 +202,9 @@ class TestInteractionService(unittest.TestCase):
             elements=[DialogueLineElement(text="Target 1")]
         )
         
-        # Sauvegarder
-        self.service.save(interaction)
+        # Sauvegarder (cible d'abord pour éviter les références cassées)
         self.service.save(target1)
+        self.service.save(interaction)
         
         # Vérifier l'index initial
         self.assertEqual(self.service._parent_index["target1"], [("test", -1)])
@@ -216,9 +216,9 @@ class TestInteractionService(unittest.TestCase):
             elements=[DialogueLineElement(text="Target 2")]
         )
         
-        # Sauvegarder les modifications
-        self.service.save(interaction)
+        # Sauvegarder les modifications (cible d'abord pour éviter les références cassées)
         self.service.save(target2)
+        self.service.save(interaction)
         
         # Vérifier que l'index a été mis à jour
         self.assertNotIn("target1", self.service._parent_index)
@@ -238,14 +238,19 @@ class TestInteractionService(unittest.TestCase):
             elements=[DialogueLineElement(text="Child")]
         )
         
-        # Sauvegarder
-        self.service.save(parent)
+        # Sauvegarder (cible d'abord pour éviter les références cassées)
         self.service.save(child)
+        self.service.save(parent)
         
         # Vérifier l'index
         self.assertIn("child", self.service._parent_index)
         
-        # Supprimer le parent
+        # La suppression d'un parent avec enfant est interdite
+        with self.assertRaises(ValueError):
+            self.service.delete("parent")
+        
+        # Supprimer d'abord l'enfant, puis le parent
+        self.service.delete("child")
         self.service.delete("parent")
         
         # Vérifier que l'entrée a été nettoyée
@@ -279,10 +284,10 @@ class TestInteractionService(unittest.TestCase):
             elements=[DialogueLineElement(text="Interaction commune")]
         )
         
-        # Sauvegarder
+        # Sauvegarder (cible d'abord pour éviter les références cassées)
+        self.service.save(commune)
         self.service.save(parent1)
         self.service.save(parent2)
-        self.service.save(commune)
         
         # Vérifier que l'interaction commune a bien deux parents
         parents_info = self.service.get_parent_info("commune")

@@ -4,38 +4,45 @@ import pytest
 import asyncio
 from unittest.mock import patch, AsyncMock
 from openai import APIError, RateLimitError, APITimeoutError
+import httpx
 from api.utils.retry import retry_with_backoff, is_retryable_error, get_retry_config
 
 
 def test_is_retryable_error_rate_limit():
     """Test que RateLimitError est considéré comme réessayable."""
-    error = RateLimitError("Rate limit exceeded", response=None, body=None)
+    req = httpx.Request("GET", "https://example.com")
+    resp = httpx.Response(429, request=req)
+    error = RateLimitError("Rate limit exceeded", response=resp, body=None)
     assert is_retryable_error(error) is True
 
 
 def test_is_retryable_error_timeout():
     """Test que APITimeoutError est considéré comme réessayable."""
-    error = APITimeoutError("Timeout", request=None)
+    req = httpx.Request("GET", "https://example.com")
+    error = APITimeoutError(req)
     assert is_retryable_error(error) is True
 
 
 def test_is_retryable_error_api_error_429():
     """Test qu'une APIError avec code 429 est réessayable."""
-    error = APIError("Rate limit", request=None, response=None)
+    req = httpx.Request("GET", "https://example.com")
+    error = APIError("Rate limit", req, body=None)
     error.status_code = 429
     assert is_retryable_error(error) is True
 
 
 def test_is_retryable_error_api_error_500():
     """Test qu'une APIError avec code 500 est réessayable."""
-    error = APIError("Server error", request=None, response=None)
+    req = httpx.Request("GET", "https://example.com")
+    error = APIError("Server error", req, body=None)
     error.status_code = 500
     assert is_retryable_error(error) is True
 
 
 def test_is_retryable_error_not_retryable():
     """Test qu'une erreur 400 n'est pas réessayable."""
-    error = APIError("Bad request", request=None, response=None)
+    req = httpx.Request("GET", "https://example.com")
+    error = APIError("Bad request", req, body=None)
     error.status_code = 400
     assert is_retryable_error(error) is False
 
@@ -83,7 +90,9 @@ async def test_retry_with_backoff_disabled():
     async def func():
         nonlocal call_count
         call_count += 1
-        raise RateLimitError("Rate limit", response=None, body=None)
+        req = httpx.Request("GET", "https://example.com")
+        resp = httpx.Response(429, request=req)
+        raise RateLimitError("Rate limit", response=resp, body=None)
     
     with patch.dict(os.environ, {"LLM_RETRY_ENABLED": "false"}, clear=True):
         # Réinitialiser le cache de config
@@ -106,7 +115,9 @@ async def test_retry_with_backoff_retries_on_rate_limit():
         nonlocal call_count
         call_count += 1
         if call_count < 2:
-            raise RateLimitError("Rate limit", response=None, body=None)
+            req = httpx.Request("GET", "https://example.com")
+            resp = httpx.Response(429, request=req)
+            raise RateLimitError("Rate limit", response=resp, body=None)
         return "success"
     
     with patch("asyncio.sleep", new_callable=AsyncMock):  # Mock sleep pour accélérer
@@ -124,7 +135,9 @@ async def test_retry_with_backoff_max_attempts():
     async def func():
         nonlocal call_count
         call_count += 1
-        raise RateLimitError("Rate limit", response=None, body=None)
+        req = httpx.Request("GET", "https://example.com")
+        resp = httpx.Response(429, request=req)
+        raise RateLimitError("Rate limit", response=resp, body=None)
     
     with patch("asyncio.sleep", new_callable=AsyncMock):
         with pytest.raises(RateLimitError):
@@ -147,7 +160,9 @@ async def test_retry_with_backoff_exponential_backoff():
         nonlocal call_count
         call_count += 1
         if call_count < 3:
-            raise RateLimitError("Rate limit", response=None, body=None)
+            req = httpx.Request("GET", "https://example.com")
+            resp = httpx.Response(429, request=req)
+            raise RateLimitError("Rate limit", response=resp, body=None)
         return "success"
     
     with patch("asyncio.sleep", side_effect=sleep_mock):
@@ -167,7 +182,8 @@ async def test_retry_with_backoff_not_retryable_error():
     async def func():
         nonlocal call_count
         call_count += 1
-        error = APIError("Bad request", request=None, response=None)
+        req = httpx.Request("GET", "https://example.com")
+        error = APIError("Bad request", req, body=None)
         error.status_code = 400
         raise error
     

@@ -39,7 +39,7 @@ class UnityDialogueGenerationService:
             max_choices: Nombre maximum de choix à générer (0-8, ou None pour laisser l'IA décider).
             
         Returns:
-            Réponse contenant les nœuds générés par l'IA (sans IDs techniques).
+            Réponse contenant un nœud de dialogue généré par l'IA (sans IDs techniques).
         """
         logger.info("Génération d'un nœud de dialogue Unity via Structured Output")
         
@@ -68,24 +68,31 @@ class UnityDialogueGenerationService:
         if not isinstance(result, UnityDialogueGenerationResponse):
             raise ValueError(f"Type de réponse inattendu: {type(result)}. Attendu: UnityDialogueGenerationResponse")
         
+        # Validation : vérifier que le nœud a soit choices soit nextNode
+        node = result.node
+        if not node.choices and not node.nextNode:
+            logger.warning(
+                "Le nœud généré n'a ni choices ni nextNode. "
+                "Le dialogue se terminera à ce nœud."
+            )
+        
         # Valider et limiter le nombre de choix si max_choices est spécifié
         if max_choices is not None:
-            for node in result.nodes:
-                if node.choices:
-                    if max_choices == 0:
-                        logger.warning(
-                            f"max_choices=0 mais le nœud a {len(node.choices)} choix. "
-                            "Suppression des choix."
-                        )
-                        node.choices = None
-                    elif len(node.choices) > max_choices:
-                        logger.warning(
-                            f"Le nœud a {len(node.choices)} choix, mais max_choices={max_choices}. "
-                            f"Troncature à {max_choices} choix."
-                        )
-                        node.choices = node.choices[:max_choices]
+            if node.choices:
+                if max_choices == 0:
+                    logger.warning(
+                        f"max_choices=0 mais le nœud a {len(node.choices)} choix. "
+                        "Suppression des choix."
+                    )
+                    node.choices = None
+                elif len(node.choices) > max_choices:
+                    logger.warning(
+                        f"Le nœud a {len(node.choices)} choix, mais max_choices={max_choices}. "
+                        f"Troncature à {max_choices} choix."
+                    )
+                    node.choices = node.choices[:max_choices]
         
-        logger.info(f"Nœud généré avec succès: {len(result.nodes)} nœud(s)")
+        logger.info("Nœud généré avec succès")
         return result
     
     def enrich_with_ids(
@@ -95,112 +102,97 @@ class UnityDialogueGenerationService:
     ) -> List[Dict[str, Any]]:
         """Ajoute les IDs techniques et gère la navigation.
         
-        Pour chaque nœud :
-        1. Génère un ID unique (START pour le premier, puis NODE_1, NODE_2...)
+        Pour le nœud unique :
+        1. Génère un ID unique (START par défaut)
         2. Résout les références (successNode, failureNode, targetNode) en utilisant
            des IDs relatifs ou en créant des IDs pour les nœuds référencés
         3. Ajoute nextNode si manquant et pas de choix (navigation linéaire)
         4. Convertit en dict pour UnityJsonRenderer
         
         Args:
-            content: Réponse de génération contenant les nœuds sans IDs.
-            start_id: ID à utiliser pour le premier nœud (par défaut "START").
+            content: Réponse de génération contenant un nœud sans ID.
+            start_id: ID à utiliser pour le nœud (par défaut "START").
             
         Returns:
-            Liste de dictionnaires représentant les nœuds Unity avec IDs.
+            Liste avec un seul dictionnaire représentant le nœud Unity avec ID.
         """
-        logger.info(f"Enrichissement de {len(content.nodes)} nœud(s) avec IDs techniques")
+        logger.info("Enrichissement du nœud avec ID technique")
         
-        enriched_nodes: List[Dict[str, Any]] = []
-        node_index = 0
+        node_content = content.node
         
-        # Créer un mapping des indices vers les IDs générés
-        # Pour l'instant, on génère un nœud à la fois, donc on n'a qu'un seul nœud
-        # Mais on prépare la structure pour l'extension future
+        # Convertir le nœud en dict
+        node_dict: Dict[str, Any] = {
+            "id": start_id
+        }
         
-        for node_content in content.nodes:
-            # Générer l'ID
-            if node_index == 0:
-                node_id = start_id
-            else:
-                node_id = f"NODE_{node_index}"
-            
-            # Convertir le nœud en dict
-            node_dict: Dict[str, Any] = {
-                "id": node_id
+        # Ajouter les champs du contenu
+        if node_content.speaker:
+            node_dict["speaker"] = node_content.speaker
+        if node_content.line:
+            node_dict["line"] = node_content.line
+        if node_content.test:
+            node_dict["test"] = node_content.test
+        if node_content.successNode:
+            # Pour l'instant, on garde la référence telle quelle
+            # Le système de validation signalera si elle est invalide
+            node_dict["successNode"] = node_content.successNode
+        if node_content.failureNode:
+            node_dict["failureNode"] = node_content.failureNode
+        if node_content.consequences:
+            node_dict["consequences"] = {
+                "flag": node_content.consequences.flag
             }
-            
-            # Ajouter les champs du contenu
-            if node_content.speaker:
-                node_dict["speaker"] = node_content.speaker
-            if node_content.line:
-                node_dict["line"] = node_content.line
-            if node_content.test:
-                node_dict["test"] = node_content.test
-            if node_content.successNode:
-                # Pour l'instant, on garde la référence telle quelle
-                # Le système de validation signalera si elle est invalide
-                node_dict["successNode"] = node_content.successNode
-            if node_content.failureNode:
-                node_dict["failureNode"] = node_content.failureNode
-            if node_content.consequences:
-                node_dict["consequences"] = {
-                    "flag": node_content.consequences.flag
-                }
-                if node_content.consequences.description:
-                    node_dict["consequences"]["description"] = node_content.consequences.description
-            if node_content.isLongRest is not None:
-                node_dict["isLongRest"] = node_content.isLongRest
-            if node_content.startState is not None:
-                node_dict["startState"] = node_content.startState
-            
-            # Gérer les choix
-            if node_content.choices:
-                choices_list = []
-                for choice_content in node_content.choices:
-                    choice_dict: Dict[str, Any] = {
-                        "text": choice_content.text
-                    }
-                    
-                    # targetNode est requis dans le format Unity, même s'il est vide
-                    if choice_content.targetNode:
-                        choice_dict["targetNode"] = choice_content.targetNode
-                    else:
-                        choice_dict["targetNode"] = ""  # Vide mais présent pour validation
-                    
-                    # Ajouter les champs optionnels du choix
-                    if choice_content.test:
-                        choice_dict["test"] = choice_content.test
-                    if choice_content.testSuccessNode:
-                        choice_dict["testSuccessNode"] = choice_content.testSuccessNode
-                    if choice_content.testFailureNode:
-                        choice_dict["testFailureNode"] = choice_content.testFailureNode
-                    if choice_content.traitRequirements:
-                        choice_dict["traitRequirements"] = choice_content.traitRequirements
-                    if choice_content.allowInfluenceForcing is not None:
-                        choice_dict["allowInfluenceForcing"] = choice_content.allowInfluenceForcing
-                    if choice_content.influenceThreshold is not None:
-                        choice_dict["influenceThreshold"] = choice_content.influenceThreshold
-                    if choice_content.influenceDelta is not None:
-                        choice_dict["influenceDelta"] = choice_content.influenceDelta
-                    if choice_content.respectDelta is not None:
-                        choice_dict["respectDelta"] = choice_content.respectDelta
-                    if choice_content.condition:
-                        choice_dict["condition"] = choice_content.condition
-                    
-                    choices_list.append(choice_dict)
-                
-                node_dict["choices"] = choices_list
-            
-            # Gérer nextNode
-            # Si pas de choix et pas de nextNode, on ne l'ajoute pas (le dialogue se termine)
-            # Si nextNode est fourni, on l'ajoute
-            if not node_content.choices and node_content.nextNode:
-                node_dict["nextNode"] = node_content.nextNode
-            
-            enriched_nodes.append(node_dict)
-            node_index += 1
+            if node_content.consequences.description:
+                node_dict["consequences"]["description"] = node_content.consequences.description
+        if node_content.isLongRest is not None:
+            node_dict["isLongRest"] = node_content.isLongRest
+        if node_content.startState is not None:
+            node_dict["startState"] = node_content.startState
         
-        logger.info(f"Enrichissement terminé: {len(enriched_nodes)} nœud(s) avec IDs")
-        return enriched_nodes
+        # Gérer les choix
+        if node_content.choices:
+            choices_list = []
+            for choice_content in node_content.choices:
+                choice_dict: Dict[str, Any] = {
+                    "text": choice_content.text
+                }
+                
+                # targetNode est requis dans le format Unity, même s'il est vide
+                if choice_content.targetNode:
+                    choice_dict["targetNode"] = choice_content.targetNode
+                else:
+                    choice_dict["targetNode"] = ""  # Vide mais présent pour validation
+                
+                # Ajouter les champs optionnels du choix
+                if choice_content.test:
+                    choice_dict["test"] = choice_content.test
+                if choice_content.testSuccessNode:
+                    choice_dict["testSuccessNode"] = choice_content.testSuccessNode
+                if choice_content.testFailureNode:
+                    choice_dict["testFailureNode"] = choice_content.testFailureNode
+                if choice_content.traitRequirements:
+                    choice_dict["traitRequirements"] = choice_content.traitRequirements
+                if choice_content.allowInfluenceForcing is not None:
+                    choice_dict["allowInfluenceForcing"] = choice_content.allowInfluenceForcing
+                if choice_content.influenceThreshold is not None:
+                    choice_dict["influenceThreshold"] = choice_content.influenceThreshold
+                if choice_content.influenceDelta is not None:
+                    choice_dict["influenceDelta"] = choice_content.influenceDelta
+                if choice_content.respectDelta is not None:
+                    choice_dict["respectDelta"] = choice_content.respectDelta
+                if choice_content.condition:
+                    choice_dict["condition"] = choice_content.condition
+                
+                choices_list.append(choice_dict)
+            
+            node_dict["choices"] = choices_list
+        
+        # Gérer nextNode
+        # Si pas de choix et pas de nextNode, on ne l'ajoute pas (le dialogue se termine)
+        # Si nextNode est fourni, on l'ajoute
+        if not node_content.choices and node_content.nextNode:
+            node_dict["nextNode"] = node_content.nextNode
+        
+        logger.info("Enrichissement terminé: nœud avec ID")
+        return [node_dict]
 

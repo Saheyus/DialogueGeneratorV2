@@ -29,7 +29,11 @@ class ContextBuilder:
     _last_info_log_time: dict = {}
     _info_log_interval: float = 5.0
 
-    def __init__(self, config_file_path: Path = DEFAULT_CONFIG_FILE):
+    def __init__(
+        self,
+        config_file_path: Path = DEFAULT_CONFIG_FILE,
+        gdd_categories_path: Optional[Path] = None,
+    ):
         self.gdd_data = {}
         self.characters = []
         self.locations = []
@@ -44,6 +48,7 @@ class ContextBuilder:
         self.quests = []
         self.context_config = self._load_context_config(config_file_path)
         self.previous_dialogue_context: Optional[List[Interaction]] = None
+        self._gdd_categories_path: Optional[Path] = gdd_categories_path
 
         if tiktoken:
             self.tokenizer = tiktoken.get_encoding("cl100k_base")
@@ -89,9 +94,10 @@ class ContextBuilder:
         except (ImportError, AttributeError):
             logger.debug("Cache GDD non disponible. Chargement direct depuis fichiers.")
         
-        # Utiliser le lien symbolique data/GDD_categories/ au lieu de PROJECT_ROOT_DIR/GDD/categories
-        # CONTEXT_BUILDER_DIR est DialogueGenerator/, donc data/GDD_categories est relatif à DialogueGenerator
-        categories_path = CONTEXT_BUILDER_DIR / "data" / "GDD_categories"
+        # Catégories GDD:
+        # - par défaut : DialogueGenerator/data/GDD_categories (symlink)
+        # - override (tests/advanced setups) : via gdd_categories_path passé au constructeur
+        categories_path = self._gdd_categories_path or (CONTEXT_BUILDER_DIR / "data" / "GDD_categories")
         import_base_path = PROJECT_ROOT_DIR / "import"
 
         logger.info(f"Début du chargement des données du GDD depuis {categories_path} et {import_base_path}.")
@@ -100,7 +106,8 @@ class ContextBuilder:
         vision_file_path = import_base_path / "Bible_Narrative" / "Vision.json"
         if vision_file_path.exists() and vision_file_path.is_file():
             # Vérifier le cache
-            cached_vision = gdd_cache.get("vision", vision_file_path) if gdd_cache else None
+            vision_cache_key = f"vision:{vision_file_path.resolve()}"
+            cached_vision = gdd_cache.get(vision_cache_key, vision_file_path) if gdd_cache else None
             
             if cached_vision is not None:
                 self.vision_data = cached_vision
@@ -112,7 +119,7 @@ class ContextBuilder:
                     logger.info(f"Fichier {vision_file_path.name} chargé avec succès.")
                     # Mettre en cache
                     if gdd_cache:
-                        gdd_cache.set("vision", self.vision_data, vision_file_path)
+                        gdd_cache.set(vision_cache_key, self.vision_data, vision_file_path)
                 except json.JSONDecodeError as e:
                     logger.error(f"Erreur de décodage JSON pour {vision_file_path.name}: {e}")
                 except Exception as e:
@@ -144,7 +151,8 @@ class ContextBuilder:
 
             if file_path.exists() and file_path.is_file():
                 # Vérifier le cache
-                cached_data = gdd_cache.get(file_key, file_path) if gdd_cache else None
+                composite_cache_key = f"{file_key}:{file_path.resolve()}"
+                cached_data = gdd_cache.get(composite_cache_key, file_path) if gdd_cache else None
                 
                 if cached_data is not None:
                     # Utiliser les données en cache
@@ -174,7 +182,7 @@ class ContextBuilder:
                         logger.info(f"Fichier {file_path.name} chargé comme objet unique.")
                         # Mettre en cache
                         if gdd_cache:
-                            gdd_cache.set(file_key, data, file_path)
+                            gdd_cache.set(composite_cache_key, data, file_path)
                         continue
                     
                     if data_to_set is not None:
@@ -184,7 +192,7 @@ class ContextBuilder:
                             logger.info(f"Fichier {file_path.name} chargé. {count} élément(s) pour '{json_main_key}'.")
                             # Mettre en cache
                             if gdd_cache:
-                                gdd_cache.set(file_key, data_to_set, file_path)
+                                gdd_cache.set(composite_cache_key, data_to_set, file_path)
                         else:
                             logger.warning(f"Type de données inattendu pour {json_main_key} dans {file_path.name}. Attendu {expected_type}, obtenu {type(data_to_set)}.")
                     else:

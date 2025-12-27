@@ -90,6 +90,8 @@ class GenerateInteractionVariantsRequest(BaseModel):
     field_configs: Optional[Dict[str, List[str]]] = Field(None, description="Configuration des champs de contexte par type d'élément")
     organization_mode: Optional[str] = Field(None, description="Mode d'organisation du contexte (default, narrative, minimal)")
     narrative_tags: Optional[List[str]] = Field(None, description="Tags narratifs pour guider le ton (ex: tension, humour, dramatique)")
+    vocabulary_min_importance: Optional[str] = Field(None, description="Niveau d'importance minimum pour le vocabulaire Alteir (Majeur, Important, Modéré, Secondaire, Mineur, Anecdotique)")
+    include_narrative_guides: bool = Field(default=True, description="Inclure les guides narratifs dans le prompt système")
 
 
 class DialogueVariantResponse(BaseModel):
@@ -175,6 +177,8 @@ class GenerateUnityDialogueRequest(BaseModel):
     llm_model_identifier: str = Field(default="gpt-4o-mini", description="Identifiant du modèle LLM")
     max_choices: Optional[int] = Field(None, ge=0, le=8, description="Nombre maximum de choix à générer (0-8, ou None pour laisser l'IA décider librement)")
     narrative_tags: Optional[List[str]] = Field(None, description="Tags narratifs pour guider le ton (ex: tension, humour, dramatique)")
+    vocabulary_min_importance: Optional[str] = Field(None, description="Niveau d'importance minimum pour le vocabulaire Alteir (Majeur, Important, Modéré, Secondaire, Mineur, Anecdotique)")
+    include_narrative_guides: bool = Field(default=True, description="Inclure les guides narratifs dans le prompt système")
 
 
 class GenerateUnityDialogueResponse(BaseModel):
@@ -193,3 +197,28 @@ class GenerateUnityDialogueResponse(BaseModel):
     estimated_tokens: int = Field(..., description="Nombre estimé de tokens")
     warning: Optional[str] = Field(None, description="Avertissement (ex: DummyLLMClient utilisé)")
 
+
+class ExportUnityDialogueRequest(BaseModel):
+    """Requête pour exporter un dialogue Unity JSON vers un fichier.
+    
+    Attributes:
+        json_content: Contenu JSON du dialogue au format Unity (tableau de nœuds).
+        title: Titre descriptif du dialogue (utilisé pour générer le nom de fichier).
+        filename: Nom de fichier optionnel (si non fourni, généré à partir du titre).
+    """
+    json_content: str = Field(..., description="Contenu JSON du dialogue au format Unity")
+    title: str = Field(..., description="Titre descriptif du dialogue")
+    filename: Optional[str] = Field(None, description="Nom de fichier optionnel (sans extension)")
+
+
+class ExportUnityDialogueResponse(BaseModel):
+    """Réponse pour l'export d'un dialogue Unity JSON.
+    
+    Attributes:
+        file_path: Chemin absolu du fichier créé.
+        filename: Nom du fichier créé.
+        success: Indique si l'export a réussi.
+    """
+    file_path: str = Field(..., description="Chemin absolu du fichier créé")
+    filename: str = Field(..., description="Nom du fichier créé")
+    success: bool = Field(..., description="Indique si l'export a réussi")

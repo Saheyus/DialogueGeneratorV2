@@ -211,7 +211,9 @@ RÈGLES TECHNIQUES À SUIVRE:
         scene_protagonists: Optional[Dict[str, str]] = None,
         scene_location: Optional[Dict[str, str]] = None,
         context_summary: Optional[str] = None,
-        generation_params: Optional[Dict[str, Any]] = None
+        generation_params: Optional[Dict[str, Any]] = None,
+        vocabulary_min_importance: Optional[str] = None,
+        include_narrative_guides: bool = True
     ) -> Tuple[str, int]:
         """
         Construit le prompt final à envoyer au LLM et estime son nombre de tokens.
@@ -223,6 +225,8 @@ RÈGLES TECHNIQUES À SUIVRE:
             context_summary (Optional[str]): Un résumé textuel du contexte général (autres personnages, objets, lore pertinent).
             generation_params (Optional[Dict[str, Any]]): Paramètres additionnels (ex: ton, style)
                                                            qui pourraient modifier le prompt.
+            vocabulary_min_importance (Optional[str]): Niveau d'importance minimum pour le vocabulaire ("Majeur", "Important", etc.).
+            include_narrative_guides (bool): Si True, inclut les guides narratifs dans le prompt.
 
         Returns:
             Tuple[str, int]: Le prompt complet et une estimation du nombre de tokens.
@@ -235,6 +239,32 @@ RÈGLES TECHNIQUES À SUIVRE:
         current_system_prompt = self.system_prompt_template
         
         prompt_parts = [current_system_prompt]
+        
+        # Injection vocabulaire et guides narratifs (après le system prompt de base)
+        if vocabulary_min_importance:
+            try:
+                from services.vocabulary_service import VocabularyService
+                vocab_service = VocabularyService()
+                all_terms = vocab_service.load_vocabulary()
+                if all_terms:
+                    filtered_terms = vocab_service.filter_by_importance(all_terms, vocabulary_min_importance)
+                    vocab_text = vocab_service.format_for_prompt(filtered_terms)
+                    if vocab_text:
+                        prompt_parts.append("\n" + vocab_text)
+            except Exception as e:
+                logger.warning(f"Erreur lors de l'injection du vocabulaire: {e}")
+        
+        if include_narrative_guides:
+            try:
+                from services.narrative_guides_service import NarrativeGuidesService
+                guides_service = NarrativeGuidesService()
+                guides = guides_service.load_guides()
+                if guides.get("dialogue_guide") or guides.get("narrative_guide"):
+                    guides_text = guides_service.format_for_prompt(guides, include_rules=True)
+                    if guides_text:
+                        prompt_parts.append("\n" + guides_text)
+            except Exception as e:
+                logger.warning(f"Erreur lors de l'injection des guides narratifs: {e}")
 
         if scene_protagonists or scene_location:
             prompt_parts.append("\n--- CADRE DE LA SCÈNE ---")
@@ -305,7 +335,9 @@ RÈGLES TECHNIQUES À SUIVRE:
         scene_location: Optional[Dict[str, str]] = None,
         max_choices: Optional[int] = None,
         narrative_tags: Optional[List[str]] = None,
-        author_profile: Optional[str] = None
+        author_profile: Optional[str] = None,
+        vocabulary_min_importance: Optional[str] = None,
+        include_narrative_guides: bool = True
     ) -> Tuple[str, int]:
         """Construit le prompt pour génération Unity JSON.
         
@@ -318,6 +350,10 @@ RÈGLES TECHNIQUES À SUIVRE:
             context_summary: Résumé du contexte GDD (optionnel).
             scene_location: Dictionnaire du lieu de la scène (optionnel).
             max_choices: Nombre maximum de choix à générer (0-8, ou None pour laisser l'IA décider).
+            narrative_tags: Tags narratifs pour guider le ton (optionnel).
+            author_profile: Profil d'auteur global (optionnel).
+            vocabulary_min_importance: Niveau d'importance minimum pour le vocabulaire (optionnel).
+            include_narrative_guides: Si True, inclut les guides narratifs (défaut: True).
             
         Returns:
             Tuple contenant le prompt complet et une estimation du nombre de tokens.
@@ -352,10 +388,43 @@ RÈGLES TECHNIQUES À SUIVRE:
         )
         prompt_parts.append("")
         
+        # Injection vocabulaire et guides narratifs (après la guidance narrative)
+        if vocabulary_min_importance:
+            try:
+                from services.vocabulary_service import VocabularyService
+                vocab_service = VocabularyService()
+                all_terms = vocab_service.load_vocabulary()
+                if all_terms:
+                    filtered_terms = vocab_service.filter_by_importance(all_terms, vocabulary_min_importance)
+                    vocab_text = vocab_service.format_for_prompt(filtered_terms)
+                    if vocab_text:
+                        prompt_parts.append(vocab_text)
+                        prompt_parts.append("")
+            except Exception as e:
+                logger.warning(f"Erreur lors de l'injection du vocabulaire: {e}")
+        
+        if include_narrative_guides:
+            try:
+                from services.narrative_guides_service import NarrativeGuidesService
+                guides_service = NarrativeGuidesService()
+                guides = guides_service.load_guides()
+                if guides.get("dialogue_guide") or guides.get("narrative_guide"):
+                    guides_text = guides_service.format_for_prompt(guides, include_rules=True)
+                    if guides_text:
+                        prompt_parts.append(guides_text)
+                        prompt_parts.append("")
+            except Exception as e:
+                logger.warning(f"Erreur lors de l'injection des guides narratifs: {e}")
+        
         # Instructions sur le format Unity JSON
         prompt_parts.append("--- FORMAT DE SORTIE ATTENDU ---")
         prompt_parts.append(
-            "Tu dois générer un nœud de dialogue au format Unity JSON. "
+            "**IMPORTANT : Tu dois générer UN SEUL nœud de dialogue, pas une séquence de nœuds.** "
+            "Ce nœud contient une réplique du PNJ interlocuteur et les choix de réponse du joueur. "
+            "Un nœud = une réplique du PNJ + choix du joueur. Ne génère PAS de séquence de nœuds "
+            "(pas de START → NODE_1 → NODE_2...). Si tu génères plusieurs nœuds par erreur, seul le premier sera utilisé."
+        )
+        prompt_parts.append(
             "Le format sera géré automatiquement via Structured Output, mais voici les règles importantes :"
         )
         prompt_parts.append(

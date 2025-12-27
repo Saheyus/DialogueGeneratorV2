@@ -7,9 +7,14 @@ from services.interaction_service import InteractionService
 
 
 @pytest.fixture
-def client():
-    """Client de test FastAPI."""
-    return TestClient(app)
+def client(mock_interaction_service):
+    """Client de test FastAPI avec override de dépendance InteractionService."""
+    from api.dependencies import get_interaction_service
+    app.dependency_overrides[get_interaction_service] = lambda: mock_interaction_service
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.pop(get_interaction_service, None)
 
 
 @pytest.fixture
@@ -36,12 +41,8 @@ def mock_interaction_service(sample_interactions, mocker):
     return service
 
 
-def test_list_interactions_no_pagination(client, mock_interaction_service, mocker):
+def test_list_interactions_no_pagination(client):
     """Test list_interactions sans pagination (rétrocompatibilité)."""
-    from api.dependencies import get_interaction_service
-    
-    mocker.patch("api.dependencies.get_interaction_service", return_value=mock_interaction_service)
-    
     # Obtenir un token d'authentification
     login_response = client.post(
         "/api/v1/auth/login",
@@ -67,12 +68,8 @@ def test_list_interactions_no_pagination(client, mock_interaction_service, mocke
     assert data["total_pages"] is None
 
 
-def test_list_interactions_with_pagination_first_page(client, mock_interaction_service, mocker):
+def test_list_interactions_with_pagination_first_page(client):
     """Test list_interactions avec pagination (première page)."""
-    from api.dependencies import get_interaction_service
-    
-    mocker.patch("api.dependencies.get_interaction_service", return_value=mock_interaction_service)
-    
     # Obtenir un token d'authentification
     login_response = client.post(
         "/api/v1/auth/login",
@@ -98,12 +95,8 @@ def test_list_interactions_with_pagination_first_page(client, mock_interaction_s
     assert data["total_pages"] == 3  # 15 items / 5 par page = 3 pages
 
 
-def test_list_interactions_with_pagination_middle_page(client, mock_interaction_service, mocker):
+def test_list_interactions_with_pagination_middle_page(client):
     """Test list_interactions avec pagination (page du milieu)."""
-    from api.dependencies import get_interaction_service
-    
-    mocker.patch("api.dependencies.get_interaction_service", return_value=mock_interaction_service)
-    
     # Obtenir un token d'authentification
     login_response = client.post(
         "/api/v1/auth/login",
@@ -125,12 +118,8 @@ def test_list_interactions_with_pagination_middle_page(client, mock_interaction_
     assert len(data["interactions"]) == 5
 
 
-def test_list_interactions_with_pagination_last_page(client, mock_interaction_service, mocker):
+def test_list_interactions_with_pagination_last_page(client):
     """Test list_interactions avec pagination (dernière page)."""
-    from api.dependencies import get_interaction_service
-    
-    mocker.patch("api.dependencies.get_interaction_service", return_value=mock_interaction_service)
-    
     # Obtenir un token d'authentification
     login_response = client.post(
         "/api/v1/auth/login",
@@ -152,12 +141,9 @@ def test_list_interactions_with_pagination_last_page(client, mock_interaction_se
     assert len(data["interactions"]) == 5  # 15 items, page 3 = items 11-15
 
 
-def test_list_interactions_pagination_page_size_limit(client, mock_interaction_service, mocker):
+def test_list_interactions_pagination_page_size_limit(client):
     """Test que page_size est limité à PAGINATION_MAX_PAGE_SIZE."""
     import os
-    from api.dependencies import get_interaction_service
-    
-    mocker.patch("api.dependencies.get_interaction_service", return_value=mock_interaction_service)
     
     # Obtenir un token d'authentification
     login_response = client.post(

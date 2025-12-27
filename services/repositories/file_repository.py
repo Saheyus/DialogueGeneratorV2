@@ -206,11 +206,21 @@ class FileInteractionRepository:
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
+                    
+                    # Détecter si le fichier est un JSON Unity (liste) au lieu d'une Interaction (dict)
+                    if isinstance(data, list):
+                        logger.warning(
+                            f"Fichier {file_path.name} contient un JSON Unity (liste) au lieu d'une Interaction. "
+                            f"Il sera ignoré. Utilisez l'export Unity pour sauvegarder les dialogues Unity."
+                        )
+                        continue
+                    
                     interaction = Interaction.model_validate(data)
                     interactions.append(interaction)
                     # print(f"[DEBUG] Interaction chargée : {interaction.interaction_id}, titre: {getattr(interaction, 'title', '<sans titre>')}")
                     logger.info(f"[DEBUG] Interaction chargée: id={getattr(interaction, 'interaction_id', None)}, titre={getattr(interaction, 'title', None)}")
-            except (json.JSONDecodeError, KeyError, FileNotFoundError, TypeError) as e: # Ajout de TypeError
+            except (json.JSONDecodeError, KeyError, FileNotFoundError, TypeError, ValueError) as e:
+                # ValueError pour capturer les ValidationError de Pydantic
                 logger.error(f"[DEBUG] Erreur lors de la lecture ou du parsing de {file_path}: {e}")
                 continue
         

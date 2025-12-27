@@ -14,13 +14,15 @@ export interface FieldInfo {
   category?: string | null
   importance?: string | null
   is_metadata?: boolean  // Si le champ est une métadonnée (avant "Introduction" dans le JSON)
-  is_essential?: boolean  // Si le champ est essentiel pour génération minimale (défini dans MINIMAL_FIELDS)
+  is_essential?: boolean  // Si le champ est essentiel (contexte OU métadonnées) selon ESSENTIAL_*_FIELDS
+  is_unique?: boolean  // Si le champ est unique (n'apparaît que dans une seule fiche)
 }
 
 export interface ContextFieldsResponse {
   element_type: string
   fields: Record<string, FieldInfo>
   total: number
+  unique_fields_by_item?: Record<string, Record<string, string>>  // item_name -> {path: label}
 }
 
 export interface ContextFieldSuggestionsResponse {
@@ -47,6 +49,9 @@ interface ContextConfigState {
   // Champs disponibles détectés
   availableFields: Record<string, Record<string, FieldInfo>>
   
+  // Champs uniques regroupés par fiche
+  uniqueFieldsByItem: Record<string, Record<string, Record<string, string>>>  // element_type -> item_name -> {path: label}
+  
   // Suggestions par type d'élément
   suggestions: Record<string, string[]>
   
@@ -59,6 +64,7 @@ interface ContextConfigState {
   toggleField: (elementType: string, fieldPath: string) => void
   selectAllFields: (elementType: string) => void
   selectEssentialFields: (elementType: string) => void
+  selectEssentialMetadataFields: (elementType: string) => void
   setOrganization: (mode: 'default' | 'narrative' | 'minimal') => void
   detectFields: (elementType: string) => Promise<void>
   loadSuggestions: (elementType: string, context?: string) => Promise<void>
@@ -85,6 +91,7 @@ export const useContextConfigStore = create<ContextConfigState>((set, get) => ({
   essentialFields: {},
   organization: 'default',
   availableFields: {},
+  uniqueFieldsByItem: {},
   suggestions: {},
   isLoading: false,
   error: null,
@@ -102,10 +109,12 @@ export const useContextConfigStore = create<ContextConfigState>((set, get) => ({
   toggleField: (elementType, fieldPath) => {
     set((state) => {
       // Ne pas permettre la désélection des champs essentiels du contexte narratif
-      // (is_essential concerne uniquement les champs essentiels pour génération minimale)
+      // (mais laisser désélectionner les métadonnées essentielles)
       const availableFieldsForType = state.availableFields[elementType] || {}
       const fieldInfo = availableFieldsForType[fieldPath]
-      if (fieldInfo?.is_essential === true) {
+      const isEssential = fieldInfo?.is_essential === true
+      const isMetadata = fieldInfo?.is_metadata === true
+      if (isEssential && !isMetadata) {
         // Champ essentiel du contexte narratif, ne pas permettre la désélection
         return state
       }
@@ -140,11 +149,10 @@ export const useContextConfigStore = create<ContextConfigState>((set, get) => ({
   selectEssentialFields: (elementType) => {
     set((state) => {
       // Récupérer les champs essentiels du CONTEXTE NARRATIF depuis availableFields
-      // (is_essential: true concerne uniquement les champs essentiels pour génération minimale)
+      // (is_essential=true && is_metadata=false)
       const availableFieldsForType = state.availableFields[elementType] || {}
       const essentialFieldsFromDetection = Object.entries(availableFieldsForType)
-        .filter(([path, fieldInfo]: [string, any]) => {
-          // Ne prendre que les champs essentiels du contexte narratif (pas les métadonnées)
+        .filter(([_path, fieldInfo]: [string, any]) => {
           const isEssential = fieldInfo.is_essential === true || fieldInfo.is_essential === 'true'
           const isMetadata = fieldInfo.is_metadata === true || fieldInfo.is_metadata === 'true'
           return isEssential && !isMetadata
@@ -160,6 +168,27 @@ export const useContextConfigStore = create<ContextConfigState>((set, get) => ({
       const newFieldConfigs = {
         ...state.fieldConfigs,
         [elementType]: [...essentialFieldsForType],
+      }
+      return { fieldConfigs: newFieldConfigs }
+    })
+  },
+
+  selectEssentialMetadataFields: (elementType) => {
+    set((state) => {
+      // Récupérer les champs essentiels des MÉTADONNÉES depuis availableFields
+      // (is_essential=true && is_metadata=true)
+      const availableFieldsForType = state.availableFields[elementType] || {}
+      const essentialMetadataFields = Object.entries(availableFieldsForType)
+        .filter(([_path, fieldInfo]: [string, any]) => {
+          const isEssential = fieldInfo.is_essential === true || fieldInfo.is_essential === 'true'
+          const isMetadata = fieldInfo.is_metadata === true || fieldInfo.is_metadata === 'true'
+          return isEssential && isMetadata
+        })
+        .map(([path]) => path)
+
+      const newFieldConfigs = {
+        ...state.fieldConfigs,
+        [elementType]: [...essentialMetadataFields],
       }
       return { fieldConfigs: newFieldConfigs }
     })
@@ -188,8 +217,14 @@ export const useContextConfigStore = create<ContextConfigState>((set, get) => ({
           [elementType]: response.fields,
         }
         
+        const newUniqueFieldsByItem = {
+          ...state.uniqueFieldsByItem,
+          [elementType]: response.unique_fields_by_item || {},
+        }
+        
         return {
           availableFields: newAvailableFields,
+          uniqueFieldsByItem: newUniqueFieldsByItem,
           isLoading: false,
         }
       })

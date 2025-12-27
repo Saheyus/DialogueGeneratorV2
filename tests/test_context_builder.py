@@ -154,7 +154,10 @@ class TestContextBuilderGDDLoading:
         """Tests successful loading of GDD files from mocked project root."""
         # dummy_context_config_file is used to ensure ContextBuilder initializes with some config,
         # though it's not directly used by load_gdd_files logic itself for paths.
-        cb = ContextBuilder(config_file_path=dummy_context_config_file)
+        cb = ContextBuilder(
+            config_file_path=dummy_context_config_file,
+            gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+        )
         cb.load_gdd_files()
 
         assert len(cb.characters) == 1
@@ -174,7 +177,10 @@ class TestContextBuilderGDDLoading:
         # For this test, we'll assume "objets.json" is missing.
         # (It's missing by default in mock_gdd_project_root)
 
-        cb = ContextBuilder(config_file_path=dummy_context_config_file)
+        cb = ContextBuilder(
+            config_file_path=dummy_context_config_file,
+            gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+        )
         cb.load_gdd_files()
 
         assert cb.items == [] # Should be an empty list
@@ -192,7 +198,10 @@ class TestContextBuilderGDDLoading:
         with open(malformed_json_path, "w") as f:
             f.write("{'nom': 'EspeceTest', 'description': 'test' ") # Malformed JSON
 
-        cb = ContextBuilder(config_file_path=dummy_context_config_file)
+        cb = ContextBuilder(
+            config_file_path=dummy_context_config_file,
+            gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+        )
         cb.load_gdd_files()
 
         assert cb.species == [] # Should be an empty list
@@ -208,7 +217,10 @@ class TestContextBuilderGDDLoading:
             # The main key "communautes" points to a dict instead of a list
             json.dump({"communautes": {"Nom": "CommunauteTest"}}, f) 
 
-        cb = ContextBuilder(config_file_path=dummy_context_config_file)
+        cb = ContextBuilder(
+            config_file_path=dummy_context_config_file,
+            gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+        )
         cb.load_gdd_files()
         
         # The attribute should remain an empty list as per default or if type check fails
@@ -232,7 +244,10 @@ class TestContextBuilderGDDLoading:
         # Must be set BEFORE the code that generates the logs is run.
         caplog.set_level(logging.INFO, logger="context_builder")
 
-        cb = ContextBuilder(config_file_path=dummy_context_config_file)
+        cb = ContextBuilder(
+            config_file_path=dummy_context_config_file,
+            gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+        )
         cb.load_gdd_files()
 
         assert cb.macro_structure == macro_data
@@ -297,7 +312,10 @@ class TestContextBuilderDataAccess:
         with open(mock_gdd_project_root / "GDD" / "categories" / "quetes.json", "w") as f:
             json.dump(quest_data, f)
 
-        cb = ContextBuilder(config_file_path=dummy_context_config_file)
+        cb = ContextBuilder(
+            config_file_path=dummy_context_config_file,
+            gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+        )
         cb.load_gdd_files()
         return cb
 
@@ -394,7 +412,10 @@ class TestContextBuilderDataAccess:
             objets_file.unlink()
         # Or create an empty one: json.dump({"objets": []}, open(objets_file, "w"))
         
-        cb = ContextBuilder(config_file_path=dummy_context_config_file)
+        cb = ContextBuilder(
+            config_file_path=dummy_context_config_file,
+            gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+        )
         cb.load_gdd_files() # Reload with objets.json potentially missing or empty
         
         assert cb.get_items_names() == []
@@ -409,7 +430,10 @@ class TestContextBuilderDataAccess:
         macro_data = {"titre": "Macro Structure Test", "actes": ["Acte 1"]}
         with open(mock_gdd_project_root / "GDD" / "categories" / "structure_macro.json", "w") as f:
             json.dump(macro_data, f) # Saved as a single dict
-        cb = ContextBuilder(config_file_path=dummy_context_config_file)
+        cb = ContextBuilder(
+            config_file_path=dummy_context_config_file,
+            gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+        )
         cb.load_gdd_files()
         assert cb.get_macro_structure() == macro_data
 
@@ -417,7 +441,10 @@ class TestContextBuilderDataAccess:
         micro_data = {"titre": "Micro Structure Test", "séquences": ["Seq A"]}
         with open(mock_gdd_project_root / "GDD" / "categories" / "structure_micro.json", "w") as f:
             json.dump(micro_data, f) # Saved as a single dict
-        cb = ContextBuilder(config_file_path=dummy_context_config_file)
+        cb = ContextBuilder(
+            config_file_path=dummy_context_config_file,
+            gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+        )
         cb.load_gdd_files()
         assert cb.get_micro_structure() == micro_data
 
@@ -543,7 +570,10 @@ class TestContextBuilderContextBuilding:
                     else:
                         json.dump({cat_file.replace(".json", ""): []}, f) # e.g. {"especes": []}
 
-        cb = ContextBuilder(config_file_path=detailed_config_path)
+        cb = ContextBuilder(
+            config_file_path=detailed_config_path,
+            gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+        )
         cb.load_gdd_files()
         return cb
 
@@ -741,7 +771,10 @@ class TestContextBuilderLinkedElements:
         if not vision_path.exists():
              with open(vision_path, "w", encoding="utf-8") as f: json.dump({}, f)
         
-        cb = ContextBuilder(config_file_path=dummy_context_config_file) 
+        cb = ContextBuilder(
+            config_file_path=dummy_context_config_file,
+            gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+        )
         cb.load_gdd_files()
         return cb
 

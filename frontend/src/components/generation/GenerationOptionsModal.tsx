@@ -4,6 +4,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useContextConfigStore } from '../../store/contextConfigStore'
 import { ContextFieldSelector } from './ContextFieldSelector'
+import { VocabularyGuidesTab } from './VocabularyGuidesTab'
 import { theme } from '../../theme'
 import * as configAPI from '../../api/config'
 import { getErrorMessage } from '../../types/errors'
@@ -14,7 +15,7 @@ export interface GenerationOptionsModalProps {
   onApply?: () => void
 }
 
-type TabId = 'context' | 'metadata' | 'unity' | 'organization' | 'guidance'
+type TabId = 'context' | 'metadata' | 'unity' | 'organization' | 'guidance' | 'vocabulary'
 
 interface Tab {
   id: TabId
@@ -133,6 +134,7 @@ export function GenerationOptionsModal({
     { id: 'unity', label: 'Unity' },
     { id: 'organization', label: 'Organisation' },
     { id: 'guidance', label: 'Guidance' },
+    { id: 'vocabulary', label: 'Vocabulaire & Guides' },
   ]
 
   if (!isOpen) return null
@@ -266,6 +268,10 @@ export function GenerationOptionsModal({
           {activeTab === 'guidance' && (
             <GuidanceTab />
           )}
+
+          {activeTab === 'vocabulary' && (
+            <VocabularyGuidesTab />
+          )}
         </div>
 
         {/* Footer */}
@@ -332,7 +338,7 @@ function ContextTab({
   ]
 
   const [selectedElementType, setSelectedElementType] = useState('character')
-  const { selectAllFields, selectEssentialFields, availableFields, fieldConfigs, essentialFields } = useContextConfigStore()
+  const { selectAllFields, selectEssentialFields, selectEssentialMetadataFields } = useContextConfigStore()
   
   const handleSelectAll = useCallback(() => {
     if (showOnlyEssential) {
@@ -346,9 +352,15 @@ function ContextTab({
 
   const handleSelectEssential = useCallback(() => {
     // "Sélectionner essentiels" = sélectionner uniquement les champs essentiels du contexte narratif
-    // (définis dans MINIMAL_FIELDS, marqués avec is_essential=true)
+    // (ESSENTIAL_CONTEXT_FIELDS, marqués avec is_essential=true et is_metadata=false)
     selectEssentialFields(selectedElementType)
   }, [selectedElementType, selectEssentialFields])
+
+  const handleSelectEssentialMetadata = useCallback(() => {
+    // "Sélectionner essentiels" (métadonnées) = sélectionner uniquement les champs essentiels des métadonnées
+    // (ESSENTIAL_METADATA_FIELDS, marqués avec is_essential=true et is_metadata=true)
+    selectEssentialMetadataFields(selectedElementType)
+  }, [selectedElementType, selectEssentialMetadataFields])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -414,19 +426,34 @@ function ContextTab({
           </>
         )}
         {showOnlyEssential && (
-          <button
-            onClick={handleSelectAll}
-            style={{
-              padding: '0.5rem 1rem',
-              border: `1px solid ${theme.border.primary}`,
-              borderRadius: '4px',
-              backgroundColor: theme.button.default.background,
-              color: theme.button.default.color,
-              cursor: 'pointer',
-            }}
-          >
-            Tout sélectionner
-          </button>
+          <>
+            <button
+              onClick={handleSelectEssentialMetadata}
+              style={{
+                padding: '0.5rem 1rem',
+                border: `1px solid ${theme.border.primary}`,
+                borderRadius: '4px',
+                backgroundColor: theme.button.default.background,
+                color: theme.button.default.color,
+                cursor: 'pointer',
+              }}
+            >
+              Sélectionner essentiels
+            </button>
+            <button
+              onClick={handleSelectAll}
+              style={{
+                padding: '0.5rem 1rem',
+                border: `1px solid ${theme.border.primary}`,
+                borderRadius: '4px',
+                backgroundColor: theme.button.default.background,
+                color: theme.button.default.color,
+                cursor: 'pointer',
+              }}
+            >
+              Tout sélectionner
+            </button>
+          </>
         )}
       </div>
 

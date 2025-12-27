@@ -8,7 +8,7 @@ class FieldInfo(BaseModel):
     
     Deux critères distincts :
     - is_metadata : Si le champ est une métadonnée (tous les champs AVANT "Introduction" dans le JSON)
-    - is_essential : Si le champ est essentiel pour la génération minimale (défini dans MINIMAL_FIELDS)
+    - is_essential : Si le champ est essentiel (contexte OU métadonnées) selon ESSENTIAL_*_FIELDS
     
     Attributes:
         path: Chemin du champ (ex: "Background.Relations")
@@ -20,7 +20,8 @@ class FieldInfo(BaseModel):
         category: Catégorie du champ ("identity", "characterization", "voice", "background", "mechanics")
         importance: Importance du champ ("essential", "common", "rare")
         is_metadata: Si le champ est une métadonnée (avant "Introduction" dans le JSON)
-        is_essential: Si le champ est essentiel pour génération minimale (défini dans MINIMAL_FIELDS)
+        is_essential: Si le champ est essentiel (contexte OU métadonnées) selon ESSENTIAL_*_FIELDS
+        is_unique: Si le champ est unique (n'apparaît que dans une seule fiche)
     """
     path: str = Field(..., description="Chemin du champ")
     label: str = Field(..., description="Label lisible du champ")
@@ -31,7 +32,8 @@ class FieldInfo(BaseModel):
     category: Optional[str] = Field(None, description="Catégorie du champ")
     importance: Optional[str] = Field(None, description="Importance du champ")
     is_metadata: bool = Field(default=False, description="Champ métadonnée (avant 'Introduction' dans le JSON)")
-    is_essential: bool = Field(default=False, description="Champ essentiel pour génération minimale (défini dans MINIMAL_FIELDS)")
+    is_essential: bool = Field(default=False, description="Champ essentiel (contexte OU métadonnées) selon ESSENTIAL_*_FIELDS")
+    is_unique: bool = Field(default=False, description="Champ unique (n'apparaît que dans une seule fiche)")
 
 
 class ContextFieldConfig(BaseModel):
@@ -54,10 +56,15 @@ class ContextFieldsResponse(BaseModel):
         element_type: Type d'élément
         fields: Dictionnaire des champs disponibles (path -> FieldInfo)
         total: Nombre total de champs détectés
+        unique_fields_by_item: Champs uniques regroupés par fiche (item_name -> {path: label})
     """
     element_type: str = Field(..., description="Type d'élément")
     fields: Dict[str, FieldInfo] = Field(default_factory=dict, description="Champs disponibles")
     total: int = Field(..., description="Nombre total de champs")
+    unique_fields_by_item: Dict[str, Dict[str, str]] = Field(
+        default_factory=dict,
+        description="Champs uniques regroupés par fiche (item_name -> {path: label})"
+    )
 
 
 class ContextFieldSuggestionsRequest(BaseModel):

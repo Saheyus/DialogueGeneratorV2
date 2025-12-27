@@ -1,7 +1,7 @@
 """Schémas Pydantic pour les endpoints de suivi LLM."""
 from datetime import datetime, date
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict, field_serializer
 
 
 class LLMUsageRecordResponse(BaseModel):
@@ -19,12 +19,12 @@ class LLMUsageRecordResponse(BaseModel):
     k_variants: int = Field(..., ge=1, description="Nombre de variantes générées")
     error_message: Optional[str] = Field(default=None, description="Message d'erreur si success=False")
     
-    class Config:
-        """Configuration Pydantic."""
-        json_encoders = {
-            datetime: lambda v: v.isoformat(),
-            date: lambda v: v.isoformat()
-        }
+    model_config = ConfigDict()
+    
+    @field_serializer('timestamp')
+    def serialize_timestamp(self, value: datetime) -> str:
+        """Sérialise datetime en ISO format."""
+        return value.isoformat() if isinstance(value, datetime) else str(value)
 
 
 class LLMUsageHistoryResponse(BaseModel):
@@ -51,9 +51,10 @@ class LLMUsageStatisticsResponse(BaseModel):
     end_date: Optional[date] = Field(default=None, description="Date de fin de la période")
     model_name: Optional[str] = Field(default=None, description="Modèle filtré (si applicable)")
     
-    class Config:
-        """Configuration Pydantic."""
-        json_encoders = {
-            date: lambda v: v.isoformat()
-        }
+    model_config = ConfigDict()
+    
+    @field_serializer('start_date', 'end_date')
+    def serialize_date(self, value: Optional[date]) -> Optional[str]:
+        """Sérialise date en ISO format."""
+        return value.isoformat() if value else None
 

@@ -27,32 +27,56 @@ class ContextOrganizer:
         "mechanics": "MÉCANIQUES",
     }
     
-    # Champs essentiels pour le mode "minimal"
-    MINIMAL_FIELDS = {
+    # Champs essentiels distincts (2 critères indépendants) :
+    # - ESSENTIAL_CONTEXT_FIELDS : champs essentiels du CONTEXTE NARRATIF (après "Introduction")
+    # - ESSENTIAL_METADATA_FIELDS : champs essentiels des MÉTADONNÉES (avant "Introduction")
+    #
+    # IMPORTANT: un champ peut être "métadonnée" et "essentiel", ou "contexte" et "essentiel".
+    # Ces listes ne définissent PAS la frontière métadonnées/contexte (c'est `is_metadata`).
+    ESSENTIAL_CONTEXT_FIELDS = {
         "character": [
-            "Nom",
+            # Minimum utile pour écrire une scène/dialogue :
+            "Introduction.Résumé de la fiche",
             "Dialogue Type.Registre de langage du personnage",
+            "Dialogue Type.Expressions courantes",
             "Caractérisation.Désir",
             "Caractérisation.Faiblesse",
+            "Background.Relations",
+        ],
+        "location": [
+            "Introduction.Résumé de la fiche",
+        ],
+        "item": [
+            "Introduction.Résumé de la fiche",
+        ],
+        "species": [
+            "Introduction.Résumé de la fiche",
+        ],
+        "community": [
+            "Introduction.Résumé de la fiche",
+        ],
+    }
+
+    ESSENTIAL_METADATA_FIELDS = {
+        "character": [
+            "Nom",
+            "Alias",
+            "Occupation",
+            "Espèce",
         ],
         "location": [
             "Nom",
-            "Rôle",
-            "Introduction.Résumé de la fiche",
         ],
         "item": [
             "Nom",
             "Type",
-            "Introduction.Résumé de la fiche",
         ],
         "species": [
             "Nom",
             "Type",
-            "Introduction.Résumé de la fiche",
         ],
         "community": [
             "Nom",
-            "Introduction.Résumé de la fiche",
         ],
     }
     
@@ -165,7 +189,7 @@ class ContextOrganizer:
     ) -> str:
         """Organisation minimale : seulement les champs essentiels."""
         # Filtrer pour ne garder que les champs essentiels
-        essential_fields = self.MINIMAL_FIELDS.get(element_type, [])
+        essential_fields = self.ESSENTIAL_CONTEXT_FIELDS.get(element_type, [])
         
         # Intersection entre fields_to_include et essential_fields
         minimal_fields = [

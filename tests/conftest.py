@@ -2,6 +2,11 @@
 import os
 import pytest
 from fastapi.testclient import TestClient
+
+# IMPORTANT: certains singletons (SecurityConfig / rate limiter) sont initialisés à l'import de `api.main`.
+# On fixe donc l'env AVANT l'import pour éviter des 429 en tests.
+os.environ.setdefault("AUTH_RATE_LIMIT_ENABLED", "false")
+
 from api.main import app
 
 

@@ -10,6 +10,8 @@ import type {
   ContextSelection,
   GenerateUnityDialogueRequest,
   GenerateUnityDialogueResponse,
+  ExportUnityDialogueRequest,
+  ExportUnityDialogueResponse,
 } from '../types/api'
 
 /**
@@ -70,6 +72,19 @@ export async function estimateTokens(
     field_configs: fieldConfigs || undefined,
     organization_mode: organizationMode || undefined,
   })
+  return response.data
+}
+
+/**
+ * Exporte un dialogue Unity JSON vers un fichier.
+ */
+export async function exportUnityDialogue(
+  request: ExportUnityDialogueRequest
+): Promise<ExportUnityDialogueResponse> {
+  const response = await apiClient.post<ExportUnityDialogueResponse>(
+    '/api/v1/dialogues/unity/export',
+    request
+  )
   return response.data
 }
 

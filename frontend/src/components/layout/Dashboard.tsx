@@ -7,7 +7,7 @@ import { GenerationPanel } from '../generation/GenerationPanel'
 import { GenerationOptionsModal } from '../generation/GenerationOptionsModal'
 import { InteractionDetails } from '../interactions/InteractionDetails'
 import { EstimatedPromptPanel } from '../generation/EstimatedPromptPanel'
-import { VariantsTabsView } from '../generation/VariantsTabsView'
+import { UnityDialogueViewer } from '../generation/UnityDialogueViewer'
 import { ContextDetail } from '../context/ContextDetail'
 import { ResizablePanels } from '../shared/ResizablePanels'
 import { Tabs, type Tab } from '../shared/Tabs'
@@ -15,7 +15,7 @@ import { useGenerationStore } from '../../store/generationStore'
 import { useGenerationActionsStore } from '../../store/generationActionsStore'
 import * as interactionsAPI from '../../api/interactions'
 import { getErrorMessage } from '../../types/errors'
-import type { InteractionResponse, CharacterResponse, LocationResponse, ItemResponse, SpeciesResponse, CommunityResponse, DialogueVariantResponse } from '../../types/api'
+import type { InteractionResponse, CharacterResponse, LocationResponse, ItemResponse, SpeciesResponse, CommunityResponse } from '../../types/api'
 import { theme } from '../../theme'
 
 type ContextItem = CharacterResponse | LocationResponse | ItemResponse | SpeciesResponse | CommunityResponse
@@ -24,44 +24,16 @@ export function Dashboard() {
   const [selectedInteraction, setSelectedInteraction] = useState<InteractionResponse | null>(null)
   const [selectedContextItem, setSelectedContextItem] = useState<ContextItem | null>(null)
   const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false)
-  const [rightPanelTab, setRightPanelTab] = useState<'prompt' | 'variants' | 'details'>('prompt')
-  const { estimatedPrompt, estimatedTokens, isEstimating, variantsResponse } = useGenerationStore()
+  const [rightPanelTab, setRightPanelTab] = useState<'prompt' | 'dialogue' | 'details'>('prompt')
+  const { estimatedPrompt, estimatedTokens, isEstimating, unityDialogueResponse } = useGenerationStore()
   const { actions } = useGenerationActionsStore()
   
-  // Basculer automatiquement vers l'onglet Variantes quand des variantes sont générées
+  // Basculer automatiquement vers l'onglet Dialogue quand un dialogue Unity est généré
   useEffect(() => {
-    if (variantsResponse && variantsResponse.variants.length > 0 && rightPanelTab === 'prompt') {
-      setRightPanelTab('variants')
+    if (unityDialogueResponse && rightPanelTab === 'prompt') {
+      setRightPanelTab('dialogue')
     }
-  }, [variantsResponse, rightPanelTab])
-
-  const handleSaveAsInteraction = async (variant: DialogueVariantResponse) => {
-    try {
-      // Convertir une variante en interaction (structure basique)
-      // Le backend attend element_type: 'dialogue_line' avec text, pas type: 'dialogue' avec content
-      const interaction: Partial<InteractionResponse> = {
-        title: variant.title,
-        elements: [
-          {
-            element_type: 'dialogue_line',
-            text: variant.content,
-            speaker: null,
-            tags: [],
-            pre_line_commands: [],
-            post_line_commands: [],
-          },
-        ],
-        header_commands: [],
-        header_tags: ['generated'],
-      }
-
-      await interactionsAPI.createInteraction(interaction)
-      alert('Interaction sauvegardée avec succès!')
-      // Optionnel: recharger les interactions si nécessaire
-    } catch (err) {
-      alert(getErrorMessage(err))
-    }
-  }
+  }, [unityDialogueResponse, rightPanelTab])
 
   const rightPanelTabs: Tab[] = [
     {
@@ -78,14 +50,25 @@ export function Dashboard() {
       ),
     },
     {
-      id: 'variants',
-      label: 'Variantes',
+      id: 'dialogue',
+      label: 'Dialogue Unity',
       content: (
         <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <VariantsTabsView
-            response={variantsResponse}
-            onValidateAsInteraction={handleSaveAsInteraction}
-          />
+          {unityDialogueResponse ? (
+            <UnityDialogueViewer response={unityDialogueResponse} />
+          ) : (
+            <div style={{ 
+              padding: '2rem', 
+              textAlign: 'center', 
+              color: theme.text.secondary,
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              Aucun dialogue Unity généré
+            </div>
+          )}
         </div>
       ),
     },

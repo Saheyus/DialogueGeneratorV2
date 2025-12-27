@@ -21,10 +21,10 @@ Détection : `_is_metadata_field()` compare la position de la clé racine avec "
 
 ### 2. Champs essentiels (`is_essential`)
 
-- **Champs essentiels du contexte narratif** : Définis dans `context_organizer.MINIMAL_FIELDS` (ex: "Dialogue Type.Registre de langage du personnage", "Caractérisation.Désir")
-- **Métadonnées** : Généralement toutes incluses (courtes), mais ne sont PAS des "champs essentiels" au sens génération
+- **Contexte narratif** : Définis dans `context_organizer.ESSENTIAL_CONTEXT_FIELDS`
+- **Métadonnées** : Définis dans `context_organizer.ESSENTIAL_METADATA_FIELDS`
 
 ## Usage
 
 - `is_metadata` : Filtrage onglets (Métadonnées vs Contexte)
-- `is_essential` : Champs non désélectionnables pour génération minimale (contexte narratif uniquement)
+- `is_essential` : Indicateur "champ essentiel" (⭐) et boutons de sélection

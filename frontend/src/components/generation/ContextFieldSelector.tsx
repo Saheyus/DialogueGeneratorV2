@@ -26,6 +26,7 @@ export function ContextFieldSelector({
 }: ContextFieldSelectorProps) {
   const {
     availableFields,
+    uniqueFieldsByItem,
     fieldConfigs,
     suggestions,
     toggleField,
@@ -53,12 +54,17 @@ export function ContextFieldSelector({
     // Filtrer les champs selon showOnlyEssential
     // showOnlyEssential=true affiche les métadonnées (is_metadata=true)
     // showOnlyEssential=false affiche le contexte narratif (is_metadata=false)
+    // Exclure les champs uniques (is_unique=true) de la liste normale
     const filteredFields = showOnlyEssential
       ? Object.fromEntries(
-          Object.entries(fields).filter(([, fieldInfo]: [string, any]) => fieldInfo.is_metadata === true)
+          Object.entries(fields).filter(([, fieldInfo]: [string, any]) => 
+            fieldInfo.is_metadata === true && !fieldInfo.is_unique
+          )
         )
       : Object.fromEntries(
-          Object.entries(fields).filter(([, fieldInfo]: [string, any]) => fieldInfo.is_metadata !== true)
+          Object.entries(fields).filter(([, fieldInfo]: [string, any]) => 
+            fieldInfo.is_metadata !== true && !fieldInfo.is_unique
+          )
         )
     
     // Créer tous les nœuds
@@ -101,7 +107,45 @@ export function ContextFieldSelector({
       }
     }
 
-    return root
+    // Aplatir les nœuds qui n'ont qu'un seul enfant
+    const flattenSingleChildNodes = (nodes: FieldNode[]): FieldNode[] => {
+      return nodes.map(node => {
+        // Si le nœud a exactement un enfant et n'est pas une feuille
+        if (node.children.length === 1 && node.fieldInfo.type === 'dict') {
+          const child = node.children[0]
+          // Si l'enfant est aussi un nœud intermédiaire, continuer récursivement
+          if (child.children.length > 0) {
+            const flattenedChild = flattenSingleChildNodes([child])[0]
+            // Fusionner le nœud avec son enfant unique
+            // Préserver le path et fieldInfo de l'enfant final (la feuille)
+            return {
+              ...flattenedChild,
+              path: flattenedChild.path, // Garder le path original de la feuille
+              label: `${node.label} > ${flattenedChild.label}`,
+              parent: node.parent,
+            }
+          } else {
+            // L'enfant est une feuille, fusionner directement
+            // Préserver le path et fieldInfo de l'enfant (la feuille)
+            return {
+              ...child,
+              path: child.path, // Garder le path original de la feuille
+              label: `${node.label} > ${child.label}`,
+              parent: node.parent,
+            }
+          }
+        } else if (node.children.length > 0) {
+          // Le nœud a plusieurs enfants, aplatir récursivement ses enfants
+          return {
+            ...node,
+            children: flattenSingleChildNodes(node.children),
+          }
+        }
+        return node
+      })
+    }
+
+    return flattenSingleChildNodes(root)
   }, [availableFields, elementType, showOnlyEssential])
 
   // Filtrer l'arbre selon la recherche
@@ -161,16 +205,22 @@ export function ContextFieldSelector({
     const importance = fieldInfo.importance || 
       (fieldInfo.frequency >= 0.8 ? 'essential' : 
        fieldInfo.frequency >= 0.2 ? 'common' : 'rare')
+    const isEssential = fieldInfo.is_essential === true
     
     if (isSuggested) {
       return { icon: '✓', color: theme.state.success.color, title: 'Champ suggéré' }
     }
+
+    // ⭐ doit représenter les champs essentiels (is_essential), pas la fréquence.
+    if (isEssential) {
+      return { icon: '⭐', color: theme.state.info.color, title: 'Champ essentiel' }
+    }
     
     switch (importance) {
       case 'essential':
-        return { icon: '⭐', color: theme.state.info.color, title: 'Champ essentiel' }
       case 'common':
         return { icon: 'ⓘ', color: theme.text.secondary, title: 'Champ commun' }
+      case 'common':
       case 'rare':
         return { icon: '○', color: theme.text.tertiary, title: 'Champ rare' }
       default:
@@ -181,9 +231,12 @@ export function ContextFieldSelector({
   const renderFieldNode = (node: FieldNode, depth: number = 0): JSX.Element => {
     const isExpanded = expandedPaths.has(node.path)
     const hasChildren = node.children.length > 0
-    // is_essential concerne uniquement les champs essentiels du contexte narratif (pour génération minimale)
+    // Pour l'onglet Contexte uniquement, on garde le comportement "essentiels toujours cochés"
+    // (dans l'onglet Métadonnées, un champ essentiel doit rester désélectionnable).
+    const isContextTab = showOnlyEssential === false
     const isEssential = node.fieldInfo.is_essential === true
-    const isSelected = isEssential || selectedFields.includes(node.path)
+    const isLocked = isContextTab && isEssential
+    const isSelected = (isLocked) || selectedFields.includes(node.path)
     const isLeaf = node.fieldInfo.type !== 'dict'
     const indicator = getFieldIndicator(node.fieldInfo)
 
@@ -235,20 +288,20 @@ export function ContextFieldSelector({
             <input
               type="checkbox"
               checked={isSelected}
-              disabled={isEssential}
+              disabled={isLocked}
               onChange={(e) => {
                 e.stopPropagation()
-                if (!isEssential) {
+                if (!isLocked) {
                   handleToggleField(node.path)
                 }
               }}
               onClick={(e) => e.stopPropagation()}
               style={{
                 marginRight: '0.5rem',
-                cursor: isEssential ? 'not-allowed' : 'pointer',
-                opacity: isEssential ? 0.6 : 1,
+                cursor: isLocked ? 'not-allowed' : 'pointer',
+                opacity: isLocked ? 0.6 : 1,
               }}
-              title={isEssential ? 'Champ essentiel (toujours sélectionné)' : undefined}
+              title={isLocked ? 'Champ essentiel (toujours sélectionné)' : undefined}
             />
           )}
           
@@ -337,19 +390,28 @@ export function ContextFieldSelector({
   // Compter les champs visibles (filtrés) et sélectionnés
   // showOnlyEssential=true : afficher les métadonnées (is_metadata=true)
   // showOnlyEssential=false : afficher le contexte narratif (is_metadata=false)
+  // Exclure les champs uniques du comptage normal
   const fields = availableFields[elementType] || {}
   const visibleFields = showOnlyEssential
-    ? Object.keys(fields).filter(path => fields[path]?.is_metadata === true)
-    : Object.keys(fields).filter(path => fields[path]?.is_metadata !== true)
+    ? Object.keys(fields).filter(path => 
+        fields[path]?.is_metadata === true && !fields[path]?.is_unique
+      )
+    : Object.keys(fields).filter(path => 
+        fields[path]?.is_metadata !== true && !fields[path]?.is_unique
+      )
   
   const totalFields = visibleFields.length
   
+  // Récupérer les champs uniques regroupés par fiche
+  const uniqueFields = uniqueFieldsByItem[elementType] || {}
+  
   // Compter uniquement les champs sélectionnés parmi ceux visibles dans l'onglet actuel
-  // Note: is_essential concerne les champs essentiels du contexte narratif (pour génération minimale)
+  // Note: dans l'onglet Contexte, les champs essentiels restent toujours cochés.
   const visibleSelectedFields = visibleFields.filter(path => {
     const isEssential = fields[path]?.is_essential === true
-    if (isEssential) {
-      return true  // Les champs essentiels du contexte narratif sont toujours sélectionnés
+    const isContextTab = showOnlyEssential === false
+    if (isContextTab && isEssential) {
+      return true  // Essentiels du contexte toujours cochés
     }
     return selectedFields.includes(path)
   })
@@ -405,6 +467,68 @@ export function ContextFieldSelector({
           </div>
         ) : (
           filteredTree.map(node => renderFieldNode(node))
+        )}
+        
+        {/* Section pour les champs uniques */}
+        {Object.keys(uniqueFields).length > 0 && (
+          <div style={{ marginTop: '2rem', paddingTop: '1rem', borderTop: `1px solid ${theme.border.primary}` }}>
+            <div style={{ 
+              marginBottom: '1rem', 
+              fontSize: '0.9rem', 
+              fontWeight: 'bold',
+              color: theme.text.primary 
+            }}>
+              Champs uniques (par fiche)
+            </div>
+            <div style={{ fontSize: '0.85rem', color: theme.text.secondary, marginBottom: '1rem' }}>
+              Ces champs n'apparaissent que dans une seule fiche. Vous pouvez les mapper sur un champ générique.
+            </div>
+            {Object.entries(uniqueFields).map(([itemName, itemFields]) => (
+              <div key={itemName} style={{ marginBottom: '1.5rem' }}>
+                <div style={{ 
+                  fontWeight: 'bold', 
+                  marginBottom: '0.5rem',
+                  color: theme.text.primary,
+                  fontSize: '0.9rem'
+                }}>
+                  {itemName}
+                </div>
+                <div style={{ marginLeft: '1rem' }}>
+                  {Object.entries(itemFields).map(([path, label]) => {
+                    const isSelected = selectedFields.includes(path)
+                    return (
+                      <div
+                        key={path}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: '0.25rem 0',
+                          cursor: 'pointer',
+                          color: isSelected ? theme.text.primary : theme.text.secondary,
+                        }}
+                        onClick={() => handleToggleField(path)}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleField(path)}
+                          style={{ marginRight: '0.5rem' }}
+                        />
+                        <span style={{ fontSize: '0.85rem' }}>{label}</span>
+                        <span style={{ 
+                          marginLeft: '0.5rem', 
+                          fontSize: '0.75rem', 
+                          color: theme.text.tertiary 
+                        }}>
+                          ({path})
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

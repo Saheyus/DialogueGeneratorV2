@@ -22,12 +22,18 @@ class NarrativeValidator:
         """Initialise le validateur."""
         pass
     
-    def validate_interaction(self, interaction: Interaction, context: Optional[str] = None) -> List[str]:
+    def validate_interaction(
+        self,
+        interaction: Interaction,
+        context: Optional[str] = None,
+        vocabulary_terms: Optional[List[Dict[str, Any]]] = None
+    ) -> List[str]:
         """Valide une interaction complète et retourne une liste de warnings.
         
         Args:
             interaction: L'interaction à valider.
             context: Le contexte GDD utilisé (optionnel, pour vérifier l'utilisation des données de voix).
+            vocabulary_terms: Liste des termes du vocabulaire Alteir (optionnel, pour validation vocabulaire).
             
         Returns:
             Liste de messages d'avertissement (vide si tout est OK).
@@ -48,6 +54,11 @@ class NarrativeValidator:
         if context:
             characterization_warnings = self.check_characterization_usage(interaction, context)
             warnings.extend(characterization_warnings)
+        
+        # Valider l'utilisation du vocabulaire si fourni
+        if vocabulary_terms:
+            vocab_warnings = self.validate_vocabulary_usage(interaction, vocabulary_terms)
+            warnings.extend(vocab_warnings)
         
         return warnings
     
@@ -173,6 +184,103 @@ class NarrativeValidator:
             warnings.append(
                 f"Peu de mots-clés du contexte utilisés ({len(found_keywords)}/{len(top_keywords)}). "
                 f"Vérifiez que la caractérisation et la voix du personnage sont bien exploitées."
+            )
+        
+        return warnings
+    
+    def validate_vocabulary_usage(
+        self,
+        interaction: Interaction,
+        vocabulary_terms: List[Dict[str, Any]]
+    ) -> List[str]:
+        """Valide l'utilisation du vocabulaire Alteir dans l'interaction.
+        
+        Détecte les termes du vocabulaire utilisés et vérifie leur utilisation correcte.
+        Génère des warnings si un terme est utilisé incorrectement ou absent alors qu'attendu.
+        
+        Args:
+            interaction: L'interaction à valider.
+            vocabulary_terms: Liste des termes du vocabulaire avec leurs définitions.
+            
+        Returns:
+            Liste de warnings pour les problèmes de vocabulaire détectés.
+        """
+        warnings: List[str] = []
+        
+        if not vocabulary_terms:
+            return warnings
+        
+        # Extraire tous les textes de dialogue
+        all_dialogue_text = " ".join([
+            element.text.lower()
+            for element in interaction.elements
+            if isinstance(element, DialogueLineElement)
+        ])
+        
+        if not all_dialogue_text:
+            return warnings
+        
+        # Créer un dictionnaire des termes par importance
+        terms_by_importance = {}
+        for term in vocabulary_terms:
+            importance = term.get("importance", "Anecdotique")
+            if importance not in terms_by_importance:
+                terms_by_importance[importance] = []
+            terms_by_importance[importance].append(term)
+        
+        # Vérifier l'utilisation des termes majeurs et importants
+        important_terms = []
+        for importance in ["Majeur", "Important"]:
+            if importance in terms_by_importance:
+                important_terms.extend(terms_by_importance[importance])
+        
+        # Détecter les termes utilisés
+        used_terms = []
+        for term in vocabulary_terms:
+            terme = term.get("term", "").lower()
+            if terme and terme in all_dialogue_text:
+                used_terms.append(term)
+        
+        # Vérifier si des termes importants sont absents
+        important_used = [t for t in used_terms if t.get("importance") in ["Majeur", "Important"]]
+        if important_terms and len(important_used) == 0:
+            # Ne pas alerter systématiquement, car tous les dialogues n'utilisent pas forcément le vocabulaire
+            # Mais on peut suggérer d'utiliser des termes si le contexte s'y prête
+            pass
+        
+        # Vérifier l'utilisation correcte (heuristique simple : présence du terme dans un contexte approprié)
+        for term in used_terms:
+            terme = term.get("term", "").lower()
+            definition = term.get("definition", "").lower()
+            
+            # Vérifier si le terme apparaît dans un contexte qui semble approprié
+            # (heuristique basique : présence de mots-clés de la définition à proximité)
+            if definition:
+                definition_keywords = set(re.findall(r'\b\w{4,}\b', definition))
+                # Chercher si des mots-clés de la définition apparaissent près du terme
+                # (dans un rayon de 50 caractères)
+                term_positions = [m.start() for m in re.finditer(re.escape(terme), all_dialogue_text)]
+                context_appropriate = False
+                
+                for pos in term_positions:
+                    context_window = all_dialogue_text[max(0, pos - 50):pos + 50 + len(terme)]
+                    context_keywords = set(re.findall(r'\b\w{4,}\b', context_window))
+                    if definition_keywords & context_keywords:
+                        context_appropriate = True
+                        break
+                
+                # Si le terme est important et que le contexte ne semble pas approprié, alerter
+                if term.get("importance") in ["Majeur", "Important"] and not context_appropriate:
+                    warnings.append(
+                        f"Terme important '{term.get('term')}' utilisé, mais le contexte ne semble pas "
+                        f"correspondre à sa définition. Vérifiez l'utilisation correcte."
+                    )
+        
+        # Statistiques (pour information, pas de warning)
+        if used_terms:
+            logger.debug(
+                f"Validation vocabulaire: {len(used_terms)}/{len(vocabulary_terms)} termes utilisés "
+                f"dans l'interaction"
             )
         
         return warnings

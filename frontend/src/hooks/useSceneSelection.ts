@@ -24,6 +24,9 @@ export function useSceneSelection() {
   const contextSelections = useContextStore((state) => state.selections)
   const contextRegion = useContextStore((state) => state.selectedRegion)
   const contextSubLocations = useContextStore((state) => state.selectedSubLocations)
+  const toggleCharacter = useContextStore((state) => state.toggleCharacter)
+  const setRegion = useContextStore((state) => state.setRegion)
+  const toggleSubLocation = useContextStore((state) => state.toggleSubLocation)
   
   const [data, setData] = useState<SceneSelectionData>({
     characters: [],
@@ -145,6 +148,27 @@ export function useSceneSelection() {
       return prevSelection
     })
   }, [contextSelections, contextRegion, contextSubLocations])
+
+  // Synchronisation inverse : mettre à jour contextStore quand sceneSelection change
+  useEffect(() => {
+    // Ajouter characterA et characterB aux sélections de personnages s'ils ne sont pas déjà présents
+    if (selection.characterA && !contextSelections.characters.includes(selection.characterA)) {
+      toggleCharacter(selection.characterA)
+    }
+    if (selection.characterB && !contextSelections.characters.includes(selection.characterB)) {
+      toggleCharacter(selection.characterB)
+    }
+    
+    // Mettre à jour la région si elle change
+    if (selection.sceneRegion !== contextRegion) {
+      setRegion(selection.sceneRegion)
+    }
+    
+    // Mettre à jour le sous-lieu si il change et que la région est définie
+    if (selection.subLocation && selection.sceneRegion && !contextSubLocations.includes(selection.subLocation)) {
+      toggleSubLocation(selection.subLocation)
+    }
+  }, [selection.characterA, selection.characterB, selection.sceneRegion, selection.subLocation, contextSelections.characters, contextRegion, contextSubLocations, toggleCharacter, setRegion, toggleSubLocation])
 
   const updateSelection = useCallback((updates: Partial<SceneSelection>) => {
     setSelection((prev) => ({ ...prev, ...updates }))

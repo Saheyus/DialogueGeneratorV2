@@ -21,6 +21,9 @@ def test_get_rate_limiter_enabled():
         "AUTH_RATE_LIMIT_REQUESTS": "5",
         "AUTH_RATE_LIMIT_WINDOW": "60"
     }, clear=True):
+        # Réinitialiser la config singleton (elle lit l'env au premier accès)
+        import api.config.security_config
+        api.config.security_config._security_config = None
         # Réinitialiser le singleton pour le test
         import api.middleware.rate_limiter
         api.middleware.rate_limiter._rate_limiter = None
@@ -36,6 +39,9 @@ def test_get_rate_limiter_enabled():
 def test_get_rate_limiter_disabled():
     """Test que get_rate_limiter retourne None quand désactivé."""
     with patch.dict(os.environ, {"AUTH_RATE_LIMIT_ENABLED": "false"}, clear=True):
+        # Réinitialiser la config singleton (elle lit l'env au premier accès)
+        import api.config.security_config
+        api.config.security_config._security_config = None
         # Réinitialiser le singleton pour le test
         import api.middleware.rate_limiter
         api.middleware.rate_limiter._rate_limiter = None
@@ -51,6 +57,8 @@ def test_get_rate_limit_string():
         "AUTH_RATE_LIMIT_REQUESTS": "5",
         "AUTH_RATE_LIMIT_WINDOW": "60"
     }, clear=True):
+        import api.config.security_config
+        api.config.security_config._security_config = None
         rate_limit_str = get_rate_limit_string()
         
         assert rate_limit_str == "5/60 seconds"
@@ -62,8 +70,10 @@ def test_rate_limit_exception_handler():
     request = MagicMock(spec=Request)
     request.state.request_id = "test-request-id"
     
-    # Créer une exception RateLimitExceeded
-    exc = RateLimitExceeded("Rate limit exceeded")
+    # Créer une exception RateLimitExceeded (slowapi attend un objet Limit, pas une string)
+    limit = MagicMock()
+    limit.error_message = ""
+    exc = RateLimitExceeded(limit)
     
     # Appeler le handler
     import asyncio
@@ -79,6 +89,8 @@ def test_rate_limit_exception_handler():
 def test_rate_limiter_singleton():
     """Test que get_limiter retourne une instance singleton."""
     with patch.dict(os.environ, {"AUTH_RATE_LIMIT_ENABLED": "true"}, clear=True):
+        import api.config.security_config
+        api.config.security_config._security_config = None
         # Réinitialiser le singleton pour le test
         import api.middleware.rate_limiter
         api.middleware.rate_limiter._rate_limiter = None

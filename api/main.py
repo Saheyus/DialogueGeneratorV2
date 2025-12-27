@@ -280,6 +280,11 @@ app.include_router(context.router, prefix="/api/v1/context", tags=["Context"])
 app.include_router(config.router, prefix="/api/v1/config", tags=["Configuration"])
 app.include_router(llm_usage.router, prefix="/api/v1/llm-usage", tags=["LLM Usage"])
 
+# Routers pour vocabulaire et guides narratifs
+from api.routers import vocabulary, narrative_guides
+app.include_router(vocabulary.router)
+app.include_router(narrative_guides.router)
+
 # Servir le frontend statique en production (APRÈS les routes API)
 if is_production_env:
     try:

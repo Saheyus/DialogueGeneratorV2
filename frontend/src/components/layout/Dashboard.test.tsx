@@ -34,6 +34,7 @@ describe('Dashboard', () => {
       estimatedPrompt: '',
       estimatedTokens: 0,
       isEstimating: false,
+      unityDialogueResponse: null,
       sceneSelection: {
         characterA: null,
         characterB: null,
@@ -46,6 +47,10 @@ describe('Dashboard', () => {
       setSystemPromptOverride: vi.fn(),
       setEstimatedPrompt: vi.fn(),
       setSceneSelection: vi.fn(),
+      setUnityDialogueResponse: vi.fn(),
+      tokensUsed: null,
+      setTokensUsed: vi.fn(),
+      clearGenerationResults: vi.fn(),
     } as ReturnType<typeof useGenerationStore>)
     
     mockUseContextStore.mockReturnValue({
@@ -124,6 +129,7 @@ describe('Dashboard', () => {
 
     // Il y a plusieurs éléments avec "prompt estimé" (bouton et contenu)
     expect(screen.getAllByText(/prompt estimé/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/dialogue unity/i)).toBeInTheDocument()
     expect(screen.getByText(/détails/i)).toBeInTheDocument()
   })
 
@@ -183,7 +189,6 @@ describe('Dashboard', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText(/prévisualiser/i)).toBeInTheDocument()
       expect(screen.getByText(/exporter/i)).toBeInTheDocument()
       expect(screen.getByText(/reset/i)).toBeInTheDocument()
       expect(screen.getByText(/générer/i)).toBeInTheDocument()
@@ -219,6 +224,7 @@ describe('Dashboard', () => {
       estimatedPrompt: testPrompt,
       estimatedTokens: 100,
       isEstimating: false,
+      unityDialogueResponse: null,
       sceneSelection: {
         characterA: null,
         characterB: null,
@@ -231,6 +237,10 @@ describe('Dashboard', () => {
       setSystemPromptOverride: vi.fn(),
       setEstimatedPrompt: vi.fn(),
       setSceneSelection: vi.fn(),
+      setUnityDialogueResponse: vi.fn(),
+      tokensUsed: null,
+      setTokensUsed: vi.fn(),
+      clearGenerationResults: vi.fn(),
     } as ReturnType<typeof useGenerationStore>)
 
     render(
@@ -242,6 +252,62 @@ describe('Dashboard', () => {
     // Le EstimatedPromptPanel devrait afficher le prompt
     await waitFor(() => {
       expect(screen.getByText(testPrompt)).toBeInTheDocument()
+    })
+  })
+
+  it('affiche UnityDialogueViewer quand unityDialogueResponse est présent', () => {
+    const mockUnityResponse = {
+      json_content: JSON.stringify([{ id: 'START', speaker: 'NPC', line: 'Hello' }]),
+      title: 'Test Dialogue',
+      estimated_tokens: 100,
+    }
+
+    mockUseGenerationStore.mockReturnValue({
+      estimatedPrompt: '',
+      estimatedTokens: 0,
+      isEstimating: false,
+      unityDialogueResponse: mockUnityResponse,
+      sceneSelection: {
+        characterA: null,
+        characterB: null,
+        sceneRegion: null,
+        subLocation: null,
+      },
+      dialogueStructure: ['', '', '', '', '', ''] as [string, string, string, string, string, string],
+      systemPromptOverride: null,
+      setDialogueStructure: vi.fn(),
+      setSystemPromptOverride: vi.fn(),
+      setEstimatedPrompt: vi.fn(),
+      setSceneSelection: vi.fn(),
+      setUnityDialogueResponse: vi.fn(),
+      tokensUsed: null,
+      setTokensUsed: vi.fn(),
+      clearGenerationResults: vi.fn(),
+    } as ReturnType<typeof useGenerationStore>)
+
+    render(
+      <BrowserRouter>
+        <Dashboard />
+      </BrowserRouter>
+    )
+
+    expect(screen.getByText('Test Dialogue')).toBeInTheDocument()
+  })
+
+  it('affiche un message quand aucun dialogue Unity n\'est généré', async () => {
+    const user = userEvent.setup()
+    render(
+      <BrowserRouter>
+        <Dashboard />
+      </BrowserRouter>
+    )
+
+    // Cliquer sur l'onglet Dialogue Unity
+    const dialogueTab = screen.getByText(/dialogue unity/i)
+    await user.click(dialogueTab)
+
+    await waitFor(() => {
+      expect(screen.getByText(/aucun dialogue unity généré/i)).toBeInTheDocument()
     })
   })
 })

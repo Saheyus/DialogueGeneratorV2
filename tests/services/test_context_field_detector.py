@@ -144,5 +144,6 @@ class TestContextOrganizer:
         )
         
         # Le mode minimal devrait filtrer pour ne garder que les champs essentiels
-        assert "Nom" in result
+        assert "Registre" in result or "Registre de langage du personnage" in result
+        assert "Désir" in result
 

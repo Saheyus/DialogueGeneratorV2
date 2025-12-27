@@ -164,7 +164,7 @@ class HTTPCacheMiddleware(BaseHTTPMiddleware):
         if self.enabled and cache is None:
             logger.warning(f"Cache HTTP activé mais cache=None pour {request.url.path}")
         
-        if cache and cache_key in cache:
+        if cache is not None and cache_key in cache:
             cached_response = cache[cache_key]
             
             # Vérifier ETag si présent
@@ -191,7 +191,7 @@ class HTTPCacheMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         
         # Mettre en cache si succès (2xx)
-        if cache and 200 <= response.status_code < 300:
+        if cache is not None and 200 <= response.status_code < 300:
             logger.debug(f"Tentative de mise en cache pour {request.url.path}")
             # Lire le body de la réponse de manière asynchrone
             try:

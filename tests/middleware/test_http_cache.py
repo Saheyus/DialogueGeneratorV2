@@ -1,9 +1,11 @@
 """Tests pour le middleware de cache HTTP."""
+import os
 import pytest
 import time
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from api.middleware.http_cache import HTTPCacheMiddleware, setup_http_cache
+from unittest.mock import patch
 
 
 @pytest.fixture
@@ -169,16 +171,16 @@ def test_cache_disabled():
     assert "X-Cache" not in response2.headers
 
 
-def test_setup_http_cache(mocker):
+def test_setup_http_cache():
     """Test setup_http_cache."""
     app = FastAPI()
     
-    with mocker.patch.dict("os.environ", {
+    with patch.dict(os.environ, {
         "HTTP_CACHE_ENABLED": "true",
         "HTTP_CACHE_TTL_GDD": "30",
         "HTTP_CACHE_TTL_STATIC": "300",
         "HTTP_CACHE_MAX_SIZE": "1000"
-    }):
+    }, clear=True):
         setup_http_cache(app)
         
         # Vérifier que le middleware a été ajouté

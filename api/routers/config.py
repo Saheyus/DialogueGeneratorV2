@@ -486,13 +486,24 @@ async def get_context_fields(
                         category=field_info.category,
                         importance=ContextFieldDetector(None).classify_field_importance(field_info.frequency),
                         is_metadata=getattr(field_info, 'is_metadata', False),
-                        is_essential=getattr(field_info, 'is_essential', False)
+                        is_essential=getattr(field_info, 'is_essential', False),
+                        is_unique=getattr(field_info, 'is_unique', False)
                     )
+            
+            # Détecter les champs uniques regroupés par fiche
+            unique_fields_by_item = {}
+            try:
+                sample_data = detector._get_sample_data(element_type)
+                if sample_data:
+                    unique_fields_by_item = detector.detect_unique_fields_by_item(element_type, sample_data)
+            except Exception as e:
+                logger.warning(f"Impossible de détecter les champs uniques: {e}", exc_info=True)
             
             return ContextFieldsResponse(
                 element_type=element_type,
                 fields=fields_dict,
-                total=len(fields_dict)
+                total=len(fields_dict),
+                unique_fields_by_item=unique_fields_by_item
             )
         
         # Détecter les champs
@@ -517,6 +528,15 @@ async def get_context_fields(
         # Mettre en cache
         cache.set(element_type, detected_fields)
         
+        # Détecter les champs uniques regroupés par fiche
+        unique_fields_by_item = {}
+        try:
+            sample_data = detector._get_sample_data(element_type)
+            if sample_data:
+                unique_fields_by_item = detector.detect_unique_fields_by_item(element_type, sample_data)
+        except Exception as e:
+            logger.warning(f"Impossible de détecter les champs uniques: {e}", exc_info=True)
+        
         # Convertir en schémas API
         fields_dict = {}
         essential_in_response = 0
@@ -524,6 +544,7 @@ async def get_context_fields(
         for path, field_info in detected_fields.items():
             is_essential = field_info.is_essential
             is_metadata = field_info.is_metadata
+            is_unique = getattr(field_info, 'is_unique', False)
             if is_essential:
                 essential_in_response += 1
             if is_metadata:
@@ -538,13 +559,15 @@ async def get_context_fields(
                 category=field_info.category,
                 importance=detector.classify_field_importance(field_info.frequency),
                 is_metadata=is_metadata,
-                is_essential=is_essential
+                is_essential=is_essential,
+                is_unique=is_unique
             )
         
         return ContextFieldsResponse(
             element_type=element_type,
             fields=fields_dict,
-            total=len(fields_dict)
+            total=len(fields_dict),
+            unique_fields_by_item=unique_fields_by_item
         )
     except Exception as e:
         logger.exception(f"Erreur lors de la détection des champs pour '{element_type}' (request_id: {request_id})")

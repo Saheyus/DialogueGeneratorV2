@@ -1,7 +1,7 @@
 """Modèles de données pour le suivi de l'utilisation des LLM."""
 from datetime import datetime, UTC
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict, field_serializer
 
 
 class LLMUsageRecord(BaseModel):
@@ -22,12 +22,8 @@ class LLMUsageRecord(BaseModel):
     k_variants: int = Field(default=1, ge=1, description="Nombre de variantes générées")
     error_message: Optional[str] = Field(default=None, description="Message d'erreur si success=False")
     
-    class Config:
-        """Configuration Pydantic."""
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
-        schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "request_id": "req_123456",
                 "timestamp": "2024-01-15T10:30:00Z",
@@ -43,4 +39,10 @@ class LLMUsageRecord(BaseModel):
                 "error_message": None
             }
         }
+    )
+    
+    @field_serializer('timestamp')
+    def serialize_timestamp(self, value: datetime) -> str:
+        """Sérialise datetime en ISO format."""
+        return value.isoformat()
 

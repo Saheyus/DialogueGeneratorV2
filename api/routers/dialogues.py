@@ -1,5 +1,8 @@
 """Router pour la génération de dialogues."""
 import logging
+import re
+import json
+from pathlib import Path
 from typing import Annotated
 from fastapi import APIRouter, Depends, Request, status
 from api.schemas.dialogue import (
@@ -10,14 +13,17 @@ from api.schemas.dialogue import (
     EstimateTokensRequest,
     EstimateTokensResponse,
     GenerateUnityDialogueRequest,
-    GenerateUnityDialogueResponse
+    GenerateUnityDialogueResponse,
+    ExportUnityDialogueRequest,
+    ExportUnityDialogueResponse
 )
 from api.schemas.interaction import InteractionResponse
 from api.dependencies import (
     get_dialogue_generation_service,
     get_interaction_service,
     get_request_id,
-    get_prompt_engine
+    get_prompt_engine,
+    get_config_service
 )
 from prompt_engine import PromptEngine
 from api.exceptions import InternalServerException, ValidationException, NotFoundException, OpenAIException
@@ -27,6 +33,7 @@ from services.unity_dialogue_generation_service import UnityDialogueGenerationSe
 from services.skill_catalog_service import SkillCatalogService
 from services.trait_catalog_service import TraitCatalogService
 from services.json_renderer.unity_json_renderer import UnityJsonRenderer
+from services.configuration_service import ConfigurationService
 from llm_client import ILLMClient
 from models.dialogue_structure.interaction import Interaction
 from models.dialogue_structure.dialogue_elements import PlayerChoicesBlockElement
@@ -241,9 +248,9 @@ async def generate_interaction_variants(
             context_builder.set_previous_dialogue_context(path_interactions)
         
         # Créer le client LLM via la factory
-        from api.dependencies import get_config_service, get_llm_usage_service
+        from api.dependencies import get_config_service, create_llm_usage_service
         config_service = get_config_service()
-        usage_service = get_llm_usage_service()
+        usage_service = create_llm_usage_service()
         from factories.llm_factory import LLMClientFactory
         llm_config = config_service.get_llm_config()
         available_models = config_service.get_available_llm_models()
@@ -283,7 +290,9 @@ async def generate_interaction_variants(
             current_llm_model_identifier=request_data.llm_model_identifier,
             field_configs=request_data.field_configs,
             organization_mode=request_data.organization_mode,
-            narrative_tags=request_data.narrative_tags
+            narrative_tags=request_data.narrative_tags,
+            vocabulary_min_importance=request_data.vocabulary_min_importance,
+            include_narrative_guides=request_data.include_narrative_guides
         )
         
         if interactions is None or len(interactions) == 0:
@@ -376,8 +385,27 @@ async def generate_interaction_variants(
             max_tokens=5000  # Limiter pour la validation
         )
         
+        # Charger le vocabulaire pour la validation si un niveau d'importance est spécifié
+        vocabulary_terms = None
+        if request_data.vocabulary_min_importance:
+            try:
+                from services.vocabulary_service import VocabularyService
+                vocab_service = VocabularyService()
+                all_terms = vocab_service.load_vocabulary()
+                if all_terms:
+                    vocabulary_terms = vocab_service.filter_by_importance(
+                        all_terms,
+                        request_data.vocabulary_min_importance
+                    )
+            except Exception as e:
+                logger.warning(f"Erreur lors du chargement du vocabulaire pour validation: {e}")
+        
         for interaction in validated_interactions:
-            warnings = narrative_validator.validate_interaction(interaction, context_summary)
+            warnings = narrative_validator.validate_interaction(
+                interaction,
+                context_summary,
+                vocabulary_terms=vocabulary_terms
+            )
             if warnings:
                 narrative_warnings[interaction.interaction_id] = warnings
                 logger.info(
@@ -611,15 +639,17 @@ async def generate_unity_dialogue(
             scene_location=scene_location,
             max_choices=request_data.max_choices,
             narrative_tags=request_data.narrative_tags,
-            author_profile=request_data.author_profile
+            author_profile=request_data.author_profile,
+            vocabulary_min_importance=request_data.vocabulary_min_importance,
+            include_narrative_guides=request_data.include_narrative_guides
         )
         
         estimated_tokens = context_tokens + prompt_tokens
         
         # 7. Créer le client LLM
-        from api.dependencies import get_config_service, get_llm_usage_service
+        from api.dependencies import get_config_service, create_llm_usage_service
         config_service = get_config_service()
-        usage_service = get_llm_usage_service()
+        usage_service = create_llm_usage_service()
         from factories.llm_factory import LLMClientFactory
         llm_config = config_service.get_llm_config()
         available_models = config_service.get_available_llm_models()
@@ -705,6 +735,103 @@ async def generate_unity_dialogue(
         logger.exception(f"Erreur lors de la génération Unity JSON (request_id: {request_id})")
         raise InternalServerException(
             message="Erreur lors de la génération du dialogue Unity JSON",
+            details={"error": str(e)},
+            request_id=request_id
+        )
+
+
+@router.post(
+    "/unity/export",
+    response_model=ExportUnityDialogueResponse,
+    status_code=status.HTTP_200_OK
+)
+async def export_unity_dialogue(
+    request_data: ExportUnityDialogueRequest,
+    request: Request,
+    config_service: Annotated[ConfigurationService, Depends(get_config_service)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> ExportUnityDialogueResponse:
+    """Exporte un dialogue Unity JSON vers un fichier.
+    
+    Args:
+        request_data: Données de la requête d'export (JSON, titre, nom de fichier).
+        request: La requête HTTP.
+        config_service: Service de configuration injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        Réponse contenant le chemin du fichier créé.
+        
+    Raises:
+        ValidationException: Si le chemin Unity n'est pas configuré ou si le JSON est invalide.
+        InternalServerException: Si l'écriture du fichier échoue.
+    """
+    try:
+        # 1. Récupérer le chemin Unity configuré
+        unity_path = config_service.get_unity_dialogues_path()
+        if not unity_path:
+            raise ValidationException(
+                message="Le chemin Unity dialogues n'est pas configuré. Configurez-le dans les paramètres.",
+                details={"field": "unity_dialogues_path"},
+                request_id=request_id
+            )
+        
+        unity_dir = Path(unity_path)
+        
+        # Créer le dossier s'il n'existe pas
+        unity_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 2. Valider que le JSON est valide
+        try:
+            json_data = json.loads(request_data.json_content)
+            if not isinstance(json_data, list):
+                raise ValidationException(
+                    message="Le JSON Unity doit être un tableau de nœuds",
+                    details={"json_content": "Doit être un tableau []"},
+                    request_id=request_id
+                )
+        except json.JSONDecodeError as e:
+            raise ValidationException(
+                message="Le JSON fourni n'est pas valide",
+                details={"json_content": f"Erreur JSON: {str(e)}"},
+                request_id=request_id
+            )
+        
+        # 3. Générer le nom de fichier
+        if request_data.filename:
+            # Utiliser le nom fourni (sans extension)
+            filename = request_data.filename
+        else:
+            # Générer un slug à partir du titre
+            # Convertir en minuscules, remplacer espaces et caractères spéciaux par underscores
+            slug = re.sub(r'[^\w\s-]', '', request_data.title.lower())
+            slug = re.sub(r'[-\s]+', '_', slug)
+            filename = slug[:100]  # Limiter la longueur
+        
+        # Ajouter l'extension .json si pas présente
+        if not filename.endswith('.json'):
+            filename += '.json'
+        
+        file_path = unity_dir / filename
+        
+        # 4. Écrire le fichier JSON (pretty-print avec 2 espaces)
+        json_content_formatted = json.dumps(json_data, indent=2, ensure_ascii=False)
+        file_path.write_text(json_content_formatted, encoding='utf-8')
+        
+        logger.info(f"Dialogue Unity exporté: {file_path} (request_id: {request_id})")
+        
+        return ExportUnityDialogueResponse(
+            file_path=str(file_path.absolute()),
+            filename=filename,
+            success=True
+        )
+        
+    except ValidationException:
+        raise
+    except Exception as e:
+        logger.exception(f"Erreur lors de l'export Unity JSON (request_id: {request_id})")
+        raise InternalServerException(
+            message="Erreur lors de l'export du dialogue Unity JSON",
             details={"error": str(e)},
             request_id=request_id
         )

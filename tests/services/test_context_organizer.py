@@ -84,8 +84,10 @@ class TestContextOrganizer:
             "minimal"
         )
         
-        # Le mode minimal devrait inclure les champs essentiels
-        assert "Nom" in result
+        # Le mode minimal devrait inclure les champs essentiels du contexte narratif
+        assert "Registre" in result or "Registre de langage du personnage" in result
+        assert "Désir" in result
+        assert "Faiblesse" in result
         # "Autre" ne devrait pas être inclus dans le mode minimal
         assert "Autre" not in result or "Autre" not in result.split("\n")[-1]
     

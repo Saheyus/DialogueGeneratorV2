@@ -58,18 +58,17 @@ class UnityDialogueNodeContent(BaseModel):
 
 
 class UnityDialogueGenerationResponse(BaseModel):
-    """Réponse de génération : tableau de nœuds (sans IDs techniques).
+    """Réponse de génération : un seul nœud de dialogue (sans ID technique).
     
-    Pour commencer, on génère un nœud à la fois, donc nodes contiendra un seul élément.
+    Le système génère un nœud à la fois contenant une réplique du PNJ et les choix du joueur.
     Les IDs seront ajoutés automatiquement par le système.
     """
     title: str = Field(
         ...,
         description="Titre descriptif du dialogue (ex: 'Rencontre avec le tavernier', 'Discussion sur la quête')"
     )
-    nodes: List[UnityDialogueNodeContent] = Field(
+    node: UnityDialogueNodeContent = Field(
         ..., 
-        min_length=1,
-        description="Nœuds du dialogue générés par l'IA"
+        description="Un seul nœud de dialogue généré par l'IA (réplique PNJ + choix joueur)"
     )
 

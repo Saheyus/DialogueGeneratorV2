@@ -17,6 +17,9 @@ from services.repositories.llm_usage_repository import FileLLMUsageRepository
 from services.llm_usage_service import LLMUsageService
 from services.llm_pricing_service import LLMPricingService
 from factories.llm_factory import LLMClientFactory
+from services.vocabulary_service import VocabularyService
+from services.narrative_guides_service import NarrativeGuidesService
+from services.notion_import_service import NotionImportService
 from constants import FilePaths, Defaults
 
 logger = logging.getLogger(__name__)
@@ -174,6 +177,20 @@ def get_llm_usage_repository() -> FileLLMUsageRepository:
     return FileLLMUsageRepository(storage_dir=storage_dir)
 
 
+def create_llm_usage_service() -> LLMUsageService:
+    """Crée un service de tracking d'utilisation LLM (sans dépendances FastAPI).
+    
+    Cette fonction peut être appelée directement sans passer par le système
+    de dépendances FastAPI. Pour l'injection de dépendances dans les routes,
+    utiliser get_llm_usage_service() avec Depends().
+    
+    Returns:
+        Instance de LLMUsageService.
+    """
+    repository = get_llm_usage_repository()
+    return LLMUsageService(repository=repository)
+
+
 def get_llm_usage_service(
     repository: Annotated[FileLLMUsageRepository, Depends(get_llm_usage_repository)]
 ) -> LLMUsageService:
@@ -198,4 +215,31 @@ def get_request_id(request: Request) -> str:
         Le request_id ou "unknown" si absent.
     """
     return getattr(request.state, "request_id", "unknown")
+
+
+def get_vocabulary_service() -> VocabularyService:
+    """Retourne le service de vocabulaire (singleton).
+    
+    Returns:
+        Instance de VocabularyService.
+    """
+    return VocabularyService()
+
+
+def get_narrative_guides_service() -> NarrativeGuidesService:
+    """Retourne le service des guides narratifs (singleton).
+    
+    Returns:
+        Instance de NarrativeGuidesService.
+    """
+    return NarrativeGuidesService()
+
+
+def get_notion_import_service() -> NotionImportService:
+    """Retourne le service d'import Notion (singleton).
+    
+    Returns:
+        Instance de NotionImportService.
+    """
+    return NotionImportService()
 

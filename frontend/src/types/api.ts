@@ -44,6 +44,9 @@ export interface GenerateDialogueVariantsRequest {
   npc_speaker_id?: string
 }
 
+/**
+ * @deprecated Utiliser GenerateUnityDialogueResponse à la place. Conservé pour compatibilité.
+ */
 export interface DialogueVariantResponse {
   id: string
   title: string
@@ -51,6 +54,9 @@ export interface DialogueVariantResponse {
   is_new: boolean
 }
 
+/**
+ * @deprecated Utiliser GenerateUnityDialogueResponse à la place. Conservé pour compatibilité.
+ */
 export interface GenerateDialogueVariantsResponse {
   variants: DialogueVariantResponse[]
   prompt_used?: string
@@ -64,6 +70,9 @@ export interface EstimateTokensResponse {
   estimated_prompt?: string | null
 }
 
+/**
+ * @deprecated Ne plus utiliser. Les interactions structurées ne sont plus générées. Conservé pour compatibilité.
+ */
 export interface GenerateInteractionVariantsRequest {
   k_variants: number
   user_instructions: string
@@ -75,6 +84,8 @@ export interface GenerateInteractionVariantsRequest {
   field_configs?: Record<string, string[]>
   organization_mode?: string
   narrative_tags?: string[]
+  vocabulary_min_importance?: string
+  include_narrative_guides?: boolean
 }
 
 // Interaction
@@ -216,6 +227,8 @@ export interface GenerateUnityDialogueRequest {
   llm_model_identifier: string
   max_choices?: number | null
   narrative_tags?: string[]
+  vocabulary_min_importance?: string
+  include_narrative_guides?: boolean
 }
 
 export interface GenerateUnityDialogueResponse {
@@ -224,5 +237,17 @@ export interface GenerateUnityDialogueResponse {
   prompt_used?: string
   estimated_tokens: number
   warning?: string
+}
+
+export interface ExportUnityDialogueRequest {
+  json_content: string
+  title: string
+  filename?: string
+}
+
+export interface ExportUnityDialogueResponse {
+  file_path: string
+  filename: string
+  success: boolean
 }
 

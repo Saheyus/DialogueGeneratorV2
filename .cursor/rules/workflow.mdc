@@ -6,7 +6,7 @@ alwaysApply: true
 
 - **Commandes essentielles (donner en une ligne)** :
   - Développement : `npm run dev` (lance backend sur 4242 + frontend sur 3000 automatiquement)
-  - Tests : `npm test` ou `pytest tests/`
+  - Tests : `pytest tests/` ou `python -m pytest tests/` (commandes recommandées, fonctionnent avec l'environnement Python actif)
   - Build production : `npm run deploy:build`
   - Vérification déploiement : `npm run deploy:check`
 
@@ -22,7 +22,9 @@ alwaysApply: true
   - **Interface web (PRINCIPALE)** : `npm run dev` (démarre tout sur localhost:3000)
 
 - **Tests** :
-  - Commande standard : `pytest tests/` (tous les tests)
+  - Commande standard : `pytest tests/` ou `python -m pytest tests/` (tous les tests backend)
+  - Alternative : `.\scripts\run_tests.ps1` (script PowerShell Windows)
+  - Note : `npm test` peut échouer selon l'environnement Python utilisé par npm
   - Tests API : utiliser `TestClient` de FastAPI, pas de serveur réel
   - Mocks : `pytest-mock` pour services externes (LLM, fichiers GDD)
   - Configuration : `pytest.ini` définit les options (asyncio_mode, testpaths, etc.)
