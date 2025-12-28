@@ -93,16 +93,19 @@ class UnityDialogueGenerationService:
                     node.choices = node.choices[:max_choices]
         else:
             # Quand max_choices est None (libre), valider que le nœud a entre 2 et 8 choix
-            if node.choices:
+            # Note: Si node.choices est None, c'est un nœud de fin valide (pas de validation)
+            # Si node.choices est une liste (vide ou avec éléments), on valide
+            if node.choices is not None:
                 num_choices = len(node.choices)
                 if num_choices == 0:
                     logger.error(
-                        "max_choices est libre (None) mais le nœud a 0 choix. "
-                        "Quand max_choices est libre, le nœud doit avoir entre 2 et 8 choix."
+                        "max_choices est libre (None) mais le nœud a une liste vide de choix. "
+                        "Quand max_choices est libre, le nœud doit avoir entre 2 et 8 choix, "
+                        "ou None pour un nœud de fin."
                     )
                     raise ValueError(
                         "Quand 'Nombre max de choix' est vide (libre), le nœud doit avoir entre 2 et 8 choix, "
-                        f"mais le nœud généré a {num_choices} choix."
+                        "mais le nœud généré a une liste vide de choix."
                     )
                 elif num_choices == 1:
                     logger.error(
