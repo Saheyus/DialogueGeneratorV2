@@ -1,5 +1,5 @@
 /**
- * Résumé compact du contexte avec chips (Personnage A, B, Région, etc.).
+ * Résumé compact du contexte avec chips (PJ, PNJ, Région, etc.).
  */
 import { theme } from '../../theme'
 import type { SceneSelection } from '../../types/generation'
@@ -20,10 +20,10 @@ export function ContextSummaryChips({
   const chips: Array<{ label: string; value: string | null }> = []
 
   if (sceneSelection.characterA) {
-    chips.push({ label: 'Personnage A', value: sceneSelection.characterA })
+    chips.push({ label: 'PJ', value: sceneSelection.characterA })
   }
   if (sceneSelection.characterB) {
-    chips.push({ label: 'Personnage B', value: sceneSelection.characterB })
+    chips.push({ label: 'PNJ', value: sceneSelection.characterB })
   }
   if (sceneSelection.sceneRegion) {
     chips.push({ label: 'Région', value: sceneSelection.sceneRegion })

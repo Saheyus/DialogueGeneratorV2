@@ -1,8 +1,15 @@
+/// <reference types="node" />
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
-import path from 'path'
+import { fileURLToPath } from 'url'
+// @ts-ignore - Node.js built-in module, types available via @types/node
+import { dirname, resolve } from 'path'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 export default defineConfig({
+  // @ts-expect-error - Rollup version mismatch between vitest and vite, but works at runtime
   plugins: [react()],
   test: {
     environment: 'jsdom',
@@ -12,7 +19,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': resolve(__dirname, './src'),
     },
   },
 })

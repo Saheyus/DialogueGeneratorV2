@@ -102,7 +102,7 @@ class PromptEngine:
 
         Args:
             user_specific_goal (str): L'instruction spécifique de l'utilisateur pour la scène.
-            scene_protagonists (Optional[Dict[str, str]]): Dictionnaire identifiant le personnage A et B.
+            scene_protagonists (Optional[Dict[str, str]]): Dictionnaire identifiant le PJ et le PNJ.
             scene_location (Optional[Dict[str, str]]): Dictionnaire identifiant le lieu et le sous-lieu.
             context_summary (Optional[str]): Un résumé textuel du contexte général (autres personnages, objets, lore pertinent).
             generation_params (Optional[Dict[str, Any]]): Paramètres additionnels (ex: ton, style)
@@ -153,8 +153,8 @@ class PromptEngine:
             if scene_protagonists:
                 personnage_a = scene_protagonists.get("personnage_a", "Non spécifié")
                 personnage_b = scene_protagonists.get("personnage_b", "Non spécifié")
-                prompt_parts.append(f"Personnage A (Joueur) : {personnage_a}")
-                prompt_parts.append(f"Personnage B (PNJ) : {personnage_b}")
+                prompt_parts.append(f"PJ : {personnage_a}")
+                prompt_parts.append(f"PNJ : {personnage_b}")
             if scene_location:
                 lieu = scene_location.get("lieu", "Non spécifié")
                 sous_lieu = scene_location.get("sous_lieu")

@@ -109,3 +109,4 @@ class LLMPricingService:
         self._load_config()
         logger.info("Configuration des prix LLM rechargée")
 
+

@@ -43,8 +43,8 @@ export function useDialogueStructure(
     }
 
     const descriptions: Record<string, string> = {
-      PNJ: 'le personnage B parle directement',
-      PJ: 'le personnage A (joueur) fait un choix parmi plusieurs options',
+      PNJ: 'le PNJ parle directement',
+      PJ: 'le PJ fait un choix parmi plusieurs options',
       Stop: 'fin de l\'interaction',
     }
 

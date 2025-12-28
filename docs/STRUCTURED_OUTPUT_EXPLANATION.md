@@ -67,3 +67,4 @@ Le Structured Output garantit la **structure**, mais pas la **sémantique**. Les
 
 Ces instructions sont **complémentaires** au Structured Output, pas redondantes.
 
+

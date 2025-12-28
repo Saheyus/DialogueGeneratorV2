@@ -312,3 +312,4 @@ class FileLLMUsageRepository:
             "avg_duration_ms": avg_duration_ms
         }
 
+

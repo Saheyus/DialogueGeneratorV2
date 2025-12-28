@@ -17,8 +17,8 @@ const STRUCTURE_OPTIONS: SelectOption[] = [
 
 const HELP_TEXT = `Définissez l'ordre et le type d'éléments pour le dialogue généré :
 
-• PNJ : Le personnage B parle (dialogue direct)
-• PJ : Le personnage A fait un choix (choix multiples)
+• PNJ : Le PNJ parle (dialogue direct)
+• PJ : Le PJ fait un choix (choix multiples)
 • Stop : Fin de la séquence
 • (Vide) : Emplacement non utilisé
 

@@ -129,3 +129,4 @@ if __name__ == "__main__":
     logger.info("Script de synchronisation Notion - doit être exécuté depuis l'agent")
     logger.info("Utilisez les outils MCP Notion pour récupérer les données")
 
+

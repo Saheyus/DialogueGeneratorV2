@@ -76,3 +76,4 @@ def test_get_model_pricing_unknown(pricing_service):
     pricing = pricing_service.get_model_pricing("unknown-model")
     assert pricing is None
 
+

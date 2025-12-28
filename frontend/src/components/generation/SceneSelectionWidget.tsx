@@ -95,7 +95,7 @@ export const SceneSelectionWidget = memo(function SceneSelectionWidget() {
           <strong style={{ color: theme.text.primary, display: 'block', marginBottom: '0.5rem' }}>
             Aucun contexte sélectionné
           </strong>
-          Choisis Personnage A/B + région, ou charge une interaction existante à droite
+          Choisis PJ/PNJ + région, ou charge une interaction existante à droite
         </div>
       </div>
     )
@@ -132,7 +132,7 @@ export const SceneSelectionWidget = memo(function SceneSelectionWidget() {
           marginBottom: '1rem',
         }}
       >
-        <FormField label="Personnage A:" style={{ marginBottom: 0 }}>
+        <FormField label="PJ:" style={{ marginBottom: 0 }}>
           <Combobox
             options={characterOptions}
             value={selection.characterA}
@@ -148,7 +148,7 @@ export const SceneSelectionWidget = memo(function SceneSelectionWidget() {
         <button
           onClick={swapCharacters}
           disabled={isLoading || (!selection.characterA && !selection.characterB)}
-          title="Échanger Personnage A et Personnage B (Alt+S)"
+          title="Échanger PJ et PNJ (Alt+S)"
           style={{
             width: '32px',
             height: '32px',
@@ -175,7 +175,7 @@ export const SceneSelectionWidget = memo(function SceneSelectionWidget() {
           ⇄
         </button>
 
-        <FormField label="Personnage B:" style={{ marginBottom: 0 }}>
+        <FormField label="PNJ:" style={{ marginBottom: 0 }}>
           <Combobox
             options={characterOptions}
             value={selection.characterB}
