@@ -38,6 +38,9 @@ class Defaults:
     MAIN_SPLITTER_STRETCH_FACTOR_GENERATION_PANEL = 3
     MAX_TOKENS_MODEL = 4096
     INTERACTION_AUTOSAVE_INTERVAL_MS = 300000 # 5 minutes (nouvelle constante)
+    # Limites pour les tokens de contexte (utilisées par l'API et le frontend)
+    MAX_CONTEXT_TOKENS = 100000  # Maximum autorisé pour max_context_tokens
+    MIN_CONTEXT_TOKENS = 10000   # Minimum pour le slider frontend
 
 class ConfigFiles:
     pass  # Placeholder for future config file constants if needed 

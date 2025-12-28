@@ -33,6 +33,13 @@ export const UnityDialogueItem = memo(function UnityDialogueItem({
     })
   }
 
+  const formatFilename = (filename: string): string => {
+    // Enlever l'extension .json et remplacer les underscores par des espaces
+    const formatted = filename.replace(/\.json$/, '').replace(/_/g, ' ')
+    // Ajouter une majuscule au premier mot
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1)
+  }
+
   return (
     <div
       onClick={onClick}
@@ -56,10 +63,7 @@ export const UnityDialogueItem = memo(function UnityDialogueItem({
       }}
     >
       <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>
-        {dialogue.title || dialogue.filename}
-      </div>
-      <div style={{ fontSize: '0.85rem', color: theme.text.secondary, marginBottom: '0.25rem' }}>
-        <span style={{ fontFamily: 'monospace' }}>{dialogue.filename}</span>
+        {formatFilename(dialogue.filename)}
       </div>
       <div
         style={{

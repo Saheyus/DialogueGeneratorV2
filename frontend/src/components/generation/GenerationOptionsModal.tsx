@@ -6,6 +6,7 @@ import { useContextConfigStore } from '../../store/contextConfigStore'
 import { ContextFieldSelector } from './ContextFieldSelector'
 import { VocabularyGuidesTab } from './VocabularyGuidesTab'
 import { PromptsTab } from './PromptsTab'
+import { ErrorBoundary } from '../shared/ErrorBoundary'
 import { theme } from '../../theme'
 import * as configAPI from '../../api/config'
 import { getErrorMessage } from '../../types/errors'
@@ -272,7 +273,27 @@ export function GenerationOptionsModal({
           )}
 
           {activeTab === 'vocabulary' && (
-            <VocabularyGuidesTab />
+            <ErrorBoundary
+              fallback={
+                <div
+                  style={{
+                    padding: '2rem',
+                    color: theme.text.primary,
+                    backgroundColor: theme.background.secondary,
+                    borderRadius: '8px',
+                    border: `1px solid ${theme.border.primary}`,
+                  }}
+                >
+                  <h3 style={{ marginTop: 0 }}>Erreur lors du chargement</h3>
+                  <p>
+                    Une erreur s'est produite lors du chargement de l'onglet
+                    Vocabulaire & Guides. Veuillez réessayer.
+                  </p>
+                </div>
+              }
+            >
+              <VocabularyGuidesTab />
+            </ErrorBoundary>
           )}
 
           {activeTab === 'prompts' && (

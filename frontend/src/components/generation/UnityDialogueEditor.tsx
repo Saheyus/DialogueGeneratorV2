@@ -3,7 +3,7 @@
  * Permet d'éditer speaker, line, choices[].text, choices[].targetNode.
  * Préserve tous les autres champs en lecture seule.
  */
-import { memo, useState, useCallback, useMemo } from 'react'
+import { memo, useState, useCallback, useMemo, type ReactNode } from 'react'
 import * as dialoguesAPI from '../../api/dialogues'
 import { getErrorMessage } from '../../types/errors'
 import { theme } from '../../theme'
@@ -17,9 +17,11 @@ import type {
 export interface UnityDialogueEditorProps {
   json_content: string
   title?: string
+  subtitle?: string
   filename?: string
   onSave?: (filename: string) => void
   onCancel?: () => void
+  extraActions?: ReactNode
 }
 
 interface ValidationError {
@@ -31,9 +33,11 @@ interface ValidationError {
 export const UnityDialogueEditor = memo(function UnityDialogueEditor({
   json_content,
   title,
+  subtitle,
   filename,
   onSave,
   onCancel,
+  extraActions,
 }: UnityDialogueEditorProps) {
   const toast = useToast()
   const [isSaving, setIsSaving] = useState(false)
@@ -281,29 +285,52 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
   }
 
   return (
-    <div style={{ padding: '1rem', height: '100%', overflowY: 'auto' }}>
-      {/* En-tête avec actions */}
+    <div style={{ height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+      {/* En-tête sticky */}
       <div
         style={{
-          marginBottom: '1rem',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          paddingBottom: '1rem',
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+          padding: '1rem',
           borderBottom: `1px solid ${theme.border.primary}`,
+          backgroundColor: theme.background.panelHeader,
+          display: 'flex',
+          gap: '0.75rem',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
         }}
       >
-        <h3 style={{ margin: 0, color: theme.text.primary }}>
-          {title || 'Éditeur de Dialogue Unity'}
-        </h3>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              margin: 0,
+              color: theme.text.primary,
+              fontSize: '1.1rem',
+              fontWeight: 700,
+              lineHeight: 1.2,
+              wordBreak: 'break-word',
+            }}
+          >
+            {title || 'Éditeur de Dialogue Unity'}
+          </div>
+          {subtitle && (
+            <div style={{ fontSize: '0.85rem', color: theme.text.secondary, marginTop: '0.25rem' }}>
+              {subtitle}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {extraActions}
           {onCancel && (
             <button
               onClick={onCancel}
               style={{
                 padding: '0.5rem 1rem',
                 border: `1px solid ${theme.border.primary}`,
-                borderRadius: '4px',
+                borderRadius: '6px',
                 backgroundColor: theme.button.default.background,
                 color: theme.button.default.color,
                 cursor: 'pointer',
@@ -318,11 +345,12 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
             style={{
               padding: '0.5rem 1rem',
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: '6px',
               backgroundColor: theme.button.primary.background,
               color: theme.button.primary.color,
               cursor: isValid && !isSaving ? 'pointer' : 'not-allowed',
               opacity: isValid && !isSaving ? 1 : 0.6,
+              fontWeight: 700,
             }}
           >
             {isSaving ? 'Sauvegarde...' : 'Sauvegarder'}
@@ -330,50 +358,52 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
         </div>
       </div>
 
-      {/* Erreurs de validation */}
-      {!isValid && (
-        <div
-          style={{
-            padding: '0.75rem',
-            marginBottom: '1rem',
-            backgroundColor: theme.state.error.background,
-            color: theme.state.error.color,
-            borderRadius: '4px',
-            border: `1px solid ${theme.border.primary}`,
-          }}
-        >
-          <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>Erreurs de validation:</div>
-          <ul style={{ margin: 0, paddingLeft: '1.5rem' }}>
-            {validationErrors.map((err, i) => (
-              <li key={i} style={{ marginBottom: '0.25rem' }}>
-                {err.nodeId && `[${err.nodeId}] `}
-                {err.choiceIndex !== undefined && `Choix ${err.choiceIndex + 1}: `}
-                {err.message}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* Contenu (paddings + spacing) */}
+      <div style={{ padding: '1rem' }}>
+        {/* Erreurs de validation */}
+        {!isValid && (
+          <div
+            style={{
+              padding: '0.75rem',
+              marginBottom: '1rem',
+              backgroundColor: theme.state.error.background,
+              color: theme.state.error.color,
+              borderRadius: '6px',
+              border: `1px solid ${theme.border.primary}`,
+            }}
+          >
+            <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>Erreurs de validation:</div>
+            <ul style={{ margin: 0, paddingLeft: '1.5rem' }}>
+              {validationErrors.map((err, i) => (
+                <li key={i} style={{ marginBottom: '0.25rem' }}>
+                  {err.nodeId && `[${err.nodeId}] `}
+                  {err.choiceIndex !== undefined && `Choix ${err.choiceIndex + 1}: `}
+                  {err.message}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
-      {/* Erreur générale */}
-      {error && (
-        <div
-          style={{
-            padding: '0.75rem',
-            marginBottom: '1rem',
-            backgroundColor: theme.state.error.background,
-            color: theme.state.error.color,
-            borderRadius: '4px',
-            border: `1px solid ${theme.border.primary}`,
-          }}
-        >
-          {error}
-        </div>
-      )}
+        {/* Erreur générale */}
+        {error && (
+          <div
+            style={{
+              padding: '0.75rem',
+              marginBottom: '1rem',
+              backgroundColor: theme.state.error.background,
+              color: theme.state.error.color,
+              borderRadius: '6px',
+              border: `1px solid ${theme.border.primary}`,
+            }}
+          >
+            {error}
+          </div>
+        )}
 
-      {/* Liste des nœuds (END est filtré car ce n'est pas un vrai nœud éditable) */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        {displayableNodes.map((node) => {
+        {/* Liste des nœuds (END est filtré car ce n'est pas un vrai nœud éditable) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {displayableNodes.map((node) => {
           const nodeErrors = getNodeErrors(node.id)
           const isAdvancedExpanded = expandedAdvanced.has(node.id)
 
@@ -382,7 +412,7 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
               key={node.id}
               style={{
                 border: `1px solid ${theme.border.primary}`,
-                borderRadius: '4px',
+                borderRadius: '6px',
                 padding: '1rem',
                 backgroundColor: theme.background.panel,
               }}
@@ -409,7 +439,7 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
                         fontSize: '0.9rem',
                         backgroundColor: theme.background.secondary,
                         padding: '0.25rem 0.5rem',
-                        borderRadius: '4px',
+                        borderRadius: '6px',
                         color: theme.text.primary,
                       }}
                     >
@@ -515,7 +545,7 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
                           style={{
                             padding: '0.75rem',
                             border: `1px solid ${theme.border.primary}`,
-                            borderRadius: '4px',
+                            borderRadius: '6px',
                             backgroundColor: theme.background.secondary,
                           }}
                         >
@@ -548,7 +578,7 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
                                     : theme.input.border
                                 }`,
                                 color: theme.input.color,
-                                borderRadius: '4px',
+                                borderRadius: '6px',
                                 fontFamily: 'inherit',
                                 resize: 'vertical',
                               }}
@@ -587,7 +617,7 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
                                       : theme.input.border
                                   }`,
                                   color: theme.input.color,
-                                  borderRadius: '4px',
+                                  borderRadius: '6px',
                                   fontFamily: 'monospace',
                                 }}
                               />
@@ -602,7 +632,7 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
                               style={{
                                 padding: '0.5rem',
                                 border: `1px solid ${theme.border.primary}`,
-                                borderRadius: '4px',
+                                borderRadius: '6px',
                                 backgroundColor: theme.button.default.background,
                                 color: theme.button.default.color,
                                 cursor: 'pointer',
@@ -641,7 +671,7 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
                     style={{
                       padding: '0.5rem 1rem',
                       border: `1px solid ${theme.border.primary}`,
-                      borderRadius: '4px',
+                      borderRadius: '6px',
                       backgroundColor: theme.button.default.background,
                       color: theme.button.default.color,
                       cursor: 'pointer',
@@ -661,7 +691,7 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
                     width: '100%',
                     padding: '0.5rem',
                     border: `1px solid ${theme.border.primary}`,
-                    borderRadius: '4px',
+                    borderRadius: '6px',
                     backgroundColor: theme.button.default.background,
                     color: theme.button.default.color,
                     cursor: 'pointer',
@@ -678,7 +708,7 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
                       marginTop: '0.5rem',
                       padding: '1rem',
                       backgroundColor: theme.background.secondary,
-                      borderRadius: '4px',
+                      borderRadius: '6px',
                       border: `1px solid ${theme.border.primary}`,
                     }}
                   >
@@ -709,6 +739,7 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
             </div>
           )
         })}
+        </div>
       </div>
     </div>
   )

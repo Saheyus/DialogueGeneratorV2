@@ -34,29 +34,42 @@ export function VocabularyGuidesTab() {
   } = useVocabularyStore()
 
   const [isLoading, setIsLoading] = useState(false)
+  const [hasInitialized, setHasInitialized] = useState(false)
 
-  // Charger les données au montage
+  // Charger les données au montage (une seule fois)
   useEffect(() => {
+    if (hasInitialized) return
+    
     const loadData = async () => {
       setIsLoading(true)
       try {
         await Promise.all([
-          loadVocabulary(),
-          loadNarrativeGuides(),
-          loadStats(),
+          loadVocabulary().catch((err) => {
+            console.error('Erreur lors du chargement du vocabulaire:', err)
+          }),
+          loadNarrativeGuides().catch((err) => {
+            console.error('Erreur lors du chargement des guides:', err)
+          }),
+          loadStats().catch((err) => {
+            console.error('Erreur lors du chargement des stats:', err)
+          }),
         ])
       } catch (err) {
         console.error('Erreur lors du chargement initial:', err)
       } finally {
         setIsLoading(false)
+        setHasInitialized(true)
       }
     }
     loadData()
-  }, [loadVocabulary, loadNarrativeGuides, loadStats])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasInitialized])
 
   // Calculer le nombre de termes selon le niveau sélectionné
   const getFilteredCount = (level: ImportanceLevel | null): number => {
-    if (!level || !vocabularyStats) return totalTerms
+    if (!level || !vocabularyStats || !vocabularyStats.by_importance) {
+      return totalTerms || 0
+    }
 
     const order: Record<ImportanceLevel, number> = {
       Majeur: 1,
@@ -68,12 +81,23 @@ export function VocabularyGuidesTab() {
     }
 
     const levelOrder = order[level]
+    if (!levelOrder) return totalTerms || 0
+
+    // Itérer sur les statistiques disponibles plutôt que sur l'ordre
+    // pour s'assurer que les clés correspondent exactement
     let count = 0
-    for (const [importance, num] of Object.entries(order)) {
-      if (num <= levelOrder) {
-        count += vocabularyStats.by_importance[importance] || 0
+    const stats = vocabularyStats.by_importance || {}
+    
+    // Parcourir toutes les importances dans l'ordre
+    const allLevels: ImportanceLevel[] = ['Majeur', 'Important', 'Modéré', 'Secondaire', 'Mineur', 'Anecdotique']
+    for (const importance of allLevels) {
+      const importanceOrder = order[importance]
+      if (importanceOrder && importanceOrder <= levelOrder) {
+        // Utiliser la clé exacte des statistiques
+        count += stats[importance] || 0
       }
     }
+    
     return count
   }
 
@@ -83,6 +107,59 @@ export function VocabularyGuidesTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {/* Section de synchronisation globale */}
+      <div
+        style={{
+          padding: '1rem',
+          border: `1px solid ${theme.border.primary}`,
+          borderRadius: '8px',
+          backgroundColor: theme.background.secondary,
+        }}
+      >
+        <h3 style={{ margin: '0 0 0.75rem 0', color: theme.text.primary }}>
+          Synchronisation Notion
+        </h3>
+        <p
+          style={{
+            margin: '0 0 1rem 0',
+            color: theme.text.secondary,
+            fontSize: '0.9rem',
+          }}
+        >
+          Synchronise le vocabulaire Alteir et les guides narratifs depuis Notion.
+        </p>
+        <button
+          onClick={handleSync}
+          disabled={isSyncing || isLoading}
+          style={{
+            padding: '0.5rem 1rem',
+            border: 'none',
+            borderRadius: '4px',
+            backgroundColor: isSyncing
+              ? theme.button.default.background
+              : theme.button.primary.background,
+            color: theme.button.primary.color,
+            cursor: isSyncing ? 'not-allowed' : 'pointer',
+            opacity: isSyncing ? 0.6 : 1,
+            fontWeight: 'bold',
+          }}
+        >
+          {isSyncing ? 'Synchronisation...' : 'Synchroniser depuis Notion'}
+        </button>
+        {lastSyncTime && (
+          <p
+            style={{
+              margin: '0.5rem 0 0 0',
+              color: theme.text.secondary,
+              fontSize: '0.85rem',
+            }}
+          >
+            Dernière synchronisation :{' '}
+            {new Date(lastSyncTime).toLocaleString('fr-FR')}
+          </p>
+        )}
+      </div>
+
       {/* Vocabulaire Alteir */}
       <div
         style={{
@@ -148,7 +225,7 @@ export function VocabularyGuidesTab() {
         </div>
 
         {/* Statistiques */}
-        {vocabularyStats && (
+        {vocabularyStats && vocabularyStats.by_importance && (
           <div
             style={{
               marginTop: '1rem',
@@ -162,50 +239,17 @@ export function VocabularyGuidesTab() {
               Statistiques :
             </strong>
             <ul style={{ margin: '0.5rem 0', paddingLeft: '1.5rem' }}>
-              <li>Total : {totalTerms} termes</li>
+              <li>Total : {totalTerms || 0} termes</li>
               {Object.entries(vocabularyStats.by_importance).map(
                 ([importance, count]) => (
                   <li key={importance}>
-                    {importance} : {count} terme(s)
+                    {importance} : {count || 0} terme(s)
                   </li>
                 )
               )}
             </ul>
           </div>
         )}
-
-        {/* Bouton de synchronisation */}
-        <div style={{ marginTop: '1rem' }}>
-          <button
-            onClick={handleSync}
-            disabled={isSyncing || isLoading}
-            style={{
-              padding: '0.5rem 1rem',
-              border: 'none',
-              borderRadius: '4px',
-              backgroundColor: isSyncing
-                ? theme.button.default.background
-                : theme.button.primary.background,
-              color: theme.button.primary.color,
-              cursor: isSyncing ? 'not-allowed' : 'pointer',
-              opacity: isSyncing ? 0.6 : 1,
-            }}
-          >
-            {isSyncing ? 'Synchronisation...' : 'Synchroniser depuis Notion'}
-          </button>
-          {lastSyncTime && (
-            <p
-              style={{
-                margin: '0.5rem 0 0 0',
-                color: theme.text.secondary,
-                fontSize: '0.85rem',
-              }}
-            >
-              Dernière synchronisation :{' '}
-              {new Date(lastSyncTime).toLocaleString('fr-FR')}
-            </p>
-          )}
-        </div>
       </div>
 
       {/* Guides narratifs */}
@@ -283,8 +327,8 @@ export function VocabularyGuidesTab() {
         <div
           style={{
             padding: '0.75rem',
-            backgroundColor: theme.error.background || '#fee',
-            color: theme.error.color || '#c00',
+            backgroundColor: theme.state.error.background,
+            color: theme.state.error.color,
             borderRadius: '4px',
             display: 'flex',
             justifyContent: 'space-between',
@@ -297,7 +341,7 @@ export function VocabularyGuidesTab() {
             style={{
               background: 'none',
               border: 'none',
-              color: theme.error.color || '#c00',
+              color: theme.state.error.color,
               cursor: 'pointer',
               fontSize: '1.2rem',
               padding: '0 0.5rem',

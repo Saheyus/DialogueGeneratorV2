@@ -13,17 +13,11 @@ export function useSystemPrompt() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Charger le prompt sauvegardé depuis localStorage au montage
+  // Charger le prompt par défaut et la sauvegarde au montage
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(SAVED_PROMPT_KEY)
-      if (saved) {
-        setSavedPrompt(saved)
-      }
-    } catch (err) {
-      console.warn('Impossible de charger le prompt sauvegardé depuis localStorage:', err)
-    }
-  }, [])
+    loadDefaultPrompt()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Charger une seule fois au montage
 
   const loadDefaultPrompt = useCallback(async () => {
     setIsLoading(true)
@@ -65,7 +59,7 @@ export function useSystemPrompt() {
     }
   }, [])
 
-  const restore = useCallback(() => {
+  const restore = useCallback(async (): Promise<string> => {
     // Lire le prompt sauvegardé depuis localStorage
     let saved: string | null = null
     try {
@@ -78,8 +72,27 @@ export function useSystemPrompt() {
     if (saved) {
       setSavedPrompt(saved)
       setSystemPrompt(saved)
-    } else if (defaultPrompt !== null) {
-      setSystemPrompt(defaultPrompt)
+      return saved
+    } else {
+      // Si defaultPrompt n'est pas encore chargé, le charger depuis l'API
+      if (defaultPrompt === null) {
+        setIsLoading(true)
+        try {
+          const response = await configAPI.getDefaultSystemPrompt()
+          setDefaultPrompt(response.prompt)
+          setSystemPrompt(response.prompt)
+          return response.prompt
+        } catch (err) {
+          setError('Erreur lors du chargement du prompt par défaut')
+          console.error('Erreur lors du chargement du prompt par défaut:', err)
+          return ''
+        } finally {
+          setIsLoading(false)
+        }
+      } else {
+        setSystemPrompt(defaultPrompt)
+        return defaultPrompt
+      }
     }
   }, [defaultPrompt])
 

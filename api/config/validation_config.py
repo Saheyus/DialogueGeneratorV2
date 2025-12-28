@@ -1,11 +1,24 @@
 """Configuration pour la validation des exports Unity."""
 import os
 import logging
+import sys
+from typing import Tuple
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings.sources import PydanticBaseSettingsSource
 
 from api.config.security_config import SecurityConfig
 
 logger = logging.getLogger(__name__)
+
+def _is_running_under_pytest() -> bool:
+    """Indique si le code s'exécute sous pytest.
+
+    Returns:
+        True si pytest est en cours d'exécution, False sinon.
+    """
+    # Ne pas se baser sur os.environ: certains tests le vident via patch.dict(..., clear=True).
+    return "pytest" in sys.modules
 
 
 class ValidationConfig(BaseSettings):
@@ -20,6 +33,26 @@ class ValidationConfig(BaseSettings):
         case_sensitive=False,
         extra="ignore"
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type["ValidationConfig"],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        """Personnalise les sources de configuration.
+
+        En test (pytest), on ignore le fichier `.env` afin d'éviter des tests non déterministes.
+
+        Returns:
+            Un tuple de sources à utiliser, dans l'ordre de priorité.
+        """
+        if _is_running_under_pytest():
+            return (init_settings, env_settings, file_secret_settings)
+        return (init_settings, env_settings, dotenv_settings, file_secret_settings)
     
     # Unity Schema Validation
     enable_unity_schema_validation: bool = False

@@ -1,7 +1,7 @@
 /**
  * Éditeur pour les instructions de scène, le profil d'auteur et le system prompt.
  */
-import React, { memo, useCallback, useState, useEffect } from 'react'
+import React, { memo, useCallback, useState, useEffect, useRef } from 'react'
 import { Tabs, type Tab } from '../shared/Tabs'
 import { FormField } from '../shared/FormField'
 import { useSystemPrompt } from '../../hooks/useSystemPrompt'
@@ -42,11 +42,24 @@ export const SystemPromptEditor = memo(function SystemPromptEditor({
   } = useAuthorProfile()
 
   // Synchroniser le state du hook avec le prop (si le prop change depuis l'extérieur)
+  // Mais ne pas écraser au chargement initial si le state local a déjà une valeur depuis localStorage
+  const hasInitialized = useRef(false)
   useEffect(() => {
+    // Au premier rendu, si le state local a une valeur mais le prop est vide, 
+    // synchroniser le prop avec le state local (le hook local a chargé depuis localStorage)
+    if (!hasInitialized.current) {
+      hasInitialized.current = true
+      if (authorProfileState && !authorProfile) {
+        onAuthorProfileChange(authorProfileState)
+        return
+      }
+    }
+    // Après l'initialisation, synchroniser le state local avec le prop
     if (authorProfile !== authorProfileState) {
       updateProfile(authorProfile)
     }
-  }, [authorProfile]) // Seulement quand le prop change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authorProfile]) // Seulement quand le prop change (onAuthorProfileChange et updateProfile sont stables)
 
   const [sceneTemplates, setSceneTemplates] = useState<configAPI.SceneInstructionTemplate[]>([])
   const [authorTemplates, setAuthorTemplates] = useState<configAPI.AuthorProfileTemplate[]>([])
@@ -90,10 +103,12 @@ export const SystemPromptEditor = memo(function SystemPromptEditor({
       setShowTemplatePreview(template.id)
     } else {
       setSelectedAuthorTemplateId(template.id)
+      // Sauvegarder explicitement dans localStorage et mettre à jour les deux hooks
+      saveProfile(template.profile)
       updateProfile(template.profile)
       onAuthorProfileChange(template.profile)
     }
-  }, [selectedAuthorTemplateId, updateProfile, onAuthorProfileChange])
+  }, [selectedAuthorTemplateId, saveProfile, updateProfile, onAuthorProfileChange])
 
   const handleSystemPromptChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -128,9 +143,14 @@ export const SystemPromptEditor = memo(function SystemPromptEditor({
     }
   }, [systemPromptOverride, systemPrompt, savePrompt, onSystemPromptChange])
 
-  const handleRestoreSystemPrompt = useCallback(() => {
-    restoreSystemPrompt()
-    onSystemPromptChange(null)
+  const handleRestoreSystemPrompt = useCallback(async () => {
+    const restoredPrompt = await restoreSystemPrompt()
+    // Utiliser la valeur restaurée directement
+    if (restoredPrompt) {
+      onSystemPromptChange(restoredPrompt)
+    } else {
+      onSystemPromptChange(null)
+    }
   }, [restoreSystemPrompt, onSystemPromptChange])
 
   const handleSaveAuthorProfile = useCallback(() => {

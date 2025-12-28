@@ -30,13 +30,20 @@ export function UnityDialogueDetails({
     loadDialogue()
   }, [filename])
 
+  const formatFilename = (filename: string): string => {
+    // Enlever l'extension .json et remplacer les underscores par des espaces
+    const formatted = filename.replace(/\.json$/, '').replace(/_/g, ' ')
+    // Ajouter une majuscule au premier mot
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1)
+  }
+
   const loadDialogue = async () => {
     setIsLoading(true)
     setError(null)
     try {
       const response = await unityDialoguesAPI.getUnityDialogue(filename)
       setJsonContent(response.json_content)
-      setTitle(response.title || filename.replace('.json', ''))
+      setTitle(formatFilename(filename))
     } catch (err) {
       setError(getErrorMessage(err))
     } finally {
@@ -114,83 +121,52 @@ export function UnityDialogueDetails({
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* En-tête avec actions */}
-      <div
-        style={{
-          padding: '1rem',
-          borderBottom: `1px solid ${theme.border.primary}`,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          backgroundColor: theme.background.panelHeader,
-        }}
-      >
-        <div>
-          <h3 style={{ margin: 0, color: theme.text.primary }}>{title}</h3>
-          <div style={{ fontSize: '0.85rem', color: theme.text.secondary, marginTop: '0.25rem' }}>
-            {filename}
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {onGenerateContinuation && (
+    <div style={{ height: '100%', overflow: 'hidden' }}>
+      <UnityDialogueEditor
+        json_content={jsonContent}
+        title={title}
+        subtitle={filename}
+        filename={filename.replace('.json', '')}
+        onSave={handleSave}
+        onCancel={onClose}
+        extraActions={
+          <>
+            {onGenerateContinuation && (
+              <button
+                onClick={() => onGenerateContinuation(jsonContent, title)}
+                style={{
+                  padding: '0.5rem 1rem',
+                  border: `1px solid ${theme.border.primary}`,
+                  borderRadius: '6px',
+                  backgroundColor: theme.button.primary.background,
+                  color: theme.button.primary.color,
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                }}
+                title="Générer un dialogue qui suit celui-ci"
+              >
+                Générer la suite
+              </button>
+            )}
             <button
-              onClick={() => onGenerateContinuation(jsonContent, title)}
+              onClick={handleDelete}
+              disabled={isDeleting}
               style={{
                 padding: '0.5rem 1rem',
                 border: `1px solid ${theme.border.primary}`,
-                borderRadius: '4px',
-                backgroundColor: theme.button.primary.background,
-                color: theme.button.primary.color,
-                cursor: 'pointer',
-                fontWeight: 'bold',
+                borderRadius: '6px',
+                backgroundColor: '#dc3545',
+                color: '#ffffff',
+                cursor: isDeleting ? 'not-allowed' : 'pointer',
+                opacity: isDeleting ? 0.6 : 1,
+                fontWeight: 700,
               }}
-              title="Générer un dialogue qui suit celui-ci"
             >
-              Générer la suite
+              {isDeleting ? 'Suppression...' : 'Supprimer'}
             </button>
-          )}
-          <button
-            onClick={handleDelete}
-            disabled={isDeleting}
-            style={{
-              padding: '0.5rem 1rem',
-              border: `1px solid ${theme.border.primary}`,
-              borderRadius: '4px',
-              backgroundColor: '#dc3545',
-              color: '#ffffff',
-              cursor: isDeleting ? 'not-allowed' : 'pointer',
-              opacity: isDeleting ? 0.6 : 1,
-            }}
-          >
-            {isDeleting ? 'Suppression...' : 'Supprimer'}
-          </button>
-          <button
-            onClick={onClose}
-            style={{
-              padding: '0.5rem 1rem',
-              border: `1px solid ${theme.border.primary}`,
-              borderRadius: '4px',
-              backgroundColor: theme.button.default.background,
-              color: theme.button.default.color,
-              cursor: 'pointer',
-            }}
-          >
-            Fermer
-          </button>
-        </div>
-      </div>
-
-      {/* Éditeur */}
-      <div style={{ flex: 1, overflow: 'hidden' }}>
-        <UnityDialogueEditor
-          json_content={jsonContent}
-          title={title}
-          filename={filename.replace('.json', '')}
-          onSave={handleSave}
-          onCancel={onClose}
-        />
-      </div>
+          </>
+        }
+      />
     </div>
   )
 }

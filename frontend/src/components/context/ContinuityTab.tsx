@@ -21,6 +21,13 @@ export const ContinuityTab = memo(function ContinuityTab({
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const formatFilename = (filename: string): string => {
+    // Enlever l'extension .json et remplacer les underscores par des espaces
+    const formatted = filename.replace(/\.json$/, '').replace(/_/g, ' ')
+    // Ajouter une majuscule au premier mot
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1)
+  }
+
   const loadDialogues = useCallback(async () => {
     setIsLoading(true)
     setError(null)
@@ -160,10 +167,7 @@ export const ContinuityTab = memo(function ContinuityTab({
                   }
                 }}
               >
-                {dialogue.title || dialogue.filename}
-                <div style={{ fontSize: '0.85rem', color: theme.text.secondary, marginTop: '0.25rem' }}>
-                  {dialogue.filename}
-                </div>
+                {formatFilename(dialogue.filename)}
               </div>
             ))
           )}
@@ -185,11 +189,8 @@ export const ContinuityTab = memo(function ContinuityTab({
               }}
             >
               <strong style={{ color: theme.text.primary }}>
-                {dialogues.find((d) => d.filename === selectedFilename)?.title || selectedFilename}
+                {selectedFilename ? formatFilename(selectedFilename) : ''}
               </strong>
-              <div style={{ fontSize: '0.85rem', color: theme.text.secondary, marginTop: '0.25rem' }}>
-                {selectedFilename}
-              </div>
             </div>
           </div>
 

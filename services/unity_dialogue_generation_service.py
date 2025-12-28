@@ -91,6 +91,34 @@ class UnityDialogueGenerationService:
                         f"Troncature à {max_choices} choix."
                     )
                     node.choices = node.choices[:max_choices]
+        else:
+            # Quand max_choices est None (libre), valider que le nœud a entre 2 et 8 choix
+            if node.choices:
+                num_choices = len(node.choices)
+                if num_choices == 0:
+                    logger.error(
+                        "max_choices est libre (None) mais le nœud a 0 choix. "
+                        "Quand max_choices est libre, le nœud doit avoir entre 2 et 8 choix."
+                    )
+                    raise ValueError(
+                        "Quand 'Nombre max de choix' est vide (libre), le nœud doit avoir entre 2 et 8 choix, "
+                        f"mais le nœud généré a {num_choices} choix."
+                    )
+                elif num_choices == 1:
+                    logger.error(
+                        "max_choices est libre (None) mais le nœud a seulement 1 choix. "
+                        "Quand max_choices est libre, le nœud doit avoir entre 2 et 8 choix."
+                    )
+                    raise ValueError(
+                        "Quand 'Nombre max de choix' est vide (libre), le nœud doit avoir entre 2 et 8 choix, "
+                        f"mais le nœud généré a seulement {num_choices} choix."
+                    )
+                elif num_choices > 8:
+                    logger.warning(
+                        f"max_choices est libre (None) mais le nœud a {num_choices} choix (> 8). "
+                        "Troncature à 8 choix."
+                    )
+                    node.choices = node.choices[:8]
         
         logger.info("Nœud généré avec succès")
         return result

@@ -128,7 +128,7 @@ export const SceneSelectionWidget = memo(function SceneSelectionWidget() {
           display: 'grid',
           gridTemplateColumns: '1fr auto 1fr',
           gap: '0.5rem',
-          alignItems: 'end',
+          alignItems: 'center',
           marginBottom: '1rem',
         }}
       >
@@ -169,7 +169,7 @@ export const SceneSelectionWidget = memo(function SceneSelectionWidget() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            marginBottom: '1.5rem',
+            alignSelf: 'center',
           }}
         >
           ⇄

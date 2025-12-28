@@ -1,7 +1,7 @@
 /**
  * Composant Dashboard avec layout 3 panneaux redimensionnables.
  */
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { ContextSelector } from '../context/ContextSelector'
 import { GenerationPanel } from '../generation/GenerationPanel'
 import { GenerationOptionsModal } from '../generation/GenerationOptionsModal'
@@ -11,7 +11,7 @@ import { ContextDetail } from '../context/ContextDetail'
 import { UsageStatsModal } from '../usage/UsageStatsModal'
 import { ResizablePanels } from '../shared/ResizablePanels'
 import { Tabs, type Tab } from '../shared/Tabs'
-import { UnityDialogueList } from '../unityDialogues/UnityDialogueList'
+import { UnityDialogueList, type UnityDialogueListRef } from '../unityDialogues/UnityDialogueList'
 import { UnityDialogueDetails } from '../unityDialogues/UnityDialogueDetails'
 import { useGenerationStore } from '../../store/generationStore'
 import { useGenerationActionsStore } from '../../store/generationActionsStore'
@@ -27,6 +27,7 @@ export function Dashboard() {
   const [rightPanelTab, setRightPanelTab] = useState<'prompt' | 'dialogue' | 'details'>('prompt')
   const [centerPanelTab, setCenterPanelTab] = useState<'generation' | 'edition'>('generation')
   const [selectedDialogue, setSelectedDialogue] = useState<UnityDialogueMetadata | null>(null)
+  const dialogueListRef = useRef<UnityDialogueListRef>(null)
   const { estimatedPrompt, estimatedTokens, isEstimating, unityDialogueResponse } = useGenerationStore()
   const { actions } = useGenerationActionsStore()
   
@@ -56,18 +57,16 @@ export function Dashboard() {
     // lors des changements manuels d'onglet
   }, [unityDialogueResponse])
 
-  const rightPanelTabs: Tab[] = [
+  const rightPanelTabs: Tab[] = useMemo(() => [
     {
       id: 'prompt',
       label: 'Prompt Estimé',
       content: (
-        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <EstimatedPromptPanel
-            estimatedPrompt={estimatedPrompt}
-            isEstimating={isEstimating}
-            estimatedTokens={estimatedTokens}
-          />
-        </div>
+        <EstimatedPromptPanel
+          estimatedPrompt={estimatedPrompt}
+          isEstimating={isEstimating}
+          estimatedTokens={estimatedTokens}
+        />
       ),
     },
     {
@@ -79,6 +78,10 @@ export function Dashboard() {
             <UnityDialogueEditor
               json_content={unityDialogueResponse.json_content}
               title={unityDialogueResponse.title}
+              onSave={() => {
+                // Rafraîchir la liste des dialogues après sauvegarde
+                dialogueListRef.current?.refresh()
+              }}
             />
           ) : (
             <div style={{ 
@@ -119,7 +122,7 @@ export function Dashboard() {
         </div>
       ),
     },
-  ]
+  ], [unityDialogueResponse, estimatedPrompt, isEstimating, estimatedTokens, selectedContextItem])
 
   return (
     <ResizablePanels
@@ -181,13 +184,16 @@ export function Dashboard() {
                 <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
                   <div
                     style={{
-                      width: '400px',
+                      // Panneau gauche (recherche/liste) volontairement compact pour donner de la place à l'édition
+                      width: 'clamp(260px, 22vw, 340px)',
+                      minWidth: '240px',
                       borderRight: `1px solid ${theme.border.primary}`,
                       overflow: 'hidden',
                       backgroundColor: theme.background.panel,
                     }}
                   >
                     <UnityDialogueList
+                      ref={dialogueListRef}
                       onSelectDialogue={setSelectedDialogue}
                       selectedFilename={selectedDialogue?.filename || null}
                     />
@@ -197,7 +203,11 @@ export function Dashboard() {
                       <UnityDialogueDetails
                         filename={selectedDialogue.filename}
                         onClose={() => setSelectedDialogue(null)}
-                        onDeleted={() => setSelectedDialogue(null)}
+                        onDeleted={() => {
+                          setSelectedDialogue(null)
+                          // Rafraîchir la liste après suppression
+                          dialogueListRef.current?.refresh()
+                        }}
                         onGenerateContinuation={(dialogueJson, dialogueTitle) => {
                           // Basculer vers l'onglet Génération
                           setCenterPanelTab('generation')

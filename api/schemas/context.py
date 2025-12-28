@@ -2,6 +2,15 @@
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from api.schemas.dialogue import ContextSelection
+import sys
+from pathlib import Path
+
+# Ajouter le répertoire racine au path pour importer constants
+_root_dir = Path(__file__).parent.parent.parent
+if str(_root_dir) not in sys.path:
+    sys.path.insert(0, str(_root_dir))
+
+from constants import Defaults
 
 
 class CharacterResponse(BaseModel):
@@ -199,7 +208,7 @@ class BuildContextRequest(BaseModel):
     """
     context_selections: ContextSelection = Field(..., description="Sélections de contexte GDD")
     user_instructions: str = Field(default="", description="Instructions utilisateur")
-    max_tokens: int = Field(default=1500, ge=100, le=50000, description="Nombre maximum de tokens")
+    max_tokens: int = Field(default=1500, ge=100, le=Defaults.MAX_CONTEXT_TOKENS, description="Nombre maximum de tokens")
     include_dialogue_type: bool = Field(default=False, description="Inclure le type de dialogue")
 
 

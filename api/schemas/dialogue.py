@@ -1,6 +1,15 @@
 """Schémas Pydantic pour la génération de dialogues."""
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
+import sys
+from pathlib import Path
+
+# Ajouter le répertoire racine au path pour importer constants
+_root_dir = Path(__file__).parent.parent.parent
+if str(_root_dir) not in sys.path:
+    sys.path.insert(0, str(_root_dir))
+
+from constants import Defaults
 
 
 class ContextSelection(BaseModel):
@@ -59,7 +68,7 @@ class GenerateDialogueVariantsRequest(BaseModel):
     k_variants: int = Field(default=1, ge=1, le=10, description="Nombre de variantes à générer")
     user_instructions: str = Field(..., min_length=1, description="Instructions spécifiques pour la scène")
     context_selections: ContextSelection = Field(..., description="Sélections de contexte GDD")
-    max_context_tokens: int = Field(default=1500, ge=100, le=50000, description="Nombre maximum de tokens pour le contexte")
+    max_context_tokens: int = Field(default=1500, ge=100, le=Defaults.MAX_CONTEXT_TOKENS, description="Nombre maximum de tokens pour le contexte")
     structured_output: bool = Field(default=False, description="Générer en format structuré")
     system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
     llm_model_identifier: str = Field(default="gpt-4o-mini", description="Identifiant du modèle LLM")
@@ -112,7 +121,7 @@ class EstimateTokensRequest(BaseModel):
     """
     context_selections: ContextSelection = Field(..., description="Sélections de contexte GDD")
     user_instructions: str = Field(default="", description="Instructions utilisateur")
-    max_context_tokens: int = Field(default=1500, ge=100, le=50000, description="Nombre maximum de tokens pour le contexte")
+    max_context_tokens: int = Field(default=1500, ge=100, le=Defaults.MAX_CONTEXT_TOKENS, description="Nombre maximum de tokens pour le contexte")
     system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
     field_configs: Optional[Dict[str, List[str]]] = Field(None, description="Configuration des champs de contexte par type d'élément")
     organization_mode: Optional[str] = Field(None, description="Mode d'organisation du contexte (default, narrative, minimal)")
@@ -146,7 +155,7 @@ class GenerateUnityDialogueRequest(BaseModel):
     user_instructions: str = Field(..., min_length=1, description="Instructions spécifiques pour la scène")
     context_selections: ContextSelection = Field(..., description="Sélections de contexte GDD")
     npc_speaker_id: Optional[str] = Field(None, description="ID du PNJ interlocuteur (si None, utiliser le premier personnage sélectionné)")
-    max_context_tokens: int = Field(default=1500, ge=100, le=50000, description="Nombre maximum de tokens pour le contexte")
+    max_context_tokens: int = Field(default=1500, ge=100, le=Defaults.MAX_CONTEXT_TOKENS, description="Nombre maximum de tokens pour le contexte")
     system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
     author_profile: Optional[str] = Field(None, description="Profil d'auteur global (style réutilisable entre scènes)")
     llm_model_identifier: str = Field(default="gpt-4o-mini", description="Identifiant du modèle LLM")

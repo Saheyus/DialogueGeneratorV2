@@ -1,6 +1,7 @@
 """Router pour les guides narratifs."""
 import logging
 from typing import Annotated
+from datetime import datetime
 from fastapi import APIRouter, Depends, status
 
 from api.dependencies import (
@@ -118,9 +119,7 @@ async def sync_narrative_guides(
     guides_service: Annotated[NarrativeGuidesService, Depends(get_narrative_guides_service)] = None,
     request_id: Annotated[str, Depends(get_request_id)] = None
 ) -> NarrativeGuidesSyncResponse:
-    """Synchronise les guides narratifs depuis Notion via MCP.
-    
-    Note: Cette fonction doit être appelée depuis un contexte où les outils MCP sont disponibles.
+    """Synchronise les guides narratifs depuis Notion.
     
     Args:
         notion_service: Service d'import Notion injecté.
@@ -133,17 +132,46 @@ async def sync_narrative_guides(
     try:
         logger.info(f"Démarrage de la synchronisation des guides depuis Notion (request_id: {request_id})")
         
-        # Note: Les appels MCP doivent être effectués depuis l'extérieur
-        # Ici, on prépare la structure mais les appels réels se font via les outils MCP disponibles
+        # Synchroniser les deux guides en parallèle
+        dialogue_guide_id = NotionImportService.get_dialogue_guide_page_id()
+        narrative_guide_id = NotionImportService.get_narrative_guide_page_id()
         
+        dialogue_content = await notion_service.sync_guide(dialogue_guide_id)
+        narrative_content = await notion_service.sync_guide(narrative_guide_id)
+        
+        # Sauvegarder dans le cache
+        cache = get_notion_cache()
+        if dialogue_content:
+            cache.set("dialogue_guide", {"content": dialogue_content})
+        if narrative_content:
+            cache.set("narrative_guide", {"content": narrative_content})
+        
+        last_sync = datetime.now().isoformat()
+        
+        logger.info(
+            f"Synchronisation terminée: dialogue ({len(dialogue_content) if dialogue_content else 0} chars), "
+            f"narration ({len(narrative_content) if narrative_content else 0} chars) "
+            f"(request_id: {request_id})"
+        )
+        
+        return NarrativeGuidesSyncResponse(
+            success=True,
+            dialogue_guide_length=len(dialogue_content) if dialogue_content else 0,
+            narrative_guide_length=len(narrative_content) if narrative_content else 0,
+            last_sync=last_sync,
+            error=None
+        )
+        
+    except ValueError as e:
+        # Erreur de configuration (pas de clé API)
+        logger.warning(f"Configuration Notion manquante (request_id: {request_id}): {e}")
         return NarrativeGuidesSyncResponse(
             success=False,
             dialogue_guide_length=0,
             narrative_guide_length=0,
             last_sync=None,
-            error="La synchronisation Notion doit être effectuée via les outils MCP disponibles dans l'environnement. Utilisez les endpoints avec les données déjà en cache ou synchronisez manuellement."
+            error=f"Configuration Notion manquante: {str(e)}. Configurez NOTION_API_KEY dans les variables d'environnement."
         )
-        
     except Exception as e:
         logger.exception(f"Erreur lors de la synchronisation des guides (request_id: {request_id}): {e}")
         return NarrativeGuidesSyncResponse(

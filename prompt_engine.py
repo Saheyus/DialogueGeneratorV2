@@ -280,58 +280,38 @@ class PromptEngine:
                 logger.warning(f"Erreur lors de l'injection des guides narratifs: {e}")
         
         # Instructions sur le format Unity JSON
-        prompt_parts.append("--- FORMAT DE SORTIE ATTENDU ---")
+        # Note: Le Structured Output garantit la structure JSON (champs, types), mais pas la logique métier.
+        # Ces instructions guident l'IA sur ce que le schéma ne peut pas garantir.
+        prompt_parts.append("--- INSTRUCTIONS DE GÉNÉRATION ---")
         prompt_parts.append(
-            "**IMPORTANT : Tu dois générer UN SEUL nœud de dialogue, pas une séquence de nœuds.** "
-            "Ce nœud contient une réplique du PNJ interlocuteur et les choix de réponse du joueur. "
-            "Un nœud = une réplique du PNJ + choix du joueur. Ne génère PAS de séquence de nœuds "
-            "(pas de START → NODE_1 → NODE_2...). Si tu génères plusieurs nœuds par erreur, seul le premier sera utilisé."
+            "**IMPORTANT : Génère UN SEUL nœud de dialogue (un nœud = une réplique du PNJ + choix du joueur).** "
+            "Ne génère PAS de séquence de nœuds. Le Structured Output garantit le format, mais tu dois respecter cette logique métier."
+        )
+        prompt_parts.append("")
+        prompt_parts.append("**Règles de contenu :**")
+        prompt_parts.append(
+            f"- Speaker (qui parle) : {npc_speaker_id} (PNJ interlocuteur)"
         )
         prompt_parts.append(
-            "Le format sera géré automatiquement via Structured Output, mais voici les règles importantes :"
+            f"- Choix (choices) : Options du joueur ({player_character_id})"
         )
         prompt_parts.append(
-            "- IMPORTANT : Génère un titre descriptif et reconnaissable pour ce dialogue "
-            "(ex: 'Rencontre avec le tavernier', 'Discussion sur la quête principale', 'Confrontation avec le bandit'). "
-            "Ce titre sera utilisé pour identifier l'interaction, pas dans le dialogue lui-même."
-        )
-        prompt_parts.append(
-            "- Le speaker doit être l'ID du personnage qui parle (contrôlé par l'auteur). "
-            "Pour cette génération, le PNJ interlocuteur est : " + npc_speaker_id
-        )
-        prompt_parts.append(
-            "- Le personnage joueur est : " + player_character_id + " (Seigneuresse Uresaïr). "
-            "Les choix (choices) sont toujours les options du joueur."
-        )
-        prompt_parts.append(
-            "- Les tests d'attributs utilisent le format : 'AttributeType+SkillId:DD' "
-            "(ex: 'Raison+Rhétorique:8'). La compétence est obligatoire."
-        )
-        prompt_parts.append(
-            "- Ne génère PAS d'IDs de nœuds (id, targetNode, successNode, etc.). "
-            "Le système les ajoutera automatiquement."
-        )
-        prompt_parts.append(
-            "- Si un nœud n'a ni choices ni nextNode, il termine le dialogue."
+            "- Tests d'attributs : Format 'AttributeType+SkillId:DD' (ex: 'Raison+Rhétorique:8'). La compétence est obligatoire."
         )
         
         # Instructions sur le nombre de choix
         if max_choices is not None:
             if max_choices == 0:
                 prompt_parts.append(
-                    "- IMPORTANT : Ce nœud ne doit PAS avoir de choix (choices). "
-                    "Utilise nextNode pour la navigation linéaire ou laisse vide pour terminer le dialogue."
+                    "- Ce nœud ne doit PAS avoir de choix (choices). Si le nœud n'a ni line ni choices, il termine le dialogue."
                 )
             else:
                 prompt_parts.append(
-                    f"- IMPORTANT : Ce nœud doit avoir exactement {max_choices} choix (choices) au maximum. "
-                    f"Génère entre 1 et {max_choices} choix selon ce qui est approprié pour la scène."
+                    f"- Nombre de choix : Entre 1 et {max_choices} selon ce qui est approprié pour la scène."
                 )
         else:
             prompt_parts.append(
-                "- Tu peux générer des choix (choices) si cela est approprié pour la scène. "
-                "Le nombre de choix est libre, mais reste raisonnable (généralement entre 0 et 8 choix). "
-                "Si aucun choix n'est nécessaire, utilise nextNode pour la navigation linéaire."
+                "- Nombre de choix : L'IA décide librement entre 2 et 8 choix selon ce qui est approprié pour la scène. Le nœud DOIT avoir au moins 2 choix."
             )
         
         # Liste des compétences disponibles

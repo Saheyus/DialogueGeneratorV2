@@ -22,16 +22,36 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
   const { formattedPrompt } = usePromptPreview(estimatedPrompt)
 
   return (
-    <div
-      style={{
-        flex: 1,
-        minHeight: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        backgroundColor: theme.background.panel,
-        overflow: 'hidden',
-      }}
-    >
+    <>
+      <style>{`
+        .estimated-prompt-scroll-container {
+          scrollbar-width: thin;
+          scrollbar-color: ${theme.border.primary} ${theme.background.panel};
+        }
+        .estimated-prompt-scroll-container::-webkit-scrollbar {
+          width: 12px;
+        }
+        .estimated-prompt-scroll-container::-webkit-scrollbar-track {
+          background: ${theme.background.panel};
+        }
+        .estimated-prompt-scroll-container::-webkit-scrollbar-thumb {
+          background-color: ${theme.border.primary};
+          border-radius: 6px;
+          border: 2px solid ${theme.background.panel};
+        }
+        .estimated-prompt-scroll-container::-webkit-scrollbar-thumb:hover {
+          background-color: ${theme.button.primary.background};
+        }
+      `}</style>
+      <div
+        style={{
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: theme.background.panel,
+          overflow: 'hidden',
+        }}
+      >
       <div style={{ 
         padding: '1rem', 
         borderBottom: `1px solid ${theme.border.primary}`,
@@ -45,13 +65,17 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
           </div>
         ) : null}
       </div>
-      <div style={{ 
-        flex: 1, 
-        minHeight: 0,
-        overflow: 'auto', 
-        padding: '1rem',
-        boxSizing: 'border-box',
-      }}>
+      <div 
+        className="estimated-prompt-scroll-container"
+        style={{ 
+          flex: 1, 
+          minHeight: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: '1rem',
+          boxSizing: 'border-box',
+        }}
+      >
         {formattedPrompt ? (
           <pre
             style={{
@@ -85,6 +109,7 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
         )}
       </div>
     </div>
+    </>
   )
 })
 

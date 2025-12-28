@@ -4,12 +4,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import * as dialoguesAPI from '../../api/dialogues'
 import * as configAPI from '../../api/config'
-import * as contextAPI from '../../api/context'
 import { useContextStore } from '../../store/contextStore'
 import { useGenerationStore } from '../../store/generationStore'
 import { useGenerationActionsStore } from '../../store/generationActionsStore'
 import { useContextConfigStore } from '../../store/contextConfigStore'
 import { useVocabularyStore } from '../../store/vocabularyStore'
+import { useAuthorProfile } from '../../hooks/useAuthorProfile'
 import { getErrorMessage } from '../../types/errors'
 import { theme } from '../../theme'
 import type {
@@ -21,7 +21,8 @@ import type {
 import { DialogueStructureWidget } from './DialogueStructureWidget'
 import { SystemPromptEditor } from './SystemPromptEditor'
 import { SceneSelectionWidget } from './SceneSelectionWidget'
-import { ContextSummaryChips, useToast, toastManager } from '../shared'
+import { useToast, toastManager } from '../shared'
+import { CONTEXT_TOKENS_LIMITS } from '../../constants'
 
 
 export function GenerationPanel() {
@@ -50,9 +51,13 @@ export function GenerationPanel() {
     includeNarrativeGuides,
   } = useVocabularyStore()
   
+  const {
+    authorProfile,
+    updateProfile: updateAuthorProfile,
+  } = useAuthorProfile()
+  
   const [userInstructions, setUserInstructions] = useState('')
-  const [authorProfile, setAuthorProfile] = useState('')
-  const [maxContextTokens, setMaxContextTokens] = useState(1500)
+  const [maxContextTokens, setMaxContextTokens] = useState(CONTEXT_TOKENS_LIMITS.DEFAULT)
   const [llmModel, setLlmModel] = useState('gpt-4o-mini')
   const [maxChoices, setMaxChoices] = useState<number | null>(null)
   const [availableModels, setAvailableModels] = useState<LLMModelResponse[]>([])
@@ -65,6 +70,7 @@ export function GenerationPanel() {
   const [narrativeTags, setNarrativeTags] = useState<string[]>([])
   const [previousDialoguePreview, setPreviousDialoguePreview] = useState<string | null>(null)
   const toast = useToast()
+  const sliderRef = useRef<HTMLInputElement>(null)
 
   const availableNarrativeTags = ['tension', 'humour', 'dramatique', 'intime', 'révélation']
 
@@ -74,6 +80,7 @@ export function GenerationPanel() {
   const saveDraft = useCallback(() => {
     const draft = {
       userInstructions,
+      authorProfile,
       systemPromptOverride,
       dialogueStructure,
       sceneSelection,
@@ -92,7 +99,7 @@ export function GenerationPanel() {
     } catch (err) {
       console.error('Erreur lors de la sauvegarde automatique:', err)
     }
-  }, [userInstructions, systemPromptOverride, dialogueStructure, sceneSelection, maxContextTokens, llmModel, maxChoices, narrativeTags, selections, selectedRegion, selectedSubLocations])
+  }, [userInstructions, authorProfile, systemPromptOverride, dialogueStructure, sceneSelection, maxContextTokens, llmModel, maxChoices, narrativeTags, selections, selectedRegion, selectedSubLocations])
 
   // Charger le brouillon au démarrage (AVANT loadModels pour préserver le modèle sauvegardé)
   useEffect(() => {
@@ -101,12 +108,20 @@ export function GenerationPanel() {
       if (saved) {
         const draft = JSON.parse(saved)
         if (draft.userInstructions !== undefined) setUserInstructions(draft.userInstructions)
+        if (draft.authorProfile !== undefined) {
+          // Charger le profil d'auteur depuis le draft et le sauvegarder dans le hook
+          updateAuthorProfile(draft.authorProfile)
+        }
         if (draft.systemPromptOverride !== undefined) setSystemPromptOverride(draft.systemPromptOverride)
         if (draft.dialogueStructure !== undefined) setDialogueStructure(draft.dialogueStructure)
         if (draft.sceneSelection !== undefined) {
           setSceneSelection(draft.sceneSelection)
         }
-        if (draft.maxContextTokens !== undefined) setMaxContextTokens(draft.maxContextTokens)
+        if (draft.maxContextTokens !== undefined) {
+          // Convertir les anciennes valeurs < MIN à MIN minimum
+          const value = Math.max(CONTEXT_TOKENS_LIMITS.MIN, draft.maxContextTokens)
+          setMaxContextTokens(value)
+        }
         if (draft.llmModel !== undefined) setLlmModel(draft.llmModel)
         if (draft.maxChoices !== undefined) setMaxChoices(draft.maxChoices)
         if (draft.narrativeTags !== undefined) setNarrativeTags(draft.narrativeTags)
@@ -123,7 +138,7 @@ export function GenerationPanel() {
     } catch (err) {
       console.error('Erreur lors du chargement du brouillon:', err)
     }
-  }, [setDialogueStructure, setSystemPromptOverride, setSceneSelection, restoreContextState]) // Charger une seule fois au montage
+  }, [setDialogueStructure, setSystemPromptOverride, setSceneSelection, restoreContextState, updateAuthorProfile]) // Charger une seule fois au montage
 
   // Détecter les changements de sceneSelection pour déclencher la sauvegarde
   // (sauf au chargement initial)
@@ -461,37 +476,7 @@ export function GenerationPanel() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isLoading, handleGenerate])
 
-  const { applyLinkedElements } = useContextStore()
   const { setActions } = useGenerationActionsStore()
-  
-  // Liaison automatique des éléments quand sceneSelection change
-  useEffect(() => {
-    // Ne lier automatiquement que si au moins un élément est sélectionné
-    if (!sceneSelection.characterA && !sceneSelection.characterB && !sceneSelection.sceneRegion && !sceneSelection.subLocation) {
-      return
-    }
-
-    const linkElementsAutomatically = async () => {
-      try {
-        const response = await contextAPI.getLinkedElements({
-          character_a: sceneSelection.characterA || undefined,
-          character_b: sceneSelection.characterB || undefined,
-          scene_region: sceneSelection.sceneRegion || undefined,
-          sub_location: sceneSelection.subLocation || undefined,
-        })
-        
-        // Les listes sont déjà dans le store (chargées par ContextSelector)
-        applyLinkedElements(response.linked_elements)
-      } catch (err) {
-        // Ignorer silencieusement les erreurs de liaison automatique pour ne pas perturber l'UX
-        console.warn('Erreur lors de la liaison automatique des éléments:', err)
-      }
-    }
-
-    // Délai pour éviter les appels multiples lors de changements rapides
-    const timeoutId = setTimeout(linkElementsAutomatically, 300)
-    return () => clearTimeout(timeoutId)
-  }, [sceneSelection.characterA, sceneSelection.characterB, sceneSelection.sceneRegion, sceneSelection.subLocation, applyLinkedElements])
 
   // Utiliser useRef pour stocker les handlers et éviter les boucles infinies
   const handlersRef = useRef({
@@ -538,15 +523,18 @@ export function GenerationPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Exécuter une seule fois au montage pour initialiser le store
 
+  // Mettre à jour le style du slider en fonction de la valeur
+  useEffect(() => {
+    if (sliderRef.current) {
+      const percentage = ((maxContextTokens - CONTEXT_TOKENS_LIMITS.MIN) / (CONTEXT_TOKENS_LIMITS.MAX - CONTEXT_TOKENS_LIMITS.MIN)) * 100
+      sliderRef.current.style.background = `linear-gradient(to right, ${theme.border.focus} 0%, ${theme.border.focus} ${percentage}%, ${theme.input.background} ${percentage}%, ${theme.input.background} 100%)`
+    }
+  }, [maxContextTokens])
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: theme.background.panel }}>
       <div style={{ padding: '1.5rem', flex: 1, overflowY: 'auto' }}>
             <h2 style={{ marginTop: 0, color: theme.text.primary }}>Génération de Dialogues</h2>
-
-            <ContextSummaryChips
-              sceneSelection={sceneSelection}
-              style={{ marginBottom: '1rem' }}
-            />
 
             <SceneSelectionWidget />
 
@@ -559,7 +547,7 @@ export function GenerationPanel() {
           setIsDirty(true)
         }}
         onAuthorProfileChange={(value) => {
-          setAuthorProfile(value)
+          updateAuthorProfile(value)
           setIsDirty(true)
         }}
         onSystemPromptChange={(value) => {
@@ -605,27 +593,82 @@ export function GenerationPanel() {
       </div>
 
       <div style={{ marginBottom: '1rem' }}>
-        <label style={{ color: theme.text.primary }}>
+        <label style={{ color: theme.text.primary, display: 'block' }}>
           Max tokens contexte:
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem' }}>
             <input
-              type="number"
+              ref={sliderRef}
+              type="range"
+              min={CONTEXT_TOKENS_LIMITS.MIN}
+              max={CONTEXT_TOKENS_LIMITS.MAX}
+              step={CONTEXT_TOKENS_LIMITS.STEP}
               value={maxContextTokens}
               onChange={(e) => {
-                setMaxContextTokens(parseInt(e.target.value) || 1500)
+                setMaxContextTokens(parseInt(e.target.value))
                 setIsDirty(true)
               }}
-              min={100}
-              max={8000}
-            style={{ 
-              width: '100%', 
-              padding: '0.5rem', 
-              marginTop: '0.5rem', 
-              boxSizing: 'border-box',
-              backgroundColor: theme.input.background,
-              border: `1px solid ${theme.input.border}`,
-              color: theme.input.color,
-            }}
-          />
+              style={{ 
+                flex: 1,
+                height: '6px',
+                borderRadius: '3px',
+                background: theme.input.background,
+                outline: 'none',
+                WebkitAppearance: 'none',
+                appearance: 'none',
+              }}
+            />
+            <span style={{ 
+              minWidth: '60px', 
+              textAlign: 'right',
+              color: theme.text.primary,
+              fontWeight: 'bold',
+            }}>
+              {maxContextTokens >= 1000 ? `${Math.round(maxContextTokens / 1000)}K` : maxContextTokens}
+            </span>
+          </div>
+          <style>{`
+            input[type="range"]::-webkit-slider-thumb {
+              -webkit-appearance: none;
+              appearance: none;
+              width: 18px;
+              height: 18px;
+              border-radius: 50%;
+              background: ${theme.border.focus};
+              cursor: pointer;
+              border: 2px solid ${theme.background.panel};
+              box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            }
+            input[type="range"]::-webkit-slider-thumb:hover {
+              background: ${theme.button.primary.background};
+              transform: scale(1.1);
+            }
+            input[type="range"]::-moz-range-thumb {
+              width: 18px;
+              height: 18px;
+              border-radius: 50%;
+              background: ${theme.border.focus};
+              cursor: pointer;
+              border: 2px solid ${theme.background.panel};
+              box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            }
+            input[type="range"]::-moz-range-thumb:hover {
+              background: ${theme.button.primary.background};
+              transform: scale(1.1);
+            }
+            input[type="range"]::-ms-thumb {
+              width: 18px;
+              height: 18px;
+              border-radius: 50%;
+              background: ${theme.border.focus};
+              cursor: pointer;
+              border: 2px solid ${theme.background.panel};
+              box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            }
+            input[type="range"]::-ms-thumb:hover {
+              background: ${theme.button.primary.background};
+              transform: scale(1.1);
+            }
+          `}</style>
         </label>
       </div>
 

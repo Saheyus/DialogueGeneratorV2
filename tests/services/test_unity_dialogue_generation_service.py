@@ -112,3 +112,182 @@ def test_enrich_with_ids_no_choices(unity_service: UnityDialogueGenerationServic
     # Note: nextNode, successNode, failureNode sont des champs techniques
     # qui ne sont pas générés par l'IA et ne sont pas ajoutés automatiquement
 
+
+@pytest.mark.asyncio
+async def test_max_choices_none_valid_2_choices(unity_service: UnityDialogueGenerationService, mock_llm_client):
+    """Test que quand max_choices est None (libre), un nœud avec 2 choix est valide."""
+    mock_response = UnityDialogueGenerationResponse(
+        title="Test Dialogue",
+        node=UnityDialogueNodeContent(
+            speaker="TEST_NPC",
+            line="Test dialogue line",
+            choices=[
+                UnityDialogueChoiceContent(text="Choice 1"),
+                UnityDialogueChoiceContent(text="Choice 2")
+            ]
+        )
+    )
+    
+    mock_llm_client.generate_variants = AsyncMock(return_value=[mock_response])
+    
+    result = await unity_service.generate_dialogue_node(
+        llm_client=mock_llm_client,
+        prompt="Test prompt",
+        max_choices=None
+    )
+    
+    assert result.node.choices is not None
+    assert len(result.node.choices) == 2
+
+
+@pytest.mark.asyncio
+async def test_max_choices_none_valid_5_choices(unity_service: UnityDialogueGenerationService, mock_llm_client):
+    """Test que quand max_choices est None (libre), un nœud avec 5 choix est valide."""
+    mock_response = UnityDialogueGenerationResponse(
+        title="Test Dialogue",
+        node=UnityDialogueNodeContent(
+            speaker="TEST_NPC",
+            line="Test dialogue line",
+            choices=[
+                UnityDialogueChoiceContent(text=f"Choice {i}")
+                for i in range(1, 6)
+            ]
+        )
+    )
+    
+    mock_llm_client.generate_variants = AsyncMock(return_value=[mock_response])
+    
+    result = await unity_service.generate_dialogue_node(
+        llm_client=mock_llm_client,
+        prompt="Test prompt",
+        max_choices=None
+    )
+    
+    assert result.node.choices is not None
+    assert len(result.node.choices) == 5
+
+
+@pytest.mark.asyncio
+async def test_max_choices_none_valid_8_choices(unity_service: UnityDialogueGenerationService, mock_llm_client):
+    """Test que quand max_choices est None (libre), un nœud avec 8 choix est valide."""
+    mock_response = UnityDialogueGenerationResponse(
+        title="Test Dialogue",
+        node=UnityDialogueNodeContent(
+            speaker="TEST_NPC",
+            line="Test dialogue line",
+            choices=[
+                UnityDialogueChoiceContent(text=f"Choice {i}")
+                for i in range(1, 9)
+            ]
+        )
+    )
+    
+    mock_llm_client.generate_variants = AsyncMock(return_value=[mock_response])
+    
+    result = await unity_service.generate_dialogue_node(
+        llm_client=mock_llm_client,
+        prompt="Test prompt",
+        max_choices=None
+    )
+    
+    assert result.node.choices is not None
+    assert len(result.node.choices) == 8
+
+
+@pytest.mark.asyncio
+async def test_max_choices_none_truncates_to_8(unity_service: UnityDialogueGenerationService, mock_llm_client):
+    """Test que quand max_choices est None (libre), un nœud avec plus de 8 choix est tronqué à 8."""
+    mock_response = UnityDialogueGenerationResponse(
+        title="Test Dialogue",
+        node=UnityDialogueNodeContent(
+            speaker="TEST_NPC",
+            line="Test dialogue line",
+            choices=[
+                UnityDialogueChoiceContent(text=f"Choice {i}")
+                for i in range(1, 12)
+            ]
+        )
+    )
+    
+    mock_llm_client.generate_variants = AsyncMock(return_value=[mock_response])
+    
+    result = await unity_service.generate_dialogue_node(
+        llm_client=mock_llm_client,
+        prompt="Test prompt",
+        max_choices=None
+    )
+    
+    assert result.node.choices is not None
+    assert len(result.node.choices) == 8
+
+
+@pytest.mark.asyncio
+async def test_max_choices_none_rejects_0_choices(unity_service: UnityDialogueGenerationService, mock_llm_client):
+    """Test que quand max_choices est None (libre), un nœud avec 0 choix lève une erreur."""
+    mock_response = UnityDialogueGenerationResponse(
+        title="Test Dialogue",
+        node=UnityDialogueNodeContent(
+            speaker="TEST_NPC",
+            line="Test dialogue line",
+            choices=[]  # Liste vide
+        )
+    )
+    
+    mock_llm_client.generate_variants = AsyncMock(return_value=[mock_response])
+    
+    with pytest.raises(ValueError, match="doit avoir entre 2 et 8 choix"):
+        await unity_service.generate_dialogue_node(
+            llm_client=mock_llm_client,
+            prompt="Test prompt",
+            max_choices=None
+        )
+
+
+@pytest.mark.asyncio
+async def test_max_choices_none_rejects_1_choice(unity_service: UnityDialogueGenerationService, mock_llm_client):
+    """Test que quand max_choices est None (libre), un nœud avec 1 seul choix lève une erreur."""
+    mock_response = UnityDialogueGenerationResponse(
+        title="Test Dialogue",
+        node=UnityDialogueNodeContent(
+            speaker="TEST_NPC",
+            line="Test dialogue line",
+            choices=[
+                UnityDialogueChoiceContent(text="Choice 1")
+            ]
+        )
+    )
+    
+    mock_llm_client.generate_variants = AsyncMock(return_value=[mock_response])
+    
+    with pytest.raises(ValueError, match="doit avoir entre 2 et 8 choix"):
+        await unity_service.generate_dialogue_node(
+            llm_client=mock_llm_client,
+            prompt="Test prompt",
+            max_choices=None
+        )
+
+
+@pytest.mark.asyncio
+async def test_max_choices_none_allows_end_node(unity_service: UnityDialogueGenerationService, mock_llm_client):
+    """Test que quand max_choices est None (libre), un nœud de fin (sans choix mais avec line) est valide."""
+    mock_response = UnityDialogueGenerationResponse(
+        title="Test Dialogue",
+        node=UnityDialogueNodeContent(
+            speaker="TEST_NPC",
+            line="Test dialogue line"
+            # Pas de choices = nœud de fin valide
+        )
+    )
+    
+    mock_llm_client.generate_variants = AsyncMock(return_value=[mock_response])
+    
+    result = await unity_service.generate_dialogue_node(
+        llm_client=mock_llm_client,
+        prompt="Test prompt",
+        max_choices=None
+    )
+    
+    # Un nœud de fin (sans choix) est valide même quand max_choices est libre
+    assert result.node.choices is None
+    assert result.node.line == "Test dialogue line"
+

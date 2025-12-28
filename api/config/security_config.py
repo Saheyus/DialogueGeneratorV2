@@ -1,13 +1,24 @@
 """Configuration de sécurité pour l'API."""
 import os
 import logging
-from typing import Optional
+import sys
+from typing import Optional, Tuple
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings.sources import PydanticBaseSettingsSource
 
 logger = logging.getLogger(__name__)
 
 # Valeur par défaut pour JWT_SECRET_KEY (utilisée uniquement en développement)
 DEFAULT_JWT_SECRET_KEY = "your-secret-key-change-in-production"
+
+def _is_running_under_pytest() -> bool:
+    """Indique si le code s'exécute sous pytest.
+
+    Returns:
+        True si pytest est en cours d'exécution, False sinon.
+    """
+    # Ne pas se baser sur os.environ: certains tests le vident via patch.dict(..., clear=True).
+    return "pytest" in sys.modules
 
 
 class SecurityConfig(BaseSettings):
@@ -24,6 +35,27 @@ class SecurityConfig(BaseSettings):
         case_sensitive=False,
         extra="ignore"
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type["SecurityConfig"],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        """Personnalise les sources de configuration.
+
+        En test (pytest), on ignore volontairement le fichier `.env` pour garantir
+        des tests déterministes (les tests patchent `os.environ`).
+
+        Returns:
+            Un tuple de sources à utiliser, dans l'ordre de priorité.
+        """
+        if _is_running_under_pytest():
+            return (init_settings, env_settings, file_secret_settings)
+        return (init_settings, env_settings, dotenv_settings, file_secret_settings)
     
     # JWT Configuration
     jwt_secret_key: str = DEFAULT_JWT_SECRET_KEY

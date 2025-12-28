@@ -281,7 +281,12 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
         />
       </div>
       <div style={{ flex: '0 0 auto' }}>
-        <SelectedContextSummary selections={selections} onClear={clearSelections} />
+        <SelectedContextSummary 
+          selections={selections} 
+          onClear={clearSelections}
+          onError={(err) => setError(err)}
+          onSuccess={() => setError(null)}
+        />
       </div>
     </div>
   )

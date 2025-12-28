@@ -101,10 +101,7 @@ async def sync_vocabulary(
     vocabulary_service: Annotated[VocabularyService, Depends(get_vocabulary_service)] = None,
     request_id: Annotated[str, Depends(get_request_id)] = None
 ) -> VocabularySyncResponse:
-    """Synchronise le vocabulaire depuis Notion via MCP.
-    
-    Note: Cette fonction doit être appelée depuis un contexte où les outils MCP sont disponibles.
-    Dans un environnement normal, les appels MCP sont effectués depuis l'extérieur (via les outils disponibles).
+    """Synchronise le vocabulaire depuis Notion.
     
     Args:
         notion_service: Service d'import Notion injecté.
@@ -115,23 +112,38 @@ async def sync_vocabulary(
         Réponse de synchronisation.
     """
     try:
-        # Note: Les appels MCP doivent être effectués depuis l'extérieur
-        # Ici, on prépare la structure mais les appels réels se font via les outils MCP disponibles
-        # dans l'environnement Cursor/agent
-        
         logger.info(f"Démarrage de la synchronisation du vocabulaire depuis Notion (request_id: {request_id})")
         
-        # Pour l'instant, on retourne une erreur indiquant que la synchronisation
-        # doit être effectuée via les outils MCP disponibles dans l'environnement
-        # Dans une implémentation complète, on utiliserait un client Notion ou les outils MCP
+        # Synchroniser depuis Notion
+        terms = await notion_service.sync_vocabulary()
         
+        # Sauvegarder dans le cache
+        cache = get_notion_cache()
+        cache.set("vocabulary", {"terms": terms})
+        
+        last_sync = datetime.now().isoformat()
+        
+        logger.info(
+            f"Synchronisation terminée: {len(terms)} termes "
+            f"(request_id: {request_id})"
+        )
+        
+        return VocabularySyncResponse(
+            success=True,
+            terms_count=len(terms),
+            last_sync=last_sync,
+            error=None
+        )
+        
+    except ValueError as e:
+        # Erreur de configuration (pas de clé API)
+        logger.warning(f"Configuration Notion manquante (request_id: {request_id}): {e}")
         return VocabularySyncResponse(
             success=False,
             terms_count=0,
             last_sync=None,
-            error="La synchronisation Notion doit être effectuée via les outils MCP disponibles dans l'environnement. Utilisez les endpoints avec les données déjà en cache ou synchronisez manuellement."
+            error=f"Configuration Notion manquante: {str(e)}. Configurez NOTION_API_KEY dans les variables d'environnement."
         )
-        
     except Exception as e:
         logger.exception(f"Erreur lors de la synchronisation du vocabulaire (request_id: {request_id}): {e}")
         return VocabularySyncResponse(

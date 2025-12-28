@@ -1,7 +1,7 @@
 /**
  * Hook personnalisé pour gérer le profil d'auteur (global, réutilisable).
  */
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 
 const SAVED_AUTHOR_PROFILE_KEY = 'dialogue_generator_saved_author_profile'
 
@@ -10,17 +10,37 @@ export function useAuthorProfile() {
   const [savedProfile, setSavedProfile] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const isInitialLoad = useRef(true)
 
   // Charger le profil sauvegardé depuis localStorage au montage
+  // Mais vérifier d'abord le draft (generation_draft) qui a la priorité
   useEffect(() => {
     try {
+      // Vérifier d'abord le draft qui a la priorité
+      const draftSaved = localStorage.getItem('generation_draft')
+      if (draftSaved) {
+        try {
+          const draft = JSON.parse(draftSaved)
+          if (draft.authorProfile !== undefined && draft.authorProfile !== '') {
+            setSavedProfile(draft.authorProfile)
+            setAuthorProfile(draft.authorProfile)
+            isInitialLoad.current = false
+            return
+          }
+        } catch (e) {
+          // Ignorer les erreurs de parsing du draft
+        }
+      }
+      // Sinon, charger depuis la clé dédiée
       const saved = localStorage.getItem(SAVED_AUTHOR_PROFILE_KEY)
       if (saved) {
         setSavedProfile(saved)
         setAuthorProfile(saved)
       }
+      isInitialLoad.current = false
     } catch (err) {
       console.warn('Impossible de charger le profil d\'auteur sauvegardé depuis localStorage:', err)
+      isInitialLoad.current = false
     }
   }, [])
 
@@ -55,6 +75,24 @@ export function useAuthorProfile() {
   const updateProfile = useCallback((profile: string) => {
     setAuthorProfile(profile)
   }, [])
+
+  // Sauvegarde automatique dans localStorage à chaque modification
+  useEffect(() => {
+    // Ignorer le chargement initial
+    if (isInitialLoad.current) {
+      return
+    }
+    
+    // Sauvegarder seulement si la valeur a changé par rapport à ce qui est sauvegardé
+    if (authorProfile !== savedProfile) {
+      try {
+        localStorage.setItem(SAVED_AUTHOR_PROFILE_KEY, authorProfile)
+        setSavedProfile(authorProfile)
+      } catch (err) {
+        console.warn('Impossible de sauvegarder automatiquement le profil d\'auteur:', err)
+      }
+    }
+  }, [authorProfile, savedProfile])
 
   return {
     authorProfile,
