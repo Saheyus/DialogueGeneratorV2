@@ -220,7 +220,6 @@ export function ContextFieldSelector({
       case 'essential':
       case 'common':
         return { icon: 'ⓘ', color: theme.text.secondary, title: 'Champ commun' }
-      case 'common':
       case 'rare':
         return { icon: '○', color: theme.text.tertiary, title: 'Champ rare' }
       default:
