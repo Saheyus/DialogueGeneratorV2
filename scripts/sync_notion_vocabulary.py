@@ -79,3 +79,4 @@ if __name__ == "__main__":
     logger.info("Utilisez les outils MCP Notion pour récupérer les données")
 
 
+
