@@ -567,7 +567,7 @@ async def get_context_fields(
             element_type=element_type,
             fields=fields_dict,
             total=len(fields_dict),
-            unique_fields_by_item=unique_fields_by_item
+            unique_fields_by_item=len(unique_fields_by_item) if isinstance(unique_fields_by_item, dict) else 0
         )
     except Exception as e:
         logger.exception(f"Erreur lors de la détection des champs pour '{element_type}' (request_id: {request_id})")

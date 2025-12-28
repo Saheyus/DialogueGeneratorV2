@@ -8,11 +8,14 @@ import { GenerationOptionsModal } from '../generation/GenerationOptionsModal'
 import { EstimatedPromptPanel } from '../generation/EstimatedPromptPanel'
 import { UnityDialogueEditor } from '../generation/UnityDialogueEditor'
 import { ContextDetail } from '../context/ContextDetail'
+import { UsageStatsModal } from '../usage/UsageStatsModal'
 import { ResizablePanels } from '../shared/ResizablePanels'
 import { Tabs, type Tab } from '../shared/Tabs'
+import { UnityDialogueList } from '../unityDialogues/UnityDialogueList'
+import { UnityDialogueDetails } from '../unityDialogues/UnityDialogueDetails'
 import { useGenerationStore } from '../../store/generationStore'
 import { useGenerationActionsStore } from '../../store/generationActionsStore'
-import type { CharacterResponse, LocationResponse, ItemResponse, SpeciesResponse, CommunityResponse } from '../../types/api'
+import type { CharacterResponse, LocationResponse, ItemResponse, SpeciesResponse, CommunityResponse, UnityDialogueMetadata } from '../../types/api'
 import { theme } from '../../theme'
 
 type ContextItem = CharacterResponse | LocationResponse | ItemResponse | SpeciesResponse | CommunityResponse
@@ -20,7 +23,10 @@ type ContextItem = CharacterResponse | LocationResponse | ItemResponse | Species
 export function Dashboard() {
   const [selectedContextItem, setSelectedContextItem] = useState<ContextItem | null>(null)
   const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false)
+  const [isUsageModalOpen, setIsUsageModalOpen] = useState(false)
   const [rightPanelTab, setRightPanelTab] = useState<'prompt' | 'dialogue' | 'details'>('prompt')
+  const [centerPanelTab, setCenterPanelTab] = useState<'generation' | 'edition'>('generation')
+  const [selectedDialogue, setSelectedDialogue] = useState<UnityDialogueMetadata | null>(null)
   const { estimatedPrompt, estimatedTokens, isEstimating, unityDialogueResponse } = useGenerationStore()
   const { actions } = useGenerationActionsStore()
   
@@ -147,7 +153,7 @@ export function Dashboard() {
         />
       </div>
 
-      {/* Panneau central: Génération */}
+      {/* Panneau central: Génération / Édition avec onglets */}
       <div
         style={{
           overflow: 'hidden',
@@ -157,7 +163,62 @@ export function Dashboard() {
           height: '100%',
         }}
       >
-        <GenerationPanel />
+        <Tabs
+          tabs={[
+            {
+              id: 'generation',
+              label: 'Génération de Dialogues',
+              content: (
+                <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                  <GenerationPanel />
+                </div>
+              ),
+            },
+            {
+              id: 'edition',
+              label: 'Édition de Dialogues',
+              content: (
+                <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      width: '400px',
+                      borderRight: `1px solid ${theme.border.primary}`,
+                      overflow: 'hidden',
+                      backgroundColor: theme.background.panel,
+                    }}
+                  >
+                    <UnityDialogueList
+                      onSelectDialogue={setSelectedDialogue}
+                      selectedFilename={selectedDialogue?.filename || null}
+                    />
+                  </div>
+                  <div style={{ flex: 1, overflow: 'hidden', backgroundColor: theme.background.panel }}>
+                    {selectedDialogue ? (
+                      <UnityDialogueDetails
+                        filename={selectedDialogue.filename}
+                        onClose={() => setSelectedDialogue(null)}
+                        onDeleted={() => setSelectedDialogue(null)}
+                        onGenerateContinuation={(dialogueJson, dialogueTitle) => {
+                          // Basculer vers l'onglet Génération
+                          setCenterPanelTab('generation')
+                          // TODO: Pré-remplir le contexte avec le dialogue existant pour générer la suite
+                          // Pour l'instant, on bascule juste vers l'onglet génération
+                        }}
+                      />
+                    ) : (
+                      <div style={{ padding: '2rem', textAlign: 'center', color: theme.text.secondary }}>
+                        Sélectionnez un dialogue Unity pour le voir et l'éditer
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ),
+            },
+          ]}
+          activeTabId={centerPanelTab}
+          onTabChange={(tabId) => setCenterPanelTab(tabId as 'generation' | 'edition')}
+          style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}
+        />
       </div>
 
       {/* Panneau droit: Prompt Estimé / Détails */}
@@ -200,6 +261,20 @@ export function Dashboard() {
               }}
             >
               Options
+            </button>
+            <button
+              onClick={() => setIsUsageModalOpen(true)}
+              style={{
+                padding: '0.4rem 0.8rem',
+                fontSize: '0.85rem',
+                backgroundColor: theme.button.default.background,
+                color: theme.button.default.color,
+                border: `1px solid ${theme.border.primary}`,
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              Usage IA
             </button>
             <button
               onClick={actions.handleExportUnity || (() => {})}
@@ -358,6 +433,10 @@ export function Dashboard() {
       <GenerationOptionsModal
         isOpen={isOptionsModalOpen}
         onClose={() => setIsOptionsModalOpen(false)}
+      />
+      <UsageStatsModal
+        isOpen={isUsageModalOpen}
+        onClose={() => setIsUsageModalOpen(false)}
       />
     </ResizablePanels>
   )

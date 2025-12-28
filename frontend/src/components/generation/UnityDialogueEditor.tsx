@@ -170,8 +170,8 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
       setNodes((prev) => {
         return prev.map((node) => {
           if (node.id !== nodeId) return node
-          const choices = [...(node.choices || [])]
-          choices[choiceIndex] = { ...choices[choiceIndex], ...updates }
+        const choices = [...(node.choices || [])]
+        choices[choiceIndex] = { ...choices[choiceIndex], ...updates }
           return { ...node, choices }
         })
       })
@@ -185,7 +185,7 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
       setNodes((prev) => {
         return prev.map((node) => {
           if (node.id !== nodeId) return node
-          const choices = [...(node.choices || [])]
+        const choices = [...(node.choices || [])]
           choices.push({ text: '', targetNode: 'END' })
           return { ...node, choices }
         })
@@ -199,8 +199,8 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
     setNodes((prev) => {
       return prev.map((node) => {
         if (node.id !== nodeId) return node
-        const choices = [...(node.choices || [])]
-        choices.splice(choiceIndex, 1)
+      const choices = [...(node.choices || [])]
+      choices.splice(choiceIndex, 1)
         return { ...node, choices: choices.length > 0 ? choices : undefined }
       })
     })

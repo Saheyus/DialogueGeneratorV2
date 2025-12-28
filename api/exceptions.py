@@ -63,7 +63,7 @@ class ValidationException(APIException):
             request_id: ID de la requête.
         """
         super().__init__(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             code="VALIDATION_ERROR",
             message=message,
             details=details,
@@ -127,7 +127,7 @@ class NotFoundException(APIException):
         """Initialise une exception de ressource non trouvée.
         
         Args:
-            resource_type: Type de ressource (ex: "Interaction", "Personnage").
+            resource_type: Type de ressource (ex: "Dialogue", "Personnage").
             resource_id: ID de la ressource non trouvée.
             request_id: ID de la requête.
         """

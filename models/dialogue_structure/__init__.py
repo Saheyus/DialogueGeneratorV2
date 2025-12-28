@@ -9,7 +9,7 @@ from .dialogue_elements import (
     CommandElement
 )
 
-from .interaction import Interaction
+# Interaction supprimé - système obsolète remplacé par Unity JSON
 
 __all__ = [
     # 'AbstractDialogueElement',
@@ -18,5 +18,4 @@ __all__ = [
     'PlayerChoiceOption',
     'PlayerChoicesBlockElement',
     'CommandElement',
-    'Interaction'
 ] 

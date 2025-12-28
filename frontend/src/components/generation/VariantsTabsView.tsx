@@ -8,19 +8,13 @@ import type { DialogueVariantResponse, GenerateDialogueVariantsResponse } from '
 
 export interface VariantsTabsViewProps {
   response: GenerateDialogueVariantsResponse | null
-  onValidateAsInteraction?: (variant: DialogueVariantResponse) => void
+  // onValidateAsInteraction supprimé - système obsolète
 }
 
 export const VariantsTabsView = memo(function VariantsTabsView({
   response,
-  onValidateAsInteraction,
 }: VariantsTabsViewProps) {
-  const handleValidate = useCallback(
-    (variant: DialogueVariantResponse) => {
-      onValidateAsInteraction?.(variant)
-    },
-    [onValidateAsInteraction]
-  )
+  // handleValidate supprimé - système obsolète
 
   if (!response || response.variants.length === 0) {
     return (
@@ -53,20 +47,7 @@ export const VariantsTabsView = memo(function VariantsTabsView({
             <h4 style={{ margin: 0, color: theme.text.primary }}>
               {variant.title}
             </h4>
-            <button
-              onClick={() => handleValidate(variant)}
-              style={{
-                padding: '0.5rem 1rem',
-                border: `1px solid ${theme.border.primary}`,
-                borderRadius: '4px',
-                backgroundColor: theme.button.primary.background,
-                color: theme.button.primary.color,
-                cursor: 'pointer',
-                fontSize: '0.9rem',
-              }}
-            >
-              Valider comme Interaction
-            </button>
+            {/* Bouton "Valider comme Interaction" supprimé - système obsolète */}
           </div>
           <div
             style={{

@@ -9,10 +9,10 @@ from context_builder import ContextBuilder
 from prompt_engine import PromptEngine
 from llm_client import ILLMClient
 from services.configuration_service import ConfigurationService
-from services.interaction_service import InteractionService
+# InteractionService supprimé - système obsolète
 from services.dialogue_generation_service import DialogueGenerationService
 from services.linked_selector import LinkedSelectorService
-from services.repositories.file_repository import FileInteractionRepository
+# FileInteractionRepository supprimé - système obsolète
 from services.repositories.llm_usage_repository import FileLLMUsageRepository
 from services.llm_usage_service import LLMUsageService
 from services.llm_pricing_service import LLMPricingService
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # Chemins par défaut
 DIALOGUE_GENERATOR_DIR = Path(__file__).resolve().parent.parent
-DEFAULT_INTERACTIONS_STORAGE_DIR = DIALOGUE_GENERATOR_DIR / FilePaths.INTERACTIONS_DIR
+# DEFAULT_INTERACTIONS_STORAGE_DIR supprimé - système obsolète
 
 
 # Instances globales (singletons) pour les services qui peuvent être partagés
@@ -88,50 +88,25 @@ def get_prompt_engine() -> PromptEngine:
     return _prompt_engine
 
 
-def get_interaction_repository() -> FileInteractionRepository:
-    """Crée un repository d'interactions basé sur fichiers.
-    
-    Returns:
-        Instance de FileInteractionRepository.
-    """
-    storage_dir = str(DEFAULT_INTERACTIONS_STORAGE_DIR)
-    os.makedirs(storage_dir, exist_ok=True)
-    return FileInteractionRepository(storage_dir=storage_dir)
-
-
-def get_interaction_service(
-    repository: Annotated[FileInteractionRepository, Depends(get_interaction_repository)]
-) -> InteractionService:
-    """Retourne le service d'interactions.
-    
-    Args:
-        repository: Repository injecté via dépendance.
-        
-    Returns:
-        Instance de InteractionService.
-    """
-    return InteractionService(repository=repository)
-
+# get_interaction_repository supprimé - système obsolète
+# get_interaction_service supprimé - système obsolète
 
 def get_dialogue_generation_service(
     context_builder: Annotated[ContextBuilder, Depends(get_context_builder)],
-    prompt_engine: Annotated[PromptEngine, Depends(get_prompt_engine)],
-    interaction_service: Annotated[InteractionService, Depends(get_interaction_service)]
+    prompt_engine: Annotated[PromptEngine, Depends(get_prompt_engine)]
 ) -> DialogueGenerationService:
     """Retourne le service de génération de dialogues.
     
     Args:
         context_builder: ContextBuilder injecté.
         prompt_engine: PromptEngine injecté.
-        interaction_service: InteractionService injecté.
         
     Returns:
         Instance de DialogueGenerationService.
     """
     return DialogueGenerationService(
         context_builder=context_builder,
-        prompt_engine=prompt_engine,
-        interaction_service=interaction_service
+        prompt_engine=prompt_engine
     )
 
 

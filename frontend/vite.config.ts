@@ -13,7 +13,7 @@ export default defineConfig({
     open: false, // Ne pas ouvrir automatiquement (géré par scripts/dev.js)
     proxy: {
       '/api': {
-        target: 'http://localhost:4242',
+        target: 'http://localhost:4243',  // Port dev (4243), production utilise 4242
         changeOrigin: true
       }
     }

@@ -374,6 +374,10 @@ async def generate_unity_dialogue(
         context_builder = dialogue_service.context_builder
         context_selections_dict = request_data.context_selections.to_service_dict()
         
+        # Si un preview de dialogue précédent est fourni, le définir dans le context builder
+        if request_data.previous_dialogue_preview:
+            context_builder.set_previous_dialogue_context(request_data.previous_dialogue_preview)
+        
         context_summary = context_builder.build_context(
             selected_elements=context_selections_dict,
             scene_instruction=request_data.user_instructions,

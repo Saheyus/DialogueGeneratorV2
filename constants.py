@@ -40,4 +40,4 @@ class Defaults:
     INTERACTION_AUTOSAVE_INTERVAL_MS = 300000 # 5 minutes (nouvelle constante)
 
 class ConfigFiles:
-    UI_SETTINGS = "ui_settings.json" 
+    pass  # Placeholder for future config file constants if needed 

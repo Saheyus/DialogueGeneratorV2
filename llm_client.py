@@ -415,7 +415,7 @@ class OpenAIClient(ILLMClient):
             await self.client.close()
 
 async def main_test():
-    from models.dialogue_structure.dynamic_interaction_schema import build_interaction_model_from_structure, DialogueLineElement, PlayerChoicesBlockElement
+    # build_interaction_model_from_structure supprimé - système obsolète
     
     # Configurer le logging pour voir les messages DEBUG de ce module et des modules Pydantic/OpenAI si nécessaire
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -434,8 +434,8 @@ async def main_test():
     # ... (test texte simple inchangé)
 
     # --- Test 2: Génération structurée avec Pydantic dynamique ---
-    structure_pnj_pj = ["PNJ", "PJ"]
-    DynamicTestModel = build_interaction_model_from_structure(structure_pnj_pj)
+    # build_interaction_model_from_structure supprimé - système obsolète
+    # DynamicTestModel supprimé - système obsolète
     
     openai_prompt_structured = (
         "Contexte: Le joueur (Seigneuresse Uresaïr) rencontre Akthar-Neth Amatru, l'Exégète, dans le Coeur du Léviathan. "
@@ -445,29 +445,15 @@ async def main_test():
         "Ton attendu: Génère une ligne pour Akthar-Neth, suivie d'un bloc de deux choix pour Uresaïr."
     )
     
-    print(f"\n--- Envoi du prompt STRUCTURÉ (pour {DynamicTestModel.__name__}) à {openai_client.model_name} --- ")
+    print(f"\n--- Envoi du prompt STRUCTURÉ (système obsolète) à {openai_client.model_name} --- ")
     # Note: Le system_prompt_template est déjà dans openai_client. Il sera combiné avec "Tu DOIS utiliser la fonction..."
     print(f"USER: {openai_prompt_structured}")
     print("--------------------------------------------------")
 
-    openai_variants_structured = await openai_client.generate_variants(openai_prompt_structured, 1, response_model=DynamicTestModel)
-    print(f"\n--- Variants STRUCTURÉS ({DynamicTestModel.__name__}) de l'OpenAIClient ({openai_client.model_name}) --- ")
-    if openai_variants_structured:
-        for i, v_struct in enumerate(openai_variants_structured):
-            print(f"Variante {i+1}:")
-            if isinstance(v_struct, BaseModel):
-                print(v_struct.model_dump_json(indent=2))
-                # Essayons aussi de valider l'ordre si c'est une instance du modèle attendu
-                from models.dialogue_structure.dynamic_interaction_schema import validate_interaction_elements_order
-                if validate_interaction_elements_order(v_struct, structure_pnj_pj):
-                    print("Validation de l'ordre des éléments réussie.")
-                else:
-                    print("ÉCHEC de la validation de l'ordre des éléments.")
-            else:
-                print(str(v_struct)) # Afficher l'erreur ou le texte brut
-            print("---")
-    else:
-        print("Aucune variante structurée n'a été générée.")
+    # Test de génération structurée supprimé - système obsolète (DynamicTestModel)
+    # openai_variants_structured = await openai_client.generate_variants(openai_prompt_structured, 1, response_model=DynamicTestModel)
+    print(f"\n--- Test de génération structurée supprimé (système obsolète) --- ")
+    # Code de test supprimé - système obsolète
 
     await openai_client.close()
 

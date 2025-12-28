@@ -63,6 +63,7 @@ export function GenerationPanel() {
   const [error, setError] = useState<string | null>(null)
   const [isDirty, setIsDirty] = useState(false)
   const [narrativeTags, setNarrativeTags] = useState<string[]>([])
+  const [previousDialoguePreview, setPreviousDialoguePreview] = useState<string | null>(null)
   const toast = useToast()
 
   const availableNarrativeTags = ['tension', 'humour', 'dramatique', 'intime', 'révélation']
@@ -367,6 +368,7 @@ export function GenerationPanel() {
         narrative_tags: narrativeTags.length > 0 ? narrativeTags : undefined,
         vocabulary_min_importance: vocabularyMinImportance || undefined,
         include_narrative_guides: includeNarrativeGuides,
+        previous_dialogue_preview: previousDialoguePreview || undefined,
       }
 
       const response = await dialoguesAPI.generateUnityDialogue(request)
@@ -415,6 +417,9 @@ export function GenerationPanel() {
     authorProfile,
     maxChoices,
     narrativeTags,
+    vocabularyMinImportance,
+    includeNarrativeGuides,
+    previousDialoguePreview,
     buildContextSelections,
     toast,
     setStoreUnityDialogueResponse,

@@ -4,8 +4,7 @@ from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock, AsyncMock
 from api.main import app
 from services.dialogue_generation_service import DialogueGenerationService
-from services.interaction_service import InteractionService
-from models.dialogue_structure.interaction import Interaction
+# InteractionService et Interaction supprimés - système obsolète
 from models.dialogue_structure.dialogue_elements import DialogueLineElement
 
 
@@ -20,22 +19,14 @@ def mock_dialogue_service():
     return mock_service
 
 
-@pytest.fixture
-def mock_interaction_service():
-    """Mock du InteractionService."""
-    mock_service = MagicMock(spec=InteractionService)
-    mock_service.exists = MagicMock(return_value=True)
-    mock_service.get_dialogue_path = MagicMock(return_value=[])
-    mock_service.get_all = MagicMock(return_value=[])
-    return mock_service
-
+# mock_interaction_service supprimé - système obsolète
 
 @pytest.fixture
-def client(mock_dialogue_service, mock_interaction_service):
+def client(mock_dialogue_service):
     """Fixture pour créer un client de test avec mocks."""
     from api.dependencies import (
         get_dialogue_generation_service,
-        get_interaction_service,
+        # get_interaction_service supprimé - système obsolète
         get_config_service
     )
     
@@ -54,7 +45,7 @@ def client(mock_dialogue_service, mock_interaction_service):
     
     # Override les dépendances FastAPI
     app.dependency_overrides[get_dialogue_generation_service] = lambda: mock_dialogue_service
-    app.dependency_overrides[get_interaction_service] = lambda: mock_interaction_service
+    # get_interaction_service supprimé - système obsolète
     app.dependency_overrides[get_config_service] = lambda: mock_config_service
     
     yield TestClient(app)
@@ -155,17 +146,7 @@ async def test_generate_interaction_variants(client, mock_dialogue_service, mock
     NOTE: Ce test est obsolète. L'endpoint /api/v1/dialogues/generate/interactions
     a été supprimé et remplacé par /api/v1/dialogues/generate/unity-dialogue.
     """
-    # Créer une interaction mock
-    mock_interaction = Interaction(
-        interaction_id="test-1",
-        title="Test Interaction",
-        elements=[DialogueLineElement(text="Hello", speaker="NPC")]
-    )
-    
-    mock_interactions = [mock_interaction]
-    mock_dialogue_service.generate_interaction_variants = AsyncMock(
-        return_value=(mock_interactions, "prompt used", 500)
-    )
+    # Mocks d'Interaction supprimés - système obsolète
     mock_dialogue_service.context_builder = MagicMock()
     mock_dialogue_service.context_builder.set_previous_dialogue_context = MagicMock()
     
@@ -197,13 +178,13 @@ async def test_generate_interaction_variants(client, mock_dialogue_service, mock
 
 
 @pytest.mark.skip(reason="Endpoint /generate/interactions supprimé. Utiliser /generate/unity-dialogue à la place.")
-def test_generate_interaction_variants_invalid_previous_id(client, mock_interaction_service):
+def test_generate_interaction_variants_invalid_previous_id(client):
     """Test de génération d'interactions avec previous_interaction_id inexistant.
     
     NOTE: Ce test est obsolète. L'endpoint /api/v1/dialogues/generate/interactions
     a été supprimé et remplacé par /api/v1/dialogues/generate/unity-dialogue.
     """
-    mock_interaction_service.exists = MagicMock(return_value=False)
+    # mock_interaction_service supprimé - système obsolète
     
     response = client.post(
         "/api/v1/dialogues/generate/interactions",

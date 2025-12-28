@@ -338,15 +338,62 @@ async function ensurePortFree(port, portName) {
   return true;
 }
 
+// Fonction pour vérifier si le frontend est prêt
+function waitForFrontend(port, maxAttempts = 30, delay = 500) {
+  return new Promise((resolve, reject) => {
+    let attempts = 0;
+    
+    const check = () => {
+      attempts++;
+      const req = http.get(`http://localhost:${port}`, (res) => {
+        // Vite peut retourner différents codes, accepter 200, 304, ou même 404 (si la route n'existe pas mais le serveur répond)
+        if (res.statusCode === 200 || res.statusCode === 304 || res.statusCode === 404) {
+          resolve();
+        } else {
+          if (attempts >= maxAttempts) {
+            reject(new Error(`Le frontend n'a pas répondu après ${maxAttempts} tentatives (status: ${res.statusCode})`));
+          } else {
+            setTimeout(check, delay);
+          }
+        }
+      });
+      
+      req.on('error', (err) => {
+        if (attempts >= maxAttempts) {
+          reject(new Error(`Le frontend n'a pas démarré après ${maxAttempts} tentatives: ${err.message}`));
+        } else {
+          setTimeout(check, delay);
+        }
+      });
+      
+      req.setTimeout(1000, () => {
+        req.destroy();
+        if (attempts >= maxAttempts) {
+          reject(new Error(`Le frontend n'a pas démarré après ${maxAttempts} tentatives (timeout)`));
+        } else {
+          setTimeout(check, delay);
+        }
+      });
+    };
+    
+    // Attendre un peu avant de commencer à vérifier (Vite démarre vite mais pas instantanément)
+    setTimeout(() => check(), 500);
+  });
+}
+
 // Fonction pour ouvrir le navigateur
 function openBrowser(url) {
-  const start = process.platform === 'win32' ? 'start' : 
-                process.platform === 'darwin' ? 'open' : 'xdg-open';
-  spawn(start, [url], { shell: true, stdio: 'ignore' });
+  try {
+    const start = process.platform === 'win32' ? 'start' : 
+                  process.platform === 'darwin' ? 'open' : 'xdg-open';
+    spawn(start, [url], { shell: true, stdio: 'ignore' });
+  } catch (err) {
+    console.log(`⚠️  Impossible d'ouvrir le navigateur automatiquement. Ouvrez manuellement: ${url}`);
+  }
 }
 
 async function startServers() {
-  const apiPort = parseInt(process.env.API_PORT || '4242', 10);
+  const apiPort = parseInt(process.env.API_PORT || '4243', 10);  // Port dev (4243) different de production (4242)
   const frontendPort = parseInt(process.env.FRONTEND_PORT || '3000', 10);
   const frontendUrl = `http://localhost:${frontendPort}`;
   
@@ -433,7 +480,10 @@ async function startServers() {
     cwd: path.join(__dirname, '..'),
     stdio: 'inherit',
     shell: true,
-    env: Object.assign({}, process.env, { RELOAD: 'true' }) // Force le hot reload
+    env: Object.assign({}, process.env, { 
+      RELOAD: 'true',  // Force le hot reload
+      API_PORT: apiPort.toString()  // Définir le port API pour le dev
+    })
   });
 
   // Capturer les erreurs de démarrage immédiates
@@ -493,13 +543,23 @@ async function startServers() {
         shutdown(1, errorMsg);
       });
 
-      // Attendre un peu que le frontend démarre, puis ouvrir le navigateur
-      setTimeout(() => {
-        if (!isShuttingDown) {
-          console.log(`\n🌐 Ouverture du navigateur sur ${frontendUrl}...\n`);
-          openBrowser(frontendUrl);
-        }
-      }, 3000);
+      // Attendre que le frontend soit prêt, puis ouvrir le navigateur
+      waitForFrontend(frontendPort)
+        .then(() => {
+          if (!isShuttingDown) {
+            console.log(`\n🌐 Ouverture du navigateur sur ${frontendUrl}...\n`);
+            openBrowser(frontendUrl);
+          }
+        })
+        .catch((err) => {
+          // Si le frontend ne démarre pas, ouvrir quand même après un délai
+          console.log(`\n⚠️  ${err.message}, ouverture du navigateur quand même...\n`);
+          setTimeout(() => {
+            if (!isShuttingDown) {
+              openBrowser(frontendUrl);
+            }
+          }, 2000);
+        });
 
       // Surveiller l'arrêt du backend
       backend.on('close', (code) => {

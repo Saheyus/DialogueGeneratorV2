@@ -13,8 +13,7 @@ try:
 except ImportError:
     tiktoken = None
 
-from models.dialogue_structure.interaction import Interaction
-from models.dialogue_structure.dialogue_elements import DialogueLineElement, PlayerChoicesBlockElement, PlayerChoiceOption
+# Imports d'Interaction supprimés - utilisation de texte formaté Unity JSON à la place
 
 logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s') # Déjà configuré dans main_app
@@ -48,7 +47,7 @@ class ContextBuilder:
         self.vision_data = None
         self.quests = []
         self.context_config = self._load_context_config(config_file_path)
-        self.previous_dialogue_context: Optional[List[Interaction]] = None
+        self.previous_dialogue_context: Optional[str] = None
         
         # Configuration des chemins GDD via variables d'environnement ou paramètres
         # Priorité : paramètre > variable d'environnement > valeur par défaut
@@ -314,78 +313,55 @@ class ContextBuilder:
         if not hasattr(self, 'quests'): return None
         return self._get_element_details_by_name(name, self.quests)
 
-    def set_previous_dialogue_context(self, path_interactions: Optional[List[Interaction]]) -> None:
-        """Définit le contexte du dialogue précédent à utiliser pour la prochaine génération."""
-        if path_interactions:
-            logger.info(f"[LOG DEBUG] ContextBuilder: Contexte de dialogue précédent défini avec {len(path_interactions)} interaction(s). Stack: {''.join(traceback.format_stack(limit=5))}")
-            self.previous_dialogue_context = path_interactions
+    def set_previous_dialogue_context(self, preview_text: Optional[str]) -> None:
+        """Définit le contexte du dialogue précédent (texte formaté Unity JSON).
+        
+        Args:
+            preview_text: Texte formaté généré par preview_unity_dialogue_for_context, ou None pour réinitialiser.
+        """
+        if preview_text:
+            logger.info(f"[LOG DEBUG] ContextBuilder: Contexte de dialogue précédent défini (texte formaté Unity JSON). Stack: {''.join(traceback.format_stack(limit=5))}")
+            self.previous_dialogue_context = preview_text
         else:
             logger.info(f"[LOG DEBUG] ContextBuilder: Contexte de dialogue précédent réinitialisé (None). Stack: {''.join(traceback.format_stack(limit=5))}")
             self.previous_dialogue_context = None
 
     def _format_previous_dialogue_for_context(self, max_tokens_for_history: int) -> str:
-        """Formate le dialogue précédent stocké pour l'inclure dans le contexte LLM."""
-        self._throttled_info_log('format_prev_dialogue', f"[LOG DEBUG] Appel à _format_previous_dialogue_for_context. previous_dialogue_context présent: {self.previous_dialogue_context is not None} (len={len(self.previous_dialogue_context) if self.previous_dialogue_context else 0})")
+        """Formate le dialogue précédent stocké pour l'inclure dans le contexte LLM.
+        
+        Le texte est déjà formaté (généré par preview_unity_dialogue_for_context),
+        on vérifie juste les tokens et tronque si nécessaire.
+        """
+        self._throttled_info_log('format_prev_dialogue', f"[LOG DEBUG] Appel à _format_previous_dialogue_for_context. previous_dialogue_context présent: {self.previous_dialogue_context is not None}")
         if not self.previous_dialogue_context:
             return ""
 
-        history_accumulator = []  # Utiliser un accumulateur temporaire
-        current_tokens_content = 0  # Tokens pour le contenu réel de l'historique
-
-        delimiter_start = "--- DIALOGUES PRECEDENTS ---"
-        delimiter_end = "--- FIN DES DIALOGUES PRECEDENTS ---"
+        # Le texte est déjà formaté, vérifier les tokens
+        tokens = self._count_tokens(self.previous_dialogue_context)
         
-        tokens_for_delimiters_structure = self._count_tokens(delimiter_start) + self._count_tokens(delimiter_end) + self._count_tokens("\n") * 2
-        available_tokens_for_content = max_tokens_for_history - tokens_for_delimiters_structure
+        if tokens <= max_tokens_for_history:
+            return self.previous_dialogue_context
         
-        if available_tokens_for_content <= 0:
-            logger.warning(f"ContextBuilder: Pas assez de tokens ({max_tokens_for_history}) alloués pour l'historique.")
-            return ""
-
-        interactions_to_include = self.previous_dialogue_context[-3:]
-
-        for i, interaction in enumerate(interactions_to_include):
-            interaction_parts = []
-            interaction_title = interaction.title or f"Interaction ID: {interaction.interaction_id[:8]}..."
-            # En-tête plus concis
-            interaction_header = f"  Précédent ({i + 1}/{len(interactions_to_include)}): {interaction_title!r}"
-            interaction_parts.append(interaction_header)
-            
-            for element in interaction.elements:
-                if isinstance(element, DialogueLineElement):
-                    char_name = element.speaker or "Narrateur"
-                    # Indentation pour les lignes de dialogue
-                    line = f"    {char_name}: {element.text}"
-                    interaction_parts.append(line)
-                elif isinstance(element, PlayerChoicesBlockElement):
-                    # Indentation pour le bloc de choix
-                    interaction_parts.append("    Joueur (Choix):")
-                    for choice_idx, choice_option in enumerate(element.choices):
-                        # Indentation pour chaque choix
-                        choice_line = f"      - Choix {choice_idx + 1}: {choice_option.text} (-> {choice_option.next_interaction_id or 'N/A'})"
-                        interaction_parts.append(choice_line)
-            
-            interaction_str = "\n".join(interaction_parts)
-            
-            tokens_for_current_interaction_segment = self._count_tokens(interaction_str)
-            if history_accumulator:  
-                tokens_for_current_interaction_segment += self._count_tokens("\n") # Pour le saut de ligne entre interactions
-
-            if current_tokens_content + tokens_for_current_interaction_segment <= available_tokens_for_content:
-                history_accumulator.append(interaction_str)
-                current_tokens_content += tokens_for_current_interaction_segment
+        # Tronquer si nécessaire (garder les dernières lignes pour préserver la fin du dialogue)
+        logger.warning(f"ContextBuilder: Limite de tokens ({max_tokens_for_history}) atteinte. Troncature du contexte précédent ({tokens} tokens).")
+        lines = self.previous_dialogue_context.split('\n')
+        truncated_lines = []
+        current_tokens = 0
+        
+        # Commencer par la fin pour garder les dernières répliques
+        for line in reversed(lines):
+            line_tokens = self._count_tokens(line + '\n')
+            if current_tokens + line_tokens <= max_tokens_for_history:
+                truncated_lines.insert(0, line)
+                current_tokens += line_tokens
             else:
-                logger.warning(f"ContextBuilder: Limite de tokens ({available_tokens_for_content} pour contenu) atteinte. Interaction {interaction_title!r} et suivantes non incluses.")
                 break
         
-        if not history_accumulator:
-            logger.info("ContextBuilder: Aucun contenu d'historique de dialogue n'a pu être formaté.")
+        if not truncated_lines:
+            logger.warning("ContextBuilder: Impossible de tronquer le contexte précédent, retour vide.")
             return ""
         
-        # Un seul saut de ligne entre les interactions dans l'accumulateur
-        final_history_content_str = "\n".join(history_accumulator) 
-        # Sauts de ligne clairs autour des délimiteurs
-        return f"{delimiter_start}\n\n{final_history_content_str}\n\n{delimiter_end}"
+        return '\n'.join(truncated_lines)
 
     def _format_list(self, data_list, max_items=5) -> str:
         if not isinstance(data_list, list):

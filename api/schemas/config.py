@@ -1,5 +1,5 @@
 """Schémas Pydantic pour les endpoints de configuration."""
-from typing import List, Optional
+from typing import List, Optional, Dict
 from pydantic import BaseModel, Field
 
 
@@ -7,22 +7,44 @@ class FieldInfo(BaseModel):
     """Information sur un champ de contexte.
     
     Attributes:
-        field_name: Nom du champ.
-        description: Description du champ.
+        path: Chemin du champ (ex: "Nom", "Introduction.Résumé de la fiche").
+        label: Libellé du champ.
+        type: Type du champ (string, list, dict).
+        depth: Profondeur du champ dans la hiérarchie.
+        frequency: Fréquence du champ (0.0 à 1.0).
+        suggested: Si True, le champ est suggéré pour le type de génération.
+        category: Catégorie du champ (identity, characterization, voice, background, mechanics).
+        importance: Niveau d'importance du champ.
+        is_metadata: Si True, le champ est une métadonnée.
         is_essential: Si True, le champ est considéré comme essentiel.
+        is_unique: Si True, le champ est unique (n'apparaît que dans une seule fiche).
     """
-    field_name: str = Field(..., description="Nom du champ")
-    description: str = Field(..., description="Description du champ")
+    path: str = Field(..., description="Chemin du champ")
+    label: str = Field(..., description="Libellé du champ")
+    type: str = Field(..., description="Type du champ")
+    depth: int = Field(..., description="Profondeur du champ")
+    frequency: float = Field(..., description="Fréquence du champ (0.0 à 1.0)")
+    suggested: bool = Field(default=False, description="Si True, le champ est suggéré")
+    category: Optional[str] = Field(None, description="Catégorie du champ")
+    importance: str = Field(..., description="Niveau d'importance du champ")
+    is_metadata: bool = Field(default=False, description="Si True, le champ est une métadonnée")
     is_essential: bool = Field(default=False, description="Si True, le champ est essentiel")
+    is_unique: bool = Field(default=False, description="Si True, le champ est unique")
 
 
 class ContextFieldsResponse(BaseModel):
     """Réponse contenant la liste des champs de contexte disponibles.
     
     Attributes:
-        fields: Liste des informations sur les champs.
+        element_type: Type d'élément (character, location, etc.).
+        fields: Dictionnaire des informations sur les champs (clé = path du champ).
+        total: Nombre total de champs.
+        unique_fields_by_item: Nombre de fiches avec des champs uniques.
     """
-    fields: List[FieldInfo] = Field(default_factory=list, description="Liste des champs de contexte")
+    element_type: str = Field(..., description="Type d'élément")
+    fields: Dict[str, FieldInfo] = Field(default_factory=dict, description="Dictionnaire des champs de contexte")
+    total: int = Field(..., description="Nombre total de champs")
+    unique_fields_by_item: int = Field(default=0, description="Nombre de fiches avec des champs uniques")
 
 
 class ContextFieldSuggestionsRequest(BaseModel):
@@ -30,9 +52,11 @@ class ContextFieldSuggestionsRequest(BaseModel):
     
     Attributes:
         element_type: Type d'élément (character, location, item, etc.).
+        context: Type de contexte (dialogue, action, etc.).
         selected_fields: Champs déjà sélectionnés.
     """
     element_type: str = Field(..., description="Type d'élément")
+    context: str = Field(..., description="Type de contexte (dialogue, action, etc.)")
     selected_fields: List[str] = Field(default_factory=list, description="Champs déjà sélectionnés")
 
 
@@ -40,33 +64,41 @@ class ContextFieldSuggestionsResponse(BaseModel):
     """Réponse contenant des suggestions de champs de contexte.
     
     Attributes:
-        suggestions: Liste des suggestions de champs.
+        element_type: Type d'élément.
+        context: Type de contexte.
+        suggested_fields: Liste des suggestions de champs.
     """
-    suggestions: List[str] = Field(default_factory=list, description="Liste des suggestions")
+    element_type: str = Field(..., description="Type d'élément")
+    context: str = Field(..., description="Type de contexte")
+    suggested_fields: List[str] = Field(default_factory=list, description="Liste des suggestions")
 
 
 class ContextPreviewRequest(BaseModel):
     """Requête pour obtenir un aperçu du contexte construit.
     
     Attributes:
-        context_selections: Sélections de contexte.
-        max_tokens: Nombre maximum de tokens pour l'aperçu.
+        selected_elements: Éléments sélectionnés (characters, locations, etc.).
+        field_configs: Configuration des champs par type d'élément.
         organization_mode: Mode d'organisation du contexte.
+        scene_instruction: Instructions de scène.
+        max_tokens: Nombre maximum de tokens pour l'aperçu.
     """
-    context_selections: dict = Field(..., description="Sélections de contexte")
+    selected_elements: Dict[str, List[str]] = Field(..., description="Éléments sélectionnés")
+    field_configs: Optional[Dict[str, List[str]]] = Field(None, description="Configuration des champs par type")
+    organization_mode: Optional[str] = Field("default", description="Mode d'organisation")
+    scene_instruction: Optional[str] = Field(None, description="Instructions de scène")
     max_tokens: int = Field(default=1500, description="Nombre maximum de tokens")
-    organization_mode: Optional[str] = Field(None, description="Mode d'organisation")
 
 
 class ContextPreviewResponse(BaseModel):
     """Réponse contenant un aperçu du contexte.
     
     Attributes:
-        preview_text: Texte de l'aperçu.
-        estimated_tokens: Nombre estimé de tokens.
+        preview: Texte de l'aperçu.
+        tokens: Nombre estimé de tokens.
     """
-    preview_text: str = Field(..., description="Texte de l'aperçu")
-    estimated_tokens: int = Field(..., description="Nombre estimé de tokens")
+    preview: str = Field(..., description="Texte de l'aperçu")
+    tokens: int = Field(..., description="Nombre estimé de tokens")
 
 
 class DefaultFieldConfigResponse(BaseModel):

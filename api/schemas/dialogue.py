@@ -66,32 +66,7 @@ class GenerateDialogueVariantsRequest(BaseModel):
     npc_speaker_id: Optional[str] = Field(None, description="ID du PNJ interlocuteur (si None, utiliser le premier personnage sélectionné)")
 
 
-class GenerateInteractionVariantsRequest(BaseModel):
-    """Requête pour générer des interactions structurées.
-    
-    Attributes:
-        k_variants: Nombre de variantes à générer.
-        user_instructions: Instructions spécifiques de l'utilisateur.
-        context_selections: Sélections de contexte GDD.
-        max_context_tokens: Nombre maximum de tokens pour le contexte.
-        system_prompt_override: Surcharge du system prompt (optionnel).
-        llm_model_identifier: Identifiant du modèle LLM à utiliser.
-        previous_interaction_id: ID d'une interaction précédente pour la continuité narrative (optionnel).
-        field_configs: Configuration des champs de contexte à inclure (optionnel).
-        organization_mode: Mode d'organisation du contexte (optionnel).
-    """
-    k_variants: int = Field(default=1, ge=1, le=10, description="Nombre de variantes à générer")
-    user_instructions: str = Field(..., min_length=1, description="Instructions spécifiques pour la scène")
-    context_selections: ContextSelection = Field(..., description="Sélections de contexte GDD")
-    max_context_tokens: int = Field(default=1500, ge=100, le=50000, description="Nombre maximum de tokens pour le contexte")
-    system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
-    llm_model_identifier: str = Field(default="gpt-4o-mini", description="Identifiant du modèle LLM")
-    previous_interaction_id: Optional[str] = Field(None, description="ID d'une interaction précédente pour la continuité narrative")
-    field_configs: Optional[Dict[str, List[str]]] = Field(None, description="Configuration des champs de contexte par type d'élément")
-    organization_mode: Optional[str] = Field(None, description="Mode d'organisation du contexte (default, narrative, minimal)")
-    narrative_tags: Optional[List[str]] = Field(None, description="Tags narratifs pour guider le ton (ex: tension, humour, dramatique)")
-    vocabulary_min_importance: Optional[str] = Field(None, description="Niveau d'importance minimum pour le vocabulaire Alteir (Majeur, Important, Modéré, Secondaire, Mineur, Anecdotique)")
-    include_narrative_guides: bool = Field(default=True, description="Inclure les guides narratifs dans le prompt système")
+# GenerateInteractionVariantsRequest supprimé - système obsolète remplacé par Unity JSON
 
 
 class DialogueVariantResponse(BaseModel):
@@ -179,6 +154,7 @@ class GenerateUnityDialogueRequest(BaseModel):
     narrative_tags: Optional[List[str]] = Field(None, description="Tags narratifs pour guider le ton (ex: tension, humour, dramatique)")
     vocabulary_min_importance: Optional[str] = Field(None, description="Niveau d'importance minimum pour le vocabulaire Alteir (Majeur, Important, Modéré, Secondaire, Mineur, Anecdotique)")
     include_narrative_guides: bool = Field(default=True, description="Inclure les guides narratifs dans le prompt système")
+    previous_dialogue_preview: Optional[str] = Field(None, description="Texte formaté du dialogue précédent (généré par preview_unity_dialogue_for_context) pour continuité narrative")
 
 
 class GenerateUnityDialogueResponse(BaseModel):

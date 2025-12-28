@@ -70,55 +70,8 @@ export interface EstimateTokensResponse {
   estimated_prompt?: string | null
 }
 
-/**
- * @deprecated Ne plus utiliser. Les interactions structurées ne sont plus générées. Conservé pour compatibilité.
- */
-export interface GenerateInteractionVariantsRequest {
-  k_variants: number
-  user_instructions: string
-  context_selections: ContextSelection
-  max_context_tokens: number
-  system_prompt_override?: string
-  llm_model_identifier: string
-  previous_interaction_id?: string
-  field_configs?: Record<string, string[]>
-  organization_mode?: string
-  narrative_tags?: string[]
-  vocabulary_min_importance?: string
-  include_narrative_guides?: boolean
-}
-
-// Interaction
-export interface DialogueElement {
-  type: 'dialogue'
-  content: string
-  speaker?: string
-}
-
-export interface ChoiceElement {
-  type: 'choice'
-  options: Array<{
-    text: string
-    next_interaction_id: string
-  }>
-}
-
-export type InteractionElement = DialogueElement | ChoiceElement | Record<string, unknown>
-
-export interface InteractionResponse {
-  interaction_id: string
-  title: string
-  elements: InteractionElement[]
-  header_commands: string[]
-  header_tags: string[]
-  next_interaction_id_if_no_choices?: string
-  narrative_warnings?: string[]
-}
-
-export interface InteractionListResponse {
-  interactions: InteractionResponse[]
-  total: number
-}
+// GenerateInteractionVariantsRequest supprimé - système obsolète
+// DialogueElement et ChoiceElement supprimés - système obsolète remplacé par Unity JSON
 
 // Context
 export interface CharacterResponse {
@@ -211,10 +164,7 @@ export interface UnityDialoguesPathResponse {
   path: string
 }
 
-export interface InteractionContextPathResponse {
-  path: InteractionResponse[]
-  total: number
-}
+// InteractionContextPathResponse supprimé - système obsolète
 
 // Unity Dialogue
 export interface GenerateUnityDialogueRequest {
@@ -229,6 +179,7 @@ export interface GenerateUnityDialogueRequest {
   narrative_tags?: string[]
   vocabulary_min_importance?: string
   include_narrative_guides?: boolean
+  previous_dialogue_preview?: string
 }
 
 export interface GenerateUnityDialogueResponse {

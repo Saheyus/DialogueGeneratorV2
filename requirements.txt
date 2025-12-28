@@ -1,11 +1,8 @@
-PySide6>=6.0
 openai>=1.15
 PyYAML>=6.0 # Potentiellement utile pour configuration YAML (non utilisé actuellement) 
 jinja2>=3.0
 tiktoken>=0.4 
 pytest>=7.0
-pytest-qt>=4.0
-qasync>=0.23.0 # Pour la gestion asyncio avec Qt 
 pytest-asyncio # Ajout pour le support asyncio dans pytest 
 pydantic>=2.0 # Ajout pour les modèles de données et la validation de schéma 
 pytest-cov>=2.12 # Ajout pour la couverture de tests 

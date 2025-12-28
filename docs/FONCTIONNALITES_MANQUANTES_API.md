@@ -1,21 +1,19 @@
 # Fonctionnalités manquantes dans l'API REST
 
-⚠️ **Note** : L'interface Python (UI desktop PySide6) est **dépréciée**. Utiliser l'interface web React (`npm run dev`) qui est l'interface principale.
-
-Ce document liste les fonctionnalités présentes dans l'interface Python (UI desktop) mais absentes de l'API REST.
+Ce document liste les fonctionnalités qui étaient présentes dans l'ancienne interface desktop mais qui ne sont pas encore implémentées dans l'API REST.
 
 **Note** : Ce document a été mis à jour le 2025-12-25. Unity n'utilise plus le format Yarn (.yarn) mais le format JSON (voir spécification dans ce dossier).
 
 ## Résumé exécutif
 
-L'API REST couvre les fonctionnalités principales, mais plusieurs fonctionnalités avancées de l'UI Python ne sont pas exposées via l'API.
+L'API REST couvre les fonctionnalités principales, mais plusieurs fonctionnalités avancées de l'ancienne interface ne sont pas encore exposées via l'API.
 
 ---
 
 ## 1. Catégories GDD manquantes
 
 ### Espèces (Species)
-- **UI Python** : Liste complète des espèces avec détails (`ui/left_selection_panel.py`)
+- **Ancienne UI** : Liste complète des espèces avec détails
 - **API REST** : ✅ Implémenté - `GET /api/v1/context/species`, `GET /api/v1/context/species/{name}`
 - **Impact** : Fonctionnalité disponible via l'API
 
@@ -26,7 +24,7 @@ GET /api/v1/context/species/{name}    # Détails d'une espèce
 ```
 
 ### Communautés (Communities)
-- **UI Python** : Liste complète des communautés avec détails (`ui/left_selection_panel.py`)
+- **Ancienne UI** : Liste complète des communautés avec détails
 - **API REST** : ✅ Implémenté - `GET /api/v1/context/communities`, `GET /api/v1/context/communities/{name}`
 - **Impact** : Fonctionnalité disponible via l'API
 
@@ -43,7 +41,7 @@ GET /api/v1/context/communities/{name}    # Détails d'une communauté
 ## 2. Linked Selector (Éléments liés)
 
 ### Suggestion automatique d'éléments liés
-- **UI Python** : 
+- **Ancienne UI** : 
   - Bouton "Lier Éléments Connexes" (`ui/generation_panel/handlers.py:4-30`)
   - Service `LinkedSelectorService` qui suggère automatiquement des éléments liés (`services/linked_selector.py`)
   - Utilise `ContextBuilder.get_linked_elements()` pour trouver les relations
@@ -80,7 +78,7 @@ Response: {
 ## 3. Régions et sous-lieux
 
 ### Hiérarchie des lieux
-- **UI Python** : 
+- **Ancienne UI** : 
   - Sélection de région avec mise à jour dynamique des sous-lieux (`ui/generation_panel/scene_selection_widget.py:117-154`)
   - Méthodes `ContextBuilder.get_regions()` et `ContextBuilder.get_sub_locations(region_name)`
 - **API REST** : ✅ Implémenté - `GET /api/v1/context/locations/regions`, `GET /api/v1/context/locations/regions/{name}/sub-locations`
@@ -101,7 +99,7 @@ GET /api/v1/context/locations/regions/{name}/sub-locations  # Sous-lieux d'une r
 ## 4. Continuité (Previous Interactions Context)
 
 ### Sélection d'interactions précédentes pour le contexte
-- **UI Python** : 
+- **Ancienne UI** : 
   - Onglet "Continuité" avec widget `PreviousDialogueSelectorWidget` (`ui/left_panel/previous_dialogue_selector_widget.py`)
   - Récupération du chemin complet d'une interaction (parents jusqu'à la racine)
   - Méthode `ContextBuilder.set_previous_dialogue_context()` pour définir le contexte
@@ -122,7 +120,7 @@ POST /api/v1/dialogues/generate/interactions       # Doit accepter previous_inte
 ## 5. Configuration Unity Dialogues Path
 
 ### Configuration du chemin des dialogues Unity
-- **UI Python** : 
+- **Ancienne UI** : 
   - Menu "Configure Unity Dialogues Path..." (`ui/main_window.py:226-251`)
   - Stocké via `ConfigurationService.set_unity_dialogues_path()`
   - Utilisé pour référencer le dossier où Unity stocke les fichiers de dialogues JSON
@@ -147,7 +145,7 @@ Body: { "path": "string" }
 ## 6. Dialogue Structure
 
 ### Structure de dialogue personnalisable
-- **UI Python** : 
+- **Ancienne UI** : 
   - Widget `DialogueStructureWidget` permettant de définir la structure du dialogue (`ui/generation_panel/dialogue_structure_widget.py`)
   - La structure est transmise au service de génération
 - **API REST** : ✅ Déjà supporté
@@ -159,7 +157,7 @@ Body: { "path": "string" }
 ## 7. System Prompt Override
 
 ### Personnalisation du system prompt
-- **UI Python** : 
+- **Ancienne UI** : 
   - Widget `InstructionsWidget` avec possibilité de modifier le system prompt (`ui/generation_panel/instructions_widget.py`)
   - Bouton "Restore Default System Prompt"
 - **API REST** : ✅ Déjà supporté

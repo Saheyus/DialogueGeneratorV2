@@ -1,7 +1,7 @@
 """Point d'entrée principal de l'API REST FastAPI."""
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     logger.info("Démarrage de l'API DialogueGenerator...")
-    logger.info(f"Timestamp: {datetime.utcnow().isoformat()}Z")
+    logger.info(f"Timestamp: {datetime.now(timezone.utc).isoformat()}Z")
     
     # Valider la configuration de sécurité
     try:
@@ -236,7 +236,7 @@ async def health_check() -> JSONResponse:
     from api.utils.health_check import perform_health_checks
     
     health_result = perform_health_checks(detailed=False)
-    health_result["timestamp"] = datetime.utcnow().isoformat() + "Z"
+    health_result["timestamp"] = datetime.now(timezone.utc).isoformat() + "Z"
     health_result["service"] = "DialogueGenerator API"
     
     # Retourner 503 si unhealthy
@@ -258,7 +258,7 @@ async def health_check_detailed() -> JSONResponse:
     from api.utils.health_check import perform_health_checks
     
     health_result = perform_health_checks(detailed=True)
-    health_result["timestamp"] = datetime.utcnow().isoformat() + "Z"
+    health_result["timestamp"] = datetime.now(timezone.utc).isoformat() + "Z"
     health_result["service"] = "DialogueGenerator API"
     
     # Retourner 503 si unhealthy, 200 même si degraded (l'app fonctionne mais avec limitations)
@@ -271,12 +271,11 @@ async def health_check_detailed() -> JSONResponse:
 
 
 # Inclusion des routers
-from api.routers import auth, dialogues, context, config, llm_usage, unity_dialogues, interactions
+from api.routers import auth, dialogues, context, config, llm_usage, unity_dialogues
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(dialogues.router, prefix="/api/v1/dialogues", tags=["Dialogues"])
 app.include_router(unity_dialogues.router, prefix="/api/v1/unity-dialogues", tags=["Unity Dialogues"])
-app.include_router(interactions.router, prefix="/api/v1/interactions", tags=["Interactions"])
 app.include_router(context.router, prefix="/api/v1/context", tags=["Context"])
 app.include_router(config.router, prefix="/api/v1/config", tags=["Configuration"])
 app.include_router(llm_usage.router, prefix="/api/v1/llm-usage", tags=["LLM Usage"])
@@ -286,24 +285,25 @@ from api.routers import vocabulary, narrative_guides
 app.include_router(vocabulary.router)
 app.include_router(narrative_guides.router)
 
-# Servir le frontend statique en production (APRÈS les routes API)
-if is_production_env:
-    try:
-        from fastapi.staticfiles import StaticFiles
-        from pathlib import Path
-        
-        # Chemin vers le dossier dist du frontend
-        frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
-        
-        if frontend_dist.exists():
-            app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="static")
-            logger.info(f"Frontend statique monté depuis: {frontend_dist}")
-        else:
-            logger.warning(f"Dossier frontend/dist introuvable: {frontend_dist}")
-    except ImportError:
-        logger.warning("StaticFiles non disponible, le frontend ne sera pas servi")
-    except Exception as e:
-        logger.error(f"Erreur lors du montage du frontend statique: {e}")
+# Servir le frontend statique si le dossier dist existe (APRÈS les routes API)
+# Fonctionne en production ET en development si le frontend est buildé
+try:
+    from fastapi.staticfiles import StaticFiles
+    from pathlib import Path
+    
+    # Chemin vers le dossier dist du frontend
+    frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+    
+    if frontend_dist.exists():
+        app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="static")
+        logger.info(f"Frontend statique monté depuis: {frontend_dist} (mode: {os.getenv('ENVIRONMENT', 'development')})")
+    else:
+        logger.warning(f"Dossier frontend/dist introuvable: {frontend_dist}")
+        logger.info("Le frontend ne sera pas servi. Builder le frontend avec 'npm run deploy:build' pour l'activer.")
+except ImportError:
+    logger.warning("StaticFiles non disponible, le frontend ne sera pas servi")
+except Exception as e:
+    logger.error(f"Erreur lors du montage du frontend statique: {e}")
 
 
 if __name__ == "__main__":

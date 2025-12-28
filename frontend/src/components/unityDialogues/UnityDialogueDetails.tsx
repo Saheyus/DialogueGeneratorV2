@@ -11,12 +11,14 @@ interface UnityDialogueDetailsProps {
   filename: string
   onClose: () => void
   onDeleted?: () => void
+  onGenerateContinuation?: (dialogueJson: string, dialogueTitle: string) => void
 }
 
 export function UnityDialogueDetails({
   filename,
   onClose,
   onDeleted,
+  onGenerateContinuation,
 }: UnityDialogueDetailsProps) {
   const [jsonContent, setJsonContent] = useState<string>('')
   const [title, setTitle] = useState<string>('')
@@ -131,6 +133,23 @@ export function UnityDialogueDetails({
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {onGenerateContinuation && (
+            <button
+              onClick={() => onGenerateContinuation(jsonContent, title)}
+              style={{
+                padding: '0.5rem 1rem',
+                border: `1px solid ${theme.border.primary}`,
+                borderRadius: '4px',
+                backgroundColor: theme.button.primary.background,
+                color: theme.button.primary.color,
+                cursor: 'pointer',
+                fontWeight: 'bold',
+              }}
+              title="Générer un dialogue qui suit celui-ci"
+            >
+              Générer la suite
+            </button>
+          )}
           <button
             onClick={handleDelete}
             disabled={isDeleting}

@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 
 # Define paths at the module level or pass them during instantiation
 DIALOGUE_GENERATOR_DIR = Path(__file__).resolve().parent.parent
-UI_SETTINGS_FILE = DIALOGUE_GENERATOR_DIR / "ui_settings.json"
+APP_CONFIG_FILE = DIALOGUE_GENERATOR_DIR / "app_config.json"
+UI_SETTINGS_FILE_LEGACY = DIALOGUE_GENERATOR_DIR / "ui_settings.json"  # Legacy file for migration
 LLM_CONFIG_FILE_PATH = DIALOGUE_GENERATOR_DIR / "llm_config.json"
 CONTEXT_CONFIG_FILE_PATH = DIALOGUE_GENERATOR_DIR / "context_config.json"
 SCENE_INSTRUCTION_TEMPLATES_FILE_PATH = DIALOGUE_GENERATOR_DIR / "config" / "scene_instruction_templates.json"
@@ -23,7 +24,8 @@ DEFAULT_UNITY_DIALOGUES_PATH = Path("F:/Unity/Alteir/Alteir_Cursor/Assets/Dialog
 
 class ConfigurationService:
     def __init__(self):
-        self.ui_settings: Dict[str, Any] = self._load_json_file(UI_SETTINGS_FILE, default={})
+        # Load app_config.json, with migration from ui_settings.json if needed
+        self.app_config: Dict[str, Any] = self._load_app_config()
         self.llm_config: Dict[str, Any] = self._load_json_file(LLM_CONFIG_FILE_PATH, default={})
         self.context_config: Dict[str, Any] = self._load_json_file(CONTEXT_CONFIG_FILE_PATH, default={})
         self.scene_instruction_templates: Dict[str, Any] = self._load_json_file(SCENE_INSTRUCTION_TEMPLATES_FILE_PATH, default={"templates": []})
@@ -80,26 +82,65 @@ class ConfigurationService:
             logger.error(f"An unexpected error occurred while saving to {file_path}: {e}")
             return False
 
-    # --- UI Settings specific methods ---
-    def get_ui_setting(self, key: str, default: Any = None) -> Any:
-        """Gets a specific UI setting."""
-        return self.ui_settings.get(key, default)
+    def _load_app_config(self) -> Dict[str, Any]:
+        """Loads app_config.json, with automatic migration from ui_settings.json if needed.
+        
+        Returns:
+            Dict[str, Any]: The loaded app configuration.
+        """
+        # Try to load app_config.json first
+        if APP_CONFIG_FILE.exists():
+            return self._load_json_file(APP_CONFIG_FILE, default={})
+        
+        # If app_config.json doesn't exist, try to migrate from ui_settings.json
+        if UI_SETTINGS_FILE_LEGACY.exists():
+            logger.info(f"Migrating from legacy ui_settings.json to app_config.json")
+            legacy_config = self._load_json_file(UI_SETTINGS_FILE_LEGACY, default={})
+            
+            # Extract only the unity_dialogues_path from legacy config
+            migrated_config = {}
+            if "unity_dialogues_path" in legacy_config:
+                migrated_config["unity_dialogues_path"] = legacy_config["unity_dialogues_path"]
+                logger.info(f"Migrated unity_dialogues_path: {migrated_config['unity_dialogues_path']}")
+            
+            # Save the migrated config
+            if migrated_config:
+                self._save_json_file(APP_CONFIG_FILE, migrated_config)
+                logger.info(f"Created app_config.json with migrated settings")
+            
+            return migrated_config
+        
+        # No config files exist, return empty dict
+        return {}
 
-    def get_all_ui_settings(self) -> Dict[str, Any]:
-        """Gets all UI settings."""
-        return self.ui_settings.copy()
+    def _get_app_config(self, key: str, default: Any = None) -> Any:
+        """Gets a value from app_config (private method).
+        
+        Args:
+            key: The configuration key.
+            default: Default value if key not found.
+            
+        Returns:
+            The configuration value or default.
+        """
+        return self.app_config.get(key, default)
 
-    def update_ui_setting(self, key: str, value: Any) -> None:
-        """Updates a single UI setting."""
-        self.ui_settings[key] = value
-    
-    def update_all_ui_settings(self, settings: Dict[str, Any]) -> None:
-        """Replaces all UI settings with the provided dictionary."""
-        self.ui_settings = settings.copy() # Ensure we're working with a copy
+    def _update_app_config(self, key: str, value: Any) -> None:
+        """Updates a value in app_config (private method).
+        
+        Args:
+            key: The configuration key.
+            value: The value to set.
+        """
+        self.app_config[key] = value
 
-    def save_ui_settings(self) -> bool:
-        """Saves current UI settings to the file."""
-        return self._save_json_file(UI_SETTINGS_FILE, self.ui_settings)
+    def _save_app_config(self) -> bool:
+        """Saves app_config to file (private method).
+        
+        Returns:
+            True if successful, False otherwise.
+        """
+        return self._save_json_file(APP_CONFIG_FILE, self.app_config)
 
     # --- LLM Config specific methods ---
     def get_llm_config(self) -> Dict[str, Any]:
@@ -208,9 +249,6 @@ class ConfigurationService:
         return templates
 
     # --- File Path Getters ---
-    def get_ui_settings_file_path(self) -> Path:
-        return UI_SETTINGS_FILE
-
     def get_llm_config_file_path(self) -> Path:
         return LLM_CONFIG_FILE_PATH
 
@@ -220,7 +258,7 @@ class ConfigurationService:
     # --- Unity Dialogues Path specific methods (from config_manager.py) ---
     def _initialize_unity_dialogues_path(self) -> Optional[Path]:
         """Initializes and validates the Unity dialogues path."""
-        path_str = self.get_ui_setting("unity_dialogues_path")
+        path_str = self._get_app_config("unity_dialogues_path")
         
         dialogues_path = None
         if path_str:
@@ -228,17 +266,17 @@ class ConfigurationService:
         else:
             dialogues_path = DEFAULT_UNITY_DIALOGUES_PATH
             logger.info(f"Unity dialogues path not configured, using default: {dialogues_path}")
-            # Save the default path to ui_settings if it wasn't there
-            self.update_ui_setting("unity_dialogues_path", str(dialogues_path))
-            self.save_ui_settings() # Persist this change
+            # Save the default path to app_config if it wasn't there
+            self._update_app_config("unity_dialogues_path", str(dialogues_path))
+            self._save_app_config() # Persist this change
 
         if not self._validate_and_prepare_path(dialogues_path):
             # If validation fails for the (default or loaded) path, try the default path explicitly one more time
             # This handles cases where the stored path is bad, but the default is good.
             if dialogues_path != DEFAULT_UNITY_DIALOGUES_PATH:
                 logger.warning(f"Initial Unity dialogues path '{dialogues_path}' is invalid. Trying default path '{DEFAULT_UNITY_DIALOGUES_PATH}'.")
-                self.update_ui_setting("unity_dialogues_path", str(DEFAULT_UNITY_DIALOGUES_PATH))
-                self.save_ui_settings()
+                self._update_app_config("unity_dialogues_path", str(DEFAULT_UNITY_DIALOGUES_PATH))
+                self._save_app_config()
                 if self._validate_and_prepare_path(DEFAULT_UNITY_DIALOGUES_PATH):
                     return DEFAULT_UNITY_DIALOGUES_PATH
             logger.error(f"Unity dialogues path '{dialogues_path}' (and default, if tried) is invalid and could not be prepared.")
@@ -289,13 +327,13 @@ class ConfigurationService:
             logger.warning(f"Proposed Unity dialogues path '{new_path}' is invalid or could not be prepared.")
             return False
 
-        self.update_ui_setting("unity_dialogues_path", str(new_path))
-        if self.save_ui_settings():
+        self._update_app_config("unity_dialogues_path", str(new_path))
+        if self._save_app_config():
             self.unity_dialogues_path = new_path
             logger.info(f"Unity dialogues path configured: {new_path}")
             return True
         else:
-            logger.error(f"Failed to save UI settings after updating Unity dialogues path to '{new_path}'.")
+            logger.error(f"Failed to save app config after updating Unity dialogues path to '{new_path}'.")
             return False
 
 # Example usage (optional, for testing or demonstration)
@@ -303,24 +341,14 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     config_service = ConfigurationService()
     
-    print(f"UI Settings File: {UI_SETTINGS_FILE}")
+    print(f"App Config File: {APP_CONFIG_FILE}")
     print(f"LLM Config File: {LLM_CONFIG_FILE_PATH}")
     print(f"Context Config File: {CONTEXT_CONFIG_FILE_PATH}")
 
     print("\n--- Initial Configs ---")
-    print(f"Initial UI settings: {config_service.get_all_ui_settings()}")
     print(f"Initial LLM config: {config_service.get_llm_config()}")
     print(f"Initial Context config: {config_service.get_context_config()}")
     print(f"Initial Unity Dialogues Path: {config_service.get_unity_dialogues_path()}")
-
-    print("\n--- Modifying UI Setting ---")
-    config_service.update_ui_setting("test_setting", "test_value")
-    config_service.update_ui_setting("window_width", 1024)
-    print(f"UI settings after update: {config_service.get_ui_setting('test_setting')}, {config_service.get_ui_setting('window_width')}")
-    if config_service.save_ui_settings():
-        print("UI settings saved successfully.")
-    else:
-        print("Failed to save UI settings.")
 
     print("\n--- Testing Unity Dialogues Path ---")
     # Test setting a new path (ensure the test_path directory can be created or exists)
@@ -350,10 +378,4 @@ if __name__ == "__main__":
     if available_models:
         print(f"Available LLM Models: {available_models}")
     else:
-        print("No LLM models found in configuration or llm_config.json is empty/missing.")
-        # Example: Saving a default LLM config if it's part of the service's role
-        # default_llm_cfg = {"api_key_env_var": "OPENAI_API_KEY", "default_model_identifier": "gpt-4o-mini", "available_models": [{"display_name": "GPT-4o Mini", "api_identifier": "gpt-4o-mini"}]}
-        # if config_service.save_llm_config(default_llm_cfg):
-        #     print(f"Saved a default LLM config. Available models: {config_service.get_available_llm_models()}")
-        # else:
-        #     print("Failed to save default LLM config.") 
+        print("No LLM models found in configuration or llm_config.json is empty/missing.") 

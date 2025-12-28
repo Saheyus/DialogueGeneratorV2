@@ -652,18 +652,9 @@ class TestContextBuilderContextBuilding:
         assert instruction in context_str
 
     def test_build_context_with_previous_dialogue(self, cb_for_context: ContextBuilder):
-        # Setup des interactions précédentes
-        from models.dialogue_structure.interaction import Interaction # Ajout import local si besoin
-        from models.dialogue_structure.dialogue_elements import DialogueLineElement # Ajout import local
-        
-        interaction1 = Interaction(
-            interaction_id="prev_inter_1", 
-            title="Rencontre initiale", 
-            elements=[
-                DialogueLineElement(element_id="line1", speaker="Elara", text="Bonjour Gorok.")
-            ]
-        )
-        cb_for_context.set_previous_dialogue_context([interaction1]) # Appel avant build_context
+        # Utiliser du texte formaté au lieu d'Interaction
+        preview_text = "--- DIALOGUES PRECEDENTS ---\n\n  Précédent (1/1): 'Rencontre initiale'\n    Elara: Bonjour Gorok.\n\n--- FIN DES DIALOGUES PRECEDENTS ---"
+        cb_for_context.set_previous_dialogue_context(preview_text) # Appel avant build_context
 
         selected = {
             "characters": ["Elara"],

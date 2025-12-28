@@ -13,22 +13,20 @@ def client_with_real_config():
     """Fixture avec configuration réelle pour tester la sélection du client."""
     from api.dependencies import (
         get_dialogue_generation_service,
-        get_interaction_service,
+# get_interaction_service supprimé - système obsolète
         get_config_service
     )
     from services.dialogue_generation_service import DialogueGenerationService
-    from services.interaction_service import InteractionService
+    # InteractionService supprimé - système obsolète
     from services.configuration_service import ConfigurationService
     
     # Utiliser le vrai ConfigurationService
     real_config_service = ConfigurationService()
     
-    # Mock des services de dialogue et interaction pour éviter les dépendances complexes
+    # Mock des services de dialogue pour éviter les dépendances complexes
     mock_dialogue_service = MagicMock(spec=DialogueGenerationService)
-    mock_interaction_service = MagicMock(spec=InteractionService)
     
     app.dependency_overrides[get_dialogue_generation_service] = lambda: mock_dialogue_service
-    app.dependency_overrides[get_interaction_service] = lambda: mock_interaction_service
     app.dependency_overrides[get_config_service] = lambda: real_config_service
     
     yield TestClient(app)

@@ -78,8 +78,17 @@ apiClient.interceptors.response.use(
         refreshTokenPromise = (async () => {
           try {
             // Le refresh token est maintenant dans un cookie httpOnly, pas besoin de le passer dans le body
-            // Utiliser apiClient pour bénéficier du proxy Vite en dev
-            const response = await apiClient.post(
+            // IMPORTANT: Utiliser axios directement pour éviter que l'intercepteur ne déclenche un autre refresh
+            // (ce qui créerait une boucle infinie si le refresh échoue)
+            const axiosInstance = axios.create({
+              baseURL: API_BASE_URL,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              timeout: 30000,
+              withCredentials: true,
+            })
+            const response = await axiosInstance.post(
               '/api/v1/auth/refresh',
               {} // Body vide, le cookie est envoyé automatiquement avec withCredentials
             )

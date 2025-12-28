@@ -1,6 +1,6 @@
 """Service d'authentification pour l'API."""
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
 import bcrypt
@@ -104,9 +104,9 @@ class AuthService:
         """
         to_encode = data.copy()
         if expires_delta:
-            expire = datetime.utcnow() + expires_delta
+            expire = datetime.now(timezone.utc) + expires_delta
         else:
-            expire = datetime.utcnow() + self.access_token_expire
+            expire = datetime.now(timezone.utc) + self.access_token_expire
         
         to_encode.update({"exp": expire, "type": "access"})
         encoded_jwt = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
@@ -122,7 +122,7 @@ class AuthService:
             Token JWT encodé.
         """
         to_encode = data.copy()
-        expire = datetime.utcnow() + self.refresh_token_expire
+        expire = datetime.now(timezone.utc) + self.refresh_token_expire
         to_encode.update({"exp": expire, "type": "refresh"})
         encoded_jwt = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
         return encoded_jwt

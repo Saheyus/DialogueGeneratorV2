@@ -5,180 +5,19 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Set, Tuple
 
-from models.dialogue_structure import (
-    Interaction,
-    DialogueLineElement,
-    PlayerChoicesBlockElement,
-    PlayerChoiceOption,
-    CommandElement,
-)
+# Imports d'Interaction supprimés - système obsolète remplacé par Unity JSON direct
 
 logger = logging.getLogger(__name__)
 
 
 class UnityJsonRenderer:
-    """Renderer qui convertit des Interactions en format JSON Unity normalisé.
+    """Renderer pour le format JSON Unity normalisé.
     
     Le format Unity attend un tableau de nœuds à la racine : [{"id": "...", ...}, ...]
-    Chaque Interaction est convertie en un DialogueNodeJson.
     """
 
-    def render_interactions(self, interactions: List[Interaction]) -> List[Dict[str, Any]]:
-        """Convertit une liste d'Interactions en liste de nœuds JSON Unity.
-        
-        Args:
-            interactions: Liste d'Interactions à convertir.
-            
-        Returns:
-            Liste de dictionnaires représentant les nœuds Unity (non normalisés).
-            
-        Raises:
-            ValueError: Si les IDs ne sont pas uniques ou si les références sont invalides.
-        """
-        # Validation : IDs uniques
-        interaction_ids = [interaction.interaction_id for interaction in interactions]
-        if len(interaction_ids) != len(set(interaction_ids)):
-            duplicate_ids = [id for id in interaction_ids if interaction_ids.count(id) > 1]
-            raise ValueError(f"IDs d'interactions dupliqués : {set(duplicate_ids)}")
-        
-        # Construire un set des IDs valides pour validation des références
-        valid_ids: Set[str] = set(interaction_ids)
-        
-        # Convertir chaque Interaction en nœud Unity
-        nodes: List[Dict[str, Any]] = []
-        for interaction in interactions:
-            node = self._interaction_to_node(interaction, valid_ids)
-            nodes.append(node)
-        
-        return nodes
-    
-    def render_interactions_to_string(
-        self, 
-        interactions: List[Interaction], 
-        normalize: bool = True
-    ) -> str:
-        """Convertit des Interactions en chaîne JSON Unity.
-        
-        Args:
-            interactions: Liste d'Interactions à convertir.
-            normalize: Si True, normalise le JSON (supprime champs vides, etc.).
-            
-        Returns:
-            Chaîne JSON formatée (indentée de 2 espaces).
-        """
-        nodes = self.render_interactions(interactions)
-        
-        if normalize:
-            nodes = [self._normalize_node(node) for node in nodes]
-        
-        return json.dumps(nodes, indent=2, ensure_ascii=False)
-    
-    def render_interactions_to_file(
-        self,
-        interactions: List[Interaction],
-        output_path: Path,
-        normalize: bool = True
-    ) -> None:
-        """Convertit des Interactions et les écrit dans un fichier JSON Unity.
-        
-        Args:
-            interactions: Liste d'Interactions à convertir.
-            output_path: Chemin du fichier de sortie.
-            normalize: Si True, normalise le JSON avant écriture.
-        """
-        json_content = self.render_interactions_to_string(interactions, normalize=normalize)
-        
-        # Créer le dossier parent si nécessaire
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Écrire le fichier
-        output_path.write_text(json_content, encoding='utf-8')
-        logger.info(f"Fichier JSON Unity écrit : {output_path}")
-    
-    def _interaction_to_node(self, interaction: Interaction, valid_ids: Set[str]) -> Dict[str, Any]:
-        """Convertit une Interaction en nœud DialogueNodeJson.
-        
-        Args:
-            interaction: L'Interaction à convertir.
-            valid_ids: Set des IDs valides pour validation des références.
-            
-        Returns:
-            Dictionnaire représentant un nœud Unity (non normalisé).
-        """
-        node: Dict[str, Any] = {
-            "id": interaction.interaction_id,  # Toujours présent (requis)
-        }
-        
-        # Trouver les lignes de dialogue (DialogueLineElement)
-        dialogue_lines = [
-            elem for elem in interaction.elements 
-            if isinstance(elem, DialogueLineElement)
-        ]
-        
-        # Prendre la première ligne pour speaker/line
-        # Si plusieurs lignes, on pourrait les concaténer, mais pour l'instant on prend la première
-        if dialogue_lines:
-            first_line = dialogue_lines[0]
-            if first_line.speaker:
-                node["speaker"] = first_line.speaker
-            if first_line.text:
-                # Si plusieurs lignes, concaténer avec des sauts de ligne
-                if len(dialogue_lines) > 1:
-                    all_texts = [line.text for line in dialogue_lines if line.text]
-                    node["line"] = "\n".join(all_texts)
-                else:
-                    node["line"] = first_line.text
-        
-        # Trouver les blocs de choix (PlayerChoicesBlockElement)
-        choices_blocks = [
-            elem for elem in interaction.elements 
-            if isinstance(elem, PlayerChoicesBlockElement)
-        ]
-        
-        if choices_blocks:
-            # Prendre le premier bloc de choix (normalement il n'y en a qu'un)
-            choices_block = choices_blocks[0]
-            choices = []
-            for choice_option in choices_blocks[0].choices:
-                choice_dict: Dict[str, Any] = {
-                    "text": choice_option.text,  # Requis
-                    "targetNode": choice_option.next_interaction_id,  # Requis, toujours présent même vide
-                }
-                
-                # Validation : vérifier que targetNode référence un ID valide (s'il n'est pas vide)
-                if choice_option.next_interaction_id and choice_option.next_interaction_id not in valid_ids:
-                    logger.warning(
-                        f"Référence invalide dans l'interaction {interaction.interaction_id}: "
-                        f"targetNode '{choice_option.next_interaction_id}' n'existe pas dans les interactions fournies"
-                    )
-                
-                # Champs optionnels du choix
-                if choice_option.condition:
-                    choice_dict["condition"] = choice_option.condition
-                # Note: Les autres champs (traitRequirements, influenceThreshold, etc.) 
-                # ne sont pas dans PlayerChoiceOption actuellement, donc on ne les ajoute pas
-                
-                choices.append(choice_dict)
-            
-            if choices:
-                node["choices"] = choices
-        
-        # nextNode : si pas de choix et qu'il y a un next_interaction_id_if_no_choices
-        if not choices_blocks and interaction.next_interaction_id_if_no_choices:
-            node["nextNode"] = interaction.next_interaction_id_if_no_choices
-            
-            # Validation
-            if node["nextNode"] not in valid_ids:
-                logger.warning(
-                    f"Référence invalide dans l'interaction {interaction.interaction_id}: "
-                    f"nextNode '{node['nextNode']}' n'existe pas dans les interactions fournies"
-                )
-        
-        # Note: Les autres champs Unity (cutsceneMode, test, consequences, etc.)
-        # ne sont pas mappés depuis Interaction actuellement.
-        # Ils pourraient être ajoutés plus tard si nécessaire via des extensions du modèle Interaction.
-        
-        return node
+    # Méthodes render_interactions, render_interactions_to_string, render_interactions_to_file,
+    # et _interaction_to_node supprimées - système obsolète remplacé par Unity JSON direct
     
     def _normalize_node(self, node: Dict[str, Any]) -> Dict[str, Any]:
         """Normalise un nœud en supprimant les champs vides selon les règles Unity.
