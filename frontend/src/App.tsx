@@ -3,8 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-
 import { MainLayout } from './components/layout/MainLayout'
 import { LoginForm } from './components/auth/LoginForm'
 import { Dashboard } from './components/layout/Dashboard'
-import { InteractionsPage } from './components/interactions/InteractionsPage'
-import { InteractionDetails } from './components/interactions/InteractionDetails'
+import { UnityDialoguesPage } from './components/unityDialogues/UnityDialoguesPage'
 import { UsageDashboard } from './components/usage/UsageDashboard'
 import { useAuthStore } from './store/authStore'
 import { ToastContainer } from './components/shared'
@@ -36,10 +35,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />
 }
 
-function InteractionDetailRoute() {
-  const { id } = useParams<{ id: string }>()
-  return <InteractionDetails interactionId={id || null} onClose={() => window.history.back()} />
-}
 
 function App() {
   return (
@@ -66,21 +61,21 @@ function App() {
           }
         />
         <Route
-          path="/interactions"
+          path="/unity-dialogues"
           element={
             <ProtectedRoute>
               <MainLayout>
-                <InteractionsPage />
+                <UnityDialoguesPage />
               </MainLayout>
             </ProtectedRoute>
           }
         />
         <Route
-          path="/interactions/:id"
+          path="/interactions"
           element={
             <ProtectedRoute>
-              <MainLayout fullWidth>
-                <InteractionDetailRoute />
+              <MainLayout>
+                <UnityDialoguesPage />
               </MainLayout>
             </ProtectedRoute>
           }

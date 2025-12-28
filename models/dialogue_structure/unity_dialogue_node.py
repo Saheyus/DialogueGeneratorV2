@@ -16,10 +16,7 @@ class UnityDialogueConsequencesContent(BaseModel):
 class UnityDialogueChoiceContent(BaseModel):
     """Contenu d'un choix généré par l'IA."""
     text: str = Field(..., description="Texte du choix")
-    targetNode: Optional[str] = Field(None, description="Référence vers nœud cible (sera résolu par le système)")
     test: Optional[str] = Field(None, description="Format: AttributeType+SkillId:DD (ex: 'Raison+Rhétorique:8')")
-    testSuccessNode: Optional[str] = Field(None, description="Référence vers nœud si test réussi")
-    testFailureNode: Optional[str] = Field(None, description="Référence vers nœud si test échoué")
     traitRequirements: Optional[List[Dict[str, Any]]] = Field(
         None, 
         description="Exigences de traits (ex: [{'trait': 'Courageux', 'minValue': 5}])"
@@ -45,16 +42,10 @@ class UnityDialogueNodeContent(BaseModel):
         None, 
         description="Format: AttributeType+SkillId:DD (ex: 'Raison+Rhétorique:8'). La compétence est obligatoire."
     )
-    successNode: Optional[str] = Field(None, description="Référence vers nœud de succès (sera résolu par le système)")
-    failureNode: Optional[str] = Field(None, description="Référence vers nœud d'échec (sera résolu par le système)")
     consequences: Optional[UnityDialogueConsequencesContent] = Field(None, description="Flags narratifs à activer")
     isLongRest: Optional[bool] = Field(None, description="Si true, déclenche un repos long")
     startState: Optional[int] = Field(None, description="État de démarrage pour dialogues multi-entrées")
     choices: Optional[List[UnityDialogueChoiceContent]] = Field(None, description="Choix disponibles pour le joueur")
-    nextNode: Optional[str] = Field(
-        None, 
-        description="Référence vers nœud suivant si pas de choix (sera résolu par le système)"
-    )
 
 
 class UnityDialogueGenerationResponse(BaseModel):

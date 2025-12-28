@@ -251,3 +251,75 @@ export interface ExportUnityDialogueResponse {
   success: boolean
 }
 
+// Unity Dialogues Library
+export interface UnityDialogueMetadata {
+  filename: string
+  file_path: string
+  size_bytes: number
+  modified_time: string
+  title?: string
+}
+
+export interface UnityDialogueListResponse {
+  dialogues: UnityDialogueMetadata[]
+  total: number
+}
+
+export interface UnityDialogueReadResponse {
+  filename: string
+  json_content: string
+  title?: string
+  size_bytes: number
+  modified_time: string
+}
+
+export interface UnityDialoguePreviewRequest {
+  json_content: string
+}
+
+export interface UnityDialoguePreviewResponse {
+  preview_text: string
+  node_count: number
+}
+
+// Unity Dialogue Node Types (for editor)
+export interface UnityDialogueChoice {
+  text: string
+  targetNode: string
+  traitRequirements?: Array<{
+    trait: string
+    minValue: number
+  }>
+  allowInfluenceForcing?: boolean
+  influenceThreshold?: number
+  influenceDelta?: number
+  respectDelta?: number
+  test?: string
+  testSuccessNode?: string
+  testFailureNode?: string
+  condition?: string
+  [key: string]: unknown
+}
+
+export interface UnityDialogueNode {
+  id: string
+  speaker?: string
+  line?: string
+  nextNode?: string
+  choices?: UnityDialogueChoice[]
+  test?: string
+  successNode?: string
+  failureNode?: string
+  isLongRest?: boolean
+  startState?: number
+  cutsceneMode?: boolean
+  cutsceneImageId?: string
+  cutsceneId?: string
+  exitCutsceneMode?: boolean
+  consequences?: {
+    flag: string
+    description?: string
+  }
+  [key: string]: unknown
+}
+

@@ -34,12 +34,10 @@ async def test_generate_dialogue_node_single_node(unity_service: UnityDialogueGe
             line="Test dialogue line",
             choices=[
                 UnityDialogueChoiceContent(
-                    text="Choice 1",
-                    targetNode=None
+                    text="Choice 1"
                 ),
                 UnityDialogueChoiceContent(
-                    text="Choice 2",
-                    targetNode=None
+                    text="Choice 2"
                 )
             ]
         )
@@ -63,7 +61,7 @@ async def test_generate_dialogue_node_single_node(unity_service: UnityDialogueGe
 
 @pytest.mark.asyncio
 async def test_enrich_with_ids_single_node(unity_service: UnityDialogueGenerationService):
-    """Test que enrich_with_ids fonctionne avec un seul nœud."""
+    """Test que enrich_with_ids fonctionne avec un seul nœud (END n'est pas créé car Unity le gère implicitement)."""
     response = UnityDialogueGenerationResponse(
         title="Test Dialogue",
         node=UnityDialogueNodeContent(
@@ -71,8 +69,7 @@ async def test_enrich_with_ids_single_node(unity_service: UnityDialogueGeneratio
             line="Test dialogue line",
             choices=[
                 UnityDialogueChoiceContent(
-                    text="Choice 1",
-                    targetNode=None
+                    text="Choice 1"
                 )
             ]
         )
@@ -80,15 +77,18 @@ async def test_enrich_with_ids_single_node(unity_service: UnityDialogueGeneratio
     
     enriched_nodes = unity_service.enrich_with_ids(response, start_id="START")
     
+    # Devrait y avoir 1 seul nœud : START (END n'est pas créé car Unity le gère implicitement)
     assert len(enriched_nodes) == 1
-    node = enriched_nodes[0]
-    assert node["id"] == "START"
-    assert node["speaker"] == "TEST_NPC"
-    assert node["line"] == "Test dialogue line"
-    assert "choices" in node
-    assert len(node["choices"]) == 1
-    assert node["choices"][0]["text"] == "Choice 1"
-    assert node["choices"][0]["targetNode"] == ""  # Vide mais présent
+    
+    # Vérifier le nœud START
+    start_node = enriched_nodes[0]
+    assert start_node["id"] == "START"
+    assert start_node["speaker"] == "TEST_NPC"
+    assert start_node["line"] == "Test dialogue line"
+    assert "choices" in start_node
+    assert len(start_node["choices"]) == 1
+    assert start_node["choices"][0]["text"] == "Choice 1"
+    assert start_node["choices"][0]["targetNode"] == "END"  # "END" est un marqueur de fin, pas un vrai nœud
 
 
 def test_enrich_with_ids_no_choices(unity_service: UnityDialogueGenerationService):
@@ -97,8 +97,7 @@ def test_enrich_with_ids_no_choices(unity_service: UnityDialogueGenerationServic
         title="Test Dialogue",
         node=UnityDialogueNodeContent(
             speaker="TEST_NPC",
-            line="Test dialogue line",
-            nextNode="END"
+            line="Test dialogue line"
         )
     )
     
@@ -109,7 +108,7 @@ def test_enrich_with_ids_no_choices(unity_service: UnityDialogueGenerationServic
     assert node["id"] == "START"
     assert node["speaker"] == "TEST_NPC"
     assert node["line"] == "Test dialogue line"
-    assert "nextNode" in node
-    assert node["nextNode"] == "END"
     assert "choices" not in node
+    # Note: nextNode, successNode, failureNode sont des champs techniques
+    # qui ne sont pas générés par l'IA et ne sont pas ajoutés automatiquement
 

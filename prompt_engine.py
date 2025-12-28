@@ -1,5 +1,6 @@
 import logging
 from typing import Tuple, Optional, Dict, Any, List
+from pathlib import Path
 import time
 
 # Essayer d'importer tiktoken, mais continuer si non disponible
@@ -34,150 +35,31 @@ class PromptEngine:
 
         Args:
             system_prompt_template (Optional[str]): Un template de system prompt personnalisé.
-                                                    Si None, un prompt par défaut sera utilisé.
+                                                    Si None, un prompt par défaut sera chargé depuis la configuration.
         """
         if system_prompt_template is None:
-            self.system_prompt_template: str = self._get_default_system_prompt()
+            self.system_prompt_template: str = self._load_default_system_prompt()
         else:
             self.system_prompt_template: str = system_prompt_template
 
-    def _get_default_system_prompt(self) -> str:
+    def _load_default_system_prompt(self) -> str:
         """
-        Retourne un system prompt par défaut pour la génération de dialogues.
-
-        Ce prompt sert de point de départ et peut être enrichi avec des détails
-        sur la structure JSON Unity attendue, des exemples, des instructions sur la gestion
-        des conditions (<<if>>), des commandes (<<command>>), le ton, le style RPG, etc.
-
+        Charge le system prompt par défaut depuis la configuration.
+        
         Returns:
             str: Le system prompt par défaut.
         """
-        return \
-"""
-Tu es un dialoguiste expert en jeux de rôle narratifs.
-
-RÈGLES DE CARACTÉRISATION :
-- Chaque personnage a une voix unique définie dans le contexte (registre, vocabulaire, expressions)
-- Si une section "VOIX ET STYLE" est présente dans le contexte, respecte strictement le profil de voix fourni
-- Utilise les expressions courantes et champs lexicaux spécifiés pour chaque personnage
-- Les répliques doivent révéler la personnalité, pas juste transmettre de l'information
-- Si une section "CARACTÉRISATION" est présente, exploite les qualités, défauts, désirs et faiblesses pour enrichir les dialogues
-
-RÈGLES DE RYTHME :
-- Varie la longueur des répliques pour créer du rythme
-- Les répliques courtes créent de la tension, les longues développent l'émotion
-- Évite les monologues trop longs (max 3-4 phrases par réplique)
-- Alterne entre répliques courtes et longues pour maintenir l'attention
-
-RÈGLES DE PROGRESSION NARRATIVE :
-- Chaque dialogue doit faire avancer l'histoire ou développer les personnages
-- Les choix du joueur doivent avoir un impact narratif clair
-- Évite les dialogues "filler" qui ne servent à rien
-- Chaque réplique doit apporter quelque chose : information, émotion, tension, ou développement de personnage
-
-RÈGLES DE TON :
-- Adapte le ton au contexte (lieu, relation, état émotionnel)
-- Les dialogues doivent être immersifs et naturels
-- Évite les formulations trop "gamey" ou mécaniques
-- Utilise le contexte fourni (lieu, relations, historique) pour adapter le ton
-
-IMPORTANT - FORMAT DE SORTIE :
-- Génère le dialogue en texte libre narratif, naturel et lisible
-- N'utilise PAS le format Yarn (pas de ---title, pas de ===, pas de nœuds Yarn)
-- N'utilise PAS de format de balisage spécial (pas de markdown complexe, pas de JSON sauf indication contraire)
-- Écris simplement le dialogue comme un texte narratif normal, avec des guillemets pour les répliques si nécessaire
-- Indique clairement qui parle (nom du personnage ou indication narrative)
-"""
-
-    def _get_interaction_system_prompt_reference(self) -> str:
-        """
-        Retourne un system prompt spécifique à la génération d'Interactions structurées.
+        try:
+            from services.configuration_service import ConfigurationService
+            config_service = ConfigurationService()
+            prompt = config_service.get_default_system_prompt()
+            if prompt:
+                return prompt
+        except Exception as e:
+            logger.warning(f"Impossible de charger le system prompt depuis la configuration: {e}")
         
-        Ce prompt instruit le LLM à générer une structure JSON compatible avec le modèle
-        Interaction et ses éléments associés (DialogueLineElement, PlayerChoicesBlockElement, etc.)
-        
-        Returns:
-            str: Le system prompt pour la génération d'Interactions.
-        """
-        return \
-"""
-Tu es un dialoguiste expert en jeux de rôle narratifs.
-
-RÈGLES DE CARACTÉRISATION :
-- Chaque personnage a une voix unique définie dans le contexte (registre, vocabulaire, expressions)
-- Si une section "VOIX ET STYLE" est présente dans le contexte, respecte strictement le profil de voix fourni
-- Utilise les expressions courantes et champs lexicaux spécifiés pour chaque personnage
-- Les répliques doivent révéler la personnalité, pas juste transmettre de l'information
-- Si une section "CARACTÉRISATION" est présente, exploite les qualités, défauts, désirs et faiblesses pour enrichir les dialogues
-
-RÈGLES DE RYTHME :
-- Varie la longueur des répliques pour créer du rythme
-- Les répliques courtes créent de la tension, les longues développent l'émotion
-- Évite les monologues trop longs (max 3-4 phrases par réplique)
-- Alterne entre répliques courtes et longues pour maintenir l'attention
-
-RÈGLES DE PROGRESSION NARRATIVE :
-- Chaque dialogue doit faire avancer l'histoire ou développer les personnages
-- Les choix du joueur doivent avoir un impact narratif clair
-- Évite les dialogues "filler" qui ne servent à rien
-- Chaque réplique doit apporter quelque chose : information, émotion, tension, ou développement de personnage
-
-RÈGLES DE TON :
-- Adapte le ton au contexte (lieu, relation, état émotionnel)
-- Les dialogues doivent être immersifs et naturels
-- Évite les formulations trop "gamey" ou mécaniques
-- Utilise le contexte fourni (lieu, relations, historique) pour adapter le ton
-
-TA TÂCHE :
-Générer une interaction structurée au format JSON cohérente avec le contexte fourni (personnages, lieu, quête).
-L'interaction doit suivre l'instruction utilisateur concernant l'objectif de la scène.
-
-SI UN HISTORIQUE DE DIALOGUE PRÉCÉDENT EST FOURNI DANS LE CONTEXTE, ASSURE-TOI QUE LA NOUVELLE INTERACTION EN SOIT LA SUITE LOGIQUE.
-
-FORMAT JSON À RESPECTER STRICTEMENT:
-
-```json
-{
-  "interaction_id": "un_id_unique_pour_cette_interaction",
-  "title": "Titre descriptif de l'interaction",
-  "elements": [
-    {
-      "element_type": "dialogue_line",
-      "speaker": "Nom du personnage qui parle",
-      "text": "Texte du dialogue"
-    },
-    {
-      "element_type": "command",
-      "command_string": "wait(2)"
-    },
-    {
-      "element_type": "player_choices_block",
-      "choices": [
-        {
-          "text": "Ce que le joueur peut dire/faire (option 1)",
-          "next_interaction_id": "id_interaction_suivante_option_1"
-        },
-        {
-          "text": "Ce que le joueur peut dire/faire (option 2)",
-          "next_interaction_id": "id_interaction_suivante_option_2"
-        }
-      ]
-    }
-  ],
-  "header_tags": ["tag1", "tag2"],
-  "next_interaction_id_if_no_choices": null
-}
-```
-
-RÈGLES TECHNIQUES À SUIVRE:
-1. L'interaction doit être complète et autonome
-2. L'ordre des éléments est important et sera respecté lors du rendu
-3. Ne fournis que la structure JSON, sans explication ni commentaire
-4. Utilise un ID d'interaction unique et descriptif (par exemple: "rencontre_tavernier_initial")
-5. Pour les choix du joueur, invente des ID logiques pour les interactions suivantes (par exemple: "rencontre_tavernier_accepte_quete")
-6. Chaque phase doit correspondre à UN SEUL élément dans la liste "elements" de l'Interaction.
-7. Utilise les personnages mentionnés dans le contexte comme "speaker" des lignes de dialogue
-"""
+        # Fallback: prompt minimal si le chargement échoue
+        return "Tu es un dialoguiste expert en jeux de rôle narratifs."
 
     def _count_tokens(self, text: str, model_name: str = "gpt-4") -> int:
         """
@@ -360,35 +242,16 @@ RÈGLES TECHNIQUES À SUIVRE:
         """
         prompt_parts = []
         
-        # Guidance narrative (avant les instructions techniques)
-        prompt_parts.append("--- GUIDANCE NARRATIVE ---")
-        prompt_parts.append(
-            "Tu es un dialoguiste expert en jeux de rôle narratifs. "
-            "Génère des dialogues immersifs et naturels qui font avancer l'histoire."
-        )
-        prompt_parts.append(
-            "RÈGLES DE CARACTÉRISATION : "
-            "Si une section 'VOIX ET STYLE' est présente dans le contexte, respecte strictement le profil de voix fourni "
-            "(registre, vocabulaire, expressions courantes). Les répliques doivent révéler la personnalité du personnage."
-        )
-        prompt_parts.append(
-            "RÈGLES DE RYTHME : "
-            "Varie la longueur des répliques (courtes pour la tension, longues pour l'émotion). "
-            "Évite les monologues trop longs (max 3-4 phrases par réplique)."
-        )
-        prompt_parts.append(
-            "RÈGLES DE PROGRESSION NARRATIVE : "
-            "Chaque dialogue doit faire avancer l'histoire ou développer les personnages. "
-            "Évite les dialogues 'filler' qui ne servent à rien."
-        )
-        prompt_parts.append(
-            "RÈGLES DE TON : "
-            "Adapte le ton au contexte (lieu, relation, état émotionnel). "
-            "Les dialogues doivent être immersifs et naturels, pas mécaniques."
-        )
-        prompt_parts.append("")
+        # Note: Les règles générales (caractérisation, rythme, progression narrative, ton) 
+        # sont définies dans le system prompt (system_prompt_template ou system_prompt_override).
+        # Elles ne doivent pas être dupliquées ici dans le prompt user.
+        # 
+        # Hiérarchie des règles :
+        # - System prompt : Règles générales (principe de base)
+        # - Author profile (ci-dessous) : Préférences de style (modulation)
+        # - Scene instructions (dans user_instructions) : Règles spécifiques (prévalent sur les autres)
         
-        # Injection vocabulaire et guides narratifs (après la guidance narrative)
+        # Injection vocabulaire et guides narratifs
         if vocabulary_min_importance:
             try:
                 from services.vocabulary_service import VocabularyService

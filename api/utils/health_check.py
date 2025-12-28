@@ -54,21 +54,38 @@ class HealthCheckResult:
 def check_gdd_files() -> HealthCheckResult:
     """Vérifie que les fichiers GDD sont accessibles.
     
+    Utilise les variables d'environnement GDD_CATEGORIES_PATH et GDD_IMPORT_PATH
+    si définies, sinon utilise les chemins par défaut.
+    
     Returns:
         HealthCheckResult avec le statut de vérification.
     """
     try:
-        # Utiliser le chemin DialogueGenerator/data/GDD_categories (lien symbolique)
-        # project_root correspond au répertoire DialogueGenerator
-        project_root = Path(__file__).resolve().parent.parent.parent
+        import os
         
-        # Utiliser le lien symbolique data/GDD_categories/ au lieu de PROJECT_ROOT_DIR/GDD/categories
-        gdd_base_path = project_root / "data" / "GDD_categories"
-        # Le chemin import reste au niveau parent (PROJECT_ROOT_DIR) s'il existe, sinon on essaie parent
-        if PROJECT_ROOT_DIR:
-            import_base_path = PROJECT_ROOT_DIR / "import" / "Bible_Narrative"
+        # Utiliser les variables d'environnement si définies, sinon les chemins par défaut
+        env_categories_path = os.getenv("GDD_CATEGORIES_PATH")
+        if env_categories_path:
+            gdd_base_path = Path(env_categories_path)
         else:
-            import_base_path = project_root.parent / "import" / "Bible_Narrative"
+            # Chemin par défaut : DialogueGenerator/data/GDD_categories
+            project_root = Path(__file__).resolve().parent.parent.parent
+            gdd_base_path = project_root / "data" / "GDD_categories"
+        
+        env_import_path = os.getenv("GDD_IMPORT_PATH")
+        if env_import_path:
+            import_base_path = Path(env_import_path)
+            # Si le chemin pointe directement vers Bible_Narrative, c'est bon
+            # Sinon, chercher dans le sous-dossier Bible_Narrative
+            if import_base_path.name != "Bible_Narrative":
+                import_base_path = import_base_path / "Bible_Narrative"
+        else:
+            # Chemin par défaut : PROJECT_ROOT_DIR/import/Bible_Narrative
+            if PROJECT_ROOT_DIR:
+                import_base_path = PROJECT_ROOT_DIR / "import" / "Bible_Narrative"
+            else:
+                project_root = Path(__file__).resolve().parent.parent.parent
+                import_base_path = project_root.parent / "import" / "Bible_Narrative"
         
         # Vérifier que les répertoires existent
         issues = []

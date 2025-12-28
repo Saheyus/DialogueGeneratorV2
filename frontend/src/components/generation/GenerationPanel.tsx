@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import * as dialoguesAPI from '../../api/dialogues'
 import * as configAPI from '../../api/config'
+import * as contextAPI from '../../api/context'
 import { useContextStore } from '../../store/contextStore'
 import { useGenerationStore } from '../../store/generationStore'
 import { useGenerationActionsStore } from '../../store/generationActionsStore'
@@ -20,7 +21,6 @@ import type {
 import { DialogueStructureWidget } from './DialogueStructureWidget'
 import { SystemPromptEditor } from './SystemPromptEditor'
 import { SceneSelectionWidget } from './SceneSelectionWidget'
-import { ContextActions } from '../context/ContextActions'
 import { ContextSummaryChips, useToast, toastManager } from '../shared'
 
 
@@ -379,7 +379,6 @@ export function GenerationPanel() {
       // Stocker directement la réponse Unity dans le store et l'état local
       setUnityDialogueResponse(response)
       setStoreUnityDialogueResponse(response)
-      setInteractions([])
       setIsDirty(false)
       
       if (response.prompt_used) {
@@ -457,8 +456,38 @@ export function GenerationPanel() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isLoading, handleGenerate])
 
+  const { applyLinkedElements } = useContextStore()
   const { setActions } = useGenerationActionsStore()
   
+  // Liaison automatique des éléments quand sceneSelection change
+  useEffect(() => {
+    // Ne lier automatiquement que si au moins un élément est sélectionné
+    if (!sceneSelection.characterA && !sceneSelection.characterB && !sceneSelection.sceneRegion && !sceneSelection.subLocation) {
+      return
+    }
+
+    const linkElementsAutomatically = async () => {
+      try {
+        const response = await contextAPI.getLinkedElements({
+          character_a: sceneSelection.characterA || undefined,
+          character_b: sceneSelection.characterB || undefined,
+          scene_region: sceneSelection.sceneRegion || undefined,
+          sub_location: sceneSelection.subLocation || undefined,
+        })
+        
+        // Les listes sont déjà dans le store (chargées par ContextSelector)
+        applyLinkedElements(response.linked_elements)
+      } catch (err) {
+        // Ignorer silencieusement les erreurs de liaison automatique pour ne pas perturber l'UX
+        console.warn('Erreur lors de la liaison automatique des éléments:', err)
+      }
+    }
+
+    // Délai pour éviter les appels multiples lors de changements rapides
+    const timeoutId = setTimeout(linkElementsAutomatically, 300)
+    return () => clearTimeout(timeoutId)
+  }, [sceneSelection.characterA, sceneSelection.characterB, sceneSelection.sceneRegion, sceneSelection.subLocation, applyLinkedElements])
+
   // Utiliser useRef pour stocker les handlers et éviter les boucles infinies
   const handlersRef = useRef({
     handleGenerate,
@@ -515,14 +544,6 @@ export function GenerationPanel() {
             />
 
             <SceneSelectionWidget />
-
-      <ContextActions
-        onError={setError}
-        onSuccess={(msg: string) => {
-          // Optionnel: afficher un message de succès
-          console.log(msg)
-        }}
-      />
 
       <SystemPromptEditor
         userInstructions={userInstructions}

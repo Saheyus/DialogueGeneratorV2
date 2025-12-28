@@ -279,6 +279,9 @@ class UnityJsonRenderer:
         
         # Valider les références de nœuds
         valid_ids = set(id for id in node_ids if id)
+        # "END" est un nœud spécial reconnu par Unity pour terminer le dialogue
+        # Il peut être omis du JSON (Unity le gère), mais on l'ajoute généralement explicitement
+        valid_ids.add("END")
         reference_fields = ["nextNode", "targetNode", "successNode", "failureNode", "testSuccessNode", "testFailureNode"]
         
         for node in nodes:

@@ -222,3 +222,69 @@ class ExportUnityDialogueResponse(BaseModel):
     file_path: str = Field(..., description="Chemin absolu du fichier créé")
     filename: str = Field(..., description="Nom du fichier créé")
     success: bool = Field(..., description="Indique si l'export a réussi")
+
+
+# Schemas pour la bibliothèque Unity Dialogues
+class UnityDialogueMetadata(BaseModel):
+    """Métadonnées d'un fichier de dialogue Unity JSON.
+    
+    Attributes:
+        filename: Nom du fichier (avec extension .json).
+        file_path: Chemin absolu du fichier.
+        size_bytes: Taille du fichier en octets.
+        modified_time: Date de modification (ISO format).
+        title: Titre extrait depuis le JSON (optionnel).
+    """
+    filename: str = Field(..., description="Nom du fichier")
+    file_path: str = Field(..., description="Chemin absolu du fichier")
+    size_bytes: int = Field(..., description="Taille en octets")
+    modified_time: str = Field(..., description="Date de modification (ISO format)")
+    title: Optional[str] = Field(None, description="Titre extrait du dialogue")
+
+
+class UnityDialogueListResponse(BaseModel):
+    """Réponse pour la liste des dialogues Unity.
+    
+    Attributes:
+        dialogues: Liste des métadonnées des fichiers.
+        total: Nombre total de fichiers.
+    """
+    dialogues: List[UnityDialogueMetadata] = Field(..., description="Liste des métadonnées")
+    total: int = Field(..., description="Nombre total de fichiers")
+
+
+class UnityDialogueReadResponse(BaseModel):
+    """Réponse pour la lecture d'un dialogue Unity.
+    
+    Attributes:
+        filename: Nom du fichier.
+        json_content: Contenu JSON brut (string).
+        title: Titre extrait du dialogue (optionnel).
+        size_bytes: Taille du fichier en octets.
+        modified_time: Date de modification (ISO format).
+    """
+    filename: str = Field(..., description="Nom du fichier")
+    json_content: str = Field(..., description="Contenu JSON brut")
+    title: Optional[str] = Field(None, description="Titre extrait du dialogue")
+    size_bytes: int = Field(..., description="Taille en octets")
+    modified_time: str = Field(..., description="Date de modification (ISO format)")
+
+
+class UnityDialoguePreviewRequest(BaseModel):
+    """Requête pour générer un preview texte d'un dialogue Unity.
+    
+    Attributes:
+        json_content: Contenu JSON du dialogue Unity.
+    """
+    json_content: str = Field(..., description="Contenu JSON du dialogue Unity")
+
+
+class UnityDialoguePreviewResponse(BaseModel):
+    """Réponse pour le preview texte d'un dialogue Unity.
+    
+    Attributes:
+        preview_text: Texte formaté pour injection LLM.
+        node_count: Nombre de nœuds dans le dialogue.
+    """
+    preview_text: str = Field(..., description="Texte formaté pour injection LLM")
+    node_count: int = Field(..., description="Nombre de nœuds")

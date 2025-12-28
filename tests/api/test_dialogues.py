@@ -147,9 +147,14 @@ def test_generate_dialogue_variants_invalid_request(client):
     assert response.status_code == 422  # Validation error
 
 
+@pytest.mark.skip(reason="Endpoint /generate/interactions supprimé. Utiliser /generate/unity-dialogue à la place.")
 @pytest.mark.asyncio
 async def test_generate_interaction_variants(client, mock_dialogue_service, mock_interaction_service, monkeypatch):
-    """Test de génération d'interactions."""
+    """Test de génération d'interactions.
+    
+    NOTE: Ce test est obsolète. L'endpoint /api/v1/dialogues/generate/interactions
+    a été supprimé et remplacé par /api/v1/dialogues/generate/unity-dialogue.
+    """
     # Créer une interaction mock
     mock_interaction = Interaction(
         interaction_id="test-1",
@@ -191,8 +196,13 @@ async def test_generate_interaction_variants(client, mock_dialogue_service, mock
     assert response.status_code in [200, 500]  # 500 si erreur de mock, 200 si ça passe
 
 
+@pytest.mark.skip(reason="Endpoint /generate/interactions supprimé. Utiliser /generate/unity-dialogue à la place.")
 def test_generate_interaction_variants_invalid_previous_id(client, mock_interaction_service):
-    """Test de génération d'interactions avec previous_interaction_id inexistant."""
+    """Test de génération d'interactions avec previous_interaction_id inexistant.
+    
+    NOTE: Ce test est obsolète. L'endpoint /api/v1/dialogues/generate/interactions
+    a été supprimé et remplacé par /api/v1/dialogues/generate/unity-dialogue.
+    """
     mock_interaction_service.exists = MagicMock(return_value=False)
     
     response = client.post(

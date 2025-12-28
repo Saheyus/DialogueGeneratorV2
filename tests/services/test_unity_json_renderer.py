@@ -287,4 +287,34 @@ class TestUnityJsonRenderer:
         
         assert "speaker" not in node
         assert node["line"] == "Text without speaker"
+    
+    def test_validate_nodes_accepts_end_special_node(self, renderer: UnityJsonRenderer):
+        """Test que le validateur accepte "END" comme nœud spécial même s'il n'est pas dans la liste.
+        
+        "END" est un nœud terminal spécial reconnu par Unity pour terminer le dialogue.
+        Il peut être référencé même s'il n'est pas présent explicitement dans le JSON.
+        """
+        # Créer un nœud qui pointe vers "END" sans créer le nœud END
+        node_with_end = {
+            "id": "START",
+            "speaker": "TEST_NPC",
+            "line": "Test dialogue",
+            "choices": [
+                {
+                    "text": "Choice 1",
+                    "targetNode": "END"
+                },
+                {
+                    "text": "Choice 2",
+                    "targetNode": "END"
+                }
+            ]
+        }
+        
+        # Valider : "END" devrait être accepté même s'il n'est pas dans la liste
+        is_valid, errors = renderer.validate_nodes([node_with_end])
+        
+        assert is_valid is True
+        assert len(errors) == 0
+        # "END" est reconnu comme nœud spécial valide
 

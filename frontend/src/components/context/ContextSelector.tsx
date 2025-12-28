@@ -42,7 +42,8 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
     toggleItem, 
     toggleSpecies,
     toggleCommunity,
-    clearSelections 
+    clearSelections,
+    setElementLists,
   } = useContextStore()
 
   useEffect(() => {
@@ -65,6 +66,15 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
       setItems(itemsRes.items)
       setSpecies(speciesRes.species)
       setCommunities(communitiesRes.communities)
+      
+      // Mettre à jour le store avec les listes pour qu'elles soient accessibles partout
+      setElementLists({
+        characters: charsRes.characters,
+        locations: locsRes.locations,
+        items: itemsRes.items,
+        species: speciesRes.species,
+        communities: communitiesRes.communities,
+      })
     } catch (err) {
       setError(getErrorMessage(err))
     } finally {

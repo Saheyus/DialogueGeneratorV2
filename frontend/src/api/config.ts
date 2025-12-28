@@ -179,3 +179,21 @@ export async function getAuthorProfileTemplates(): Promise<AuthorProfileTemplate
   return response.data
 }
 
+/**
+ * Réponse contenant les chemins des fichiers de templates.
+ */
+export interface TemplateFilePathsResponse {
+  system_prompt_path: string
+  scene_instructions_dir: string
+  author_profiles_dir: string
+  config_dir: string
+}
+
+/**
+ * Récupère les chemins des fichiers de templates pour les ouvrir dans l'éditeur.
+ */
+export async function getTemplateFilePaths(): Promise<TemplateFilePathsResponse> {
+  const response = await apiClient.get<TemplateFilePathsResponse>('/api/v1/config/template-file-paths')
+  return response.data
+}
+

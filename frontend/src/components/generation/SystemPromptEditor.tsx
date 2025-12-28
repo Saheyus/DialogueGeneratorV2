@@ -80,14 +80,10 @@ export const SystemPromptEditor = memo(function SystemPromptEditor({
       setShowTemplatePreview(template.id)
     } else {
       setSelectedSceneTemplateId(template.id)
-      // Appliquer les instructions du template au brief de scène
-      const currentInstructions = userInstructions.trim()
-      const newInstructions = currentInstructions
-        ? `${currentInstructions}\n\n${template.instructions}`
-        : template.instructions
-      onUserInstructionsChange(newInstructions)
+      // Remplacer les instructions par le contenu du template
+      onUserInstructionsChange(template.instructions)
     }
-  }, [selectedSceneTemplateId, userInstructions, onUserInstructionsChange])
+  }, [selectedSceneTemplateId, onUserInstructionsChange])
 
   const handleAuthorTemplateClick = useCallback((template: configAPI.AuthorProfileTemplate) => {
     if (selectedAuthorTemplateId === template.id) {

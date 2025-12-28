@@ -5,8 +5,6 @@ import apiClient from './client'
 import type {
   GenerateDialogueVariantsRequest,
   GenerateDialogueVariantsResponse,
-  GenerateInteractionVariantsRequest,
-  InteractionResponse,
   ContextSelection,
   GenerateUnityDialogueRequest,
   GenerateUnityDialogueResponse,
@@ -27,18 +25,7 @@ export async function generateDialogueVariants(
   return response.data
 }
 
-/**
- * Génère des interactions structurées.
- */
-export async function generateInteractionVariants(
-  request: GenerateInteractionVariantsRequest
-): Promise<InteractionResponse[]> {
-  const response = await apiClient.post<InteractionResponse[]>(
-    '/api/v1/dialogues/generate/interactions',
-    request
-  )
-  return response.data
-}
+// NOTE: generateInteractionVariants a été supprimé. Utiliser generateUnityDialogue à la place.
 
 /**
  * Génère un nœud de dialogue au format Unity JSON.

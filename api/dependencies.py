@@ -54,6 +54,9 @@ def get_context_builder() -> ContextBuilder:
     
     Le ContextBuilder charge les fichiers GDD au premier accès.
     Utilise un verrou pour éviter les race conditions lors d'appels simultanés.
+    Les chemins GDD peuvent être configurés via les variables d'environnement :
+    - GDD_CATEGORIES_PATH : Chemin vers le répertoire des catégories GDD
+    - GDD_IMPORT_PATH : Chemin vers le répertoire import (ou directement Bible_Narrative)
     
     Returns:
         Instance de ContextBuilder avec données GDD chargées.
@@ -63,6 +66,8 @@ def get_context_builder() -> ContextBuilder:
         with _context_builder_lock:
             # Double-check après avoir acquis le lock pour éviter les initialisations multiples
             if _context_builder is None:
+                # Les chemins sont maintenant lus depuis les variables d'environnement
+                # dans le constructeur de ContextBuilder
                 _context_builder = ContextBuilder()
                 logger.info("Chargement des fichiers GDD...")
                 _context_builder.load_gdd_files()

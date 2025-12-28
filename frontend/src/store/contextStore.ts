@@ -2,13 +2,33 @@
  * Store Zustand pour gérer les sélections de contexte.
  */
 import { create } from 'zustand'
-import type { ContextSelection } from '../types/api'
+import type { 
+  ContextSelection,
+  CharacterResponse,
+  LocationResponse,
+  ItemResponse,
+  SpeciesResponse,
+  CommunityResponse,
+} from '../types/api'
 
 interface ContextState {
   selections: ContextSelection
   selectedRegion: string | null
   selectedSubLocations: string[]
+  // Listes des éléments disponibles (chargées depuis ContextSelector)
+  characters: CharacterResponse[]
+  locations: LocationResponse[]
+  items: ItemResponse[]
+  species: SpeciesResponse[]
+  communities: CommunityResponse[]
   setSelections: (selections: ContextSelection) => void
+  setElementLists: (lists: {
+    characters: CharacterResponse[]
+    locations: LocationResponse[]
+    items: ItemResponse[]
+    species: SpeciesResponse[]
+    communities: CommunityResponse[]
+  }) => void
   toggleCharacter: (name: string) => void
   toggleLocation: (name: string) => void
   toggleItem: (name: string) => void
@@ -30,13 +50,28 @@ const defaultSelections: ContextSelection = {
   dialogues_examples: [],
 }
 
-export const useContextStore = create<ContextState>((set) => ({
+export const useContextStore = create<ContextState>((set, get) => ({
   selections: defaultSelections,
   selectedRegion: null,
   selectedSubLocations: [],
+  characters: [],
+  locations: [],
+  items: [],
+  species: [],
+  communities: [],
 
   setSelections: (selections: ContextSelection) => {
     set({ selections })
+  },
+
+  setElementLists: (lists) => {
+    set({
+      characters: lists.characters,
+      locations: lists.locations,
+      items: lists.items,
+      species: lists.species,
+      communities: lists.communities,
+    })
   },
 
   toggleCharacter: (name: string) => {
@@ -150,17 +185,38 @@ export const useContextStore = create<ContextState>((set) => ({
 
   applyLinkedElements: (elements: string[]) => {
     set((state) => {
-      // Ajouter tous les éléments liés aux sélections appropriées
-      // On ne peut pas déterminer automatiquement la catégorie, donc on les ajoute tous aux locations
-      // pour l'instant. Dans une implémentation plus sophistiquée, on pourrait avoir une logique
-      // pour déterminer la catégorie de chaque élément.
-      const newLocations = [...new Set([...state.selections.locations, ...elements])]
+      const newSelections = { ...state.selections }
+      
+      // Déterminer le type de chaque élément en cherchant dans les listes du store
+      for (const elementName of elements) {
+        // Chercher dans chaque catégorie (ordre important)
+        if (state.characters.some((char) => char.name === elementName)) {
+          if (!newSelections.characters.includes(elementName)) {
+            newSelections.characters = [...newSelections.characters, elementName]
+          }
+        } else if (state.locations.some((loc) => loc.name === elementName)) {
+          if (!newSelections.locations.includes(elementName)) {
+            newSelections.locations = [...newSelections.locations, elementName]
+          }
+        } else if (state.items.some((item) => item.name === elementName)) {
+          if (!newSelections.items.includes(elementName)) {
+            newSelections.items = [...newSelections.items, elementName]
+          }
+        } else if (state.species.some((spec) => spec.name === elementName)) {
+          if (!newSelections.species.includes(elementName)) {
+            newSelections.species = [...newSelections.species, elementName]
+          }
+        } else if (state.communities.some((comm) => comm.name === elementName)) {
+          if (!newSelections.communities.includes(elementName)) {
+            newSelections.communities = [...newSelections.communities, elementName]
+          }
+        } else {
+          console.warn(`Élément "${elementName}" non trouvé dans les listes, ignoré`)
+        }
+      }
       
       return {
-        selections: {
-          ...state.selections,
-          locations: newLocations,
-        },
+        selections: newSelections,
       }
     })
   },

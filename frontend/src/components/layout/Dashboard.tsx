@@ -1,39 +1,54 @@
 /**
  * Composant Dashboard avec layout 3 panneaux redimensionnables.
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ContextSelector } from '../context/ContextSelector'
 import { GenerationPanel } from '../generation/GenerationPanel'
 import { GenerationOptionsModal } from '../generation/GenerationOptionsModal'
-import { InteractionDetails } from '../interactions/InteractionDetails'
 import { EstimatedPromptPanel } from '../generation/EstimatedPromptPanel'
-import { UnityDialogueViewer } from '../generation/UnityDialogueViewer'
+import { UnityDialogueEditor } from '../generation/UnityDialogueEditor'
 import { ContextDetail } from '../context/ContextDetail'
 import { ResizablePanels } from '../shared/ResizablePanels'
 import { Tabs, type Tab } from '../shared/Tabs'
 import { useGenerationStore } from '../../store/generationStore'
 import { useGenerationActionsStore } from '../../store/generationActionsStore'
-import * as interactionsAPI from '../../api/interactions'
-import { getErrorMessage } from '../../types/errors'
-import type { InteractionResponse, CharacterResponse, LocationResponse, ItemResponse, SpeciesResponse, CommunityResponse } from '../../types/api'
+import type { CharacterResponse, LocationResponse, ItemResponse, SpeciesResponse, CommunityResponse } from '../../types/api'
 import { theme } from '../../theme'
 
 type ContextItem = CharacterResponse | LocationResponse | ItemResponse | SpeciesResponse | CommunityResponse
 
 export function Dashboard() {
-  const [selectedInteraction, setSelectedInteraction] = useState<InteractionResponse | null>(null)
   const [selectedContextItem, setSelectedContextItem] = useState<ContextItem | null>(null)
   const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false)
   const [rightPanelTab, setRightPanelTab] = useState<'prompt' | 'dialogue' | 'details'>('prompt')
   const { estimatedPrompt, estimatedTokens, isEstimating, unityDialogueResponse } = useGenerationStore()
   const { actions } = useGenerationActionsStore()
   
-  // Basculer automatiquement vers l'onglet Dialogue quand un dialogue Unity est généré
+  // Ref pour suivre l'ID du dernier dialogue pour lequel on a fait le basculement automatique
+  const lastAutoSwitchedDialogueRef = useRef<string | null>(null)
+  
+  // Basculer automatiquement vers l'onglet Dialogue quand un NOUVEAU dialogue Unity est généré
+  // (seulement lors de la création, pas à chaque changement d'onglet manuel)
   useEffect(() => {
-    if (unityDialogueResponse && rightPanelTab === 'prompt') {
-      setRightPanelTab('dialogue')
+    if (unityDialogueResponse) {
+      // Créer un ID unique pour ce dialogue (basé sur le titre ou le contenu)
+      const dialogueId = unityDialogueResponse.title || 
+        (unityDialogueResponse.json_content ? 
+          JSON.stringify(unityDialogueResponse.json_content).slice(0, 100) : 
+          'unknown')
+      
+      // Basculer seulement si c'est un nouveau dialogue (pas encore traité)
+      if (lastAutoSwitchedDialogueRef.current !== dialogueId) {
+        setRightPanelTab('dialogue')
+        lastAutoSwitchedDialogueRef.current = dialogueId
+      }
+    } else {
+      // Si le dialogue est supprimé, réinitialiser la ref
+      lastAutoSwitchedDialogueRef.current = null
     }
-  }, [unityDialogueResponse, rightPanelTab])
+    // Ne pas inclure rightPanelTab dans les dépendances pour éviter les basculements
+    // lors des changements manuels d'onglet
+  }, [unityDialogueResponse])
 
   const rightPanelTabs: Tab[] = [
     {
@@ -55,7 +70,10 @@ export function Dashboard() {
       content: (
         <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {unityDialogueResponse ? (
-            <UnityDialogueViewer response={unityDialogueResponse} />
+            <UnityDialogueEditor
+              json_content={unityDialogueResponse.json_content}
+              title={unityDialogueResponse.title}
+            />
           ) : (
             <div style={{ 
               padding: '2rem', 
@@ -77,15 +95,7 @@ export function Dashboard() {
       label: 'Détails',
       content: (
         <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          {selectedInteraction ? (
-            <InteractionDetails
-              interactionId={selectedInteraction.interaction_id}
-              onClose={() => {
-                setSelectedInteraction(null)
-                setRightPanelTab('prompt')
-              }}
-            />
-          ) : selectedContextItem ? (
+          {selectedContextItem ? (
             <ContextDetail item={selectedContextItem} />
           ) : (
             <div style={{ 
@@ -97,7 +107,7 @@ export function Dashboard() {
               alignItems: 'center',
               justifyContent: 'center',
             }}>
-              Sélectionnez un élément de contexte ou une interaction pour voir ses détails
+              Sélectionnez un élément de contexte pour voir ses détails
             </div>
           )}
         </div>
@@ -132,7 +142,6 @@ export function Dashboard() {
             setSelectedContextItem(item)
             if (item) {
               setRightPanelTab('details')
-              setSelectedInteraction(null)
             }
           }}
         />
@@ -270,6 +279,44 @@ export function Dashboard() {
               zIndex: 10,
             }}
           >
+            {/* Barre de progression */}
+            {actions.isLoading && (
+              <>
+                <div
+                  style={{
+                    width: '100%',
+                    height: '4px',
+                    backgroundColor: theme.border.primary,
+                    borderRadius: '2px',
+                    overflow: 'hidden',
+                    marginBottom: '0.75rem',
+                    position: 'relative',
+                  }}
+                >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      height: '100%',
+                      width: '40%',
+                      backgroundColor: theme.button.primary.background,
+                      animation: 'loading-slide 1.5s ease-in-out infinite',
+                    }}
+                  />
+                </div>
+                <style>{`
+                  @keyframes loading-slide {
+                    0% {
+                      left: -40%;
+                    }
+                    100% {
+                      left: 100%;
+                    }
+                  }
+                `}</style>
+              </>
+            )}
             <button
               onClick={actions.handleGenerate}
               disabled={actions.isLoading}

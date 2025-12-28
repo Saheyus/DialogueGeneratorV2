@@ -2,6 +2,7 @@
 import logging
 from typing import Annotated, Dict, List, Optional
 from fastapi import APIRouter, Depends, Request, status, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from api.dependencies import (
     get_config_service,
@@ -17,14 +18,13 @@ from api.schemas.config import (
     ContextPreviewRequest,
     ContextPreviewResponse,
     DefaultFieldConfigResponse,
-    PromptTemplate,
-    PromptTemplatesResponse,
     SceneInstructionTemplate,
     SceneInstructionTemplatesResponse,
     AuthorProfileTemplate,
     AuthorProfileTemplatesResponse,
+    TemplateFilePathsResponse,
 )
-from services.configuration_service import ConfigurationService
+from services.configuration_service import ConfigurationService, CONFIG_DIR
 from services.context_field_detector import ContextFieldDetector, FieldInfo as DetectorFieldInfo
 from services.field_suggestion_service import FieldSuggestionService
 from services.context_organizer import ContextOrganizer
@@ -686,16 +686,15 @@ async def preview_context(
 
 
 @router.get(
-    "/prompt-templates",
-    response_model=PromptTemplatesResponse,
+    "/default-system-prompt",
     status_code=status.HTTP_200_OK
 )
-async def get_prompt_templates(
+async def get_default_system_prompt(
     request: Request,
     config_service: Annotated[ConfigurationService, Depends(get_config_service)],
     request_id: Annotated[str, Depends(get_request_id)]
-) -> PromptTemplatesResponse:
-    """Récupère la liste des templates de prompts disponibles.
+) -> JSONResponse:
+    """Récupère le system prompt par défaut.
     
     Args:
         request: La requête HTTP.
@@ -703,27 +702,60 @@ async def get_prompt_templates(
         request_id: ID de la requête.
         
     Returns:
-        Liste des templates de prompts disponibles.
+        Réponse JSON contenant le prompt par défaut.
     """
     try:
-        templates_data = config_service.get_prompt_templates()
-        templates = [
-            PromptTemplate(
-                id=template.get("id", ""),
-                name=template.get("name", ""),
-                description=template.get("description", ""),
-                prompt=template.get("prompt", "")
-            )
-            for template in templates_data
-        ]
-        return PromptTemplatesResponse(
-            templates=templates,
-            total=len(templates)
+        prompt = config_service.get_default_system_prompt()
+        return JSONResponse(content={"prompt": prompt})
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération du system prompt par défaut: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"error": "Erreur lors de la récupération du system prompt par défaut"}
+        )
+
+
+@router.get(
+    "/template-file-paths",
+    response_model=TemplateFilePathsResponse,
+    status_code=status.HTTP_200_OK
+)
+async def get_template_file_paths(
+    request: Request,
+    config_service: Annotated[ConfigurationService, Depends(get_config_service)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> TemplateFilePathsResponse:
+    """Récupère les chemins des fichiers de templates pour les ouvrir dans l'éditeur.
+    
+    Args:
+        request: La requête HTTP.
+        config_service: Service de configuration injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        Chemins des fichiers de templates.
+    """
+    try:
+        # Chemin du system prompt par défaut
+        default_meta = config_service.prompts_metadata.get("system_prompts", {}).get("default", {})
+        system_prompt_file = default_meta.get("file", "system_prompts/default.txt")
+        system_prompt_path = str(CONFIG_DIR / system_prompt_file)
+        
+        # Chemins des répertoires
+        scene_instructions_dir = str(CONFIG_DIR / "scene_instructions")
+        author_profiles_dir = str(CONFIG_DIR / "author_profiles")
+        config_dir = str(CONFIG_DIR)
+        
+        return TemplateFilePathsResponse(
+            system_prompt_path=system_prompt_path,
+            scene_instructions_dir=scene_instructions_dir,
+            author_profiles_dir=author_profiles_dir,
+            config_dir=config_dir
         )
     except Exception as e:
-        logger.exception(f"Erreur lors de la récupération des templates de prompts (request_id: {request_id})")
+        logger.exception(f"Erreur lors de la récupération des chemins de templates (request_id: {request_id})")
         raise InternalServerException(
-            message="Erreur lors de la récupération des templates de prompts",
+            message="Erreur lors de la récupération des chemins de templates",
             details={"error": str(e)},
             request_id=request_id
         )

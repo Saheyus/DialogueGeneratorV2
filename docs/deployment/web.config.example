@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Configuration IIS/SmarterASP.net pour FastAPI -->
+<!-- 
+  Instructions:
+  1. Copier ce fichier vers web.config à la racine de l'application
+  2. Ajuster les chemins selon votre installation
+  3. Configurer le point d'entrée: api.main:app
+-->
+<configuration>
+  <system.webServer>
+    <handlers>
+      <add name="httpPlatformHandler" path="*" verb="*" modules="httpPlatformHandler" resourceType="Unspecified" />
+    </handlers>
+    <httpPlatform processPath="python" 
+                  arguments="-m uvicorn api.main:app --host 0.0.0.0 --port %HTTP_PLATFORM_PORT%"
+                  stdoutLogEnabled="true"
+                  stdoutLogFile=".\logs\stdout.log"
+                  startupTimeLimit="120"
+                  requestTimeout="00:05:00">
+      <environmentVariables>
+        <!-- Les variables d'environnement doivent être configurées dans le panneau de contrôle -->
+        <!-- ou via le fichier .env à la racine de l'application -->
+      </environmentVariables>
+    </httpPlatform>
+    
+    <!-- Redirection des erreurs -->
+    <httpErrors errorMode="Detailed" />
+    
+    <!-- Configuration des répertoires statiques (frontend) -->
+    <staticContent>
+      <mimeMap fileExtension=".json" mimeType="application/json" />
+      <mimeMap fileExtension=".js" mimeType="application/javascript" />
+      <mimeMap fileExtension=".css" mimeType="text/css" />
+    </staticContent>
+  </system.webServer>
+</configuration>
+

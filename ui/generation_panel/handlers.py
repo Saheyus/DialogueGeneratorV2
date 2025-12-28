@@ -115,7 +115,7 @@ def handle_restore_default_system_prompt(panel):
     Slot pour le bouton "Restaurer Défaut" du prompt système.
     Restaure le prompt système par défaut dans le PromptEngine, met à jour l'UI et relance l'estimation des tokens.
     """
-    default_prompt = panel.prompt_engine._get_default_system_prompt()
+    default_prompt = panel.prompt_engine._load_default_system_prompt()
     panel.instructions_widget.set_system_prompt_text(default_prompt)
     if panel.prompt_engine.system_prompt_template != default_prompt:
         panel.prompt_engine.system_prompt_template = default_prompt
@@ -307,7 +307,7 @@ def load_generation_panel_settings(panel, settings):
         "user_instructions": settings.get("user_instructions", ""),
         "system_prompt": settings.get("system_prompt")
     }
-    default_system_prompt_for_iw = panel.prompt_engine._get_default_system_prompt() if panel.prompt_engine else ""
+    default_system_prompt_for_iw = panel.prompt_engine._load_default_system_prompt() if panel.prompt_engine else ""
     panel.instructions_widget.load_settings(
         instruction_settings_to_load,
         default_user_instructions="",

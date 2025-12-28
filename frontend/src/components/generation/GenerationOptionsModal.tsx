@@ -5,6 +5,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { useContextConfigStore } from '../../store/contextConfigStore'
 import { ContextFieldSelector } from './ContextFieldSelector'
 import { VocabularyGuidesTab } from './VocabularyGuidesTab'
+import { PromptsTab } from './PromptsTab'
 import { theme } from '../../theme'
 import * as configAPI from '../../api/config'
 import { getErrorMessage } from '../../types/errors'
@@ -15,7 +16,7 @@ export interface GenerationOptionsModalProps {
   onApply?: () => void
 }
 
-type TabId = 'context' | 'metadata' | 'unity' | 'organization' | 'guidance' | 'vocabulary'
+type TabId = 'context' | 'metadata' | 'unity' | 'organization' | 'guidance' | 'vocabulary' | 'prompts'
 
 interface Tab {
   id: TabId
@@ -135,6 +136,7 @@ export function GenerationOptionsModal({
     { id: 'organization', label: 'Organisation' },
     { id: 'guidance', label: 'Guidance' },
     { id: 'vocabulary', label: 'Vocabulaire & Guides' },
+    { id: 'prompts', label: 'Prompts' },
   ]
 
   if (!isOpen) return null
@@ -271,6 +273,10 @@ export function GenerationOptionsModal({
 
           {activeTab === 'vocabulary' && (
             <VocabularyGuidesTab />
+          )}
+
+          {activeTab === 'prompts' && (
+            <PromptsTab />
           )}
         </div>
 

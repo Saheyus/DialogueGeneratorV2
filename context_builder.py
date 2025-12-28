@@ -33,6 +33,7 @@ class ContextBuilder:
         self,
         config_file_path: Path = DEFAULT_CONFIG_FILE,
         gdd_categories_path: Optional[Path] = None,
+        gdd_import_path: Optional[Path] = None,
     ):
         self.gdd_data = {}
         self.characters = []
@@ -48,7 +49,26 @@ class ContextBuilder:
         self.quests = []
         self.context_config = self._load_context_config(config_file_path)
         self.previous_dialogue_context: Optional[List[Interaction]] = None
-        self._gdd_categories_path: Optional[Path] = gdd_categories_path
+        
+        # Configuration des chemins GDD via variables d'environnement ou paramètres
+        # Priorité : paramètre > variable d'environnement > valeur par défaut
+        if gdd_categories_path is not None:
+            self._gdd_categories_path = gdd_categories_path
+        else:
+            env_categories_path = os.getenv("GDD_CATEGORIES_PATH")
+            if env_categories_path:
+                self._gdd_categories_path = Path(env_categories_path)
+            else:
+                self._gdd_categories_path = None  # Utilisera la valeur par défaut dans load_gdd_files
+        
+        if gdd_import_path is not None:
+            self._gdd_import_path = gdd_import_path
+        else:
+            env_import_path = os.getenv("GDD_IMPORT_PATH")
+            if env_import_path:
+                self._gdd_import_path = Path(env_import_path)
+            else:
+                self._gdd_import_path = None  # Utilisera la valeur par défaut dans load_gdd_files
 
         if tiktoken:
             self.tokenizer = tiktoken.get_encoding("cl100k_base")
@@ -96,14 +116,29 @@ class ContextBuilder:
         
         # Catégories GDD:
         # - par défaut : DialogueGenerator/data/GDD_categories (symlink)
-        # - override (tests/advanced setups) : via gdd_categories_path passé au constructeur
-        categories_path = self._gdd_categories_path or (CONTEXT_BUILDER_DIR / "data" / "GDD_categories")
-        import_base_path = PROJECT_ROOT_DIR / "import"
+        # - override : via variable d'environnement GDD_CATEGORIES_PATH ou paramètre gdd_categories_path
+        if self._gdd_categories_path is not None:
+            categories_path = self._gdd_categories_path
+        else:
+            categories_path = CONTEXT_BUILDER_DIR / "data" / "GDD_categories"
+        
+        # Chemin import pour Vision.json:
+        # - par défaut : PROJECT_ROOT_DIR/import/Bible_Narrative/
+        # - override : via variable d'environnement GDD_IMPORT_PATH ou paramètre gdd_import_path
+        if self._gdd_import_path is not None:
+            import_base_path = self._gdd_import_path
+        else:
+            import_base_path = PROJECT_ROOT_DIR / "import" / "Bible_Narrative"
 
         logger.info(f"Début du chargement des données du GDD depuis {categories_path} et {import_base_path}.")
 
         # Charger Vision.json avec cache
-        vision_file_path = import_base_path / "Bible_Narrative" / "Vision.json"
+        # Si import_base_path pointe déjà vers Bible_Narrative, utiliser directement
+        # Sinon, chercher dans le sous-dossier Bible_Narrative
+        if import_base_path.name == "Bible_Narrative":
+            vision_file_path = import_base_path / "Vision.json"
+        else:
+            vision_file_path = import_base_path / "Bible_Narrative" / "Vision.json"
         if vision_file_path.exists() and vision_file_path.is_file():
             # Vérifier le cache
             vision_cache_key = f"vision:{vision_file_path.resolve()}"

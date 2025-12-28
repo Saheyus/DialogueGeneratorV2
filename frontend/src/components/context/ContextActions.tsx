@@ -29,6 +29,7 @@ export const ContextActions = memo(function ContextActions({
         sub_location: sceneSelection.subLocation || undefined,
       })
       
+      // Les listes sont déjà dans le store (chargées par ContextSelector)
       applyLinkedElements(response.linked_elements)
       onSuccess?.(`${response.total} éléments liés ajoutés`)
     } catch (err) {

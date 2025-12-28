@@ -39,7 +39,7 @@ class UnityDialogueGenerationService:
             max_choices: Nombre maximum de choix à générer (0-8, ou None pour laisser l'IA décider).
             
         Returns:
-            Réponse contenant un nœud de dialogue généré par l'IA (sans IDs techniques).
+            Réponse contenant les nœuds générés par l'IA (sans IDs techniques).
         """
         logger.info("Génération d'un nœud de dialogue Unity via Structured Output")
         
@@ -68,11 +68,11 @@ class UnityDialogueGenerationService:
         if not isinstance(result, UnityDialogueGenerationResponse):
             raise ValueError(f"Type de réponse inattendu: {type(result)}. Attendu: UnityDialogueGenerationResponse")
         
-        # Validation : vérifier que le nœud a soit choices soit nextNode
+        # Validation : vérifier que le nœud a du contenu
         node = result.node
-        if not node.choices and not node.nextNode:
+        if not node.choices and not node.line:
             logger.warning(
-                "Le nœud généré n'a ni choices ni nextNode. "
+                "Le nœud généré n'a ni choices ni line. "
                 "Le dialogue se terminera à ce nœud."
             )
         
@@ -104,17 +104,33 @@ class UnityDialogueGenerationService:
         
         Pour le nœud unique :
         1. Génère un ID unique (START par défaut)
-        2. Résout les références (successNode, failureNode, targetNode) en utilisant
-           des IDs relatifs ou en créant des IDs pour les nœuds référencés
-        3. Ajoute nextNode si manquant et pas de choix (navigation linéaire)
-        4. Convertit en dict pour UnityJsonRenderer
+        2. Ajoute targetNode: "END" pour chaque choix (champ technique géré par l'application)
+        3. Convertit en dict pour UnityJsonRenderer
+        
+        Note: Les champs techniques (targetNode, nextNode, successNode, etc.) ne sont jamais
+        générés par l'IA. Ils sont gérés uniquement par l'application.
+        
+        IMPORTANT - "END" comme marqueur de fin (pas un vrai nœud) :
+        Le nœud "END" est utilisé par défaut comme placeholder temporaire car on génère
+        un fragment de dialogue sans savoir ce qui suivra. C'est un artifice temporaire
+        pour que le JSON soit valide. Si on génère la suite du dialogue plus tard,
+        les targetNode seront mis à jour pour pointer vers les vrais nœuds suivants.
+        
+        Le nœud "END" peut aussi être la fin définitive si c'est vraiment une scène d'au revoir,
+        mais ce n'est pas le problème du logiciel - c'est l'auteur qui décide.
+        
+        Le nœud "END" est reconnu par Unity comme marqueur de fin spécial. Il n'est PAS créé
+        comme nœud explicite dans le JSON car Unity le gère implicitement. Le validateur
+        accepte "END" comme référence valide même sans nœud explicite, et l'interface
+        d'édition filtre "END" de l'affichage car ce n'est pas un vrai nœud éditable.
         
         Args:
             content: Réponse de génération contenant un nœud sans ID.
             start_id: ID à utiliser pour le nœud (par défaut "START").
             
         Returns:
-            Liste avec un seul dictionnaire représentant le nœud Unity avec ID.
+            Liste avec un seul dictionnaire représentant le nœud Unity avec ID :
+            - [START] (END n'est pas créé car Unity le gère implicitement)
         """
         logger.info("Enrichissement du nœud avec ID technique")
         
@@ -132,12 +148,6 @@ class UnityDialogueGenerationService:
             node_dict["line"] = node_content.line
         if node_content.test:
             node_dict["test"] = node_content.test
-        if node_content.successNode:
-            # Pour l'instant, on garde la référence telle quelle
-            # Le système de validation signalera si elle est invalide
-            node_dict["successNode"] = node_content.successNode
-        if node_content.failureNode:
-            node_dict["failureNode"] = node_content.failureNode
         if node_content.consequences:
             node_dict["consequences"] = {
                 "flag": node_content.consequences.flag
@@ -154,22 +164,13 @@ class UnityDialogueGenerationService:
             choices_list = []
             for choice_content in node_content.choices:
                 choice_dict: Dict[str, Any] = {
-                    "text": choice_content.text
+                    "text": choice_content.text,
+                    "targetNode": "END"  # Placeholder temporaire : sera mis à jour si on génère la suite
                 }
                 
-                # targetNode est requis dans le format Unity, même s'il est vide
-                if choice_content.targetNode:
-                    choice_dict["targetNode"] = choice_content.targetNode
-                else:
-                    choice_dict["targetNode"] = ""  # Vide mais présent pour validation
-                
-                # Ajouter les champs optionnels du choix
+                # Ajouter les champs optionnels du choix (champs créatifs que l'IA peut générer)
                 if choice_content.test:
                     choice_dict["test"] = choice_content.test
-                if choice_content.testSuccessNode:
-                    choice_dict["testSuccessNode"] = choice_content.testSuccessNode
-                if choice_content.testFailureNode:
-                    choice_dict["testFailureNode"] = choice_content.testFailureNode
                 if choice_content.traitRequirements:
                     choice_dict["traitRequirements"] = choice_content.traitRequirements
                 if choice_content.allowInfluenceForcing is not None:
@@ -187,12 +188,13 @@ class UnityDialogueGenerationService:
             
             node_dict["choices"] = choices_list
         
-        # Gérer nextNode
-        # Si pas de choix et pas de nextNode, on ne l'ajoute pas (le dialogue se termine)
-        # Si nextNode est fourni, on l'ajoute
-        if not node_content.choices and node_content.nextNode:
-            node_dict["nextNode"] = node_content.nextNode
+        # Note: nextNode, successNode, failureNode, testSuccessNode, testFailureNode
+        # sont des champs techniques qui ne doivent pas être générés par l'IA
+        # Ils seront gérés par l'application si nécessaire
         
+        # Ne pas créer de nœud "END" explicite : Unity gère "END" implicitement comme marqueur de fin.
+        # Le validateur accepte "END" comme référence valide même sans nœud explicite.
+        # Cela évite d'afficher un nœud "END" éditable dans l'interface, car ce n'est pas un vrai nœud.
         logger.info("Enrichissement terminé: nœud avec ID")
         return [node_dict]
 
