@@ -8,6 +8,7 @@ import * as dialoguesAPI from '../../api/dialogues'
 import { getErrorMessage } from '../../types/errors'
 import { theme } from '../../theme'
 import { useToast } from '../shared'
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import type {
   UnityDialogueNode,
   UnityDialogueChoice,
@@ -241,6 +242,35 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
       setIsSaving(false)
     }
   }, [isValid, nodes, title, filename, toast, onSave])
+
+  // Raccourcis clavier
+  useKeyboardShortcuts(
+    [
+      {
+        key: 'ctrl+s',
+        handler: (e) => {
+          e.preventDefault()
+          if (isValid && !isSaving) {
+            handleSave()
+          }
+        },
+        description: 'Sauvegarder le dialogue Unity',
+        enabled: isValid && !isSaving,
+      },
+      {
+        key: 'ctrl+e',
+        handler: (e) => {
+          e.preventDefault()
+          if (isValid && !isSaving) {
+            handleSave() // Dans l'éditeur, Ctrl+E sauvegarde (export)
+          }
+        },
+        description: 'Exporter/Sauvegarder le dialogue Unity',
+        enabled: isValid && !isSaving,
+      },
+    ],
+    [isValid, isSaving, handleSave]
+  )
 
   // Toggle collapse pour options avancées
   const toggleAdvanced = useCallback((nodeId: string) => {

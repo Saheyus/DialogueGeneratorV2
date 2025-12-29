@@ -6,6 +6,7 @@ import { Combobox, type ComboboxOption } from '../shared/Combobox'
 import { FormField } from '../shared/FormField'
 import { useSceneSelection } from '../../hooks/useSceneSelection'
 import { useGenerationStore } from '../../store/generationStore'
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { theme } from '../../theme'
 
 export const SceneSelectionWidget = memo(function SceneSelectionWidget() {
@@ -20,19 +21,21 @@ export const SceneSelectionWidget = memo(function SceneSelectionWidget() {
   }, [selection, setSceneSelection])
 
   // Raccourci clavier pour swap (Alt+S)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.altKey && e.key === 's') {
-        e.preventDefault()
-        if (selection.characterA || selection.characterB) {
-          swapCharacters()
-        }
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selection, swapCharacters])
+  useKeyboardShortcuts(
+    [
+      {
+        key: 'alt+s',
+        handler: () => {
+          if (selection.characterA || selection.characterB) {
+            swapCharacters()
+          }
+        },
+        description: 'Échanger les personnages (swap)',
+        enabled: !!(selection.characterA || selection.characterB),
+      },
+    ],
+    [selection, swapCharacters]
+  )
 
   const handleCharacterAChange = useCallback(
     (value: string | null) => {

@@ -83,6 +83,29 @@ export const UnityDialogueViewer = memo(function UnityDialogueViewer({
     toast('JSON copié dans le presse-papier', 'success', 2000)
   }, [response.json_content, toast])
 
+  // Raccourcis clavier
+  useKeyboardShortcuts(
+    [
+      {
+        key: 'ctrl+c',
+        handler: () => {
+          handleCopyJson()
+        },
+        description: 'Copier le JSON Unity',
+        enabled: nodes.length > 0,
+      },
+      {
+        key: 'ctrl+e',
+        handler: () => {
+          handleExport()
+        },
+        description: 'Exporter le dialogue Unity',
+        enabled: nodes.length > 0,
+      },
+    ],
+    [handleCopyJson, handleExport, nodes.length]
+  )
+
   if (nodes.length === 0) {
     return (
       <div

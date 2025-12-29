@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { MainLayout } from './components/layout/MainLayout'
 import { LoginForm } from './components/auth/LoginForm'
 import { Dashboard } from './components/layout/Dashboard'
@@ -7,6 +7,7 @@ import { UnityDialoguesPage } from './components/unityDialogues/UnityDialoguesPa
 import { UsageDashboard } from './components/usage/UsageDashboard'
 import { useAuthStore } from './store/authStore'
 import { ToastContainer } from './components/shared'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import './App.css'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -58,13 +59,54 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />
 }
 
+/**
+ * Composant pour gérer les raccourcis de navigation globaux.
+ */
+function NavigationShortcuts() {
+  const navigate = useNavigate()
+  const location = useLocation()
 
-function App() {
+  useKeyboardShortcuts(
+    [
+      {
+        key: 'ctrl+1',
+        handler: () => {
+          if (location.pathname !== '/') {
+            navigate('/')
+          }
+        },
+        description: 'Naviguer vers Dashboard',
+      },
+      {
+        key: 'ctrl+2',
+        handler: () => {
+          if (location.pathname !== '/unity-dialogues') {
+            navigate('/unity-dialogues')
+          }
+        },
+        description: 'Naviguer vers Dialogues Unity',
+      },
+      {
+        key: 'ctrl+3',
+        handler: () => {
+          if (location.pathname !== '/usage') {
+            navigate('/usage')
+          }
+        },
+        description: 'Naviguer vers Usage/Statistiques',
+      },
+    ],
+    [navigate, location.pathname]
+  )
+
+  return null
+}
+
+function AppRoutes() {
   return (
     <>
-      <ToastContainer />
-      <BrowserRouter>
-        <Routes>
+      <NavigationShortcuts />
+      <Routes>
         <Route
           path="/login"
           element={
@@ -105,7 +147,17 @@ function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+    </>
+  )
+}
+
+function App() {
+  return (
+    <>
+      <ToastContainer />
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
     </>
   )
 }

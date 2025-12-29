@@ -8,6 +8,7 @@ import { VocabularyGuidesTab } from './VocabularyGuidesTab'
 import { PromptsTab } from './PromptsTab'
 import { ErrorBoundary } from '../shared/ErrorBoundary'
 import { theme } from '../../theme'
+import { getAllShortcuts, formatShortcut } from '../../hooks/useKeyboardShortcuts'
 import * as configAPI from '../../api/config'
 import { getErrorMessage } from '../../types/errors'
 
@@ -17,7 +18,7 @@ export interface GenerationOptionsModalProps {
   onApply?: () => void
 }
 
-type TabId = 'context' | 'metadata' | 'unity' | 'organization' | 'guidance' | 'vocabulary' | 'prompts'
+type TabId = 'context' | 'metadata' | 'unity' | 'organization' | 'guidance' | 'vocabulary' | 'prompts' | 'shortcuts'
 
 interface Tab {
   id: TabId
@@ -138,6 +139,7 @@ export function GenerationOptionsModal({
     { id: 'guidance', label: 'Guidance' },
     { id: 'vocabulary', label: 'Vocabulaire & Guides' },
     { id: 'prompts', label: 'Prompts' },
+    { id: 'shortcuts', label: 'Raccourcis' },
   ]
 
   if (!isOpen) return null
@@ -179,6 +181,7 @@ export function GenerationOptionsModal({
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
+            flexShrink: 0,
           }}
         >
           <h2 style={{ margin: 0, color: theme.text.primary }}>Options de Génération</h2>
@@ -197,41 +200,52 @@ export function GenerationOptionsModal({
           </button>
         </div>
 
-        {/* Tabs */}
-        <div
-          style={{
-            display: 'flex',
-            borderBottom: `1px solid ${theme.border.primary}`,
-            backgroundColor: theme.background.secondary,
-          }}
-        >
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              style={{
-                padding: '1rem 1.5rem',
-                border: 'none',
-                borderBottom: activeTab === tab.id ? `3px solid ${theme.border.focus}` : '3px solid transparent',
-                backgroundColor: 'transparent',
-                color: activeTab === tab.id ? theme.text.primary : theme.text.secondary,
-                cursor: 'pointer',
-                fontWeight: activeTab === tab.id ? 'bold' : 'normal',
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Content */}
+        {/* Scrollable container avec tabs sticky */}
         <div
           style={{
             flex: 1,
             overflow: 'auto',
-            padding: '1.5rem',
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
           }}
         >
+          {/* Tabs - Position sticky */}
+          <div
+            style={{
+              display: 'flex',
+              borderBottom: `1px solid ${theme.border.primary}`,
+              backgroundColor: theme.background.secondary,
+              position: 'sticky',
+              top: 0,
+              zIndex: 10,
+            }}
+          >
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  padding: '1rem 1.5rem',
+                  border: 'none',
+                  borderBottom: activeTab === tab.id ? `3px solid ${theme.border.focus}` : '3px solid transparent',
+                  backgroundColor: 'transparent',
+                  color: activeTab === tab.id ? theme.text.primary : theme.text.secondary,
+                  cursor: 'pointer',
+                  fontWeight: activeTab === tab.id ? 'bold' : 'normal',
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Content */}
+          <div
+            style={{
+              padding: '1.5rem',
+            }}
+          >
           {activeTab === 'context' && (
             <ContextTab
               onDetectAll={handleDetectAll}
@@ -299,6 +313,11 @@ export function GenerationOptionsModal({
           {activeTab === 'prompts' && (
             <PromptsTab />
           )}
+
+          {activeTab === 'shortcuts' && (
+            <ShortcutsTab />
+          )}
+          </div>
         </div>
 
         {/* Footer */}
@@ -309,6 +328,7 @@ export function GenerationOptionsModal({
             display: 'flex',
             justifyContent: 'flex-end',
             gap: '0.5rem',
+            flexShrink: 0,
           }}
         >
           <button
@@ -703,6 +723,87 @@ function GuidanceTab() {
           <li>Le mode "Narratif" améliore la compréhension du LLM en organisant logiquement les informations</li>
           <li>Utilisez la prévisualisation pour vérifier le contexte avant de générer</li>
         </ul>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Onglet affichant les raccourcis clavier disponibles.
+ */
+function ShortcutsTab() {
+  const [shortcuts, setShortcuts] = useState<Array<{ key: string; description: string }>>([])
+
+  useEffect(() => {
+    // Récupérer les raccourcis dynamiques enregistrés
+    const dynamicShortcuts = getAllShortcuts()
+    const defaultShortcuts = [
+      { key: 'ctrl+enter', description: 'Générer un dialogue' },
+      { key: 'alt+s', description: 'Échanger les personnages (swap)' },
+      { key: 'ctrl+k', description: 'Ouvrir la palette de commandes' },
+      { key: '/', description: 'Ouvrir la palette de commandes' },
+      { key: 'ctrl+e', description: 'Exporter le dialogue Unity' },
+      { key: 'ctrl+s', description: 'Sauvegarder le dialogue' },
+      { key: 'ctrl+n', description: 'Nouveau dialogue (réinitialiser)' },
+      { key: 'ctrl+,', description: 'Ouvrir les options' },
+      { key: 'escape', description: 'Fermer les modals/panels' },
+      { key: 'ctrl+/', description: 'Afficher l\'aide des raccourcis' },
+      { key: 'ctrl+1', description: 'Naviguer vers Dashboard' },
+      { key: 'ctrl+2', description: 'Naviguer vers Dialogues Unity' },
+      { key: 'ctrl+3', description: 'Naviguer vers Usage/Statistiques' },
+    ]
+    
+    const combined = [...defaultShortcuts, ...dynamicShortcuts]
+    
+    // Dédupliquer par key (garder la première occurrence)
+    const unique = new Map<string, { key: string; description: string }>()
+    combined.forEach(s => {
+      if (!unique.has(s.key)) {
+        unique.set(s.key, s)
+      }
+    })
+    
+    setShortcuts(Array.from(unique.values()).sort((a, b) => a.key.localeCompare(b.key)))
+  }, [])
+
+  return (
+    <div>
+      <h3 style={{ marginTop: 0, color: theme.text.primary, marginBottom: '1rem' }}>Raccourcis clavier</h3>
+      <p style={{ color: theme.text.secondary, marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+        Utilisez ces raccourcis pour accélérer votre workflow. La plupart fonctionnent même lorsque vous êtes dans un champ de saisie.
+      </p>
+      
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        {shortcuts.map((shortcut, index) => (
+          <div
+            key={index}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '0.75rem',
+              backgroundColor: theme.background.secondary,
+              borderRadius: '4px',
+              border: `1px solid ${theme.border.primary}`,
+            }}
+          >
+            <span style={{ color: theme.text.primary, flex: 1 }}>{shortcut.description}</span>
+            <kbd
+              style={{
+                padding: '0.25rem 0.5rem',
+                backgroundColor: theme.input.background,
+                border: `1px solid ${theme.border.primary}`,
+                borderRadius: '4px',
+                fontSize: '0.85rem',
+                fontFamily: 'monospace',
+                color: theme.text.primary,
+                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+              }}
+            >
+              {formatShortcut(shortcut.key)}
+            </kbd>
+          </div>
+        ))}
       </div>
     </div>
   )

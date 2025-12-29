@@ -9,5 +9,8 @@ export { ToastContainer, useToast, toastManager } from './Toast'
 export { Combobox, type ComboboxOption } from './Combobox'
 export { ContextSummaryChips } from './ContextSummaryChips'
 export { ActionBar, type ActionButton } from './ActionBar'
+export { KeyboardShortcutsHelp } from './KeyboardShortcutsHelp'
+export { CommandPalette } from './CommandPalette'
+export { SaveStatusIndicator } from './SaveStatusIndicator'
 export { ResizablePanels } from './ResizablePanels'
 

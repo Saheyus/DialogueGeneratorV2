@@ -4,7 +4,7 @@ globs: ["frontend/**/*", "web/**/*", "client/**/*"]
 alwaysApply: false
 ---
 
-- **Architecture**: React + TypeScript + Vite dans `frontend/`. **Interface principale** du projet. Consomme l'API REST (`/api/v1/*`), n'implémente pas la logique métier. ⚠️ L'ancienne interface desktop PySide6 est dépréciée.
+- **Architecture**: React + TypeScript + Vite dans `frontend/`. **Interface principale** du projet. Consomme l'API REST (`/api/v1/*`), n'implémente pas la logique métier. 
 - **Client API**: `frontend/src/api/client.ts` (axios avec intercepteurs), modules par domaine (`auth.ts`, `dialogues.ts`, `interactions.ts`).
 - **Types**: `frontend/src/types/api.ts` alignés sur les schémas backend Pydantic. Générer depuis OpenAPI si possible.
 - **State Management**: Zustand (`frontend/src/store/`) pour auth et état global. Éviter prop drilling excessif.

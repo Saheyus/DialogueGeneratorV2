@@ -21,8 +21,10 @@ import type {
 import { DialogueStructureWidget } from './DialogueStructureWidget'
 import { SystemPromptEditor } from './SystemPromptEditor'
 import { SceneSelectionWidget } from './SceneSelectionWidget'
-import { useToast, toastManager } from '../shared'
+import { useToast, toastManager, SaveStatusIndicator } from '../shared'
 import { CONTEXT_TOKENS_LIMITS } from '../../constants'
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
+import type { SaveStatus } from '../shared/SaveStatusIndicator'
 
 
 export function GenerationPanel() {
@@ -57,7 +59,7 @@ export function GenerationPanel() {
   } = useAuthorProfile()
   
   const [userInstructions, setUserInstructions] = useState('')
-  const [maxContextTokens, setMaxContextTokens] = useState(CONTEXT_TOKENS_LIMITS.DEFAULT)
+  const [maxContextTokens, setMaxContextTokens] = useState<number>(CONTEXT_TOKENS_LIMITS.DEFAULT)
   const [llmModel, setLlmModel] = useState('gpt-4o-mini')
   const [maxChoices, setMaxChoices] = useState<number | null>(null)
   const [availableModels, setAvailableModels] = useState<LLMModelResponse[]>([])
@@ -67,6 +69,7 @@ export function GenerationPanel() {
   const [isEstimating, setIsEstimating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isDirty, setIsDirty] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved')
   const [narrativeTags, setNarrativeTags] = useState<string[]>([])
   const [previousDialoguePreview, setPreviousDialoguePreview] = useState<string | null>(null)
   const toast = useToast()
@@ -78,6 +81,7 @@ export function GenerationPanel() {
   const DRAFT_STORAGE_KEY = 'generation_draft'
   
   const saveDraft = useCallback(() => {
+    setSaveStatus('saving')
     const draft = {
       userInstructions,
       authorProfile,
@@ -96,8 +100,10 @@ export function GenerationPanel() {
     try {
       localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft))
       setIsDirty(false)
+      setSaveStatus('saved')
     } catch (err) {
       console.error('Erreur lors de la sauvegarde automatique:', err)
+      setSaveStatus('error')
     }
   }, [userInstructions, authorProfile, systemPromptOverride, dialogueStructure, sceneSelection, maxContextTokens, llmModel, maxChoices, narrativeTags, selections, selectedRegion, selectedSubLocations])
 
@@ -134,9 +140,11 @@ export function GenerationPanel() {
           restoreContextState(draft.contextSelections, savedRegion, savedSubLocations)
         }
         setIsDirty(false)
+        setSaveStatus('saved')
       }
     } catch (err) {
       console.error('Erreur lors du chargement du brouillon:', err)
+      setSaveStatus('error')
     }
   }, [setDialogueStructure, setSystemPromptOverride, setSceneSelection, restoreContextState, updateAuthorProfile]) // Charger une seule fois au montage
 
@@ -146,6 +154,7 @@ export function GenerationPanel() {
   useEffect(() => {
     if (!isInitialLoad) {
       setIsDirty(true)
+      setSaveStatus('unsaved')
     }
   }, [sceneSelection, isInitialLoad])
 
@@ -153,6 +162,7 @@ export function GenerationPanel() {
   useEffect(() => {
     if (!isInitialLoad) {
       setIsDirty(true)
+      setSaveStatus('unsaved')
     }
   }, [selections, selectedRegion, selectedSubLocations, isInitialLoad])
   
@@ -453,28 +463,37 @@ export function GenerationPanel() {
     toast('Export Unity à implémenter', 'info')
   }
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setUserInstructions('')
     setUnityDialogueResponse(null)
     setError(null)
     setIsDirty(false)
     toast('Formulaire réinitialisé', 'info')
-  }
+  }, [toast])
 
-  // Raccourci clavier pour générer (Ctrl+Enter)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'Enter') {
-        e.preventDefault()
-        if (!isLoading) {
-          handleGenerate()
-        }
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isLoading, handleGenerate])
+  // Raccourcis clavier
+  useKeyboardShortcuts(
+    [
+      {
+        key: 'ctrl+enter',
+        handler: () => {
+          if (!isLoading) {
+            handleGenerate()
+          }
+        },
+        description: 'Générer un dialogue',
+        enabled: !isLoading,
+      },
+      {
+        key: 'ctrl+n',
+        handler: () => {
+          handleReset()
+        },
+        description: 'Nouveau dialogue (réinitialiser)',
+      },
+    ],
+    [isLoading, handleGenerate, handleReset]
+  )
 
   const { setActions } = useGenerationActionsStore()
 
@@ -534,7 +553,10 @@ export function GenerationPanel() {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: theme.background.panel }}>
       <div style={{ padding: '1.5rem', flex: 1, overflowY: 'auto' }}>
-            <h2 style={{ marginTop: 0, color: theme.text.primary }}>Génération de Dialogues</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <h2 style={{ marginTop: 0, marginBottom: 0, color: theme.text.primary }}>Génération de Dialogues</h2>
+          <SaveStatusIndicator status={saveStatus} />
+        </div>
 
             <SceneSelectionWidget />
 
@@ -545,14 +567,17 @@ export function GenerationPanel() {
         onUserInstructionsChange={(value) => {
           setUserInstructions(value)
           setIsDirty(true)
+          setSaveStatus('unsaved')
         }}
         onAuthorProfileChange={(value) => {
           updateAuthorProfile(value)
           setIsDirty(true)
+          setSaveStatus('unsaved')
         }}
         onSystemPromptChange={(value) => {
           setSystemPromptOverride(value)
           setIsDirty(true)
+          setSaveStatus('unsaved')
         }}
       />
 
@@ -561,6 +586,7 @@ export function GenerationPanel() {
         onChange={(value) => {
           setDialogueStructure(value)
           setIsDirty(true)
+          setSaveStatus('unsaved')
         }}
       />
 
@@ -572,6 +598,7 @@ export function GenerationPanel() {
             onChange={(e) => {
               setLlmModel(e.target.value)
               setIsDirty(true)
+              setSaveStatus('unsaved')
             }}
             style={{ 
               width: '100%', 
@@ -606,6 +633,7 @@ export function GenerationPanel() {
               onChange={(e) => {
                 setMaxContextTokens(parseInt(e.target.value))
                 setIsDirty(true)
+                setSaveStatus('unsaved')
               }}
               style={{ 
                 flex: 1,
@@ -715,6 +743,7 @@ export function GenerationPanel() {
               }
             }
             setIsDirty(true)
+            setSaveStatus('unsaved')
           }}
           min={0}
           max={8}

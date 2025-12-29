@@ -13,8 +13,12 @@ import { ResizablePanels } from '../shared/ResizablePanels'
 import { Tabs, type Tab } from '../shared/Tabs'
 import { UnityDialogueList, type UnityDialogueListRef } from '../unityDialogues/UnityDialogueList'
 import { UnityDialogueDetails } from '../unityDialogues/UnityDialogueDetails'
+import { KeyboardShortcutsHelp } from '../shared/KeyboardShortcutsHelp'
+import { CommandPalette } from '../shared/CommandPalette'
 import { useGenerationStore } from '../../store/generationStore'
 import { useGenerationActionsStore } from '../../store/generationActionsStore'
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
+import { useCommandPalette } from '../../hooks/useCommandPalette'
 import type { CharacterResponse, LocationResponse, ItemResponse, SpeciesResponse, CommunityResponse, UnityDialogueMetadata } from '../../types/api'
 import { theme } from '../../theme'
 
@@ -24,12 +28,63 @@ export function Dashboard() {
   const [selectedContextItem, setSelectedContextItem] = useState<ContextItem | null>(null)
   const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false)
   const [isUsageModalOpen, setIsUsageModalOpen] = useState(false)
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false)
   const [rightPanelTab, setRightPanelTab] = useState<'prompt' | 'dialogue' | 'details'>('prompt')
   const [centerPanelTab, setCenterPanelTab] = useState<'generation' | 'edition'>('generation')
   const [selectedDialogue, setSelectedDialogue] = useState<UnityDialogueMetadata | null>(null)
   const dialogueListRef = useRef<UnityDialogueListRef>(null)
   const { estimatedPrompt, estimatedTokens, isEstimating, unityDialogueResponse } = useGenerationStore()
   const { actions } = useGenerationActionsStore()
+  const commandPalette = useCommandPalette()
+
+  // Raccourcis clavier
+  useKeyboardShortcuts(
+    [
+      {
+        key: 'ctrl+k',
+        handler: () => {
+          commandPalette.open()
+        },
+        description: 'Ouvrir la palette de commandes',
+      },
+      {
+        key: '/',
+        handler: () => {
+          commandPalette.open()
+        },
+        description: 'Ouvrir la palette de commandes',
+      },
+      {
+        key: 'ctrl+,',
+        handler: () => {
+          setIsOptionsModalOpen(true)
+        },
+        description: 'Ouvrir les options',
+      },
+      {
+        key: 'ctrl+/',
+        handler: () => {
+          setIsHelpModalOpen(true)
+        },
+        description: 'Afficher l\'aide des raccourcis',
+      },
+      {
+        key: 'escape',
+        handler: () => {
+          if (isOptionsModalOpen) {
+            setIsOptionsModalOpen(false)
+          } else if (isUsageModalOpen) {
+            setIsUsageModalOpen(false)
+          } else if (isHelpModalOpen) {
+            setIsHelpModalOpen(false)
+          }
+        },
+        description: 'Fermer les modals/panels',
+        enabled: isOptionsModalOpen || isUsageModalOpen || isHelpModalOpen,
+      },
+    ],
+    [isOptionsModalOpen, isUsageModalOpen, isHelpModalOpen]
+  )
   
   // Ref pour suivre l'ID du dernier dialogue pour lequel on a fait le basculement automatique
   const lastAutoSwitchedDialogueRef = useRef<string | null>(null)
@@ -447,6 +502,10 @@ export function Dashboard() {
       <UsageStatsModal
         isOpen={isUsageModalOpen}
         onClose={() => setIsUsageModalOpen(false)}
+      />
+      <KeyboardShortcutsHelp
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
       />
     </ResizablePanels>
   )
