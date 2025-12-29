@@ -26,7 +26,7 @@ class TestLLMClientFactory:
         """Test qu'un DummyLLMClient est retourné si le modèle n'est pas trouvé."""
         config = {"api_key_env_var": "OPENAI_API_KEY"}
         available_models = [
-            {"api_identifier": "gpt-4o", "display_name": "GPT-4o"}
+            {"api_identifier": "gpt-5.2", "display_name": "GPT-5.2"}
         ]
         
         client = LLMClientFactory.create_client(
@@ -41,11 +41,11 @@ class TestLLMClientFactory:
         """Test qu'un DummyLLMClient est retourné si api_key_env_var n'est pas défini."""
         config = {}  # Pas de api_key_env_var
         available_models = [
-            {"api_identifier": "gpt-4o", "display_name": "GPT-4o", "client_type": "openai"}
+            {"api_identifier": "gpt-5.2", "display_name": "GPT-5.2", "client_type": "openai"}
         ]
         
         client = LLMClientFactory.create_client(
-            model_id="gpt-4o",
+            model_id="gpt-5.2",
             config=config,
             available_models=available_models
         )
@@ -56,12 +56,12 @@ class TestLLMClientFactory:
         """Test qu'un DummyLLMClient est retourné si la clé API n'est pas dans l'environnement."""
         config = {"api_key_env_var": "OPENAI_API_KEY"}
         available_models = [
-            {"api_identifier": "gpt-4o", "display_name": "GPT-4o", "client_type": "openai"}
+            {"api_identifier": "gpt-5.2", "display_name": "GPT-5.2", "client_type": "openai"}
         ]
         
         with patch.dict(os.environ, {}, clear=True):
             client = LLMClientFactory.create_client(
-                model_id="gpt-4o",
+                model_id="gpt-5.2",
                 config=config,
                 available_models=available_models
             )
@@ -81,7 +81,7 @@ class TestLLMClientFactory:
         }
         available_models = [
             {
-                "api_identifier": "gpt-4o-mini",
+                "api_identifier": "gpt-5.2-mini",
                 "display_name": "GPT-4o Mini",
                 "client_type": "openai"
             }
@@ -89,7 +89,7 @@ class TestLLMClientFactory:
         
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key-123"}):
             client = LLMClientFactory.create_client(
-                model_id="gpt-4o-mini",
+                model_id="gpt-5.2-mini",
                 config=config,
                 available_models=available_models
             )
@@ -98,7 +98,7 @@ class TestLLMClientFactory:
         mock_openai_client_class.assert_called_once()
         call_kwargs = mock_openai_client_class.call_args[1]
         assert call_kwargs["api_key"] == "test-key-123"
-        assert call_kwargs["config"]["default_model"] == "gpt-4o-mini"
+        assert call_kwargs["config"]["default_model"] == "gpt-5.2-mini"
         assert call_kwargs["config"]["temperature"] == 0.7
     
     @patch('factories.llm_factory.OpenAIClient')
@@ -114,7 +114,7 @@ class TestLLMClientFactory:
         }
         available_models = [
             {
-                "api_identifier": "gpt-4o",
+                "api_identifier": "gpt-5.2",
                 "display_name": "GPT-4o",
                 "client_type": "openai",
                 "parameters": {
@@ -126,13 +126,13 @@ class TestLLMClientFactory:
         
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key-456"}):
             client = LLMClientFactory.create_client(
-                model_id="gpt-4o",
+                model_id="gpt-5.2",
                 config=config,
                 available_models=available_models
             )
         
         call_kwargs = mock_openai_client_class.call_args[1]
-        assert call_kwargs["config"]["default_model"] == "gpt-4o"
+        assert call_kwargs["config"]["default_model"] == "gpt-5.2"
         assert call_kwargs["config"]["temperature"] == 0.8  # Du paramètre du modèle
         assert call_kwargs["config"]["max_tokens"] == 3000  # Du paramètre du modèle
     
@@ -141,7 +141,7 @@ class TestLLMClientFactory:
         config = {"api_key_env_var": "OPENAI_API_KEY"}
         available_models = [
             {
-                "model_identifier": "gpt-4o-mini",  # Pas d'api_identifier
+                "model_identifier": "gpt-5.2-mini",  # Pas d'api_identifier
                 "display_name": "GPT-4o Mini",
                 "client_type": "openai"
             }
@@ -151,20 +151,20 @@ class TestLLMClientFactory:
             with patch('factories.llm_factory.OpenAIClient') as mock_openai:
                 mock_openai.return_value = MagicMock()
                 client = LLMClientFactory.create_client(
-                    model_id="gpt-4o-mini",
+                    model_id="gpt-5.2-mini",
                     config=config,
                     available_models=available_models
                 )
         
         call_kwargs = mock_openai.call_args[1]
-        assert call_kwargs["config"]["default_model"] == "gpt-4o-mini"
+        assert call_kwargs["config"]["default_model"] == "gpt-5.2-mini"
     
     def test_create_client_default_client_type_openai(self):
         """Test que client_type par défaut est 'openai'."""
         config = {"api_key_env_var": "OPENAI_API_KEY"}
         available_models = [
             {
-                "api_identifier": "gpt-4o-mini",
+                "api_identifier": "gpt-5.2-mini",
                 "display_name": "GPT-4o Mini"
                 # Pas de client_type, devrait utiliser "openai" par défaut
             }
@@ -174,7 +174,7 @@ class TestLLMClientFactory:
             with patch('factories.llm_factory.OpenAIClient') as mock_openai:
                 mock_openai.return_value = MagicMock()
                 client = LLMClientFactory.create_client(
-                    model_id="gpt-4o-mini",
+                    model_id="gpt-5.2-mini",
                     config=config,
                     available_models=available_models
                 )
@@ -190,7 +190,7 @@ class TestLLMClientFactory:
         config = {"api_key_env_var": "OPENAI_API_KEY"}
         available_models = [
             {
-                "api_identifier": "gpt-4o-mini",
+                "api_identifier": "gpt-5.2-mini",
                 "display_name": "GPT-4o Mini",
                 "client_type": "openai"
             }
@@ -198,7 +198,7 @@ class TestLLMClientFactory:
         
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
             client = LLMClientFactory.create_client(
-                model_id="gpt-4o-mini",
+                model_id="gpt-5.2-mini",
                 config=config,
                 available_models=available_models
             )

@@ -170,6 +170,7 @@ export function GenerationOptionsModal({
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+          overflow: 'hidden',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -200,52 +201,43 @@ export function GenerationOptionsModal({
           </button>
         </div>
 
-        {/* Scrollable container avec tabs sticky */}
+        {/* Tabs - En dehors du conteneur scrollable */}
+        <div
+          style={{
+            display: 'flex',
+            borderBottom: `1px solid ${theme.border.primary}`,
+            backgroundColor: theme.background.secondary,
+            flexShrink: 0,
+          }}
+        >
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                padding: '1rem 1.5rem',
+                border: 'none',
+                borderBottom: activeTab === tab.id ? `3px solid ${theme.border.focus}` : '3px solid transparent',
+                backgroundColor: 'transparent',
+                color: activeTab === tab.id ? theme.text.primary : theme.text.secondary,
+                cursor: 'pointer',
+                fontWeight: activeTab === tab.id ? 'bold' : 'normal',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Content - Seul ce conteneur scroll */}
         <div
           style={{
             flex: 1,
             overflow: 'auto',
             minHeight: 0,
-            display: 'flex',
-            flexDirection: 'column',
+            padding: '1.5rem',
           }}
         >
-          {/* Tabs - Position sticky */}
-          <div
-            style={{
-              display: 'flex',
-              borderBottom: `1px solid ${theme.border.primary}`,
-              backgroundColor: theme.background.secondary,
-              position: 'sticky',
-              top: 0,
-              zIndex: 10,
-            }}
-          >
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                style={{
-                  padding: '1rem 1.5rem',
-                  border: 'none',
-                  borderBottom: activeTab === tab.id ? `3px solid ${theme.border.focus}` : '3px solid transparent',
-                  backgroundColor: 'transparent',
-                  color: activeTab === tab.id ? theme.text.primary : theme.text.secondary,
-                  cursor: 'pointer',
-                  fontWeight: activeTab === tab.id ? 'bold' : 'normal',
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Content */}
-          <div
-            style={{
-              padding: '1.5rem',
-            }}
-          >
           {activeTab === 'context' && (
             <ContextTab
               onDetectAll={handleDetectAll}
@@ -317,7 +309,6 @@ export function GenerationOptionsModal({
           {activeTab === 'shortcuts' && (
             <ShortcutsTab />
           )}
-          </div>
         </div>
 
         {/* Footer */}

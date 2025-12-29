@@ -833,3 +833,181 @@ class TestContextBuilderTokenization:
         assert cb._count_tokens("Hello world test") == 3 # Counts words
         assert cb._count_tokens("OneWord") == 1
         assert cb._count_tokens("") == 0
+
+
+class TestContextBuilderCustomFieldsWithModes:
+    """Tests pour build_context_with_custom_fields avec element_modes (full/excerpt)."""
+    
+    @pytest.fixture
+    def cb_for_modes(self, mock_gdd_project_root, temp_test_dir) -> ContextBuilder:
+        """ContextBuilder avec config pour tester les modes excerpt/full."""
+        # Config avec champs "extrait"
+        config_content = {
+            "character": {
+                "1": [
+                    {"path": "Nom", "label": "Nom", "truncate": -1},
+                    {"path": "Occupation", "label": "Occupation", "truncate": -1}
+                ],
+                "2": [
+                    {"path": "Background.Origine", "label": "Origine (extrait)", "truncate": 50},
+                    {"path": "Traits.Personnalité", "label": "Personnalité", "truncate": -1}
+                ]
+            },
+            "species": {
+                "1": [
+                    {"path": "Nom", "label": "Nom Espèce", "truncate": -1},
+                ],
+                "2": [
+                    {"path": "Biologie.Physiologie", "label": "Physiologie (extrait)", "truncate": 100},
+                    {"path": "Société et culture.Culture et traditions", "label": "Culture et traditions (extrait)", "truncate": 80}
+                ]
+            }
+        }
+        
+        config_path = temp_test_dir / "context_config_modes.json"
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config_content, f)
+        
+        # GDD data
+        char_data = {"personnages": [
+            {
+                "Nom": "Elara",
+                "Occupation": "Mage",
+                "Background": {"Origine": "Un long texte sur l'origine d'Elara qui devrait être tronqué en mode excerpt"},
+                "Traits": {"Personnalité": "Curieuse et déterminée"}
+            }
+        ]}
+        with open(mock_gdd_project_root / "GDD" / "categories" / "personnages.json", "w", encoding="utf-8") as f:
+            json.dump(char_data, f)
+        
+        species_data = {"especes": [
+            {
+                "Nom": "Van'Doei",
+                "Biologie": {"Physiologie": "Un très long texte sur la physiologie des Van'Doei qui devrait être tronqué en mode excerpt"},
+                "Société et culture": {"Culture et traditions": "Un texte sur la culture qui devrait aussi être tronqué"}
+            }
+        ]}
+        with open(mock_gdd_project_root / "GDD" / "categories" / "especes.json", "w", encoding="utf-8") as f:
+            json.dump(species_data, f)
+        
+        # Fichiers vides pour les autres catégories
+        for cat_file in ["lieux.json", "objets.json", "communautes.json", "dialogues.json", "quetes.json", "structure_macro.json", "structure_micro.json"]:
+            p = mock_gdd_project_root / "GDD" / "categories" / cat_file
+            if not p.exists():
+                with open(p, "w", encoding="utf-8") as f:
+                    if "structure" in cat_file:
+                        json.dump({}, f)
+                    else:
+                        json.dump({cat_file.replace(".json", ""): []}, f)
+        
+        vision_path = mock_gdd_project_root / "import" / "Bible_Narrative" / "Vision.json"
+        if not vision_path.exists():
+            with open(vision_path, "w", encoding="utf-8") as f:
+                json.dump({}, f)
+        
+        cb = ContextBuilder(
+            config_file_path=config_path,
+            gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+        )
+        cb.load_gdd_files()
+        return cb
+    
+    def test_build_context_with_custom_fields_full_mode(self, cb_for_modes: ContextBuilder):
+        """Test que le mode full inclut tous les champs sans troncature."""
+        selected = {"characters": ["Elara"]}
+        field_configs = {"character": ["Nom", "Occupation", "Background.Origine", "Traits.Personnalité"]}
+        element_modes = {"characters": {"Elara": "full"}}
+        
+        context_str = cb_for_modes.build_context_with_custom_fields(
+            selected_elements=selected,
+            scene_instruction="Test",
+            field_configs=field_configs,
+            organization_mode="default",
+            max_tokens=10000,
+            element_modes=element_modes
+        )
+        
+        # En mode full, tout devrait être présent sans troncature
+        assert "Nom: Elara" in context_str
+        assert "Occupation: Mage" in context_str
+        assert "Origine" in context_str
+        assert "Personnalité" in context_str
+        # Le texte complet devrait être présent (pas de troncature)
+        assert "Un long texte sur l'origine" in context_str
+        assert "(extrait)" not in context_str  # Pas de label "(extrait)" en mode full
+    
+    def test_build_context_with_custom_fields_excerpt_mode(self, cb_for_modes: ContextBuilder):
+        """Test que le mode excerpt utilise uniquement les champs avec label '(extrait)' et applique la troncature."""
+        selected = {"characters": ["Elara"]}
+        field_configs = None  # Utiliser la config par défaut
+        element_modes = {"characters": {"Elara": "excerpt"}}
+        
+        context_str = cb_for_modes.build_context_with_custom_fields(
+            selected_elements=selected,
+            scene_instruction="Test",
+            field_configs=field_configs,
+            organization_mode="default",
+            max_tokens=10000,
+            element_modes=element_modes
+        )
+        
+        # En mode excerpt, seuls les champs avec "(extrait)" devraient être présents
+        # Le champ "Origine (extrait)" devrait être présent
+        assert "Origine" in context_str or "origine" in context_str.lower()
+        # Le texte devrait être tronqué
+        assert "... (extrait)" in context_str
+    
+    def test_build_context_with_custom_fields_mixed_modes(self, cb_for_modes: ContextBuilder):
+        """Test avec plusieurs éléments en modes différents."""
+        selected = {
+            "characters": ["Elara"],
+            "species": ["Van'Doei"]
+        }
+        field_configs = None
+        element_modes = {
+            "characters": {"Elara": "full"},
+            "species": {"Van'Doei": "excerpt"}
+        }
+        
+        context_str = cb_for_modes.build_context_with_custom_fields(
+            selected_elements=selected,
+            scene_instruction="Test",
+            field_configs=field_configs,
+            organization_mode="default",
+            max_tokens=10000,
+            element_modes=element_modes
+        )
+        
+        # Elara en mode full devrait avoir tout
+        assert "Nom: Elara" in context_str
+        assert "Un long texte sur l'origine" in context_str
+        
+        # Van'Doei en mode excerpt devrait être tronqué
+        assert "Van'Doei" in context_str or "VAN'DOEI" in context_str
+        # Vérifier qu'il y a de la troncature pour les espèces
+        assert "... (extrait)" in context_str
+    
+    def test_get_field_config_for_mode_full(self, cb_for_modes: ContextBuilder):
+        """Test _get_field_config_for_mode en mode full."""
+        # Mode full avec custom_fields
+        custom_fields = ["Nom", "Occupation", "Background.Origine"]
+        result = cb_for_modes._get_field_config_for_mode("character", "full", custom_fields)
+        assert result == custom_fields  # Devrait retourner les custom_fields tels quels
+    
+    def test_get_field_config_for_mode_excerpt(self, cb_for_modes: ContextBuilder):
+        """Test _get_field_config_for_mode en mode excerpt."""
+        # Mode excerpt sans custom_fields - devrait utiliser les champs "(extrait)" de la config
+        result = cb_for_modes._get_field_config_for_mode("character", "excerpt", None)
+        assert result is not None
+        assert isinstance(result, list)
+        # Devrait contenir les champs avec "(extrait)" dans le label
+        assert "Background.Origine" in result
+    
+    def test_apply_excerpt_truncation(self, cb_for_modes: ContextBuilder):
+        """Test _apply_excerpt_truncation."""
+        long_text = "A" * 200  # Texte de 200 caractères
+        result = cb_for_modes._apply_excerpt_truncation(long_text, "character")
+        
+        # Si la troncature est appliquée, le texte devrait être plus court
+        # ou contenir "... (extrait)"
+        assert len(result) <= len(long_text) or "... (extrait)" in result

@@ -227,6 +227,9 @@ async def estimate_tokens(
         
         # Construire le contexte via le service
         context_builder = dialogue_service.context_builder
+        # Extraire _element_modes si présent
+        element_modes = context_selections_dict.pop("_element_modes", None)
+        
         # Utiliser build_context_with_custom_fields si field_configs est fourni
         if request_data.field_configs and hasattr(context_builder, 'build_context_with_custom_fields'):
             context_text = context_builder.build_context_with_custom_fields(
@@ -234,7 +237,8 @@ async def estimate_tokens(
                 scene_instruction=request_data.user_instructions,
                 field_configs=request_data.field_configs,
                 organization_mode=request_data.organization_mode or "default",
-                max_tokens=request_data.max_context_tokens
+                max_tokens=request_data.max_context_tokens,
+                element_modes=element_modes
             )
         else:
             context_text = context_builder.build_context(
@@ -374,10 +378,15 @@ async def generate_unity_dialogue(
         context_builder = dialogue_service.context_builder
         context_selections_dict = request_data.context_selections.to_service_dict()
         
+        # Extraire _element_modes si présent
+        element_modes = context_selections_dict.pop("_element_modes", None)
+        
         # Si un preview de dialogue précédent est fourni, le définir dans le context builder
         if request_data.previous_dialogue_preview:
             context_builder.set_previous_dialogue_context(request_data.previous_dialogue_preview)
         
+        # Pour l'instant, utiliser build_context standard (sans field_configs)
+        # TODO: Ajouter support pour field_configs dans generate_unity_dialogue si nécessaire
         context_summary = context_builder.build_context(
             selected_elements=context_selections_dict,
             scene_instruction=request_data.user_instructions,

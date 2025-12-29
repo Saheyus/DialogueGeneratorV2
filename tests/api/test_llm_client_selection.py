@@ -85,7 +85,7 @@ def test_llm_factory_creates_dummy_when_api_key_missing():
     }
     available_models = [
         {
-            "api_identifier": "gpt-4o-mini",
+            "api_identifier": "gpt-5.2-mini",
             "display_name": "GPT-4o Mini",
             "client_type": "openai"
         }
@@ -94,7 +94,7 @@ def test_llm_factory_creates_dummy_when_api_key_missing():
     # Simuler l'absence de clé API
     with patch.dict(os.environ, {}, clear=True):
         client = LLMClientFactory.create_client(
-            model_id="gpt-4o-mini",
+            model_id="gpt-5.2-mini",
             config=config,
             available_models=available_models
         )
@@ -154,7 +154,7 @@ def test_llm_factory_handles_model_without_client_type():
     }
     available_models = [
         {
-            "api_identifier": "gpt-4o-mini",
+            "api_identifier": "gpt-5.2-mini",
             "display_name": "GPT-4o Mini"
             # Pas de client_type
         }
@@ -165,7 +165,7 @@ def test_llm_factory_handles_model_without_client_type():
             mock_openai.return_value = MagicMock(spec=OpenAIClient)
             
             client = LLMClientFactory.create_client(
-                model_id="gpt-4o-mini",
+                model_id="gpt-5.2-mini",
                 config=config,
                 available_models=available_models
             )

@@ -2,7 +2,7 @@
  * Composant pour afficher une liste d'éléments de contexte (personnages, lieux, objets).
  */
 import { useState } from 'react'
-import type { CharacterResponse, LocationResponse, ItemResponse } from '../../types/api'
+import type { CharacterResponse, LocationResponse, ItemResponse, ElementMode } from '../../types/api'
 import { theme } from '../../theme'
 
 type ContextItem = CharacterResponse | LocationResponse | ItemResponse
@@ -15,6 +15,8 @@ interface ContextListProps {
   selectedDetail: string | null
   onSelectDetail: (name: string | null) => void
   isLoading?: boolean
+  getElementMode?: (name: string) => ElementMode | null
+  onModeChange?: (name: string, mode: ElementMode) => void
 }
 
 export function ContextList({
@@ -25,6 +27,8 @@ export function ContextList({
   selectedDetail,
   onSelectDetail: _onSelectDetail, // eslint-disable-line @typescript-eslint/no-unused-vars
   isLoading = false,
+  getElementMode,
+  onModeChange,
 }: ContextListProps) {
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -67,6 +71,15 @@ export function ContextList({
           filteredItems.map((item) => {
             const isSelected = selectedItems.includes(item.name)
             const isDetailSelected = selectedDetail === item.name
+            const currentMode = getElementMode ? getElementMode(item.name) : null
+
+            const handleModeClick = (e: React.MouseEvent) => {
+              e.stopPropagation()
+              if (onModeChange && isSelected && currentMode) {
+                const newMode: ElementMode = currentMode === 'full' ? 'excerpt' : 'full'
+                onModeChange(item.name, newMode)
+              }
+            }
 
             return (
               <div
@@ -75,7 +88,7 @@ export function ContextList({
                   padding: '0.75rem',
                   marginBottom: '0.5rem',
                   border: isSelected 
-                    ? `2px solid ${theme.button.primary.background}` 
+                    ? `2px solid ${currentMode === 'excerpt' ? theme.state.warning.border || theme.border.primary : theme.button.primary.background}` 
                     : `1px solid ${theme.border.primary}`,
                   borderRadius: '4px',
                   backgroundColor: isSelected 
@@ -113,6 +126,37 @@ export function ContextList({
                 <span style={{ flex: 1, fontWeight: isSelected ? 'bold' : 'normal' }}>
                   {item.name}
                 </span>
+                {isSelected && currentMode && onModeChange && (
+                  <button
+                    type="button"
+                    onClick={handleModeClick}
+                    title={currentMode === 'full' ? 'Complet - Cliquer pour passer en Extrait' : 'Extrait - Cliquer pour passer en Complet'}
+                    style={{
+                      padding: '0.25rem 0.5rem',
+                      border: `1px solid ${currentMode === 'excerpt' ? theme.state.warning.border || theme.border.primary : theme.border.primary}`,
+                      borderRadius: '4px',
+                      backgroundColor: currentMode === 'excerpt' 
+                        ? theme.state.warning.background || theme.background.secondary
+                        : theme.background.secondary,
+                      color: currentMode === 'excerpt' 
+                        ? theme.state.warning.color || theme.text.secondary
+                        : theme.text.secondary,
+                      cursor: 'pointer',
+                      fontSize: '0.75rem',
+                      fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.25rem',
+                      minWidth: '60px',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {currentMode === 'full' ? '📄' : '✂️'}
+                    <span style={{ fontSize: '0.7rem' }}>
+                      {currentMode === 'full' ? 'Complet' : 'Extrait'}
+                    </span>
+                  </button>
+                )}
               </div>
             )
           })

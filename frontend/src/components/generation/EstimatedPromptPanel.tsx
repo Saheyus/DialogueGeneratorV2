@@ -25,27 +25,44 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
     <>
       <style>{`
         .estimated-prompt-scroll-container {
-          scrollbar-width: thin;
-          scrollbar-color: ${theme.border.primary} ${theme.background.panel};
+          /* Firefox - scrollbar visible */
+          scrollbar-width: auto;
+          scrollbar-color: #9d4edd #1a1a1a;
+          scrollbar-gutter: stable;
         }
         .estimated-prompt-scroll-container::-webkit-scrollbar {
-          width: 12px;
+          width: 50px !important;
+          display: block !important;
+          -webkit-appearance: none !important;
         }
         .estimated-prompt-scroll-container::-webkit-scrollbar-track {
-          background: ${theme.background.panel};
+          background: #1a1a1a !important;
+          border-left: 3px solid #9d4edd !important;
+          -webkit-box-shadow: inset 0 0 6px rgba(157, 78, 221, 0.3) !important;
         }
         .estimated-prompt-scroll-container::-webkit-scrollbar-thumb {
-          background-color: ${theme.border.primary};
-          border-radius: 6px;
-          border: 2px solid ${theme.background.panel};
+          background-color: #9d4edd !important;
+          border-radius: 10px !important;
+          border: 5px solid #1a1a1a !important;
+          min-height: 100px !important;
+          -webkit-box-shadow: inset 0 0 6px rgba(157, 78, 221, 0.5) !important;
         }
         .estimated-prompt-scroll-container::-webkit-scrollbar-thumb:hover {
-          background-color: ${theme.button.primary.background};
+          background-color: #c77dff !important;
+        }
+        .estimated-prompt-scroll-container::-webkit-scrollbar-thumb:active {
+          background-color: #7b2cbf !important;
+        }
+        /* Force la scrollbar à être toujours visible, même au repos */
+        .estimated-prompt-scroll-container:hover::-webkit-scrollbar-thumb {
+          background-color: #9d4edd !important;
         }
       `}</style>
       <div
         style={{
-          height: '100%',
+          flex: 1,
+          minHeight: 0,
+          maxHeight: '100%', // Force le conteneur à respecter la hauteur du parent
           display: 'flex',
           flexDirection: 'column',
           backgroundColor: theme.background.panel,
@@ -68,12 +85,17 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
       <div 
         className="estimated-prompt-scroll-container"
         style={{ 
-          flex: 1, 
+          flex: '1 1 0%', // Utilise flex-basis: 0% pour forcer le respect de la hauteur parent
           minHeight: 0,
-          overflowY: 'auto',
-          overflowX: 'hidden',
+          height: 0, // Force le conteneur à respecter la hauteur du parent flex
+          // NE PAS utiliser overflow: 'auto' car React le combine mal avec overflowX/overflowY
+          // Utiliser overflowY et overflowX séparément (comme ContextSelector ligne 330)
+          overflowY: 'auto', // Comme les autres scrollbars visibles de l'app
+          overflowX: 'hidden', // Pas de scroll horizontal
           padding: '1rem',
           boxSizing: 'border-box',
+          // Force la scrollbar à être visible
+          scrollbarGutter: 'stable',
         }}
       >
         {formattedPrompt ? (

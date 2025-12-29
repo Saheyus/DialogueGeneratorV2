@@ -67,8 +67,10 @@ export function UnityDialogueDetails({
     setIsDeleting(true)
     try {
       await unityDialoguesAPI.deleteUnityDialogue(filename)
-      onDeleted?.()
+      // Fermer d'abord pour éviter que le composant reste monté avec un fichier supprimé
       onClose()
+      // Puis notifier la suppression pour rafraîchir la liste
+      onDeleted?.()
     } catch (err) {
       setError(getErrorMessage(err))
       setIsDeleting(false)

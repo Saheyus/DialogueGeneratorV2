@@ -488,7 +488,8 @@ class ContextBuilder:
         field_configs: Optional[Dict[str, List[str]]] = None,
         organization_mode: str = "default",
         max_tokens: int = 70000,
-        include_dialogue_type: bool = True
+        include_dialogue_type: bool = True,
+        element_modes: Optional[Dict[str, Dict[str, str]]] = None
     ) -> str:
         """Construit un contexte avec une configuration personnalisée de champs.
         
@@ -569,14 +570,29 @@ class ContextBuilder:
                     element_data = self.get_quest_details_by_name(name)
                 
                 if element_data:
-                    if fields_to_include:
-                        # Utiliser l'organisateur avec les champs personnalisés
+                    # Déterminer le mode de cet élément
+                    element_mode = "full"  # Par défaut
+                    if element_modes and category_key in element_modes and name in element_modes[category_key]:
+                        element_mode = element_modes[category_key][name]
+                    
+                    # Obtenir les champs selon le mode
+                    fields_for_element = self._get_field_config_for_mode(
+                        element_type, 
+                        element_mode, 
+                        fields_to_include
+                    )
+                    
+                    if fields_for_element:
+                        # Utiliser l'organisateur avec les champs personnalisés selon le mode
                         info_str = organizer.organize_context(
                             element_data=element_data,
                             element_type=element_type,
-                            fields_to_include=fields_to_include,
+                            fields_to_include=fields_for_element,
                             organization_mode=organization_mode
                         )
+                        # Appliquer la troncature si mode excerpt
+                        if element_mode == "excerpt":
+                            info_str = self._apply_excerpt_truncation(info_str, element_type)
                     else:
                         # Fallback: utiliser la méthode standard
                         info_str = self._get_prioritized_info(
@@ -585,6 +601,9 @@ class ContextBuilder:
                             3,  # level max
                             include_dialogue_type=include_dialogue_type
                         )
+                        # Appliquer la troncature si mode excerpt
+                        if element_mode == "excerpt":
+                            info_str = self._apply_excerpt_truncation(info_str, element_type)
                     gdd_context_parts.append(info_str)
                 else:
                     logger.warning(f"Aucune donnée trouvée pour l'élément '{name}' dans la catégorie '{category_key}'.")
@@ -610,6 +629,79 @@ class ContextBuilder:
             context_summary = truncated_text + "\n... (contexte tronqué)"
         
         return context_summary
+
+    def _get_field_config_for_mode(
+        self, 
+        element_type: str, 
+        mode: str, 
+        custom_fields: Optional[List[str]] = None
+    ) -> Optional[List[str]]:
+        """Obtient la configuration de champs selon le mode (full/excerpt).
+        
+        Args:
+            element_type: Type d'élément (character, location, etc.)
+            mode: Mode de sélection ('full' ou 'excerpt')
+            custom_fields: Champs personnalisés fournis (optionnel)
+            
+        Returns:
+            Liste des chemins de champs à inclure, ou None pour utiliser la config par défaut.
+        """
+        if mode == "full":
+            # Mode full: utiliser tous les champs disponibles (ou custom_fields si fourni)
+            return custom_fields
+        
+        # Mode excerpt: filtrer pour ne garder que les champs avec "(extrait)" dans le label
+        if custom_fields:
+            # Si des champs personnalisés sont fournis, les utiliser tels quels
+            # (l'utilisateur a déjà choisi quels champs inclure)
+            return custom_fields
+        
+        # Sinon, utiliser la config par défaut et filtrer les champs "extrait"
+        config_for_type = self.context_config.get(element_type.lower(), {})
+        excerpt_fields = []
+        
+        # Parcourir toutes les priorités (1, 2, 3)
+        for priority_level, fields in config_for_type.items():
+            for field_config in fields:
+                label = field_config.get("label", "")
+                path = field_config.get("path", "")
+                
+                # Si le label contient "(extrait)", inclure ce champ
+                if "(extrait)" in label and path:
+                    excerpt_fields.append(path)
+        
+        return excerpt_fields if excerpt_fields else None
+
+    def _apply_excerpt_truncation(self, text: str, element_type: str) -> str:
+        """Applique la troncature selon les paramètres de context_config.json pour le mode excerpt.
+        
+        Args:
+            text: Texte à tronquer
+            element_type: Type d'élément
+            
+        Returns:
+            Texte tronqué si nécessaire.
+        """
+        config_for_type = self.context_config.get(element_type.lower(), {})
+        
+        # Parcourir les champs pour trouver les paramètres de troncature
+        for priority_level, fields in config_for_type.items():
+            for field_config in fields:
+                label = field_config.get("label", "")
+                truncate = field_config.get("truncate", -1)
+                
+                # Si c'est un champ "extrait" avec troncature
+                if "(extrait)" in label and truncate > 0:
+                    # Tronquer le texte si nécessaire
+                    if len(text) > truncate:
+                        # Essayer de tronquer à un mot complet
+                        truncated = text[:truncate]
+                        last_space = truncated.rfind(' ')
+                        if last_space > truncate * 0.8:  # Si on trouve un espace proche
+                            truncated = truncated[:last_space]
+                        return truncated + "... (extrait)"
+        
+        return text
 
     def build_context(self, selected_elements: dict[str, list[str]], scene_instruction: str, max_tokens: int = 70000, include_dialogue_type: bool = True) -> str:
         """

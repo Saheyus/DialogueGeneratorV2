@@ -110,8 +110,13 @@ export function useSceneSelection() {
       }
       
       // Mapper les personnages : les 2 premiers deviennent characterA et characterB
-      const characterA = contextSelections.characters[0] || null
-      const characterB = contextSelections.characters[1] || null
+      // Fusionner les listes full et excerpt
+      const allCharacters = [
+        ...(Array.isArray(contextSelections.characters_full) ? contextSelections.characters_full : []),
+        ...(Array.isArray(contextSelections.characters_excerpt) ? contextSelections.characters_excerpt : [])
+      ]
+      const characterA = allCharacters[0] || null
+      const characterB = allCharacters[1] || null
       
       // Mapper les lieux : le premier lieu devient sceneRegion ou subLocation
       let sceneRegion: string | null = null
@@ -124,10 +129,17 @@ export function useSceneSelection() {
         if (contextSubLocations.length > 0) {
           subLocation = contextSubLocations[0]
         }
-      } else if (contextSelections.locations.length > 0) {
-        // Sinon, utiliser le premier lieu de la liste
-        // On suppose que c'est une région (pas un sous-lieu)
-        sceneRegion = contextSelections.locations[0]
+      } else {
+        // Fusionner les listes full et excerpt pour les lieux
+        const allLocations = [
+          ...(Array.isArray(contextSelections.locations_full) ? contextSelections.locations_full : []),
+          ...(Array.isArray(contextSelections.locations_excerpt) ? contextSelections.locations_excerpt : [])
+        ]
+        if (allLocations.length > 0) {
+          // Sinon, utiliser le premier lieu de la liste
+          // On suppose que c'est une région (pas un sous-lieu)
+          sceneRegion = allLocations[0]
+        }
       }
       
       // Mettre à jour seulement si quelque chose a changé
@@ -151,12 +163,18 @@ export function useSceneSelection() {
 
   // Synchronisation inverse : mettre à jour contextStore quand sceneSelection change
   useEffect(() => {
+    // Fusionner les listes full et excerpt pour vérifier si les personnages sont déjà sélectionnés
+    const allCharacters = [
+      ...(Array.isArray(contextSelections.characters_full) ? contextSelections.characters_full : []),
+      ...(Array.isArray(contextSelections.characters_excerpt) ? contextSelections.characters_excerpt : [])
+    ]
+    
     // Ajouter characterA et characterB aux sélections de personnages s'ils ne sont pas déjà présents
-    if (selection.characterA && !contextSelections.characters.includes(selection.characterA)) {
-      toggleCharacter(selection.characterA)
+    if (selection.characterA && !allCharacters.includes(selection.characterA)) {
+      toggleCharacter(selection.characterA, 'full') // Par défaut en mode full
     }
-    if (selection.characterB && !contextSelections.characters.includes(selection.characterB)) {
-      toggleCharacter(selection.characterB)
+    if (selection.characterB && !allCharacters.includes(selection.characterB)) {
+      toggleCharacter(selection.characterB, 'full') // Par défaut en mode full
     }
     
     // Mettre à jour la région si elle change
@@ -168,7 +186,7 @@ export function useSceneSelection() {
     if (selection.subLocation && selection.sceneRegion && !contextSubLocations.includes(selection.subLocation)) {
       toggleSubLocation(selection.subLocation)
     }
-  }, [selection.characterA, selection.characterB, selection.sceneRegion, selection.subLocation, contextSelections.characters, contextRegion, contextSubLocations, toggleCharacter, setRegion, toggleSubLocation])
+  }, [selection.characterA, selection.characterB, selection.sceneRegion, selection.subLocation, contextSelections.characters_full, contextSelections.characters_excerpt, contextRegion, contextSubLocations, toggleCharacter, setRegion, toggleSubLocation])
 
   const updateSelection = useCallback((updates: Partial<SceneSelection>) => {
     setSelection((prev) => ({ ...prev, ...updates }))

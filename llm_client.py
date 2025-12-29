@@ -140,7 +140,7 @@ class OpenAIClient(ILLMClient):
         self.client = AsyncOpenAI(api_key=api_key)
         
         self.llm_config = config if config is not None else {}
-        self.model_name = self.llm_config.get("default_model", "gpt-4o")
+        self.model_name = self.llm_config.get("default_model", "gpt-5.2")
         self.temperature = self.llm_config.get("temperature", 0.7)
         self.max_tokens = self.llm_config.get("max_tokens", 1500)
         
@@ -394,7 +394,9 @@ class OpenAIClient(ILLMClient):
 
     def get_max_tokens(self) -> int:
         model_lower = self.model_name.lower()
-        if "gpt-4o-mini" in model_lower or "gpt-4o" in model_lower:
+        if "gpt-5.2" in model_lower:
+            return 128000  # GPT-5.2 et ses variantes (mini, nano, thinking) supportent 128k tokens
+        elif "gpt-4o-mini" in model_lower or "gpt-4o" in model_lower:
             return 128000 
         elif "gpt-4-turbo" in model_lower:
             return 128000

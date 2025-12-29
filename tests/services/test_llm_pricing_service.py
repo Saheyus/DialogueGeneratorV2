@@ -10,7 +10,7 @@ def pricing_config_path(tmp_path):
     config_file = tmp_path / "llm_pricing.json"
     config_file.write_text("""{
   "models": {
-    "gpt-4o": {
+    "gpt-5.2": {
       "input_price_per_1M": 2.50,
       "output_price_per_1M": 10.00
     },
@@ -30,9 +30,9 @@ def pricing_service(pricing_config_path):
 
 
 def test_calculate_cost_gpt4o(pricing_service):
-    """Teste le calcul de coût pour gpt-4o."""
+    """Teste le calcul de coût pour gpt-5.2."""
     cost = pricing_service.calculate_cost(
-        model_name="gpt-4o",
+        model_name="gpt-5.2",
         prompt_tokens=1000000,
         completion_tokens=500000
     )
@@ -65,7 +65,7 @@ def test_calculate_cost_unknown_model(pricing_service):
 
 def test_get_model_pricing(pricing_service):
     """Teste la récupération des tarifs d'un modèle."""
-    pricing = pricing_service.get_model_pricing("gpt-4o")
+    pricing = pricing_service.get_model_pricing("gpt-5.2")
     assert pricing is not None
     assert pricing["input_price_per_1M"] == 2.50
     assert pricing["output_price_per_1M"] == 10.00

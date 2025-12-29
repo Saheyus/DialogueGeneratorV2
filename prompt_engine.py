@@ -61,7 +61,7 @@ class PromptEngine:
         # Fallback: prompt minimal si le chargement échoue
         return "Tu es un dialoguiste expert en jeux de rôle narratifs."
 
-    def _count_tokens(self, text: str, model_name: str = "gpt-4") -> int:
+    def _count_tokens(self, text: str, model_name: str = "gpt-5.2") -> int:
         """
         Compte le nombre de tokens dans un texte en utilisant tiktoken si disponible.
 
@@ -70,7 +70,7 @@ class PromptEngine:
 
         Args:
             text (str): Le texte pour lequel compter les tokens.
-            model_name (str): Le nom du modèle à utiliser pour l'encodage (par défaut "gpt-4").
+            model_name (str): Le nom du modèle à utiliser pour l'encodage (par défaut "gpt-5.2").
                               Cela influence la manière dont tiktoken compte les tokens.
 
         Returns:

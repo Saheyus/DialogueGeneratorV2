@@ -651,6 +651,11 @@ async def preview_context(
         Prévisualisation du contexte formaté.
     """
     try:
+        # Extraire _element_modes si présent (si selected_elements est un dict avec _element_modes)
+        element_modes = None
+        if isinstance(request_data.selected_elements, dict):
+            element_modes = request_data.selected_elements.pop("_element_modes", None)
+        
         # Utiliser build_context_with_custom_fields si disponible
         # Sinon, utiliser build_context normal avec les champs sélectionnés
         if hasattr(context_builder, 'build_context_with_custom_fields'):
@@ -659,7 +664,8 @@ async def preview_context(
                 scene_instruction=request_data.scene_instruction or "",
                 field_configs=request_data.field_configs,
                 organization_mode=request_data.organization_mode or "default",
-                max_tokens=request_data.max_tokens
+                max_tokens=request_data.max_tokens,
+                element_modes=element_modes
             )
         else:
             # Fallback: utiliser build_context normal

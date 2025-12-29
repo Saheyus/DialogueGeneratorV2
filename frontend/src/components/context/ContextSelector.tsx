@@ -44,6 +44,8 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
     toggleCommunity,
     clearSelections,
     setElementLists,
+    getElementMode,
+    setElementMode,
   } = useContextStore()
 
   useEffect(() => {
@@ -137,12 +139,68 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
   }
 
   const getSelectedItems = (): string[] => {
-    if (activeTab === 'characters') return selections.characters
-    if (activeTab === 'locations') return selections.locations
-    if (activeTab === 'items') return selections.items
-    if (activeTab === 'species') return selections.species
-    if (activeTab === 'communities') return selections.communities
+    // Fusionner les listes full et excerpt pour chaque type
+    // Sécurité: s'assurer que les propriétés sont toujours des tableaux
+    if (activeTab === 'characters') {
+      return [
+        ...(Array.isArray(selections.characters_full) ? selections.characters_full : []),
+        ...(Array.isArray(selections.characters_excerpt) ? selections.characters_excerpt : [])
+      ]
+    }
+    if (activeTab === 'locations') {
+      return [
+        ...(Array.isArray(selections.locations_full) ? selections.locations_full : []),
+        ...(Array.isArray(selections.locations_excerpt) ? selections.locations_excerpt : [])
+      ]
+    }
+    if (activeTab === 'items') {
+      return [
+        ...(Array.isArray(selections.items_full) ? selections.items_full : []),
+        ...(Array.isArray(selections.items_excerpt) ? selections.items_excerpt : [])
+      ]
+    }
+    if (activeTab === 'species') {
+      return [
+        ...(Array.isArray(selections.species_full) ? selections.species_full : []),
+        ...(Array.isArray(selections.species_excerpt) ? selections.species_excerpt : [])
+      ]
+    }
+    if (activeTab === 'communities') {
+      return [
+        ...(Array.isArray(selections.communities_full) ? selections.communities_full : []),
+        ...(Array.isArray(selections.communities_excerpt) ? selections.communities_excerpt : [])
+      ]
+    }
     return []
+  }
+
+  const handleModeChange = (name: string, mode: 'full' | 'excerpt') => {
+    if (activeTab === 'characters') {
+      setElementMode('characters', name, mode)
+    } else if (activeTab === 'locations') {
+      setElementMode('locations', name, mode)
+    } else if (activeTab === 'items') {
+      setElementMode('items', name, mode)
+    } else if (activeTab === 'species') {
+      setElementMode('species', name, mode)
+    } else if (activeTab === 'communities') {
+      setElementMode('communities', name, mode)
+    }
+  }
+
+  const getElementModeForList = (name: string): 'full' | 'excerpt' | null => {
+    if (activeTab === 'characters') {
+      return getElementMode('characters', name)
+    } else if (activeTab === 'locations') {
+      return getElementMode('locations', name)
+    } else if (activeTab === 'items') {
+      return getElementMode('items', name)
+    } else if (activeTab === 'species') {
+      return getElementMode('species', name)
+    } else if (activeTab === 'communities') {
+      return getElementMode('communities', name)
+    }
+    return null
   }
 
   return (
@@ -278,6 +336,8 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
           selectedDetail={selectedDetail}
           onSelectDetail={setSelectedDetail}
           isLoading={isLoading}
+          getElementMode={getElementModeForList}
+          onModeChange={handleModeChange}
         />
       </div>
       <div style={{ flex: '0 0 auto' }}>

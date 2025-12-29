@@ -117,11 +117,13 @@ export function Dashboard() {
       id: 'prompt',
       label: 'Prompt Estimé',
       content: (
-        <EstimatedPromptPanel
-          estimatedPrompt={estimatedPrompt}
-          isEstimating={isEstimating}
-          estimatedTokens={estimatedTokens}
-        />
+        <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <EstimatedPromptPanel
+            estimatedPrompt={estimatedPrompt}
+            isEstimating={isEstimating}
+            estimatedTokens={estimatedTokens}
+          />
+        </div>
       ),
     },
     {
@@ -259,8 +261,8 @@ export function Dashboard() {
                         filename={selectedDialogue.filename}
                         onClose={() => setSelectedDialogue(null)}
                         onDeleted={() => {
-                          setSelectedDialogue(null)
-                          // Rafraîchir la liste après suppression
+                          // onClose() gère déjà la fermeture (setSelectedDialogue(null))
+                          // On ne fait que rafraîchir la liste pour retirer le dialogue supprimé
                           dialogueListRef.current?.refresh()
                         }}
                         onGenerateContinuation={(dialogueJson, dialogueTitle) => {
@@ -403,6 +405,9 @@ export function Dashboard() {
             activeTabId={rightPanelTab}
             onTabChange={(tabId) => setRightPanelTab(tabId as 'prompt' | 'variants' | 'details')}
             style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}
+            // Important: overflow: 'hidden' pour éviter le double scroll, mais scrollbar-gutter réserve l'espace
+            // Le contenu enfant gère son propre scroll avec scrollbar-gutter: stable
+            contentStyle={{ overflow: 'hidden', scrollbarGutter: 'stable' }}
           />
         </div>
         {/* Gros bouton Générer en bas (visible sur Prompt et Variantes) */}

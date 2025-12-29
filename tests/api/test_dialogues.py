@@ -37,7 +37,7 @@ def client(mock_dialogue_service):
     })
     mock_config_service.get_available_llm_models = MagicMock(return_value=[
         {
-            "api_identifier": "gpt-4o-mini",
+            "api_identifier": "gpt-5.2-mini",
             "display_name": "GPT-4o Mini",
             "client_type": "openai"
         }
@@ -113,7 +113,7 @@ async def test_generate_dialogue_variants(client, mock_dialogue_service, monkeyp
             "max_context_tokens": 1000,
             "structured_output": False,
             "user_instructions": "Test",
-            "llm_model_identifier": "gpt-4",
+            "llm_model_identifier": "gpt-5.2-mini",
             "context_selections": {
                 "characters": [],
                 "locations": [],
@@ -162,7 +162,7 @@ async def test_generate_interaction_variants(client, mock_dialogue_service, mock
             "k_variants": 1,
             "max_context_tokens": 1000,
             "user_instructions": "Test",
-            "llm_model_identifier": "gpt-4",
+            "llm_model_identifier": "gpt-5.2-mini",
             "context_selections": {
                 "characters": [],
                 "locations": [],
@@ -192,7 +192,7 @@ def test_generate_interaction_variants_invalid_previous_id(client):
             "k_variants": 1,
             "max_context_tokens": 1000,
             "user_instructions": "Test",
-            "llm_model_identifier": "gpt-4",
+            "llm_model_identifier": "gpt-5.2-mini",
             "previous_interaction_id": "non-existent",
             "context_selections": {
                 "characters": [],

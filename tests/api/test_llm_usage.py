@@ -24,7 +24,7 @@ def sample_records():
         LLMUsageRecord(
             request_id=f"req_{i}",
             timestamp=base_time - timedelta(hours=i),
-            model_name="gpt-4o" if i % 2 == 0 else "gpt-3.5-turbo",
+            model_name="gpt-5.2" if i % 2 == 0 else "gpt-3.5-turbo",
             prompt_tokens=1000 + i * 100,
             completion_tokens=500 + i * 50,
             total_tokens=1500 + i * 150,
@@ -113,13 +113,13 @@ def test_get_usage_history_with_filters(client, sample_records, tmp_path):
     
     try:
         # Filtrer par modèle
-        response = client.get("/api/v1/llm-usage/history?model=gpt-4o&page=1&page_size=10")
+        response = client.get("/api/v1/llm-usage/history?model=gpt-5.2&page=1&page_size=10")
         
         assert response.status_code == 200
         data = response.json()
-        # Vérifier que tous les enregistrements sont pour gpt-4o
+        # Vérifier que tous les enregistrements sont pour gpt-5.2
         for record in data["records"]:
-            assert record["model_name"] == "gpt-4o"
+            assert record["model_name"] == "gpt-5.2"
     finally:
         # Nettoyer l'override
         app.dependency_overrides.pop(get_llm_usage_service, None)

@@ -16,9 +16,14 @@ export interface TabsProps {
   activeTabId: string
   onTabChange: (tabId: string) => void
   style?: React.CSSProperties
+  /**
+   * Styles appliqués au conteneur de contenu (zone sous les onglets).
+   * Utile pour désactiver le scroll interne quand le contenu gère déjà son propre overflow.
+   */
+  contentStyle?: React.CSSProperties
 }
 
-export function Tabs({ tabs, activeTabId, onTabChange, style }: TabsProps) {
+export function Tabs({ tabs, activeTabId, onTabChange, style, contentStyle }: TabsProps) {
   const activeTab = tabs.find((tab) => tab.id === activeTabId)
 
   return (
@@ -83,8 +88,9 @@ export function Tabs({ tabs, activeTabId, onTabChange, style }: TabsProps) {
         style={{
           flex: 1,
           minHeight: 0,
-          overflow: 'auto',
+          overflow: contentStyle?.overflow !== undefined ? contentStyle.overflow : 'auto',
           backgroundColor: theme.background.panel,
+          ...contentStyle,
         }}
       >
         {activeTab?.content}

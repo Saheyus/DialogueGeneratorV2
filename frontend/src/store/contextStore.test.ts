@@ -27,21 +27,23 @@ describe('contextStore', () => {
     it('ne doit pas permettre les doublons', () => {
       let store = useContextStore.getState()
       
-      // Ajouter un personnage
+      // Ajouter un personnage en mode full par défaut
       store.toggleCharacter('Personnage 1')
       store = useContextStore.getState()
-      expect(store.selections.characters).toEqual(['Personnage 1'])
+      expect(store.selections.characters_full).toEqual(['Personnage 1'])
+      expect(store.selections.characters_excerpt).toEqual([])
       
       // Essayer d'ajouter le même personnage à nouveau (devrait le retirer)
       store.toggleCharacter('Personnage 1')
       store = useContextStore.getState()
-      expect(store.selections.characters).toEqual([]) // Devrait être retiré, pas dupliqué
+      expect(store.selections.characters_full).toEqual([])
+      expect(store.selections.characters_excerpt).toEqual([])
       
       // Ajouter à nouveau
       store.toggleCharacter('Personnage 1')
       store = useContextStore.getState()
-      expect(store.selections.characters).toEqual(['Personnage 1'])
-      expect(store.selections.characters.length).toBe(1)
+      expect(store.selections.characters_full).toEqual(['Personnage 1'])
+      expect(store.selections.characters_excerpt).toEqual([])
     })
 
     it('permet d\'ajouter plusieurs personnages différents', () => {
@@ -52,10 +54,41 @@ describe('contextStore', () => {
       store.toggleCharacter('Personnage 3')
       
       store = useContextStore.getState()
-      expect(store.selections.characters.length).toBe(3)
-      expect(store.selections.characters).toContain('Personnage 1')
-      expect(store.selections.characters).toContain('Personnage 2')
-      expect(store.selections.characters).toContain('Personnage 3')
+      expect(store.selections.characters_full.length).toBe(3)
+      expect(store.selections.characters_full).toContain('Personnage 1')
+      expect(store.selections.characters_full).toContain('Personnage 2')
+      expect(store.selections.characters_full).toContain('Personnage 3')
+    })
+
+    it('permet de sélectionner en mode excerpt', () => {
+      let store = useContextStore.getState()
+      
+      store.toggleCharacter('Personnage 1', 'excerpt')
+      store = useContextStore.getState()
+      expect(store.selections.characters_full).toEqual([])
+      expect(store.selections.characters_excerpt).toEqual(['Personnage 1'])
+    })
+
+    it('permet de basculer entre full et excerpt', () => {
+      let store = useContextStore.getState()
+      
+      // Ajouter en mode full
+      store.toggleCharacter('Personnage 1', 'full')
+      store = useContextStore.getState()
+      expect(store.selections.characters_full).toEqual(['Personnage 1'])
+      expect(store.selections.characters_excerpt).toEqual([])
+      
+      // Changer le mode
+      store.setElementMode('characters', 'Personnage 1', 'excerpt')
+      store = useContextStore.getState()
+      expect(store.selections.characters_full).toEqual([])
+      expect(store.selections.characters_excerpt).toEqual(['Personnage 1'])
+      
+      // Changer à nouveau en full
+      store.setElementMode('characters', 'Personnage 1', 'full')
+      store = useContextStore.getState()
+      expect(store.selections.characters_full).toEqual(['Personnage 1'])
+      expect(store.selections.characters_excerpt).toEqual([])
     })
   })
 
@@ -65,58 +98,99 @@ describe('contextStore', () => {
       
       store.toggleLocation('Lieu 1')
       store = useContextStore.getState()
-      expect(store.selections.locations).toEqual(['Lieu 1'])
+      expect(store.selections.locations_full).toEqual(['Lieu 1'])
+      expect(store.selections.locations_excerpt).toEqual([])
       
       // Essayer d'ajouter le même lieu à nouveau
       store.toggleLocation('Lieu 1')
       store = useContextStore.getState()
-      expect(store.selections.locations).toEqual([])
+      expect(store.selections.locations_full).toEqual([])
+      expect(store.selections.locations_excerpt).toEqual([])
+    })
+  })
+
+  describe('getElementMode', () => {
+    it('devrait retourner le mode correct pour un élément sélectionné', () => {
+      let store = useContextStore.getState()
+      
+      store.toggleCharacter('Personnage 1', 'full')
+      store.toggleCharacter('Personnage 2', 'excerpt')
+      
+      store = useContextStore.getState()
+      expect(store.getElementMode('characters', 'Personnage 1')).toBe('full')
+      expect(store.getElementMode('characters', 'Personnage 2')).toBe('excerpt')
+      expect(store.getElementMode('characters', 'Personnage 3')).toBe(null)
+    })
+  })
+
+  describe('isElementSelected', () => {
+    it('devrait retourner true si l\'élément est sélectionné (full ou excerpt)', () => {
+      let store = useContextStore.getState()
+      
+      store.toggleCharacter('Personnage 1', 'full')
+      store.toggleCharacter('Personnage 2', 'excerpt')
+      
+      store = useContextStore.getState()
+      expect(store.isElementSelected('characters', 'Personnage 1')).toBe(true)
+      expect(store.isElementSelected('characters', 'Personnage 2')).toBe(true)
+      expect(store.isElementSelected('characters', 'Personnage 3')).toBe(false)
     })
   })
 
   describe('restoreState', () => {
-    it('devrait restaurer les sélections sans créer de doublons', () => {
+    it('devrait restaurer les sélections avec les deux listes', () => {
       let store = useContextStore.getState()
       
       const selectionsToRestore: ContextSelection = {
-        characters: ['Personnage 1', 'Personnage 2'],
-        locations: ['Lieu 1'],
-        items: [],
-        species: [],
-        communities: [],
+        characters_full: ['Personnage 1'],
+        characters_excerpt: ['Personnage 2'],
+        locations_full: ['Lieu 1'],
+        locations_excerpt: [],
+        items_full: [],
+        items_excerpt: [],
+        species_full: [],
+        species_excerpt: [],
+        communities_full: [],
+        communities_excerpt: [],
         dialogues_examples: [],
       }
       
       store.restoreState(selectionsToRestore, null, [])
       store = useContextStore.getState()
       
-      expect(store.selections.characters.length).toBe(2)
-      expect(store.selections.characters).toEqual(['Personnage 1', 'Personnage 2'])
+      expect(store.selections.characters_full).toEqual(['Personnage 1'])
+      expect(store.selections.characters_excerpt).toEqual(['Personnage 2'])
+      expect(store.selections.locations_full).toEqual(['Lieu 1'])
     })
 
-    it('ne doit pas permettre les doublons même si restoreState reçoit un tableau avec doublons', () => {
+    it('devrait normaliser les données non-array en tableaux vides', () => {
       let store = useContextStore.getState()
       
-      // Simuler un restoreState avec des doublons (cas d'erreur)
-      const selectionsWithDuplicates: ContextSelection = {
-        characters: ['Personnage 1', 'Personnage 1'], // Doublon dans le tableau restauré
-        locations: [],
-        items: [],
-        species: [],
-        communities: [],
+      // Simuler un restoreState avec des données invalides
+      const invalidSelections = {
+        characters_full: undefined,
+        characters_excerpt: null,
+        locations_full: 'not an array',
+        locations_excerpt: [],
+        items_full: [],
+        items_excerpt: [],
+        species_full: [],
+        species_excerpt: [],
+        communities_full: [],
+        communities_excerpt: [],
         dialogues_examples: [],
-      }
+      } as unknown as ContextSelection
       
-      store.restoreState(selectionsWithDuplicates, null, [])
+      store.restoreState(invalidSelections, null, [])
       store = useContextStore.getState()
       
-      // Le store accepte ce qu'on lui donne, donc les doublons peuvent être présents
-      // Ce test documente que restoreState ne filtre pas les doublons
-      // Il faudrait soit filtrer dans restoreState, soit s'assurer que les données restaurées n'ont pas de doublons
-      expect(store.selections.characters.length).toBe(2) // Comportement actuel (ne filtre pas)
-      // Si on voulait filtrer, on devrait avoir :
-      // expect(store.selections.characters.length).toBe(1)
-      // expect(store.selections.characters).toEqual(['Personnage 1'])
+      // Toutes les propriétés devraient être des tableaux
+      expect(Array.isArray(store.selections.characters_full)).toBe(true)
+      expect(Array.isArray(store.selections.characters_excerpt)).toBe(true)
+      expect(Array.isArray(store.selections.locations_full)).toBe(true)
+      expect(store.selections.characters_full.length).toBe(0)
+      expect(store.selections.characters_excerpt.length).toBe(0)
+      expect(store.selections.locations_full.length).toBe(0)
     })
   })
 
@@ -130,40 +204,51 @@ describe('contextStore', () => {
       
       // Remplacer avec de nouvelles sélections
       const newSelections: ContextSelection = {
-        characters: ['Nouveau Personnage'],
-        locations: ['Nouveau Lieu'],
-        items: [],
-        species: [],
-        communities: [],
+        characters_full: ['Nouveau Personnage'],
+        characters_excerpt: [],
+        locations_full: ['Nouveau Lieu'],
+        locations_excerpt: [],
+        items_full: [],
+        items_excerpt: [],
+        species_full: [],
+        species_excerpt: [],
+        communities_full: [],
+        communities_excerpt: [],
         dialogues_examples: [],
       }
       
       store.setSelections(newSelections)
       store = useContextStore.getState()
       
-      expect(store.selections.characters).toEqual(['Nouveau Personnage'])
-      expect(store.selections.locations).toEqual(['Nouveau Lieu'])
-      expect(store.selections.characters).not.toContain('Personnage Initial')
+      expect(store.selections.characters_full).toEqual(['Nouveau Personnage'])
+      expect(store.selections.locations_full).toEqual(['Nouveau Lieu'])
+      expect(store.selections.characters_full).not.toContain('Personnage Initial')
     })
 
-    it('ne doit pas permettre les doublons même si setSelections reçoit un tableau avec doublons', () => {
+    it('devrait normaliser les données non-array en tableaux vides', () => {
       let store = useContextStore.getState()
       
-      const selectionsWithDuplicates: ContextSelection = {
-        characters: ['Personnage 1', 'Personnage 1'],
-        locations: [],
-        items: [],
-        species: [],
-        communities: [],
+      const invalidSelections = {
+        characters_full: undefined,
+        characters_excerpt: null,
+        locations_full: 'not an array',
+        locations_excerpt: [],
+        items_full: [],
+        items_excerpt: [],
+        species_full: [],
+        species_excerpt: [],
+        communities_full: [],
+        communities_excerpt: [],
         dialogues_examples: [],
-      }
+      } as unknown as ContextSelection
       
-      store.setSelections(selectionsWithDuplicates)
+      store.setSelections(invalidSelections)
       store = useContextStore.getState()
       
-      // Comportement actuel : setSelections accepte les doublons
-      // Ce test documente le comportement actuel
-      expect(store.selections.characters.length).toBe(2)
+      // Toutes les propriétés devraient être des tableaux
+      expect(Array.isArray(store.selections.characters_full)).toBe(true)
+      expect(Array.isArray(store.selections.characters_excerpt)).toBe(true)
+      expect(Array.isArray(store.selections.locations_full)).toBe(true)
     })
   })
 
@@ -171,8 +256,8 @@ describe('contextStore', () => {
     it('ne doit pas ajouter d\'éléments déjà présents', () => {
       let store = useContextStore.getState()
       
-      // Ajouter un personnage initial
-      store.toggleCharacter('Personnage 1')
+      // Ajouter un personnage initial en mode full
+      store.toggleCharacter('Personnage 1', 'full')
       
       // Simuler des listes d'éléments disponibles
       store.setElementLists({
@@ -188,10 +273,28 @@ describe('contextStore', () => {
       store = useContextStore.getState()
       
       // Personnage 1 ne doit pas être dupliqué
-      const personnages = store.selections.characters
-      const countPersonnage1 = personnages.filter(p => p === 'Personnage 1').length
+      const allCharacters = [...store.selections.characters_full, ...store.selections.characters_excerpt]
+      const countPersonnage1 = allCharacters.filter(p => p === 'Personnage 1').length
       expect(countPersonnage1).toBe(1)
-      expect(personnages).toContain('Personnage 2')
+      expect(allCharacters).toContain('Personnage 2')
+    })
+
+    it('devrait ajouter les éléments en mode full par défaut', () => {
+      let store = useContextStore.getState()
+      
+      store.setElementLists({
+        characters: [{ name: 'Personnage 1', data: {} }],
+        locations: [],
+        items: [],
+        species: [],
+        communities: [],
+      })
+      
+      store.applyLinkedElements(['Personnage 1'])
+      store = useContextStore.getState()
+      
+      expect(store.selections.characters_full).toContain('Personnage 1')
+      expect(store.selections.characters_excerpt).not.toContain('Personnage 1')
     })
   })
 
@@ -199,20 +302,26 @@ describe('contextStore', () => {
     it('devrait vider toutes les sélections', () => {
       let store = useContextStore.getState()
       
-      // Ajouter des sélections
-      store.toggleCharacter('Personnage 1')
-      store.toggleLocation('Lieu 1')
-      store.toggleSpecies('Espèce 1')
+      // Ajouter des sélections en différents modes
+      store.toggleCharacter('Personnage 1', 'full')
+      store.toggleCharacter('Personnage 2', 'excerpt')
+      store.toggleLocation('Lieu 1', 'full')
+      store.toggleSpecies('Espèce 1', 'excerpt')
       
       // Tout effacer
       store.clearSelections()
       store = useContextStore.getState()
       
-      expect(store.selections.characters.length).toBe(0)
-      expect(store.selections.locations.length).toBe(0)
-      expect(store.selections.items.length).toBe(0)
-      expect(store.selections.species.length).toBe(0)
-      expect(store.selections.communities.length).toBe(0)
+      expect(store.selections.characters_full.length).toBe(0)
+      expect(store.selections.characters_excerpt.length).toBe(0)
+      expect(store.selections.locations_full.length).toBe(0)
+      expect(store.selections.locations_excerpt.length).toBe(0)
+      expect(store.selections.items_full.length).toBe(0)
+      expect(store.selections.items_excerpt.length).toBe(0)
+      expect(store.selections.species_full.length).toBe(0)
+      expect(store.selections.species_excerpt.length).toBe(0)
+      expect(store.selections.communities_full.length).toBe(0)
+      expect(store.selections.communities_excerpt.length).toBe(0)
       expect(store.selections.dialogues_examples.length).toBe(0)
       expect(store.selectedRegion).toBe(null)
       expect(store.selectedSubLocations.length).toBe(0)

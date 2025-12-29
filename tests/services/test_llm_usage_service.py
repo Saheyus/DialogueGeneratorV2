@@ -34,7 +34,7 @@ def test_track_usage(usage_service, mock_repository, mock_pricing_service):
     """Teste l'enregistrement d'un appel LLM."""
     usage_service.track_usage(
         request_id="req_123",
-        model_name="gpt-4o",
+        model_name="gpt-5.2",
         prompt_tokens=1000,
         completion_tokens=500,
         total_tokens=1500,
@@ -46,7 +46,7 @@ def test_track_usage(usage_service, mock_repository, mock_pricing_service):
     
     # Vérifier que le pricing service a été appelé
     mock_pricing_service.calculate_cost.assert_called_once_with(
-        model_name="gpt-4o",
+        model_name="gpt-5.2",
         prompt_tokens=1000,
         completion_tokens=500
     )
@@ -64,7 +64,7 @@ def test_track_usage_with_error(usage_service, mock_repository):
     """Teste l'enregistrement d'un appel en erreur."""
     usage_service.track_usage(
         request_id="req_456",
-        model_name="gpt-4o",
+        model_name="gpt-5.2",
         prompt_tokens=1000,
         completion_tokens=0,
         total_tokens=1000,
@@ -87,7 +87,7 @@ def test_get_usage_history(usage_service, mock_repository):
         LLMUsageRecord(
             request_id=f"req_{i}",
             timestamp=datetime.now(UTC),
-            model_name="gpt-4o",
+            model_name="gpt-5.2",
             prompt_tokens=1000,
             completion_tokens=500,
             total_tokens=1500,

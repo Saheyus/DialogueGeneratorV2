@@ -12,8 +12,8 @@ export function UnityDialoguesPage() {
   const dialogueListRef = useRef<UnityDialogueListRef>(null)
 
   const handleDialogueDeleted = () => {
-    setSelectedDialogue(null)
-    // Rafraîchir la liste après suppression
+    // onClose() gère déjà la fermeture (setSelectedDialogue(null))
+    // On ne fait que rafraîchir la liste pour retirer le dialogue supprimé
     dialogueListRef.current?.refresh()
   }
 

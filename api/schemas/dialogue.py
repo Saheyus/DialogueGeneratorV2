@@ -16,39 +16,80 @@ class ContextSelection(BaseModel):
     """Sélection de contexte pour la génération.
     
     Attributes:
-        characters: Liste des noms de personnages à inclure.
-        locations: Liste des noms de lieux à inclure.
-        items: Liste des noms d'objets à inclure.
-        species: Liste des noms d'espèces à inclure.
-        communities: Liste des noms de communautés à inclure.
+        characters_full: Liste des noms de personnages à inclure en mode complet.
+        characters_excerpt: Liste des noms de personnages à inclure en mode extrait.
+        locations_full: Liste des noms de lieux à inclure en mode complet.
+        locations_excerpt: Liste des noms de lieux à inclure en mode extrait.
+        items_full: Liste des noms d'objets à inclure en mode complet.
+        items_excerpt: Liste des noms d'objets à inclure en mode extrait.
+        species_full: Liste des noms d'espèces à inclure en mode complet.
+        species_excerpt: Liste des noms d'espèces à inclure en mode extrait.
+        communities_full: Liste des noms de communautés à inclure en mode complet.
+        communities_excerpt: Liste des noms de communautés à inclure en mode extrait.
         dialogues_examples: Liste des titres d'exemples de dialogues à inclure.
         scene_protagonists: Dictionnaire des protagonistes de la scène (sera converti en _scene_protagonists pour le service).
         scene_location: Dictionnaire du lieu de la scène (sera converti en _scene_location pour le service).
         generation_settings: Paramètres de génération additionnels.
     """
-    characters: List[str] = Field(default_factory=list, description="Liste des personnages")
-    locations: List[str] = Field(default_factory=list, description="Liste des lieux")
-    items: List[str] = Field(default_factory=list, description="Liste des objets")
-    species: List[str] = Field(default_factory=list, description="Liste des espèces")
-    communities: List[str] = Field(default_factory=list, description="Liste des communautés")
+    characters_full: List[str] = Field(default_factory=list, description="Liste des personnages (mode complet)")
+    characters_excerpt: List[str] = Field(default_factory=list, description="Liste des personnages (mode extrait)")
+    locations_full: List[str] = Field(default_factory=list, description="Liste des lieux (mode complet)")
+    locations_excerpt: List[str] = Field(default_factory=list, description="Liste des lieux (mode extrait)")
+    items_full: List[str] = Field(default_factory=list, description="Liste des objets (mode complet)")
+    items_excerpt: List[str] = Field(default_factory=list, description="Liste des objets (mode extrait)")
+    species_full: List[str] = Field(default_factory=list, description="Liste des espèces (mode complet)")
+    species_excerpt: List[str] = Field(default_factory=list, description="Liste des espèces (mode extrait)")
+    communities_full: List[str] = Field(default_factory=list, description="Liste des communautés (mode complet)")
+    communities_excerpt: List[str] = Field(default_factory=list, description="Liste des communautés (mode extrait)")
     dialogues_examples: List[str] = Field(default_factory=list, description="Liste des exemples de dialogues")
     scene_protagonists: Optional[Dict[str, Any]] = Field(None, description="Protagonistes de la scène")
     scene_location: Optional[Dict[str, Any]] = Field(None, description="Lieu de la scène")
     generation_settings: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Paramètres de génération")
     
     def to_service_dict(self) -> Dict[str, Any]:
-        """Convertit le ContextSelection en dictionnaire pour le service (avec préfixes underscore).
+        """Convertit le ContextSelection en dictionnaire pour le service (avec préfixes underscore et métadonnées de mode).
         
         Returns:
-            Dictionnaire avec _scene_protagonists et _scene_location pour compatibilité service.
+            Dictionnaire avec _scene_protagonists, _scene_location, et _element_modes pour compatibilité service.
+            Les listes sont fusionnées et un dictionnaire _element_modes indique le mode de chaque élément.
         """
         data = self.model_dump(exclude_none=True)
+        
         # Convertir scene_protagonists -> _scene_protagonists
         if "scene_protagonists" in data:
             data["_scene_protagonists"] = data.pop("scene_protagonists")
         # Convertir scene_location -> _scene_location
         if "scene_location" in data:
             data["_scene_location"] = data.pop("scene_location")
+        
+        # Construire _element_modes pour indiquer le mode de chaque élément
+        element_modes: Dict[str, Dict[str, str]] = {}
+        
+        # Fusionner les listes et créer les métadonnées de mode
+        for element_type in ["characters", "locations", "items", "species", "communities"]:
+            full_list = data.get(f"{element_type}_full", [])
+            excerpt_list = data.get(f"{element_type}_excerpt", [])
+            
+            # Fusionner les listes (mode full par défaut pour compatibilité)
+            merged_list = full_list + excerpt_list
+            data[element_type] = merged_list
+            
+            # Créer le dictionnaire de modes pour ce type
+            if merged_list:
+                element_modes[element_type] = {}
+                for name in full_list:
+                    element_modes[element_type][name] = "full"
+                for name in excerpt_list:
+                    element_modes[element_type][name] = "excerpt"
+            
+            # Supprimer les listes séparées
+            data.pop(f"{element_type}_full", None)
+            data.pop(f"{element_type}_excerpt", None)
+        
+        # Ajouter _element_modes si non vide
+        if element_modes:
+            data["_element_modes"] = element_modes
+        
         return data
 
 
@@ -71,7 +112,7 @@ class GenerateDialogueVariantsRequest(BaseModel):
     max_context_tokens: int = Field(default=1500, ge=100, le=Defaults.MAX_CONTEXT_TOKENS, description="Nombre maximum de tokens pour le contexte")
     structured_output: bool = Field(default=False, description="Générer en format structuré")
     system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
-    llm_model_identifier: str = Field(default="gpt-4o-mini", description="Identifiant du modèle LLM")
+    llm_model_identifier: str = Field(default="gpt-5.2-mini", description="Identifiant du modèle LLM")
     npc_speaker_id: Optional[str] = Field(None, description="ID du PNJ interlocuteur (si None, utiliser le premier personnage sélectionné)")
 
 
@@ -158,7 +199,7 @@ class GenerateUnityDialogueRequest(BaseModel):
     max_context_tokens: int = Field(default=1500, ge=100, le=Defaults.MAX_CONTEXT_TOKENS, description="Nombre maximum de tokens pour le contexte")
     system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
     author_profile: Optional[str] = Field(None, description="Profil d'auteur global (style réutilisable entre scènes)")
-    llm_model_identifier: str = Field(default="gpt-4o-mini", description="Identifiant du modèle LLM")
+    llm_model_identifier: str = Field(default="gpt-5.2-mini", description="Identifiant du modèle LLM")
     max_choices: Optional[int] = Field(None, ge=0, le=8, description="Nombre maximum de choix à générer (0-8, ou None pour laisser l'IA décider librement)")
     narrative_tags: Optional[List[str]] = Field(None, description="Tags narratifs pour guider le ton (ex: tension, humour, dramatique)")
     vocabulary_min_importance: Optional[str] = Field(None, description="Niveau d'importance minimum pour le vocabulaire Alteir (Majeur, Important, Modéré, Secondaire, Mineur, Anecdotique)")

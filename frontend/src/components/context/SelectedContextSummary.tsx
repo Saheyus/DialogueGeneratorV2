@@ -44,13 +44,27 @@ export const SelectedContextSummary = memo(function SelectedContextSummary({
     }
   }, [sceneSelection, applyLinkedElements, onError, onSuccess])
   
+  // Helper pour obtenir la longueur en toute sécurité
+  const safeLength = (arr: unknown[] | undefined): number => {
+    return Array.isArray(arr) ? arr.length : 0
+  }
+
+  // Protection contre selections undefined
+  if (!selections) {
+    return (
+      <div style={{ padding: '1rem', textAlign: 'center', color: theme.text.secondary, fontSize: '0.9rem' }}>
+        Aucune sélection
+      </div>
+    )
+  }
+
   const totalSelected =
-    selections.characters.length +
-    selections.locations.length +
-    selections.items.length +
-    selections.species.length +
-    selections.communities.length +
-    selections.dialogues_examples.length
+    safeLength(selections.characters_full) + safeLength(selections.characters_excerpt) +
+    safeLength(selections.locations_full) + safeLength(selections.locations_excerpt) +
+    safeLength(selections.items_full) + safeLength(selections.items_excerpt) +
+    safeLength(selections.species_full) + safeLength(selections.species_excerpt) +
+    safeLength(selections.communities_full) + safeLength(selections.communities_excerpt) +
+    safeLength(selections.dialogues_examples)
 
   if (totalSelected === 0) {
     return (
@@ -136,12 +150,51 @@ export const SelectedContextSummary = memo(function SelectedContextSummary({
       </div>
       {isExpanded && (
         <div style={{ fontSize: '0.85rem', color: theme.text.secondary, marginTop: '0.75rem' }}>
-          {renderCategory('Personnages', selections.characters, selections.characters.length)}
-          {renderCategory('Lieux', selections.locations, selections.locations.length)}
-          {renderCategory('Objets', selections.items, selections.items.length)}
-          {renderCategory('Espèces', selections.species, selections.species.length)}
-          {renderCategory('Communautés', selections.communities, selections.communities.length)}
-          {renderCategory('Exemples de dialogues', selections.dialogues_examples, selections.dialogues_examples.length)}
+          {renderCategory(
+            'Personnages', 
+            [
+              ...(Array.isArray(selections.characters_full) ? selections.characters_full : []),
+              ...(Array.isArray(selections.characters_excerpt) ? selections.characters_excerpt : [])
+            ], 
+            safeLength(selections.characters_full) + safeLength(selections.characters_excerpt)
+          )}
+          {renderCategory(
+            'Lieux', 
+            [
+              ...(Array.isArray(selections.locations_full) ? selections.locations_full : []),
+              ...(Array.isArray(selections.locations_excerpt) ? selections.locations_excerpt : [])
+            ], 
+            safeLength(selections.locations_full) + safeLength(selections.locations_excerpt)
+          )}
+          {renderCategory(
+            'Objets', 
+            [
+              ...(Array.isArray(selections.items_full) ? selections.items_full : []),
+              ...(Array.isArray(selections.items_excerpt) ? selections.items_excerpt : [])
+            ], 
+            safeLength(selections.items_full) + safeLength(selections.items_excerpt)
+          )}
+          {renderCategory(
+            'Espèces', 
+            [
+              ...(Array.isArray(selections.species_full) ? selections.species_full : []),
+              ...(Array.isArray(selections.species_excerpt) ? selections.species_excerpt : [])
+            ], 
+            safeLength(selections.species_full) + safeLength(selections.species_excerpt)
+          )}
+          {renderCategory(
+            'Communautés', 
+            [
+              ...(Array.isArray(selections.communities_full) ? selections.communities_full : []),
+              ...(Array.isArray(selections.communities_excerpt) ? selections.communities_excerpt : [])
+            ], 
+            safeLength(selections.communities_full) + safeLength(selections.communities_excerpt)
+          )}
+          {renderCategory(
+            'Exemples de dialogues', 
+            Array.isArray(selections.dialogues_examples) ? selections.dialogues_examples : [],
+            safeLength(selections.dialogues_examples)
+          )}
         </div>
       )}
     </div>

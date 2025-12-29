@@ -171,6 +171,9 @@ class DialogueGenerationService(IDialogueGenerationService):
         logger.debug(f"[_build_context_summary] context_selections reçu: {context_selections}")
         logger.debug(f"[_build_context_summary] characters dans context_selections: {context_selections.get('characters', [])}")
         
+        # Extraire _element_modes si présent
+        element_modes = context_selections.pop("_element_modes", None) if isinstance(context_selections, dict) else None
+        
         # Utiliser build_context_with_custom_fields si field_configs est fourni
         if field_configs and hasattr(self.context_builder, 'build_context_with_custom_fields'):
             return self.context_builder.build_context_with_custom_fields(
@@ -178,7 +181,8 @@ class DialogueGenerationService(IDialogueGenerationService):
                 scene_instruction=user_instructions,
                 field_configs=field_configs,
                 organization_mode=organization_mode or "default",
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
+                element_modes=element_modes
             )
         else:
             return self.context_builder.build_context(context_selections, user_instructions, max_tokens=max_tokens)

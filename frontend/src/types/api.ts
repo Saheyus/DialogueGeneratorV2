@@ -21,12 +21,20 @@ export interface UserResponse {
 }
 
 // Dialogue
+export type ElementMode = 'full' | 'excerpt'
+
 export interface ContextSelection {
-  characters: string[]
-  locations: string[]
-  items: string[]
-  species: string[]
-  communities: string[]
+  // Listes séparées par mode pour chaque type d'élément
+  characters_full: string[]
+  characters_excerpt: string[]
+  locations_full: string[]
+  locations_excerpt: string[]
+  items_full: string[]
+  items_excerpt: string[]
+  species_full: string[]
+  species_excerpt: string[]
+  communities_full: string[]
+  communities_excerpt: string[]
   dialogues_examples: string[]
   scene_protagonists?: Record<string, unknown>
   scene_location?: Record<string, unknown>

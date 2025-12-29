@@ -60,7 +60,7 @@ export function GenerationPanel() {
   
   const [userInstructions, setUserInstructions] = useState('')
   const [maxContextTokens, setMaxContextTokens] = useState<number>(CONTEXT_TOKENS_LIMITS.DEFAULT)
-  const [llmModel, setLlmModel] = useState('gpt-4o-mini')
+  const [llmModel, setLlmModel] = useState('gpt-5.2-mini')
   const [maxChoices, setMaxChoices] = useState<number | null>(null)
   const [availableModels, setAvailableModels] = useState<LLMModelResponse[]>([])
   const [unityDialogueResponse, setUnityDialogueResponse] = useState<GenerateUnityDialogueResponse | null>(null)
@@ -215,11 +215,16 @@ export function GenerationPanel() {
 
   const hasSelections = useCallback((): boolean => {
     return (
-      selections.characters.length > 0 ||
-      selections.locations.length > 0 ||
-      selections.items.length > 0 ||
-      selections.species.length > 0 ||
-      selections.communities.length > 0 ||
+      selections.characters_full.length > 0 ||
+      selections.characters_excerpt.length > 0 ||
+      selections.locations_full.length > 0 ||
+      selections.locations_excerpt.length > 0 ||
+      selections.items_full.length > 0 ||
+      selections.items_excerpt.length > 0 ||
+      selections.species_full.length > 0 ||
+      selections.species_excerpt.length > 0 ||
+      selections.communities_full.length > 0 ||
+      selections.communities_excerpt.length > 0 ||
       selections.dialogues_examples.length > 0
     )
   }, [selections])
@@ -317,11 +322,16 @@ export function GenerationPanel() {
   useEffect(() => {
     // Estimer les tokens quand les sélections, les instructions, le system prompt, ou les fieldConfigs changent
     const hasAnySelections = 
-      selections.characters.length > 0 ||
-      selections.locations.length > 0 ||
-      selections.items.length > 0 ||
-      selections.species.length > 0 ||
-      selections.communities.length > 0 ||
+      selections.characters_full.length > 0 ||
+      selections.characters_excerpt.length > 0 ||
+      selections.locations_full.length > 0 ||
+      selections.locations_excerpt.length > 0 ||
+      selections.items_full.length > 0 ||
+      selections.items_excerpt.length > 0 ||
+      selections.species_full.length > 0 ||
+      selections.species_excerpt.length > 0 ||
+      selections.communities_full.length > 0 ||
+      selections.communities_excerpt.length > 0 ||
       selections.dialogues_examples.length > 0
     
     const hasSystemPrompt = systemPromptOverride && systemPromptOverride.trim().length > 0
@@ -336,7 +346,7 @@ export function GenerationPanel() {
     }, 500)
 
     return () => clearTimeout(timeoutId)
-  }, [userInstructions, selections.characters, selections.locations, selections.items, selections.species, selections.communities, selections.dialogues_examples, maxContextTokens, estimateTokens, sceneSelection, dialogueStructure, systemPromptOverride, setEstimatedPrompt, fieldConfigs, organization])
+  }, [userInstructions, selections.characters_full, selections.characters_excerpt, selections.locations_full, selections.locations_excerpt, selections.items_full, selections.items_excerpt, selections.species_full, selections.species_excerpt, selections.communities_full, selections.communities_excerpt, selections.dialogues_examples, maxContextTokens, estimateTokens, sceneSelection, dialogueStructure, systemPromptOverride, setEstimatedPrompt, fieldConfigs, organization])
 
   const handleGenerate = useCallback(async () => {
     // Validation minimale
@@ -357,7 +367,8 @@ export function GenerationPanel() {
       console.log('Personnages dans contextSelections:', contextSelections.characters)
       
       // Validation : au moins un personnage requis pour Unity
-      if (!contextSelections.characters || contextSelections.characters.length === 0) {
+      const hasCharacters = (contextSelections.characters_full?.length || 0) + (contextSelections.characters_excerpt?.length || 0) > 0
+      if (!hasCharacters) {
         toast('Au moins un personnage doit être sélectionné pour générer un dialogue Unity', 'error')
         if (toastId) {
           toastManager.remove(toastId)
