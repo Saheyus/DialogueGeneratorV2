@@ -26,6 +26,12 @@ pip install -r requirements.txt
    - `AUTH_RATE_LIMIT_ENABLED`: Activer le rate limiting (par défaut: `true`)
    - `AUTH_RATE_LIMIT_REQUESTS`: Nombre de requêtes par fenêtre (par défaut: `5`)
    - `AUTH_RATE_LIMIT_WINDOW`: Fenêtre en secondes (par défaut: `60`)
+   - `LOG_FILE_ENABLED`: Activer l'archivage des logs dans des fichiers (par défaut: `true`)
+   - `LOG_RETENTION_DAYS`: Durée de rétention des logs en jours (par défaut: `30`)
+   - `LOG_DIR`: Dossier de stockage des logs (par défaut: `data/logs`)
+   - `LOG_MAX_FILE_SIZE_MB`: Taille maximale d'un fichier de log en MB avant rotation (par défaut: `100`)
+   - `LOG_FORMAT`: Format des logs (`json` ou `text`, par défaut: `text` en dev, `json` en prod)
+   - `LOG_LEVEL`: Niveau de log (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`, par défaut: `INFO`)
 
    **Note** : Voir `.env.example` pour la liste complète des variables. En production, `JWT_SECRET_KEY` **doit** être changée et ne peut pas être la valeur par défaut.
 
@@ -98,6 +104,126 @@ L'API sera accessible sur :
 - `GET /api/v1/config/llm` - Configuration LLM
 - `GET /api/v1/config/llm/models` - Modèles disponibles
 - `GET /api/v1/config/context` - Configuration contexte
+
+### Logs
+
+- `GET /api/v1/logs` - Recherche de logs (query params: `start_date`, `end_date`, `level`, `logger`, `request_id`, `endpoint`, `limit`, `offset`)
+- `GET /api/v1/logs/stats` - Statistiques sur les logs (comptage par niveau, par jour, par logger)
+- `GET /api/v1/logs/files` - Liste des fichiers de logs disponibles
+- `POST /api/v1/logs/frontend` - Recevoir un log depuis le frontend
+
+## Système de logs
+
+L'API dispose d'un système de logs complet avec archivage persistant, rotation automatique et API de consultation.
+
+### Archivage des logs
+
+Les logs sont automatiquement archivés dans des fichiers JSON par date dans le dossier `data/logs/` :
+- Format : `logs_YYYY-MM-DD.json`
+- Rotation automatique quotidienne
+- Rétention configurable (30 jours par défaut)
+- Format JSON structuré pour faciliter l'analyse
+
+### Configuration
+
+Variables d'environnement pour le logging :
+- `LOG_FILE_ENABLED`: Activer l'archivage fichier (défaut: `true`)
+- `LOG_RETENTION_DAYS`: Durée de rétention en jours (défaut: `30`)
+- `LOG_DIR`: Dossier de stockage (défaut: `data/logs`)
+- `LOG_MAX_FILE_SIZE_MB`: Taille max avant rotation intra-jour (défaut: `100`)
+- `LOG_FORMAT`: Format console (`json` ou `text`, défaut: `text` en dev, `json` en prod)
+- `LOG_LEVEL`: Niveau de log (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`, défaut: `INFO`)
+
+### Consultation des logs
+
+#### Recherche de logs
+
+```bash
+# Rechercher tous les logs d'aujourd'hui
+GET /api/v1/logs
+
+# Rechercher les erreurs des 7 derniers jours
+GET /api/v1/logs?level=ERROR&start_date=2024-12-08&end_date=2024-12-15
+
+# Rechercher par request_id
+GET /api/v1/logs?request_id=abc123
+
+# Rechercher avec pagination
+GET /api/v1/logs?limit=50&offset=0
+```
+
+#### Statistiques
+
+```bash
+# Statistiques sur les 30 derniers jours
+GET /api/v1/logs/stats
+
+# Statistiques sur une plage de dates
+GET /api/v1/logs/stats?start_date=2024-12-01&end_date=2024-12-15
+```
+
+Réponse :
+```json
+{
+  "total_logs": 1234,
+  "date_range": {
+    "start": "2024-12-01",
+    "end": "2024-12-15"
+  },
+  "by_level": {
+    "INFO": 800,
+    "WARNING": 200,
+    "ERROR": 34
+  },
+  "by_day": {
+    "2024-12-15": 100,
+    "2024-12-14": 95
+  },
+  "by_logger": {
+    "api.middleware": 500,
+    "api.routers": 300
+  }
+}
+```
+
+#### Liste des fichiers
+
+```bash
+GET /api/v1/logs/files
+```
+
+### Logs frontend
+
+Le frontend envoie automatiquement ses logs critiques au backend via `POST /api/v1/logs/frontend`. Les logs frontend sont intégrés dans le même système d'archivage.
+
+### Nettoyage automatique
+
+Les fichiers de logs plus anciens que `LOG_RETENTION_DAYS` sont automatiquement supprimés au démarrage de l'API. Le nettoyage peut également être déclenché manuellement :
+
+```bash
+python -m api.utils.log_cleanup [retention_days]
+```
+
+### Format des logs
+
+Chaque entrée de log contient :
+```json
+{
+  "timestamp": "2024-12-15T10:30:00.123Z",
+  "level": "INFO",
+  "logger": "api.middleware",
+  "message": "Request: GET /api/dialogues",
+  "module": "middleware",
+  "function": "dispatch",
+  "line": 54,
+  "request_id": "abc123",
+  "endpoint": "/api/dialogues",
+  "method": "GET",
+  "status_code": 200,
+  "duration_ms": 45,
+  "environment": "production"
+}
+```
 - `GET /api/v1/config/unity-dialogues-path` - Chemin configuré des dialogues Unity
 - `PUT /api/v1/config/unity-dialogues-path` - Configurer le chemin des dialogues Unity
 

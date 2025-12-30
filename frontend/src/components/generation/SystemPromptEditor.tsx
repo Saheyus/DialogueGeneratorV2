@@ -6,6 +6,7 @@ import { Tabs, type Tab } from '../shared/Tabs'
 import { FormField } from '../shared/FormField'
 import { useSystemPrompt } from '../../hooks/useSystemPrompt'
 import { useAuthorProfile } from '../../hooks/useAuthorProfile'
+import { useToast } from '../shared'
 import { theme } from '../../theme'
 import * as configAPI from '../../api/config'
 
@@ -40,6 +41,8 @@ export const SystemPromptEditor = memo(function SystemPromptEditor({
     restore: restoreAuthorProfile,
     updateProfile,
   } = useAuthorProfile()
+
+  const toast = useToast()
 
   // Synchroniser le state du hook avec le prop (si le prop change depuis l'extérieur)
   // Mais ne pas écraser au chargement initial si le state local a déjà une valeur depuis localStorage
@@ -136,12 +139,12 @@ export const SystemPromptEditor = memo(function SystemPromptEditor({
     try {
       savePrompt(currentPrompt)
       onSystemPromptChange(currentPrompt || null)
-      alert('Prompt système sauvegardé avec succès')
+      toast('Prompt système sauvegardé avec succès', 'success')
     } catch (err) {
       console.error('Erreur lors de la sauvegarde:', err)
-      alert('Erreur lors de la sauvegarde du prompt système')
+      toast('Erreur lors de la sauvegarde du prompt système', 'error')
     }
-  }, [systemPromptOverride, systemPrompt, savePrompt, onSystemPromptChange])
+  }, [systemPromptOverride, systemPrompt, savePrompt, onSystemPromptChange, toast])
 
   const handleRestoreSystemPrompt = useCallback(async () => {
     const restoredPrompt = await restoreSystemPrompt()
@@ -158,12 +161,12 @@ export const SystemPromptEditor = memo(function SystemPromptEditor({
     try {
       saveProfile(currentProfile)
       onAuthorProfileChange(currentProfile)
-      alert('Profil d\'auteur sauvegardé avec succès')
+      toast('Profil d\'auteur sauvegardé avec succès', 'success')
     } catch (err) {
       console.error('Erreur lors de la sauvegarde:', err)
-      alert('Erreur lors de la sauvegarde du profil d\'auteur')
+      toast('Erreur lors de la sauvegarde du profil d\'auteur', 'error')
     }
-  }, [authorProfile, saveProfile, onAuthorProfileChange])
+  }, [authorProfile, saveProfile, onAuthorProfileChange, toast])
 
   const handleRestoreAuthorProfile = useCallback(() => {
     restoreAuthorProfile()
@@ -177,12 +180,12 @@ export const SystemPromptEditor = memo(function SystemPromptEditor({
   const handleSaveSceneInstructions = useCallback(() => {
     try {
       localStorage.setItem('dialogue_generator_saved_scene_instructions', userInstructions)
-      alert('Brief de scène sauvegardé avec succès')
+      toast('Brief de scène sauvegardé avec succès', 'success')
     } catch (err) {
       console.error('Erreur lors de la sauvegarde:', err)
-      alert('Erreur lors de la sauvegarde du brief de scène')
+      toast('Erreur lors de la sauvegarde du brief de scène', 'error')
     }
-  }, [userInstructions])
+  }, [userInstructions, toast])
 
   const handleRestoreSceneInstructions = useCallback(() => {
     try {

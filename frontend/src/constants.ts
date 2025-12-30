@@ -5,6 +5,29 @@
  */
 
 /**
+ * Noms des modèles OpenAI utilisés dans l'application.
+ * 
+ * Source de vérité unique pour tous les identifiants de modèles côté frontend.
+ * Ces constantes doivent correspondre à ModelNames dans constants.py côté backend.
+ */
+export const MODEL_NAMES = {
+  /** GPT-5.2 - Modèle principal */
+  GPT_5_2: 'gpt-5.2',
+  /** GPT-5.2 Thinking - Modèle pour raisonnement approfondi */
+  GPT_5_2_THINKING: 'gpt-5.2-thinking',
+  /** GPT-5 Mini - Version économique et rapide */
+  GPT_5_MINI: 'gpt-5-mini',
+  /** GPT-5 Nano - Version compacte */
+  GPT_5_NANO: 'gpt-5-nano',
+} as const
+
+/**
+ * Modèle par défaut à utiliser.
+ * Doit correspondre à Defaults.MODEL_ID dans constants.py.
+ */
+export const DEFAULT_MODEL = MODEL_NAMES.GPT_5_MINI
+
+/**
  * Limites pour les tokens de contexte.
  * 
  * Ces valeurs doivent correspondre à celles définies dans constants.py (Defaults.MAX_CONTEXT_TOKENS, Defaults.MIN_CONTEXT_TOKENS)
@@ -18,6 +41,16 @@ export const CONTEXT_TOKENS_LIMITS = {
   STEP: 5000,
   /** Valeur par défaut (50K) */
   DEFAULT: 50000,
+} as const
+
+/**
+ * Timeouts pour les requêtes HTTP (en millisecondes).
+ */
+export const API_TIMEOUTS = {
+  /** Timeout par défaut pour les requêtes API rapides (30 secondes) */
+  DEFAULT: 30000,
+  /** Timeout pour les requêtes LLM longues (5 minutes) - génération de dialogues */
+  LLM_GENERATION: 300000,
 } as const
 
 

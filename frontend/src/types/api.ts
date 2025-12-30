@@ -181,6 +181,7 @@ export interface GenerateUnityDialogueRequest {
   context_selections: ContextSelection
   npc_speaker_id?: string
   max_context_tokens: number
+  max_completion_tokens?: number | null
   system_prompt_override?: string
   llm_model_identifier: string
   max_choices?: number | null

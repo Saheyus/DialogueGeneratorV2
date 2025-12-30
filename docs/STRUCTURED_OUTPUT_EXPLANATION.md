@@ -69,3 +69,4 @@ Ces instructions sont **complémentaires** au Structured Output, pas redondantes
 
 
 
+

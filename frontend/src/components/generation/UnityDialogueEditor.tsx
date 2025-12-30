@@ -3,7 +3,7 @@
  * Permet d'éditer speaker, line, choices[].text, choices[].targetNode.
  * Préserve tous les autres champs en lecture seule.
  */
-import { memo, useState, useCallback, useMemo, type ReactNode } from 'react'
+import { memo, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import * as dialoguesAPI from '../../api/dialogues'
 import { getErrorMessage } from '../../types/errors'
 import { theme } from '../../theme'
@@ -58,6 +58,22 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
       return []
     }
   })
+
+  // Mettre à jour les nœuds quand json_content change
+  useEffect(() => {
+    try {
+      const parsed = JSON.parse(json_content)
+      if (!Array.isArray(parsed)) {
+        throw new Error('Le JSON Unity doit être un tableau de nœuds')
+      }
+      setNodes(parsed as UnityDialogueNode[])
+      setError(null)
+    } catch (error) {
+      console.error('Erreur lors du parsing du JSON Unity:', error)
+      setNodes([])
+      setError('Erreur lors du parsing du JSON Unity')
+    }
+  }, [json_content])
 
   // Validation: IDs uniques et références valides
   const validationErrors = useMemo<ValidationError[]>(() => {
@@ -315,13 +331,19 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
   }
 
   return (
-    <div style={{ height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ 
+      flex: 1,
+      minHeight: 0,
+      maxHeight: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      backgroundColor: theme.background.panel,
+      overflow: 'hidden',
+    }}>
       {/* En-tête sticky */}
       <div
         style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 10,
+          flexShrink: 0,
           padding: '1rem',
           borderBottom: `1px solid ${theme.border.primary}`,
           backgroundColor: theme.background.panelHeader,
@@ -388,8 +410,19 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
         </div>
       </div>
 
-      {/* Contenu (paddings + spacing) */}
-      <div style={{ padding: '1rem' }}>
+      {/* Contenu scrollable */}
+      <div 
+        style={{ 
+          flex: '1 1 0%',
+          minHeight: 0,
+          height: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: '1rem',
+          boxSizing: 'border-box',
+          scrollbarGutter: 'stable',
+        }}
+      >
         {/* Erreurs de validation */}
         {!isValid && (
           <div

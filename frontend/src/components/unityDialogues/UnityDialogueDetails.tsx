@@ -67,10 +67,16 @@ export function UnityDialogueDetails({
     setIsDeleting(true)
     try {
       await unityDialoguesAPI.deleteUnityDialogue(filename)
-      // Fermer d'abord pour éviter que le composant reste monté avec un fichier supprimé
+      // Notifier la suppression AVANT de fermer pour s'assurer que le rafraîchissement se fait
+      // pendant que le composant est encore monté et que la ref est disponible
+      if (onDeleted) {
+        console.log('[UnityDialogueDetails] Appel de onDeleted pour rafraîchir la liste')
+        onDeleted()
+      } else {
+        console.warn('[UnityDialogueDetails] onDeleted n\'est pas défini, la liste ne sera pas rafraîchie')
+      }
+      // Fermer après pour éviter que le composant reste monté avec un fichier supprimé
       onClose()
-      // Puis notifier la suppression pour rafraîchir la liste
-      onDeleted?.()
     } catch (err) {
       setError(getErrorMessage(err))
       setIsDeleting(false)

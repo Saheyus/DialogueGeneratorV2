@@ -189,15 +189,25 @@ async def list_llm_models(
     try:
         available_models = config_service.get_available_llm_models()
         
-        model_responses = [
-            LLMModelResponse(
-                model_identifier=model.get("api_identifier", model.get("model_identifier", "unknown")),
-                display_name=model.get("display_name", model.get("api_identifier", model.get("model_identifier", "Unknown"))),
-                client_type=model.get("client_type", "openai"),  # Par défaut openai pour les modèles de la config
-                max_tokens=model.get("max_tokens", 4096)
+        model_responses = []
+        for model in available_models:
+            # S'assurer qu'on utilise api_identifier en priorité, puis model_identifier, mais jamais "unknown"
+            api_id = model.get("api_identifier")
+            model_id = model.get("model_identifier")
+            # Si ni api_identifier ni model_identifier, utiliser le display_name comme fallback
+            identifier = api_id or model_id
+            if not identifier:
+                logger.warning(f"Modèle sans identifiant trouvé: {model.get('display_name', 'Unknown')}. Utilisation du display_name comme identifiant.")
+                identifier = model.get("display_name", "unknown").lower().replace(" ", "-").replace("(", "").replace(")", "")
+            
+            model_responses.append(
+                LLMModelResponse(
+                    model_identifier=identifier,
+                    display_name=model.get("display_name", identifier),
+                    client_type=model.get("client_type", "openai"),  # Par défaut openai pour les modèles de la config
+                    max_tokens=model.get("max_tokens", 4096)
+                )
             )
-            for model in available_models
-        ]
         
         return LLMModelsListResponse(
             models=model_responses,

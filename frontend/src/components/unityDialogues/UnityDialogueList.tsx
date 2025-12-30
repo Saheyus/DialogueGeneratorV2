@@ -25,12 +25,15 @@ export const UnityDialogueList = forwardRef<UnityDialogueListRef, UnityDialogueL
   const [error, setError] = useState<string | null>(null)
 
   const loadDialogues = useCallback(async () => {
+    console.log('[UnityDialogueList] Chargement de la liste des dialogues')
     setIsLoading(true)
     setError(null)
     try {
       const response = await unityDialoguesAPI.listUnityDialogues()
+      console.log(`[UnityDialogueList] ${response.dialogues.length} dialogue(s) chargé(s)`)
       setDialogues(response.dialogues)
     } catch (err) {
+      console.error('[UnityDialogueList] Erreur lors du chargement:', err)
       setError(getErrorMessage(err))
     } finally {
       setIsLoading(false)

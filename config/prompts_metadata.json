@@ -29,6 +29,11 @@
     }
   },
   "scene_instructions": {
+    "first_meeting": {
+      "file": "scene_instructions/first_meeting.txt",
+      "name": "Première rencontre",
+      "description": "Ton adaptatif, établissement de la relation, présentation du personnage. Idéal pour la première interaction in-game entre le joueur et un PNJ, même si une relation préexistante peut exister."
+    },
     "conversation": {
       "file": "scene_instructions/conversation.txt",
       "name": "Conversation",
@@ -48,11 +53,6 @@
       "file": "scene_instructions/revelation.txt",
       "name": "Révélation",
       "description": "Ton dramatique, progression graduelle, tension narrative. Idéal pour les révélations de plot, découvertes importantes, moments de bascule."
-    },
-    "humor": {
-      "file": "scene_instructions/humor.txt",
-      "name": "Humour",
-      "description": "Ton léger, répliques vives, moments de détente. Idéal pour les interactions comiques, moments de répit, dialogues légers."
     },
     "confrontation": {
       "file": "scene_instructions/confrontation.txt",

@@ -5,6 +5,7 @@ import logging
 import json
 from typing import Any, Dict
 from datetime import datetime, timezone
+from pathlib import Path
 
 
 class JSONFormatter(logging.Formatter):
@@ -137,7 +138,7 @@ def setup_logging() -> None:
     """Configure le logging structuré pour l'API.
     
     Configure le format (JSON ou text) selon l'environnement et les variables
-    d'environnement.
+    d'environnement. Ajoute également un handler de fichier si activé.
     """
     log_format = get_log_format()
     log_level = get_log_level()
@@ -163,6 +164,43 @@ def setup_logging() -> None:
     root_logger.handlers = []  # Nettoyer les handlers existants
     root_logger.addHandler(console_handler)
     
+    # Ajouter le handler de fichier si activé
+    log_file_enabled = os.getenv("LOG_FILE_ENABLED", "true").lower() not in ("false", "0", "no", "off")
+    if log_file_enabled:
+        try:
+            from api.utils.log_file_handler import DateRotatingFileHandler
+            from constants import FilePaths
+            
+            # Configuration du dossier de logs
+            log_dir = os.getenv("LOG_DIR", str(FilePaths.LOGS_DIR))
+            retention_days = int(os.getenv("LOG_RETENTION_DAYS", "30"))
+            
+            # Créer le handler de fichier (toujours en format JSON pour faciliter l'analyse)
+            file_handler = DateRotatingFileHandler(
+                log_dir=log_dir,
+                retention_days=retention_days,
+                max_file_size_mb=int(os.getenv("LOG_MAX_FILE_SIZE_MB", "100"))
+            )
+            file_handler.setLevel(getattr(logging, log_level))
+            # Utiliser JSONFormatter pour les fichiers (même si console est en texte)
+            file_formatter = JSONFormatter()
+            file_handler.setFormatter(file_formatter)
+            
+            root_logger.addHandler(file_handler)
+            
+            logger = logging.getLogger(__name__)
+            logger.info(
+                f"Logging fichier activé: dossier={log_dir}, rétention={retention_days} jours",
+                extra={"environment": environment}
+            )
+        except Exception as e:
+            # En cas d'erreur, continuer avec console uniquement
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Impossible d'activer le logging fichier: {e}. Continuation avec console uniquement.",
+                extra={"environment": environment}
+            )
+    
     # Réduire la verbosité de certains loggers spécifiques
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.error").setLevel(logging.INFO)
@@ -187,7 +225,7 @@ def setup_logging() -> None:
     # Logger la configuration
     logger = logging.getLogger(__name__)
     logger.info(
-        f"Logging configuré: format={log_format}, level={log_level}, environment={environment}",
+        f"Logging configuré: format={log_format}, level={log_level}, environment={environment}, fichier={'activé' if log_file_enabled else 'désactivé'}",
         extra={"environment": environment}
     )
 

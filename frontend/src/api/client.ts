@@ -17,7 +17,7 @@ const apiClient: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // 30 secondes
+  timeout: 30000, // 30 secondes par défaut (sera surchargé pour les requêtes LLM)
   withCredentials: true, // Nécessaire pour envoyer/recevoir les cookies (refresh_token)
 })
 

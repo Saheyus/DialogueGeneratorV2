@@ -56,6 +56,29 @@ class UnityDialogueGenerationService:
         
         result = variants[0]
         
+        # Détecter si le résultat est une chaîne d'erreur (cas où le modèle n'a pas retourné de structured output)
+        if isinstance(result, str):
+            model_name = getattr(llm_client, 'model_name', 'unknown')
+            if result.startswith("Erreur:"):
+                # Erreur retournée par le LLM client
+                error_msg = (
+                    f"Le modèle '{model_name}' n'a pas retourné de structured output (JSON structuré). "
+                    f"Le modèle a retourné du texte au lieu d'un format JSON valide. "
+                    f"Détails techniques: {result}"
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            else:
+                # Autre type de chaîne (texte libre, pas une erreur)
+                error_msg = (
+                    f"Le modèle '{model_name}' a retourné du texte libre au lieu d'un structured output (JSON). "
+                    f"Un structured output est requis pour générer des dialogues Unity. "
+                    f"Vérifiez les logs pour voir les paramètres API envoyés et la réponse reçue. "
+                    f"Réponse reçue (premiers 200 caractères): {result[:200]}"
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+        
         # Gérer le cas où DummyLLMClient retourne un dict au lieu d'un modèle Pydantic
         if isinstance(result, dict):
             logger.warning("DummyLLMClient a retourné un dict, conversion en UnityDialogueGenerationResponse")
@@ -66,7 +89,15 @@ class UnityDialogueGenerationService:
                 raise ValueError(f"Impossible de convertir le résultat en UnityDialogueGenerationResponse: {e}")
         
         if not isinstance(result, UnityDialogueGenerationResponse):
-            raise ValueError(f"Type de réponse inattendu: {type(result)}. Attendu: UnityDialogueGenerationResponse")
+            model_name = getattr(llm_client, 'model_name', 'unknown')
+            error_msg = (
+                f"Type de réponse inattendu: {type(result)}. Attendu: UnityDialogueGenerationResponse. "
+                f"Modèle utilisé: {model_name}. "
+                f"Le modèle n'a pas retourné un structured output valide. "
+                f"Vérifiez les logs pour voir les paramètres API envoyés et la réponse complète."
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
         
         # Validation : vérifier que le nœud a du contenu
         node = result.node

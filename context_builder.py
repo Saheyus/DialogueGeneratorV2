@@ -517,9 +517,9 @@ class ContextBuilder:
             context_parts.append(previous_dialogue_formatted)
             logger.info(f"Historique du dialogue précédent ajouté au contexte.")
         
-        # Objectif de la scène
-        if scene_instruction and scene_instruction.strip():
-            context_parts.append("\n--- OBJECTIF DE LA SCÈNE (Instruction Utilisateur) ---\n" + scene_instruction.strip())
+        # Note: L'objectif de la scène (scene_instruction) n'est PAS ajouté ici car il est déjà
+        # ajouté séparément dans le prompt final par prompt_engine.py::build_prompt().
+        # Le contexte doit contenir uniquement les informations GDD.
         
         # Informations sur le GDD avec champs personnalisés
         element_categories_order = ["characters", "species", "communities", "locations", "items", "quests"]
@@ -583,12 +583,17 @@ class ContextBuilder:
                     )
                     
                     if fields_for_element:
+                        # Récupérer les labels depuis context_config.json
+                        field_labels_map = self._get_field_labels_map(element_type, fields_for_element)
+                        
                         # Utiliser l'organisateur avec les champs personnalisés selon le mode
                         info_str = organizer.organize_context(
                             element_data=element_data,
                             element_type=element_type,
                             fields_to_include=fields_for_element,
-                            organization_mode=organization_mode
+                            organization_mode=organization_mode,
+                            field_labels_map=field_labels_map,
+                            element_mode=element_mode
                         )
                         # Appliquer la troncature si mode excerpt
                         if element_mode == "excerpt":
@@ -672,6 +677,35 @@ class ContextBuilder:
         
         return excerpt_fields if excerpt_fields else None
 
+    def _get_field_labels_map(
+        self, 
+        element_type: str, 
+        fields_to_include: List[str]
+    ) -> Dict[str, str]:
+        """Récupère les labels depuis context_config.json pour les champs spécifiés.
+        
+        Args:
+            element_type: Type d'élément (character, location, etc.)
+            fields_to_include: Liste des chemins de champs à inclure
+            
+        Returns:
+            Dictionnaire {field_path: label} pour les champs trouvés dans la config.
+        """
+        labels_map = {}
+        config_for_type = self.context_config.get(element_type.lower(), {})
+        
+        # Parcourir toutes les priorités (1, 2, 3)
+        for priority_level, fields in config_for_type.items():
+            for field_config in fields:
+                path = field_config.get("path", "")
+                label = field_config.get("label", "")
+                
+                # Si ce champ est dans la liste à inclure et a un label, l'ajouter
+                if path in fields_to_include and label:
+                    labels_map[path] = label
+        
+        return labels_map
+
     def _apply_excerpt_truncation(self, text: str, element_type: str) -> str:
         """Applique la troncature selon les paramètres de context_config.json pour le mode excerpt.
         
@@ -723,9 +757,9 @@ class ContextBuilder:
             context_parts.append(previous_dialogue_formatted)
             logger.info(f"Historique du dialogue précédent ajouté au contexte.")
         
-        # Ajouter l'objectif de la scène juste après l'historique
-        if scene_instruction and scene_instruction.strip():
-            context_parts.append("\n--- OBJECTIF DE LA SCÈNE (Instruction Utilisateur) ---\n" + scene_instruction.strip())
+        # Note: L'objectif de la scène (scene_instruction) n'est PAS ajouté ici car il est déjà
+        # ajouté séparément dans le prompt final par prompt_engine.py::build_prompt().
+        # Le contexte doit contenir uniquement les informations GDD.
         
         # Informations sur le GDD (personnages, lieux, etc.)
         element_categories_order = ["characters", "species", "communities", "locations", "items", "quests"]

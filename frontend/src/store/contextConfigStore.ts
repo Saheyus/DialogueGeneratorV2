@@ -2,6 +2,7 @@
  * Store Zustand pour gérer la configuration des champs de contexte.
  */
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import * as configAPI from '../api/config'
 
 export interface FieldInfo {
@@ -70,6 +71,7 @@ interface ContextConfigState {
   loadSuggestions: (elementType: string, context?: string) => Promise<void>
   loadDefaultConfig: () => Promise<void>
   resetToDefault: () => void
+  initializeWithAllFields: () => void
   getPreview: (
     selectedElements: Record<string, string[]>,
     sceneInstruction: string,
@@ -86,15 +88,19 @@ const defaultFieldConfigs: Record<string, string[]> = {
   community: [],
 }
 
-export const useContextConfigStore = create<ContextConfigState>((set, get) => ({
-  fieldConfigs: { ...defaultFieldConfigs },
-  essentialFields: {},
-  organization: 'default',
-  availableFields: {},
-  uniqueFieldsByItem: {},
-  suggestions: {},
-  isLoading: false,
-  error: null,
+const STORAGE_KEY = 'context_config_store'
+
+export const useContextConfigStore = create<ContextConfigState>()(
+  persist(
+    (set, get) => ({
+      fieldConfigs: { ...defaultFieldConfigs },
+      essentialFields: {},
+      organization: 'default',
+      availableFields: {},
+      uniqueFieldsByItem: {},
+      suggestions: {},
+      isLoading: false,
+      error: null,
 
   setFieldConfig: (elementType, fields) => {
     set((state) => {
@@ -255,30 +261,80 @@ export const useContextConfigStore = create<ContextConfigState>((set, get) => ({
     try {
       const response = await configAPI.getDefaultFieldConfig()
       const state = get()
+      
+      // Toujours mettre à jour essentialFields
+      set({
+        essentialFields: response.essential_fields,
+      })
+      
       // Ne réinitialiser les fieldConfigs que s'ils sont vides (première ouverture)
       const hasExistingConfigs = Object.values(state.fieldConfigs).some(fields => fields.length > 0)
       
       if (!hasExistingConfigs) {
-        // Initialiser les fieldConfigs avec les champs par défaut seulement si vide
-        const defaultFieldConfigs: Record<string, string[]> = {}
-        for (const [elementType, fields] of Object.entries(response.default_fields)) {
-          defaultFieldConfigs[elementType] = [...fields]
+        // Si aucun champ n'est sélectionné, initialiser avec "tous les champs" par défaut
+        // Pour cela, on doit d'abord détecter les champs disponibles
+        const elementTypes = ['character', 'location', 'item', 'species', 'community']
+        const allFieldsDetected: Record<string, string[]> = {}
+        const newAvailableFields: Record<string, Record<string, FieldInfo>> = {}
+        
+        // Détecter les champs pour chaque type d'élément en appelant directement l'API
+        for (const elementType of elementTypes) {
+          try {
+            // Invalider le cache pour forcer une nouvelle détection
+            try {
+              await configAPI.invalidateContextFieldsCache(elementType)
+            } catch (err) {
+              console.warn(`Impossible d'invalider le cache pour ${elementType}:`, err)
+            }
+            
+            // Appeler directement l'API pour détecter les champs
+            const fieldsResponse = await configAPI.getContextFields(elementType)
+            newAvailableFields[elementType] = fieldsResponse.fields
+            
+            const allFieldPaths = Object.keys(fieldsResponse.fields)
+            const essentialFieldsForType = response.essential_fields[elementType] || []
+            
+            // Sélectionner tous les champs (essentiels + tous les autres)
+            allFieldsDetected[elementType] = [...new Set([...essentialFieldsForType, ...allFieldPaths])]
+          } catch (err) {
+            console.warn(`Impossible de détecter les champs pour ${elementType}:`, err)
+            // En cas d'erreur, utiliser les champs par défaut de l'API
+            allFieldsDetected[elementType] = response.default_fields[elementType] || []
+          }
         }
         
-        set({
-          fieldConfigs: defaultFieldConfigs,
-          essentialFields: response.essential_fields,
-        })
-      } else {
-        // Mettre à jour seulement essentialFields, garder les fieldConfigs existants
-        set({
-          essentialFields: response.essential_fields,
-        })
+        // Mettre à jour le store avec les champs détectés et disponibles
+        set((state) => ({
+          fieldConfigs: allFieldsDetected,
+          availableFields: {
+            ...state.availableFields,
+            ...newAvailableFields,
+          },
+        }))
       }
     } catch (err) {
       console.error('Erreur lors du chargement de la config par défaut:', err)
       // Ne pas bloquer si le chargement échoue
     }
+  },
+
+  initializeWithAllFields: () => {
+    const state = get()
+    const elementTypes = ['character', 'location', 'item', 'species', 'community']
+    const allFieldsConfig: Record<string, string[]> = {}
+    
+    for (const elementType of elementTypes) {
+      const availableFieldsForType = state.availableFields[elementType] || {}
+      const allFieldPaths = Object.keys(availableFieldsForType)
+      const essentialFieldsForType = state.essentialFields[elementType] || []
+      
+      // Sélectionner tous les champs (essentiels + tous les autres)
+      allFieldsConfig[elementType] = [...new Set([...essentialFieldsForType, ...allFieldPaths])]
+    }
+    
+    set({
+      fieldConfigs: allFieldsConfig,
+    })
   },
 
   resetToDefault: () => {
@@ -326,5 +382,15 @@ export const useContextConfigStore = create<ContextConfigState>((set, get) => ({
   clearError: () => {
     set({ error: null })
   },
-}))
+    }),
+    {
+      name: STORAGE_KEY,
+      // Ne persister que fieldConfigs et organization, pas les autres états temporaires
+      partialize: (state) => ({
+        fieldConfigs: state.fieldConfigs,
+        organization: state.organization,
+      }),
+    }
+  )
+)
 

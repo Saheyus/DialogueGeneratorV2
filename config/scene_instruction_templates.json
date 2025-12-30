@@ -1,6 +1,12 @@
 {
   "templates": [
     {
+      "id": "first_meeting",
+      "name": "Première rencontre",
+      "description": "Ton adaptatif, établissement de la relation, présentation du personnage. Idéal pour la première interaction in-game entre le joueur et un PNJ, même si une relation préexistante peut exister.",
+      "instructions": "Ton adaptatif et engageant. Privilégie les répliques MESURÉES (1-3 phrases) qui établissent la relation et présentent le personnage. Les répliques courtes créent de la dynamique et de la curiosité. Les répliques plus longues servent à révéler la personnalité, les motivations ou le contexte. Alterne entre répliques courtes (premiers échanges, hésitations) et moyennes (présentation, établissement du ton de la relation). Cette première rencontre doit marquer le joueur et donner envie d'interagir à nouveau avec ce personnage."
+    },
+    {
       "id": "conversation",
       "name": "Conversation",
       "description": "Ton équilibré, répliques naturelles, dialogue classique. Idéal pour les conversations quotidiennes, échanges normaux, interactions standards.",
@@ -23,12 +29,6 @@
       "name": "Révélation",
       "description": "Ton dramatique, progression graduelle, tension narrative. Idéal pour les révélations de plot, découvertes importantes, moments de bascule.",
       "instructions": "Ton dramatique et tendu. Construis la tension avec une PROGRESSION GRADUELLE. Commence par des répliques de longueur moyenne, puis alterne entre courtes (tension) et longues (révélation). Les répliques les plus longues doivent être réservées au moment de la révélation elle-même. Crée un crescendo narratif jusqu'à la révélation."
-    },
-    {
-      "id": "humor",
-      "name": "Humour",
-      "description": "Ton léger, répliques vives, moments de détente. Idéal pour les interactions comiques, moments de répit, dialogues légers.",
-      "instructions": "Ton léger et vif. Privilégie les répliques VIVES et RAPIDES (1-3 phrases). Les répliques courtes créent du rythme comique. Les répliques plus longues sont réservées aux blagues développées ou aux moments de comédie de situation. Alterne entre répliques courtes (punchlines) et moyennes (setup)."
     },
     {
       "id": "confrontation",

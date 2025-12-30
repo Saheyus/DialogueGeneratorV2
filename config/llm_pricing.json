@@ -5,15 +5,15 @@
       "output_price_per_1M": 10.00,
       "description": "GPT-5.2 - Modèle le plus récent et performant, bon équilibre performance/coût"
     },
-    "gpt-5.2-mini": {
+    "gpt-5-mini": {
       "input_price_per_1M": 0.15,
       "output_price_per_1M": 0.60,
-      "description": "GPT-5.2 Mini - Version économique et rapide"
+      "description": "GPT-5 Mini - Version économique et rapide"
     },
-    "gpt-5.2-nano": {
+    "gpt-5-nano": {
       "input_price_per_1M": 0.10,
       "output_price_per_1M": 0.40,
-      "description": "GPT-5.2 Nano - Version compacte et très économique"
+      "description": "GPT-5 Nano - Version compacte et très économique"
     },
     "gpt-5.2-thinking": {
       "input_price_per_1M": 5.00,

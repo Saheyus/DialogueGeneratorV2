@@ -282,7 +282,9 @@ async def estimate_tokens(
                 user_specific_goal=request_data.user_instructions,
                 scene_protagonists=scene_protagonists_dict if scene_protagonists_dict else None,
                 scene_location=scene_location_dict if scene_location_dict else None,
-                generation_params=generation_params_for_prompt_build if generation_params_for_prompt_build else None
+                generation_params=generation_params_for_prompt_build if generation_params_for_prompt_build else None,
+                vocabulary_min_importance=request_data.vocabulary_min_importance,
+                include_narrative_guides=request_data.include_narrative_guides
             )
         finally:
             # Restaurer le system prompt original si on l'a modifié
@@ -333,29 +335,33 @@ async def generate_unity_dialogue(
         InternalServerException: Si la génération échoue.
     """
     try:
-        # 1. Valider qu'au moins un personnage est sélectionné
-        if not request_data.context_selections.characters or len(request_data.context_selections.characters) == 0:
+        # 1. Convertir ContextSelection en dict (fusionne automatiquement toutes les listes)
+        context_selections_dict = request_data.context_selections.to_service_dict()
+        
+        # 2. Valider qu'au moins un personnage est sélectionné
+        all_characters = context_selections_dict.get('characters', [])
+        if not all_characters or len(all_characters) == 0:
             raise ValidationException(
                 message="Au moins un personnage doit être sélectionné pour générer un dialogue",
-                details={"field": "context_selections.characters"},
+                details={"field": "context_selections.characters_full ou context_selections.characters_excerpt"},
                 request_id=request_id
             )
         
-        # 2. Extraire le PNJ interlocuteur
+        # 3. Extraire le PNJ interlocuteur
         npc_speaker_id = request_data.npc_speaker_id
         if not npc_speaker_id:
             # Utiliser le premier personnage sélectionné
-            npc_speaker_id = request_data.context_selections.characters[0]
+            npc_speaker_id = all_characters[0]
             logger.info(f"PNJ interlocuteur non spécifié, utilisation du premier personnage: {npc_speaker_id}")
         else:
             # Vérifier que le PNJ sélectionné est dans la liste des personnages
-            if npc_speaker_id not in request_data.context_selections.characters:
+            if npc_speaker_id not in all_characters:
                 logger.warning(
                     f"PNJ interlocuteur '{npc_speaker_id}' n'est pas dans la liste des personnages sélectionnés. "
                     f"Utilisation quand même."
                 )
         
-        # 3. Charger le catalogue des compétences
+        # 4. Charger le catalogue des compétences
         skill_service = SkillCatalogService()
         try:
             skills_list = skill_service.load_skills()
@@ -364,7 +370,7 @@ async def generate_unity_dialogue(
             logger.warning(f"Impossible de charger le catalogue des compétences: {e}. Continuation sans liste de compétences.")
             skills_list = []
         
-        # 4. Charger le catalogue des traits
+        # 5. Charger le catalogue des traits
         trait_service = TraitCatalogService()
         try:
             traits_data = trait_service.load_traits()
@@ -374,9 +380,8 @@ async def generate_unity_dialogue(
             logger.warning(f"Impossible de charger le catalogue des traits: {e}. Continuation sans liste de traits.")
             traits_list = []
         
-        # 5. Construire le contexte GDD
+        # 6. Construire le contexte GDD
         context_builder = dialogue_service.context_builder
-        context_selections_dict = request_data.context_selections.to_service_dict()
         
         # Extraire _element_modes si présent
         element_modes = context_selections_dict.pop("_element_modes", None)
@@ -399,7 +404,7 @@ async def generate_unity_dialogue(
         if request_data.context_selections.scene_location:
             scene_location = request_data.context_selections.scene_location
         
-        # 6. Construire le prompt Unity
+        # 7. Construire le prompt Unity
         prompt, prompt_tokens = prompt_engine.build_unity_dialogue_prompt(
             user_instructions=request_data.user_instructions,
             npc_speaker_id=npc_speaker_id,
@@ -417,7 +422,7 @@ async def generate_unity_dialogue(
         
         estimated_tokens = context_tokens + prompt_tokens
         
-        # 7. Créer le client LLM
+        # 8. Créer le client LLM
         from api.dependencies import get_config_service, create_llm_usage_service
         config_service = get_config_service()
         usage_service = create_llm_usage_service()
@@ -438,10 +443,32 @@ async def generate_unity_dialogue(
         is_dummy_client = isinstance(llm_client, DummyLLMClient)
         warning = None
         if is_dummy_client:
-            warning = "ATTENTION: DummyLLMClient utilisé au lieu d'OpenAI"
+            # Vérifier la raison probable
+            import os
+            llm_config = config_service.get_llm_config()
+            api_key_env_var = llm_config.get("api_key_env_var", "OPENAI_API_KEY")
+            api_key = os.getenv(api_key_env_var)
+            available_models = config_service.get_available_llm_models()
+            model_found = any(
+                m.get("api_identifier") == request_data.llm_model_identifier 
+                or m.get("model_identifier") == request_data.llm_model_identifier 
+                for m in available_models
+            )
+            
+            if not model_found:
+                warning = f"ATTENTION: DummyLLMClient utilisé - Modèle '{request_data.llm_model_identifier}' non trouvé dans la configuration"
+            elif not api_key:
+                warning = f"ATTENTION: DummyLLMClient utilisé - Clé API manquante (variable d'environnement '{api_key_env_var}' non définie)"
+            else:
+                warning = f"ATTENTION: DummyLLMClient utilisé au lieu d'OpenAI pour le modèle '{request_data.llm_model_identifier}' (voir les logs pour plus de détails)"
+            
             logger.warning(warning)
         
-        # 8. Générer le nœud via Structured Output
+        # 9. Configurer max_completion_tokens pour le client LLM si fourni
+        if request_data.max_completion_tokens is not None:
+            llm_client.max_tokens = request_data.max_completion_tokens
+        
+        # 10. Générer le nœud via Structured Output
         unity_service = UnityDialogueGenerationService()
         generation_response = await unity_service.generate_dialogue_node(
             llm_client=llm_client,
@@ -450,13 +477,13 @@ async def generate_unity_dialogue(
             max_choices=request_data.max_choices
         )
         
-        # 9. Enrichir avec IDs
+        # 10. Enrichir avec IDs
         enriched_nodes = unity_service.enrich_with_ids(
             content=generation_response,
             start_id="START"
         )
         
-        # 10. Normaliser et rendre en JSON
+        # 11. Normaliser et rendre en JSON
         renderer = UnityJsonRenderer()
         json_content = renderer.render_unity_nodes(
             nodes=enriched_nodes,
@@ -503,10 +530,77 @@ async def generate_unity_dialogue(
     except ValidationException:
         raise
     except Exception as e:
-        logger.exception(f"Erreur lors de la génération Unity JSON (request_id: {request_id})")
+        # Vérifier si c'est une erreur OpenAI
+        from openai import APIError
+        if isinstance(e, APIError):
+            logger.error(f"Erreur OpenAI lors de la génération Unity JSON (request_id: {request_id}): {e}")
+            raise _transform_openai_error(e, request_id)
+        
+        # Vérifier si c'est une erreur de validation Pydantic
+        from pydantic import ValidationError as PydanticValidationError
+        if isinstance(e, PydanticValidationError):
+            error_details = []
+            for err in e.errors():
+                field = ".".join(str(loc) for loc in err.get("loc", []))
+                msg = err.get("msg", "Erreur de validation")
+                error_details.append(f"{field}: {msg}")
+            error_msg = "Erreur de validation des données générées: " + "; ".join(error_details[:3])
+            logger.error(f"Erreur de validation Pydantic lors de la génération Unity JSON (request_id: {request_id}): {error_msg}")
+            raise ValidationException(
+                message=error_msg,
+                details={"validation_errors": e.errors()},
+                request_id=request_id
+            )
+        
+        # Vérifier si c'est une erreur liée au structured output
+        error_message = str(e)
+        error_lower = error_message.lower()
+        error_type = type(e).__name__  # Définir error_type dès le début
+        
+        # Détecter les erreurs spécifiques au structured output
+        if "structured output" in error_lower or "tool_calls" in error_lower or "function calling" in error_lower:
+            model_id = request_data.llm_model_identifier if hasattr(request_data, 'llm_model_identifier') else "unknown"
+            
+            # Détecter spécifiquement les erreurs de limite de tokens
+            if "finish_reason: length" in error_lower or "length" in error_lower:
+                detailed_message = (
+                    f"Le modèle {model_id} a atteint la limite de tokens avant de générer le structured output. "
+                    f"Le modèle semble être un modèle 'thinking' qui nécessite plus de tokens pour raisonner. "
+                    f"Essayez d'augmenter 'max_completion_tokens' ou utilisez un modèle différent comme 'gpt-5.2'. "
+                    f"Erreur technique: {error_message[:200]}"
+                )
+            else:
+                detailed_message = (
+                    f"Erreur de structured output (génération JSON) avec le modèle {model_id}. "
+                    f"Vérifiez les logs pour voir les paramètres API envoyés et la réponse complète. "
+                    f"Erreur technique: {error_message[:200]}"
+                )
+        else:
+            # Autres erreurs
+            # Construire un message d'erreur plus détaillé
+            detailed_message = f"Erreur lors de la génération du dialogue Unity JSON"
+            if error_type:
+                detailed_message += f" ({error_type})"
+            if error_message and len(error_message) < 200:  # Inclure le message si pas trop long
+                detailed_message += f": {error_message}"
+        
+        logger.exception(f"Erreur lors de la génération Unity JSON (request_id: {request_id}, type: {error_type})")
+        
+        # En développement, inclure plus de détails
+        import os
+        is_development = os.getenv("ENVIRONMENT", "development") != "production"
+        details = {
+            "error_type": error_type,
+            "error": error_message
+        }
+        if is_development:
+            # Ajouter des détails supplémentaires en développement
+            import traceback
+            details["traceback"] = traceback.format_exc()
+        
         raise InternalServerException(
-            message="Erreur lors de la génération du dialogue Unity JSON",
-            details={"error": str(e)},
+            message=detailed_message,
+            details=details,
             request_id=request_id
         )
 

@@ -36,7 +36,7 @@ interface VocabularyState {
   setMinImportance: (level: ImportanceLevel | null) => void
   toggleGuides: () => void
   loadVocabulary: (minImportance?: ImportanceLevel) => Promise<void>
-  loadNarrativeGuides: () => Promise<void>
+  loadNarrativeGuides: (skipLastSyncUpdate?: boolean) => Promise<void>
   syncFromNotion: () => Promise<void>
   loadStats: () => Promise<void>
   clearError: () => void
@@ -88,14 +88,19 @@ export const useVocabularyStore = create<VocabularyState>((set, get) => ({
     }
   },
 
-  loadNarrativeGuides: async () => {
+  loadNarrativeGuides: async (skipLastSyncUpdate: boolean = false) => {
     try {
       set({ error: null })
       const response = await vocabularyAPI.getNarrativeGuides()
-      set({
+      const updates: Partial<VocabularyState> = {
         narrativeGuides: response,
-        lastSyncTime: response.last_sync,
-      })
+      }
+      // Ne pas écraser lastSyncTime si skipLastSyncUpdate est true
+      // (utilisé après une synchronisation pour éviter d'écraser la valeur mise à jour)
+      if (!skipLastSyncUpdate) {
+        updates.lastSyncTime = response.last_sync
+      }
+      set(updates)
     } catch (err) {
       const errorMessage =
         err instanceof Error
@@ -118,12 +123,17 @@ export const useVocabularyStore = create<VocabularyState>((set, get) => ({
 
       if (vocabResult.success && guidesResult.success) {
         // Recharger les données après synchronisation
+        // Ne pas mettre à jour lastSyncTime dans loadNarrativeGuides pour éviter d'écraser la valeur
         await Promise.all([
           get().loadVocabulary(),
-          get().loadNarrativeGuides(),
+          get().loadNarrativeGuides(true), // skipLastSyncUpdate = true
         ])
+        // Utiliser la valeur la plus récente entre les deux synchronisations
+        const latestSync = vocabResult.last_sync && guidesResult.last_sync
+          ? (vocabResult.last_sync > guidesResult.last_sync ? vocabResult.last_sync : guidesResult.last_sync)
+          : (vocabResult.last_sync || guidesResult.last_sync)
         set({
-          lastSyncTime: vocabResult.last_sync || guidesResult.last_sync,
+          lastSyncTime: latestSync,
         })
       } else {
         const errors = [

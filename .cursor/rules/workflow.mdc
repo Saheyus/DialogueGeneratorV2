@@ -5,7 +5,7 @@ alwaysApply: true
 ---
 
 - **Commandes essentielles (donner en une ligne)** :
-  - Développement : `npm run dev` (lance backend sur 4242 + frontend sur 3000 automatiquement)
+  - Développement : `npm run dev` (lance backend sur 4243 + frontend sur 3000 automatiquement)
   - Tests : `pytest tests/` ou `python -m pytest tests/` (commandes recommandées, fonctionnent avec l'environnement Python actif)
   - Build production : `npm run deploy:build`
   - Vérification déploiement : `npm run deploy:check`

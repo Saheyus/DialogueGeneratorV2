@@ -1,9 +1,8 @@
 ---
-description: Tests Frontend — Vitest, React Testing Library, Playwright, workflow de test automatique
-globs: ["frontend/**/*", "e2e/**/*", "*.test.tsx", "*.spec.ts"]
+description: Tests Frontend — Vitest, React Testing Library, Playwright, workflow de test automatique, tout bug ou problème lié à l'interface, aux boutons, aux écrans, aux formulaires, etc.
 alwaysApply: false
 ---
-
+- Tu es autonome pour les tests frontend via l'outil browser. Tu peux te connecter avec le login admin et le mot de passe admin123.
 - **Tests unitaires**: Vitest + React Testing Library dans `frontend/src/test/`. Tests rapides, isolation complète, mocks pour API.
 - **Tests E2E**: Playwright dans `e2e/`. Tests critiques (auth, navigation, génération), nécessite serveurs lancés.
 - **Vérifications automatiques après modification frontend**:
@@ -18,6 +17,6 @@ alwaysApply: false
   - Avant commit : `.\scripts\test-frontend.ps1` ou `npm run test:frontend`
   - Pour tests E2E : s'assurer que `npm run dev` est lancé, puis `npm run test:e2e`
 - **Commandes**:
-  - `npm run test:frontend` : Tests unitaires frontend
+  - `npm run test:frontend` : Build + lint + tests unitaires frontend (script PowerShell automatisé)
   - `npm run test:e2e` : Tests E2E Playwright
   - `npm run test:all` : Backend + frontend (unitaires uniquement)

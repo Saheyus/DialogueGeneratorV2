@@ -8,6 +8,7 @@ import { UsageDashboard } from './components/usage/UsageDashboard'
 import { useAuthStore } from './store/authStore'
 import { ToastContainer } from './components/shared'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+import { initLogging } from './utils/logging'
 import './App.css'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -152,6 +153,11 @@ function AppRoutes() {
 }
 
 function App() {
+  useEffect(() => {
+    // Initialiser le système de logging au démarrage
+    initLogging()
+  }, [])
+
   return (
     <>
       <ToastContainer />

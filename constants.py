@@ -25,13 +25,44 @@ class FilePaths:
     DATA_DIR = Path("data")
     INTERACTIONS_DIR = DATA_DIR / "interactions"
     LLM_USAGE_DIR = DATA_DIR / "llm_usage"
+    LOGS_DIR = DATA_DIR / "logs"
     LLM_CONFIG = "llm_config.json"
+
+class ModelNames:
+    """Noms des modèles OpenAI utilisés dans l'application.
+    
+    Source de vérité unique pour tous les identifiants de modèles.
+    Utiliser ces constantes au lieu de strings codées en dur.
+    """
+    # Modèles GPT-5.2
+    GPT_5_2 = "gpt-5.2"
+    GPT_5_2_THINKING = "gpt-5.2-thinking"
+    
+    # Modèles GPT-5 (versions allégées)
+    GPT_5_MINI = "gpt-5-mini"
+    GPT_5_NANO = "gpt-5-nano"
+    
+    # Modèles obsolètes (pour référence)
+    GPT_4_TURBO = "gpt-4-turbo"
+    GPT_3_5_TURBO = "gpt-3.5-turbo"
+    
+    # Modèle de test
+    DUMMY = "dummy"
+    
+    # Liste des modèles qui nécessitent max_completion_tokens (au lieu de max_tokens)
+    MODELS_USING_MAX_COMPLETION_TOKENS = [GPT_5_2, GPT_5_2_THINKING, GPT_5_MINI, GPT_5_NANO]
+    
+    # Liste des modèles qui ne supportent pas la température personnalisée
+    MODELS_WITHOUT_CUSTOM_TEMPERATURE = [GPT_5_MINI, GPT_5_NANO]
+    
+    # Liste des modèles qui peuvent avoir des problèmes avec le structured output
+    MODELS_WITH_STRUCTURED_OUTPUT_ISSUES = [GPT_5_MINI, GPT_5_NANO]
 
 class Defaults:
     CONTEXT_TOKENS = 1500
     VARIANTS_COUNT = 2
     TEMPERATURE = 0.7
-    MODEL_ID = "gpt-5.2"
+    MODEL_ID = ModelNames.GPT_5_MINI  # Modèle par défaut
     MAX_TOKENS_FOR_CONTEXT_BUILDING = 32000
     SAVE_SETTINGS_DELAY_MS = 1000
     MAIN_SPLITTER_STRETCH_FACTOR_LEFT_PANEL = 1

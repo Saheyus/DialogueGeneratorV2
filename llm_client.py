@@ -11,6 +11,7 @@ from typing import List, Optional, Type, TypeVar, Union, Dict, Any # Ajout de Di
 from pydantic import BaseModel, ValidationError # Ajout de ValidationError
 import pydantic
 import inspect # Ajout pour l'inspection de la signature
+from constants import ModelNames # Ajout pour vérifier les modèles sans température
 
 logger = logging.getLogger(__name__)
 
@@ -66,17 +67,18 @@ class DummyLLMClient(ILLMClient):
                 # Cas spécial pour UnityDialogueGenerationResponse
                 if response_model.__name__ == "UnityDialogueGenerationResponse":
                     dummy_data = {
-                        "nodes": [
-                            {
-                                "line": "Texte de test généré par DummyLLMClient pour Unity JSON.",
-                                "choices": [
-                                    {
-                                        "text": "Choix de test",
-                                        "targetNode": ""
-                                    }
-                                ]
-                            }
-                        ]
+                        "title": "Dialogue de test généré par DummyLLMClient",
+                        "node": {
+                            "line": "Texte de test généré par DummyLLMClient pour Unity JSON.",
+                            "choices": [
+                                {
+                                    "text": "Choix de test 1"
+                                },
+                                {
+                                    "text": "Choix de test 2"
+                                }
+                            ]
+                        }
                     }
                 else:
                     # Pour les autres modèles (Interaction, etc.)
@@ -237,6 +239,9 @@ class OpenAIClient(ILLMClient):
             }
             tool_choice_option = {"type": "function", "function": {"name": "generate_interaction"}}
             logger.info(f"Utilisation du structured output avec le modèle: {response_model.__name__}")
+            # Note: Tous les modèles GPT-5 supportent le structured output selon la documentation OpenAI
+            # Les logs détaillés permettront de comparer les réponses entre modèles
+            logger.info(f"Configuration structured output pour {self.model_name}: tool_definition présent, tool_choice forcé")
             logger.debug(f"Schéma de la fonction 'generate_interaction' envoyé à OpenAI: \n{json.dumps(model_schema_for_tool, indent=2, ensure_ascii=False)}")
             logger.debug(f"Messages complets envoyés à OpenAI (avec tool): \n{json.dumps(messages, indent=2, ensure_ascii=False)}")
 
@@ -273,16 +278,47 @@ class OpenAIClient(ILLMClient):
                 # #endregion
                 
                 # Créer une fonction wrapper pour l'appel API avec retry et circuit breaker
+                # Certains modèles (comme gpt-5.2) nécessitent max_completion_tokens au lieu de max_tokens
+                # Certains modèles (gpt-5-mini, gpt-5-nano) ne supportent pas le paramètre temperature
+                api_params = {
+                    "model": self.model_name,
+                    "messages": messages,
+                    "n": 1,
+                    "tools": [tool_definition] if tool_definition else NOT_GIVEN,
+                    "tool_choice": tool_choice_option,
+                }
+                
+                # Ajouter temperature seulement si le modèle le supporte
+                if self.model_name and self.model_name not in ModelNames.MODELS_WITHOUT_CUSTOM_TEMPERATURE:
+                    api_params["temperature"] = self.temperature
+                elif self.model_name and self.model_name in ModelNames.MODELS_WITHOUT_CUSTOM_TEMPERATURE:
+                    logger.debug(f"Le modèle {self.model_name} ne supporte pas le paramètre temperature. Il sera omis de la requête API.")
+                
+                # Utiliser max_completion_tokens pour les modèles récents (gpt-5.x), max_tokens pour les anciens
+                if self.model_name and "gpt-5" in self.model_name:
+                    # Les modèles "thinking" (mini, nano) nécessitent plus de tokens car ils utilisent des reasoning_tokens
+                    # avant de générer la réponse finale
+                    if self.model_name and ("gpt-5-mini" in self.model_name or "gpt-5-nano" in self.model_name):
+                        # Augmenter la limite pour les modèles thinking (reasoning + output)
+                        # Si max_tokens a été explicitement défini (par l'utilisateur), l'utiliser, sinon utiliser 10k par défaut
+                        if self.max_tokens >= 10000:
+                            # L'utilisateur a déjà défini une valeur élevée, l'utiliser
+                            max_completion_tokens = self.max_tokens
+                        else:
+                            # Utiliser 10k par défaut pour les modèles thinking
+                            max_completion_tokens = 10000
+                        api_params["max_completion_tokens"] = max_completion_tokens
+                        logger.info(f"Modèle thinking détecté ({self.model_name}), utilisation de max_completion_tokens={max_completion_tokens}")
+                    else:
+                        api_params["max_completion_tokens"] = self.max_tokens
+                else:
+                    api_params["max_tokens"] = self.max_tokens
+                
+                # Logger les paramètres API pour comparaison entre modèles
+                logger.info(f"Paramètres API pour {self.model_name}: {json.dumps({k: v for k, v in api_params.items() if k != 'messages'}, indent=2, ensure_ascii=False)}")
+                
                 async def _make_api_call():
-                    return await self.client.chat.completions.create(
-                        model=self.model_name,
-                        messages=messages,
-                        temperature=self.temperature,
-                        max_tokens=self.max_tokens,
-                        n=1,
-                        tools=[tool_definition] if tool_definition else NOT_GIVEN,
-                        tool_choice=tool_choice_option,
-                    )
+                    return await self.client.chat.completions.create(**api_params)
                 
                 # Appliquer retry et circuit breaker si disponibles
                 # Le retry doit envelopper le circuit breaker
@@ -307,7 +343,14 @@ class OpenAIClient(ILLMClient):
                     completion_tokens = response.usage.completion_tokens or 0
                     total_tokens = response.usage.total_tokens or 0
                 
-                logger.info(f"Réponse BRUTE de l'API OpenAI reçue pour la variante {i+1}:\n{response.model_dump_json(indent=2)}")
+                logger.info(f"Réponse BRUTE de l'API OpenAI reçue pour la variante {i+1} (modèle: {self.model_name}):\n{response.model_dump_json(indent=2)}")
+                
+                # Logger spécifiquement les tool_calls pour comparaison
+                if response.choices and response.choices[0].message:
+                    has_tool_calls = hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls
+                    has_content = hasattr(response.choices[0].message, 'content') and response.choices[0].message.content
+                    finish_reason = getattr(response.choices[0], 'finish_reason', 'unknown')
+                    logger.info(f"Analyse réponse {self.model_name}: tool_calls={bool(has_tool_calls)}, content={bool(has_content)}, finish_reason={finish_reason}")
 
                 if response_model and response.choices[0].message.tool_calls:
                     tool_call = response.choices[0].message.tool_calls[0]
@@ -328,6 +371,24 @@ class OpenAIClient(ILLMClient):
                         logger.warning(f"Outil inattendu appelé: {tool_call.function.name}")
                         generated_results.append(f"Erreur: Outil inattendu {tool_call.function.name}")
                         error_message = f"Unexpected tool: {tool_call.function.name}"
+
+                elif response_model and response.choices and response.choices[0].message and response.choices[0].message.content:
+                    # Cas critique: response_model requis mais le modèle a retourné du texte au lieu de tool_calls
+                    text_output = response.choices[0].message.content.strip()
+                    finish_reason = response.choices[0].finish_reason if hasattr(response.choices[0], 'finish_reason') else "unknown"
+                    
+                    error_msg = (
+                        f"Le modèle {self.model_name} n'a pas retourné de structured output (tool_calls) alors qu'un response_model était requis. "
+                        f"Finish reason: {finish_reason}. "
+                        f"Le modèle a retourné du texte à la place. "
+                        f"Cela peut indiquer que le modèle ne supporte pas correctement le structured output (function calling). "
+                        f"Essayez d'utiliser un modèle différent comme 'gpt-5.2'. "
+                        f"Réponse reçue (premiers 500 caractères): {text_output[:500]}"
+                    )
+                    logger.error(error_msg)
+                    generated_results.append(f"Erreur: {error_msg}")
+                    error_message = f"Structured output not supported by {self.model_name}: model returned text instead of tool_calls"
+                    success = False
 
                 elif response.choices and response.choices[0].message and response.choices[0].message.content:
                     text_output = response.choices[0].message.content.strip()
@@ -356,8 +417,12 @@ class OpenAIClient(ILLMClient):
                     success = True
                 else:
                     logger.warning(f"Aucun contenu ou appel de fonction dans la réponse pour la variante {i+1}.")
-                    generated_results.append(f"Erreur: Réponse vide ou inattendue pour la variante {i+1}")
-                    error_message = "Empty or unexpected response"
+                    finish_reason = response.choices[0].finish_reason if (response.choices and response.choices[0] and hasattr(response.choices[0], 'finish_reason')) else "unknown"
+                    error_msg = f"Réponse vide ou inattendue pour la variante {i+1} (finish_reason: {finish_reason})"
+                    if response_model:
+                        error_msg += f". Structured output (response_model) était requis mais non reçu du modèle {self.model_name}."
+                    generated_results.append(f"Erreur: {error_msg}")
+                    error_message = error_msg
             
             except APIError as e:
                 logger.error(f"Erreur API OpenAI lors de la génération de la variante {i+1}: {e}")
@@ -396,18 +461,6 @@ class OpenAIClient(ILLMClient):
         model_lower = self.model_name.lower()
         if "gpt-5.2" in model_lower:
             return 128000  # GPT-5.2 et ses variantes (mini, nano, thinking) supportent 128k tokens
-        elif "gpt-4o-mini" in model_lower or "gpt-4o" in model_lower:
-            return 128000 
-        elif "gpt-4-turbo" in model_lower:
-            return 128000
-        elif "gpt-4" in model_lower: # Inclut gpt-4, gpt-4-0613 etc.
-            return 8192
-        elif "gpt-3.5-turbo" in model_lower: # Inclut gpt-3.5-turbo, gpt-3.5-turbo-16k etc.
-            # Les modèles 3.5 peuvent avoir 4k, 8k, ou 16k. On prend 16k comme une approximation safe pour le prompt total.
-            # La limite de complétion est gérée séparément par self.max_tokens.
-            return 16385 
-        elif "text-davinci" in model_lower: # Modèles plus anciens, moins probables mais pour référence
-            return 4096 # Ou 4097 selon les sources, mais 4096 est plus sûr pour le calcul prompt+completion
         else:
             logger.warning(f"Modèle OpenAI inconnu ou non listé pour get_max_tokens: {self.model_name}. Retourne 4096 par défaut.")
             return 4096 

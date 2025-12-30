@@ -1,10 +1,11 @@
 /**
  * Hook personnalisé pour gérer la sélection de scène.
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import * as contextAPI from '../api/context'
 import type { SceneSelection } from '../types/generation'
 import { useContextStore } from '../store/contextStore'
+import { useGenerationStore } from '../store/generationStore'
 
 export interface SceneSelectionData {
   characters: string[]
@@ -28,6 +29,9 @@ export function useSceneSelection() {
   const setRegion = useContextStore((state) => state.setRegion)
   const toggleSubLocation = useContextStore((state) => state.toggleSubLocation)
   
+  // Récupérer sceneSelection depuis le store pour synchronisation
+  const storeSceneSelection = useGenerationStore((state) => state.sceneSelection)
+  
   const [data, setData] = useState<SceneSelectionData>({
     characters: [],
     regions: [],
@@ -40,6 +44,7 @@ export function useSceneSelection() {
     subLocation: null,
   })
   const [isLoading, setIsLoading] = useState(false)
+  const isInitialMount = useRef(true)
 
   const loadCharacters = useCallback(async () => {
     try {
@@ -99,8 +104,42 @@ export function useSceneSelection() {
     }
   }, [selection.sceneRegion, loadSubLocations])
 
-  // Synchronisation avec contextStore : mapper les sélections de contexte vers la sélection de scène
+  // Synchroniser l'état local avec le store au montage initial et quand le store change
+  // Cela permet de restaurer les valeurs sauvegardées depuis le draft
   useEffect(() => {
+    const hasStoreSelection = storeSceneSelection.characterA || storeSceneSelection.characterB || storeSceneSelection.sceneRegion
+    
+    // Au montage initial, utiliser la valeur du store si elle existe
+    if (isInitialMount.current) {
+      if (hasStoreSelection) {
+        setSelection(storeSceneSelection)
+      }
+      isInitialMount.current = false
+      return
+    }
+    
+    // Après le montage, synchroniser seulement si :
+    // - Le store a des valeurs ET
+    // - L'état local est vide (pour restaurer un draft chargé après le montage)
+    // Cela permet de restaurer les valeurs sauvegardées même si elles sont chargées après le montage
+    setSelection((prevSelection) => {
+      const hasLocalSelection = prevSelection.characterA || prevSelection.characterB || prevSelection.sceneRegion
+      if (hasStoreSelection && !hasLocalSelection) {
+        return storeSceneSelection
+      }
+      return prevSelection
+    })
+  }, [storeSceneSelection])
+
+  // Synchronisation avec contextStore : mapper les sélections de contexte vers la sélection de scène
+  // MAIS seulement si l'état local est vide ET que le store n'a pas de valeurs sauvegardées
+  useEffect(() => {
+    // Ne pas synchroniser si le store a déjà des valeurs (priorité au draft sauvegardé)
+    const hasStoreSelection = storeSceneSelection.characterA || storeSceneSelection.characterB || storeSceneSelection.sceneRegion
+    if (hasStoreSelection) {
+      return
+    }
+
     setSelection((prevSelection) => {
       // Ne synchroniser que si la sélection de scène est vide (pour éviter d'écraser les sélections manuelles)
       const hasSceneSelection = prevSelection.characterA || prevSelection.characterB || prevSelection.sceneRegion

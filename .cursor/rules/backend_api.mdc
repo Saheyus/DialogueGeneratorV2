@@ -10,7 +10,7 @@ alwaysApply: false
 - **RESTful**: Versioning `/api/v1/`, méthodes HTTP appropriées, codes de statut corrects, format de réponse standardisé.
 - **Authentification**: JWT (python-jose), access token (15 min) + refresh token (7 jours), middleware d'auth.
 - **Validation**: Pydantic pour schemas API, double validation (API + métier), messages d'erreur clairs.
-- **Gestion d'erreurs**: Exceptions hiérarchisées (`api/exceptions.py`), handler global, logging structuré avec request_id.
+- **Gestion d'erreurs**: Exceptions hiérarchisées (`api/exceptions.py`), handler global, logging structuré avec request_id. Voir `.cursor/rules/logging.mdc` pour le système de logs complet (archivage, API de consultation).
 - **Sécurité**: HTTPS en production, CORS configuré, validation inputs, pas de secrets dans logs/réponses.
 - **Documentation**: OpenAPI/Swagger automatique via FastAPI (`/api/docs`), maintenir les docstrings.
 - **Tests**: `tests/api/` avec pytest, tests unitaires routers + intégration API, mocks pour services externes.

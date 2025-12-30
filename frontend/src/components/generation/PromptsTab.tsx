@@ -3,11 +3,13 @@
  */
 import { useState, useEffect } from 'react'
 import * as configAPI from '../../api/config'
+import { useToast } from '../shared'
 import { theme } from '../../theme'
 
 export function PromptsTab() {
   const [paths, setPaths] = useState<configAPI.TemplateFilePathsResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const toast = useToast()
 
   useEffect(() => {
     loadPaths()
@@ -28,14 +30,14 @@ export function PromptsTab() {
     // Pour une application web, on ne peut pas ouvrir directement un fichier dans l'éditeur du système
     // On copie le chemin dans le presse-papiers pour que l'utilisateur puisse l'utiliser
     navigator.clipboard.writeText(path).then(() => {
-      // Afficher un message temporaire
-      const message = `Chemin copié dans le presse-papiers:\n${path}\n\nCollez-le dans l'explorateur de fichiers Windows pour ouvrir le dossier/fichier.`
-      alert(message)
+      // Afficher un toast temporaire
+      toast(`Chemin copié dans le presse-papiers: ${path}`, 'success', 5000)
     }).catch(() => {
       // Fallback si clipboard API n'est pas disponible
       const copied = prompt('Copiez ce chemin:', path)
       if (copied) {
         // L'utilisateur a copié manuellement
+        toast('Chemin copié manuellement', 'info')
       }
     })
   }

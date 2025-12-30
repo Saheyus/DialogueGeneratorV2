@@ -22,7 +22,7 @@ import { DialogueStructureWidget } from './DialogueStructureWidget'
 import { SystemPromptEditor } from './SystemPromptEditor'
 import { SceneSelectionWidget } from './SceneSelectionWidget'
 import { useToast, toastManager, SaveStatusIndicator } from '../shared'
-import { CONTEXT_TOKENS_LIMITS } from '../../constants'
+import { CONTEXT_TOKENS_LIMITS, DEFAULT_MODEL } from '../../constants'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import type { SaveStatus } from '../shared/SaveStatusIndicator'
 
@@ -60,7 +60,8 @@ export function GenerationPanel() {
   
   const [userInstructions, setUserInstructions] = useState('')
   const [maxContextTokens, setMaxContextTokens] = useState<number>(CONTEXT_TOKENS_LIMITS.DEFAULT)
-  const [llmModel, setLlmModel] = useState('gpt-5.2-mini')
+  const [maxCompletionTokens, setMaxCompletionTokens] = useState<number | null>(null) // null = valeur par défaut selon le modèle
+  const [llmModel, setLlmModel] = useState<string>(DEFAULT_MODEL)
   const [maxChoices, setMaxChoices] = useState<number | null>(null)
   const [availableModels, setAvailableModels] = useState<LLMModelResponse[]>([])
   const [unityDialogueResponse, setUnityDialogueResponse] = useState<GenerateUnityDialogueResponse | null>(null)
@@ -89,6 +90,7 @@ export function GenerationPanel() {
       dialogueStructure,
       sceneSelection,
       maxContextTokens,
+      maxCompletionTokens,
       llmModel,
       maxChoices,
       narrativeTags,
@@ -105,7 +107,7 @@ export function GenerationPanel() {
       console.error('Erreur lors de la sauvegarde automatique:', err)
       setSaveStatus('error')
     }
-  }, [userInstructions, authorProfile, systemPromptOverride, dialogueStructure, sceneSelection, maxContextTokens, llmModel, maxChoices, narrativeTags, selections, selectedRegion, selectedSubLocations])
+  }, [userInstructions, authorProfile, systemPromptOverride, dialogueStructure, sceneSelection, maxContextTokens, maxCompletionTokens, llmModel, maxChoices, narrativeTags, selections, selectedRegion, selectedSubLocations])
 
   // Charger le brouillon au démarrage (AVANT loadModels pour préserver le modèle sauvegardé)
   useEffect(() => {
@@ -128,7 +130,11 @@ export function GenerationPanel() {
           const value = Math.max(CONTEXT_TOKENS_LIMITS.MIN, draft.maxContextTokens)
           setMaxContextTokens(value)
         }
-        if (draft.llmModel !== undefined) setLlmModel(draft.llmModel)
+        if (draft.maxCompletionTokens !== undefined) setMaxCompletionTokens(draft.maxCompletionTokens)
+        if (draft.llmModel !== undefined && draft.llmModel !== "unknown") {
+          // Ne charger le modèle du draft que s'il est valide (sera validé plus tard lors du chargement des modèles)
+          setLlmModel(draft.llmModel)
+        }
         if (draft.maxChoices !== undefined) setMaxChoices(draft.maxChoices)
         if (draft.narrativeTags !== undefined) setNarrativeTags(draft.narrativeTags)
         // Charger les sélections de contexte
@@ -200,9 +206,17 @@ export function GenerationPanel() {
           // Ignorer les erreurs de parsing, continuer avec le modèle par défaut
         }
       }
-      // Sinon, utiliser le premier modèle disponible seulement si aucun modèle n'est déjà défini
-      if (response.models.length > 0 && !llmModel) {
-        setLlmModel(response.models[0].model_identifier)
+      // Valider que le modèle actuel existe dans la liste des modèles disponibles
+      // Si le modèle actuel n'existe pas, utiliser le premier modèle disponible
+      if (response.models.length > 0) {
+        const currentModelExists = llmModel && response.models.some(m => m.model_identifier === llmModel && m.model_identifier !== "unknown")
+        if (!currentModelExists) {
+          // Le modèle actuel n'existe pas ou est invalide, utiliser le premier modèle disponible
+          const firstModel = response.models.find(m => m.model_identifier && m.model_identifier !== "unknown") || response.models[0]
+          if (firstModel && firstModel.model_identifier && firstModel.model_identifier !== "unknown") {
+            setLlmModel(firstModel.model_identifier)
+          }
+        }
       }
     } catch (err) {
       console.error('Erreur lors du chargement des modèles:', err)
@@ -231,11 +245,13 @@ export function GenerationPanel() {
 
   // Construire context_selections avec scene_protagonists, scene_location, et generation_settings
   const buildContextSelections = useCallback((): ContextSelection => {
+    // Créer un nouvel objet sans scene_protagonists et scene_location pour éviter d'envoyer des valeurs vides
+    const { scene_protagonists, scene_location, ...baseSelections } = selections
     const contextSelections: ContextSelection = {
-      ...selections,
+      ...baseSelections,
     }
 
-    // Ajouter scene_protagonists
+    // Ajouter scene_protagonists seulement s'il y a des valeurs
     const sceneProtagonists: Record<string, string> = {}
     if (sceneSelection.characterA) {
       sceneProtagonists.personnage_a = sceneSelection.characterA
@@ -247,7 +263,7 @@ export function GenerationPanel() {
       contextSelections.scene_protagonists = sceneProtagonists
     }
 
-    // Ajouter scene_location
+    // Ajouter scene_location seulement s'il y a des valeurs
     const sceneLocation: Record<string, string> = {}
     if (sceneSelection.sceneRegion) {
       sceneLocation.lieu = sceneSelection.sceneRegion
@@ -299,7 +315,9 @@ export function GenerationPanel() {
         maxContextTokens,
         systemPromptOverride,
         Object.keys(fieldConfigsWithEssential).length > 0 ? fieldConfigsWithEssential : undefined,
-        organization
+        organization,
+        vocabularyMinImportance || undefined,
+        includeNarrativeGuides
       )
       setEstimatedTokens(response.total_estimated_tokens)
       setEstimatedPrompt(response.estimated_prompt || null, response.total_estimated_tokens, false)
@@ -314,7 +332,7 @@ export function GenerationPanel() {
     } finally {
       setIsEstimating(false)
     }
-  }, [userInstructions, hasSelections, maxContextTokens, buildContextSelections, setEstimatedPrompt, systemPromptOverride])
+  }, [userInstructions, hasSelections, maxContextTokens, buildContextSelections, setEstimatedPrompt, systemPromptOverride, vocabularyMinImportance, includeNarrativeGuides])
 
   // Récupérer fieldConfigs et organization depuis le store pour les inclure dans les dépendances
   const { fieldConfigs, organization } = useContextConfigStore()
@@ -346,7 +364,7 @@ export function GenerationPanel() {
     }, 500)
 
     return () => clearTimeout(timeoutId)
-  }, [userInstructions, selections.characters_full, selections.characters_excerpt, selections.locations_full, selections.locations_excerpt, selections.items_full, selections.items_excerpt, selections.species_full, selections.species_excerpt, selections.communities_full, selections.communities_excerpt, selections.dialogues_examples, maxContextTokens, estimateTokens, sceneSelection, dialogueStructure, systemPromptOverride, setEstimatedPrompt, fieldConfigs, organization])
+  }, [userInstructions, selections.characters_full, selections.characters_excerpt, selections.locations_full, selections.locations_excerpt, selections.items_full, selections.items_excerpt, selections.species_full, selections.species_excerpt, selections.communities_full, selections.communities_excerpt, selections.dialogues_examples, maxContextTokens, estimateTokens, sceneSelection, dialogueStructure, systemPromptOverride, setEstimatedPrompt, fieldConfigs, organization, vocabularyMinImportance, includeNarrativeGuides])
 
   const handleGenerate = useCallback(async () => {
     // Validation minimale
@@ -362,9 +380,6 @@ export function GenerationPanel() {
 
     try {
       const contextSelections = buildContextSelections()
-      // Log pour déboguer les personnages sélectionnés
-      console.log('Context selections envoyés:', contextSelections)
-      console.log('Personnages dans contextSelections:', contextSelections.characters)
       
       // Validation : au moins un personnage requis pour Unity
       const hasCharacters = (contextSelections.characters_full?.length || 0) + (contextSelections.characters_excerpt?.length || 0) > 0
@@ -392,14 +407,43 @@ export function GenerationPanel() {
         console.warn('Impossible d\'estimer les tokens:', err)
       }
       
+      // Valider que le modèle sélectionné existe dans la liste des modèles disponibles
+      // Si availableModels est vide, essayer de charger les modèles d'abord
+      let modelsToCheck = availableModels
+      if (modelsToCheck.length === 0) {
+        try {
+          const response = await configAPI.listLLMModels()
+          setAvailableModels(response.models)
+          modelsToCheck = response.models
+        } catch (err) {
+          console.error('Erreur lors du chargement des modèles:', err)
+          throw new Error('Impossible de charger les modèles LLM disponibles')
+        }
+      }
+      
+      // Déterminer le modèle à utiliser (valide ou fallback)
+      let modelToUse = llmModel
+      const validModel = modelsToCheck.find(m => m.model_identifier === llmModel)?.model_identifier
+      if (!validModel) {
+        // Utiliser le premier modèle disponible comme fallback
+        const fallbackModel = modelsToCheck[0]?.model_identifier
+        if (fallbackModel) {
+          setLlmModel(fallbackModel)
+          modelToUse = fallbackModel
+        } else {
+          throw new Error(`Aucun modèle LLM disponible. Modèle demandé: ${llmModel}`)
+        }
+      }
+      
       const request: GenerateUnityDialogueRequest = {
         user_instructions: userInstructions,
         context_selections: contextSelections,
         npc_speaker_id: sceneSelection.characterB || undefined,
         max_context_tokens: maxContextTokens,
+        max_completion_tokens: maxCompletionTokens ?? undefined,
         system_prompt_override: systemPromptOverride || undefined,
         author_profile: authorProfile || undefined,
-        llm_model_identifier: llmModel,
+        llm_model_identifier: modelToUse,
         max_choices: maxChoices ?? undefined,
         narrative_tags: narrativeTags.length > 0 ? narrativeTags : undefined,
         vocabulary_min_importance: vocabularyMinImportance || undefined,
@@ -607,9 +651,13 @@ export function GenerationPanel() {
           <select
             value={llmModel}
             onChange={(e) => {
-              setLlmModel(e.target.value)
-              setIsDirty(true)
-              setSaveStatus('unsaved')
+              const newValue = e.target.value
+              // Ne pas accepter "unknown" comme valeur valide
+              if (newValue && newValue !== "unknown") {
+                setLlmModel(newValue)
+                setIsDirty(true)
+                setSaveStatus('unsaved')
+              }
             }}
             style={{ 
               width: '100%', 
@@ -704,6 +752,101 @@ export function GenerationPanel() {
               box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
             }
             input[type="range"]::-ms-thumb:hover {
+              background: ${theme.button.primary.background};
+              transform: scale(1.1);
+            }
+          `}</style>
+        </label>
+      </div>
+
+      <div style={{ marginBottom: '1rem' }}>
+        <label style={{ color: theme.text.primary, display: 'block' }}>
+          Max tokens génération:
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem' }}>
+            <input
+              type="range"
+              min={500}
+              max={50000}
+              step={500}
+              value={maxCompletionTokens ?? 10000}
+              onChange={(e) => {
+                const value = parseInt(e.target.value)
+                setMaxCompletionTokens(value === 10000 ? null : value) // null = valeur par défaut
+                setIsDirty(true)
+                setSaveStatus('unsaved')
+              }}
+              style={{ 
+                flex: 1,
+                height: '6px',
+                borderRadius: '3px',
+                background: `linear-gradient(to right, ${theme.border.focus} 0%, ${theme.border.focus} ${((maxCompletionTokens ?? 10000) - 500) / (50000 - 500) * 100}%, ${theme.input.background} ${((maxCompletionTokens ?? 10000) - 500) / (50000 - 500) * 100}%, ${theme.input.background} 100%)`,
+                outline: 'none',
+                WebkitAppearance: 'none',
+                appearance: 'none',
+                cursor: 'pointer',
+              }}
+            />
+            <span style={{ 
+              minWidth: '70px', 
+              textAlign: 'right',
+              color: theme.text.primary,
+              fontWeight: 'bold',
+            }}>
+              {maxCompletionTokens ? (maxCompletionTokens >= 1000 ? `${Math.round(maxCompletionTokens / 1000)}K` : maxCompletionTokens) : 'Auto (10K)'}
+            </span>
+          </div>
+          <div style={{ fontSize: '0.85rem', color: theme.text.secondary, marginTop: '0.25rem' }}>
+            {maxCompletionTokens ? `Limite fixée à ${maxCompletionTokens >= 1000 ? `${Math.round(maxCompletionTokens / 1000)}K` : maxCompletionTokens} tokens` : 'Valeur automatique selon le modèle (10K pour thinking, 1.5K pour autres)'}
+          </div>
+          <style>{`
+            input[type="range"][value="${maxCompletionTokens ?? 10000}"]::-webkit-slider-runnable-track {
+              height: 6px;
+              border-radius: 3px;
+            }
+            input[type="range"][value="${maxCompletionTokens ?? 10000}"]::-moz-range-track {
+              height: 6px;
+              border-radius: 3px;
+              background: ${theme.input.background};
+            }
+            input[type="range"][value="${maxCompletionTokens ?? 10000}"]::-webkit-slider-thumb {
+              -webkit-appearance: none;
+              appearance: none;
+              width: 18px;
+              height: 18px;
+              border-radius: 50%;
+              background: ${theme.border.focus};
+              cursor: pointer;
+              border: 2px solid ${theme.background.panel};
+              box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+              margin-top: -6px;
+            }
+            input[type="range"][value="${maxCompletionTokens ?? 10000}"]::-webkit-slider-thumb:hover {
+              background: ${theme.button.primary.background};
+              transform: scale(1.1);
+            }
+            input[type="range"][value="${maxCompletionTokens ?? 10000}"]::-moz-range-thumb {
+              width: 18px;
+              height: 18px;
+              border-radius: 50%;
+              background: ${theme.border.focus};
+              cursor: pointer;
+              border: 2px solid ${theme.background.panel};
+              box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            }
+            input[type="range"][value="${maxCompletionTokens ?? 10000}"]::-moz-range-thumb:hover {
+              background: ${theme.button.primary.background};
+              transform: scale(1.1);
+            }
+            input[type="range"][value="${maxCompletionTokens ?? 10000}"]::-ms-thumb {
+              width: 18px;
+              height: 18px;
+              border-radius: 50%;
+              background: ${theme.border.focus};
+              cursor: pointer;
+              border: 2px solid ${theme.background.panel};
+              box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            }
+            input[type="range"][value="${maxCompletionTokens ?? 10000}"]::-ms-thumb:hover {
               background: ${theme.button.primary.background};
               transform: scale(1.1);
             }

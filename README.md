@@ -39,7 +39,7 @@ L'application est en cours de développement actif. Les fonctionnalités suivant
     *   *System prompt* par défaut basique inclus, avec une brève introduction au format JSON Unity.
 *   **Client LLM (`LLMClient`)** :
     *   Interface `IGenerator` définissant la méthode `async generate_variants(prompt, k)`.
-    *   `OpenAIClient` : Implémentation utilisant l'API OpenAI (modèle par défaut actuel : `gpt-5.2-mini`). Nécessite la variable d'environnement `OPENAI_API_KEY`.
+    *   `OpenAIClient` : Implémentation utilisant l'API OpenAI (modèle par défaut actuel : `gpt-5-mini`). Nécessite la variable d'environnement `OPENAI_API_KEY`.
     *   `DummyLLMClient` : Implémentation factice utilisée en fallback si `OpenAIClient` ne peut s'initialiser (ex: clé API manquante) ou pour des tests rapides. Simule la génération de `k` variantes au format JSON Unity.
 *   **Flux de Génération** :
     *   Sélection du contexte via l'interface web.

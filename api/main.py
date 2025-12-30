@@ -61,6 +61,13 @@ async def lifespan(app: FastAPI):
         logger.critical("L'application ne peut pas démarrer avec une configuration de sécurité invalide.")
         raise
     
+    # Nettoyer les anciens logs au démarrage
+    try:
+        from api.utils.log_cleanup import cleanup_on_startup
+        cleanup_on_startup()
+    except Exception as e:
+        logger.warning(f"Erreur lors du nettoyage des logs au démarrage: {e}")
+    
     yield
     # Shutdown
     logger.info("Arrêt de l'API DialogueGenerator...")
@@ -127,6 +134,16 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         Réponse JSON avec format d'erreur standardisé.
     """
     request_id = getattr(request.state, "request_id", "unknown")
+    
+    # #region agent log
+    try:
+        import json
+        from datetime import datetime
+        from pathlib import Path
+        with open(Path(__file__).parent.parent / ".cursor" / "debug.log", "a", encoding="utf-8") as f:
+            f.write(json.dumps({"id": f"log_{int(datetime.now().timestamp()*1000)}", "timestamp": int(datetime.now().timestamp()*1000), "location": "api/main.py:129", "message": "RequestValidationError caught", "data": {"request_id": request_id, "errors": exc.errors(), "path": str(request.url.path)}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
+    except: pass
+    # #endregion
     
     # Transformer les erreurs Pydantic en format simple : {champ: message}
     errors = exc.errors()
@@ -271,7 +288,7 @@ async def health_check_detailed() -> JSONResponse:
 
 
 # Inclusion des routers
-from api.routers import auth, dialogues, context, config, llm_usage, unity_dialogues
+from api.routers import auth, dialogues, context, config, llm_usage, unity_dialogues, logs
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(dialogues.router, prefix="/api/v1/dialogues", tags=["Dialogues"])
@@ -279,6 +296,7 @@ app.include_router(unity_dialogues.router, prefix="/api/v1/unity-dialogues", tag
 app.include_router(context.router, prefix="/api/v1/context", tags=["Context"])
 app.include_router(config.router, prefix="/api/v1/config", tags=["Configuration"])
 app.include_router(llm_usage.router, prefix="/api/v1/llm-usage", tags=["LLM Usage"])
+app.include_router(logs.router)
 
 # Routers pour vocabulaire et guides narratifs
 from api.routers import vocabulary, narrative_guides

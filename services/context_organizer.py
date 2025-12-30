@@ -89,7 +89,9 @@ class ContextOrganizer:
         element_data: Dict,
         element_type: str,
         fields_to_include: List[str],
-        organization_mode: str = "default"
+        organization_mode: str = "default",
+        field_labels_map: Optional[Dict[str, str]] = None,
+        element_mode: Optional[str] = None
     ) -> str:
         """Organise les champs d'un élément selon le mode d'organisation.
         
@@ -98,22 +100,26 @@ class ContextOrganizer:
             element_type: Type d'élément ("character", "location", etc.)
             fields_to_include: Liste des chemins de champs à inclure
             organization_mode: Mode d'organisation ("default", "narrative", "minimal")
+            field_labels_map: Dictionnaire {field_path: label} depuis context_config.json (optionnel)
+            element_mode: Mode de sélection ("full" ou "excerpt") pour adapter les labels (optionnel)
             
         Returns:
             Texte formaté avec les champs organisés.
         """
         if organization_mode == "minimal":
-            return self._organize_minimal(element_data, element_type, fields_to_include)
+            return self._organize_minimal(element_data, element_type, fields_to_include, field_labels_map, element_mode)
         elif organization_mode == "narrative":
-            return self._organize_narrative(element_data, element_type, fields_to_include)
+            return self._organize_narrative(element_data, element_type, fields_to_include, field_labels_map, element_mode)
         else:  # default
-            return self._organize_default(element_data, element_type, fields_to_include)
+            return self._organize_default(element_data, element_type, fields_to_include, field_labels_map, element_mode)
     
     def _organize_default(
         self,
         element_data: Dict,
         element_type: str,
-        fields_to_include: List[str]
+        fields_to_include: List[str],
+        field_labels_map: Optional[Dict[str, str]] = None,
+        element_mode: Optional[str] = None
     ) -> str:
         """Organisation par défaut : ordre linéaire des champs."""
         parts = []
@@ -123,7 +129,7 @@ class ContextOrganizer:
             if value is None:
                 continue
             
-            label = self._generate_label(field_path)
+            label = self._generate_label(field_path, field_labels_map, element_mode)
             formatted_value = self._format_value(value)
             parts.append(f"{label}: {formatted_value}")
         
@@ -133,7 +139,9 @@ class ContextOrganizer:
         self,
         element_data: Dict,
         element_type: str,
-        fields_to_include: List[str]
+        fields_to_include: List[str],
+        field_labels_map: Optional[Dict[str, str]] = None,
+        element_mode: Optional[str] = None
     ) -> str:
         """Organisation narrative : groupement par sections logiques."""
         # Grouper les champs par catégorie
@@ -156,7 +164,7 @@ class ContextOrganizer:
                     if value is None:
                         continue
                     
-                    label = self._generate_label(field_path)
+                    label = self._generate_label(field_path, field_labels_map, element_mode)
                     formatted_value = self._format_value(value)
                     section_parts.append(f"{label}: {formatted_value}")
                 
@@ -173,7 +181,7 @@ class ContextOrganizer:
                     if value is None:
                         continue
                     
-                    label = self._generate_label(field_path)
+                    label = self._generate_label(field_path, field_labels_map, element_mode)
                     formatted_value = self._format_value(value)
                     section_parts.append(f"{label}: {formatted_value}")
                 
@@ -185,7 +193,9 @@ class ContextOrganizer:
         self,
         element_data: Dict,
         element_type: str,
-        fields_to_include: List[str]
+        fields_to_include: List[str],
+        field_labels_map: Optional[Dict[str, str]] = None,
+        element_mode: Optional[str] = None
     ) -> str:
         """Organisation minimale : seulement les champs essentiels."""
         # Filtrer pour ne garder que les champs essentiels
@@ -201,7 +211,7 @@ class ContextOrganizer:
         if not minimal_fields:
             minimal_fields = fields_to_include[:5]  # Limiter à 5 champs
         
-        return self._organize_default(element_data, element_type, minimal_fields)
+        return self._organize_default(element_data, element_type, minimal_fields, field_labels_map, element_mode)
     
     def _extract_field_value(self, data: Dict, path: str) -> Optional[any]:
         """Extrait la valeur d'un champ depuis un chemin."""
@@ -238,14 +248,43 @@ class ContextOrganizer:
         else:
             return str(value)
     
-    def _generate_label(self, path: str) -> str:
-        """Génère un label lisible à partir d'un chemin."""
-        parts = path.split(".")
-        last_part = parts[-1]
+    def _generate_label(
+        self, 
+        path: str, 
+        field_labels_map: Optional[Dict[str, str]] = None,
+        element_mode: Optional[str] = None
+    ) -> str:
+        """Génère un label lisible à partir d'un chemin.
         
-        # Remplacer les underscores et capitaliser
-        label = last_part.replace("_", " ").replace("-", " ")
-        label = " ".join(word.capitalize() for word in label.split())
+        Args:
+            path: Chemin du champ (ex: "Background.Histoire de l'Espèce")
+            field_labels_map: Dictionnaire {field_path: label} depuis context_config.json (optionnel)
+            element_mode: Mode de sélection ("full" ou "excerpt") pour adapter les labels (optionnel)
+            
+        Returns:
+            Label formaté avec indication du mode si applicable.
+        """
+        # Si un label existe dans la config, l'utiliser
+        if field_labels_map and path in field_labels_map:
+            label = field_labels_map[path]
+        else:
+            # Sinon, générer le label depuis le chemin
+            parts = path.split(".")
+            last_part = parts[-1]
+            
+            # Remplacer les underscores et capitaliser
+            label = last_part.replace("_", " ").replace("-", " ")
+            label = " ".join(word.capitalize() for word in label.split())
+        
+        # Adapter le label selon le mode
+        if element_mode == "full":
+            # En mode full, remplacer "(extrait)" par "(complet)"
+            if "(extrait)" in label:
+                label = label.replace("(extrait)", "(complet)")
+        elif element_mode == "excerpt":
+            # En mode excerpt, s'assurer que "(extrait)" est présent
+            if "(extrait)" not in label and "(complet)" not in label:
+                label = f"{label} (extrait)"
         
         return label
     

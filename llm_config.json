@@ -6,24 +6,19 @@
       "notes": "Modèle le plus récent et le plus capable, bon équilibre performance/coût."
     },
     {
-      "display_name": "GPT-5.2 Mini",
-      "api_identifier": "gpt-5.2-mini",
-      "notes": "Version plus rapide et moins chère de GPT-5.2, pour des tâches moins complexes ou des tests rapides."
+      "display_name": "GPT-5 Mini",
+      "api_identifier": "gpt-5-mini",
+      "notes": "Version plus rapide et moins chère de GPT-5, pour des tâches moins complexes ou des tests rapides. ⚠️ ATTENTION: Ce modèle peut avoir des problèmes avec le structured output (génération JSON). Utilisez GPT-5.2 si vous avez des erreurs de génération JSON."
     },
     {
-      "display_name": "GPT-5.2 Nano",
-      "api_identifier": "gpt-5.2-nano",
-      "notes": "Version compacte et rapide, idéale pour les développeurs et les tâches nécessitant moins de ressources."
+      "display_name": "GPT-5 Nano",
+      "api_identifier": "gpt-5-nano",
+      "notes": "Version compacte et rapide, idéale pour les développeurs et les tâches nécessitant moins de ressources. ⚠️ ATTENTION: Ce modèle peut avoir des problèmes avec le structured output (génération JSON). Utilisez GPT-5.2 si vous avez des erreurs de génération JSON."
     },
     {
       "display_name": "GPT-5.2 Thinking",
       "api_identifier": "gpt-5.2-thinking",
       "notes": "Modèle conçu pour des tâches complexes nécessitant un raisonnement approfondi."
-    },
-    {
-      "display_name": "GPT-4.1 (Experimental)",
-      "api_identifier": "gpt-4.1-2025-04-14",
-      "notes": "Modèle avancé avec long contexte, potentiellement plus cher. À utiliser si l'accès est confirmé et pour des besoins spécifiques."
     }
   ],
   "default_model_identifier": "gpt-5.2",

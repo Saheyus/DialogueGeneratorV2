@@ -130,7 +130,7 @@ export function Dashboard() {
       id: 'dialogue',
       label: 'Dialogue Unity',
       content: (
-        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%' }}>
           {unityDialogueResponse ? (
             <UnityDialogueEditor
               json_content={unityDialogueResponse.json_content}
@@ -160,7 +160,7 @@ export function Dashboard() {
       id: 'details',
       label: 'Détails',
       content: (
-        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%' }}>
           {selectedContextItem ? (
             <ContextDetail item={selectedContextItem} />
           ) : (
@@ -263,7 +263,12 @@ export function Dashboard() {
                         onDeleted={() => {
                           // onClose() gère déjà la fermeture (setSelectedDialogue(null))
                           // On ne fait que rafraîchir la liste pour retirer le dialogue supprimé
-                          dialogueListRef.current?.refresh()
+                          if (dialogueListRef.current) {
+                            console.log('[Dashboard] Rafraîchissement de la liste des dialogues')
+                            dialogueListRef.current.refresh()
+                          } else {
+                            console.error('[Dashboard] dialogueListRef.current est null, impossible de rafraîchir')
+                          }
                         }}
                         onGenerateContinuation={(dialogueJson, dialogueTitle) => {
                           // Basculer vers l'onglet Génération
@@ -410,8 +415,8 @@ export function Dashboard() {
             contentStyle={{ overflow: 'hidden', scrollbarGutter: 'stable' }}
           />
         </div>
-        {/* Gros bouton Générer en bas (visible sur Prompt et Variantes) */}
-        {actions.handleGenerate && (rightPanelTab === 'prompt' || rightPanelTab === 'variants') && (
+        {/* Gros bouton Générer en bas (visible sur Prompt, Variantes et Dialogue Unity) */}
+        {actions.handleGenerate && (rightPanelTab === 'prompt' || rightPanelTab === 'variants' || rightPanelTab === 'dialogue') && (
           <div
             style={{
               padding: '0.75rem 1rem',

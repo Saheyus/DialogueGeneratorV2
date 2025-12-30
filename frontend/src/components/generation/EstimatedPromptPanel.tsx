@@ -1,8 +1,9 @@
 /**
  * Panneau d'affichage du prompt estimé.
  */
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { usePromptPreview } from '../../hooks/usePromptPreview'
+import { StructuredPromptView } from './StructuredPromptView'
 import { theme } from '../../theme'
 
 export interface EstimatedPromptPanelProps {
@@ -20,44 +21,11 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
   estimatedTokens,
 }: EstimatedPromptPanelProps) {
   const { formattedPrompt } = usePromptPreview(estimatedPrompt)
+  const [viewMode, setViewMode] = useState<'raw' | 'structured'>('structured')
 
   return (
     <>
-      <style>{`
-        .estimated-prompt-scroll-container {
-          /* Firefox - scrollbar visible */
-          scrollbar-width: auto;
-          scrollbar-color: #9d4edd #1a1a1a;
-          scrollbar-gutter: stable;
-        }
-        .estimated-prompt-scroll-container::-webkit-scrollbar {
-          width: 50px !important;
-          display: block !important;
-          -webkit-appearance: none !important;
-        }
-        .estimated-prompt-scroll-container::-webkit-scrollbar-track {
-          background: #1a1a1a !important;
-          border-left: 3px solid #9d4edd !important;
-          -webkit-box-shadow: inset 0 0 6px rgba(157, 78, 221, 0.3) !important;
-        }
-        .estimated-prompt-scroll-container::-webkit-scrollbar-thumb {
-          background-color: #9d4edd !important;
-          border-radius: 10px !important;
-          border: 5px solid #1a1a1a !important;
-          min-height: 100px !important;
-          -webkit-box-shadow: inset 0 0 6px rgba(157, 78, 221, 0.5) !important;
-        }
-        .estimated-prompt-scroll-container::-webkit-scrollbar-thumb:hover {
-          background-color: #c77dff !important;
-        }
-        .estimated-prompt-scroll-container::-webkit-scrollbar-thumb:active {
-          background-color: #7b2cbf !important;
-        }
-        /* Force la scrollbar à être toujours visible, même au repos */
-        .estimated-prompt-scroll-container:hover::-webkit-scrollbar-thumb {
-          background-color: #9d4edd !important;
-        }
-      `}</style>
+      {/* Pas de styles personnalisés : utilise les scrollbars par défaut du navigateur, comme les autres composants (ContextList, ContextSelector) */}
       <div
         style={{
           flex: 1,
@@ -73,17 +41,84 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
         padding: '1rem', 
         borderBottom: `1px solid ${theme.border.primary}`,
         flexShrink: 0,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
       }}>
-        {isEstimating ? (
-          <div style={{ color: theme.text.secondary }}>Estimation en cours...</div>
-        ) : estimatedTokens !== null && estimatedTokens !== undefined ? (
-          <div style={{ color: theme.text.primary }}>
-            <strong>Tokens estimés:</strong> {estimatedTokens.toLocaleString()}
+        <div>
+          {isEstimating ? (
+            <div style={{ color: theme.text.secondary }}>Estimation en cours...</div>
+          ) : estimatedTokens !== null && estimatedTokens !== undefined ? (
+            <div style={{ color: theme.text.primary }}>
+              <strong>Tokens estimés:</strong> {estimatedTokens.toLocaleString()}
+            </div>
+          ) : null}
+        </div>
+        {estimatedPrompt && !isEstimating && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              color: theme.text.secondary,
+              fontSize: '0.85rem',
+            }}
+          >
+            <span style={{ color: viewMode === 'raw' ? theme.text.primary : theme.text.secondary }}>
+              Brut
+            </span>
+            <label
+              style={{
+                position: 'relative',
+                display: 'inline-block',
+                width: '44px',
+                height: '24px',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={viewMode === 'structured'}
+                onChange={(e) => setViewMode(e.target.checked ? 'structured' : 'raw')}
+                style={{
+                  opacity: 0,
+                  width: 0,
+                  height: 0,
+                }}
+              />
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: viewMode === 'structured' ? theme.border.focus : theme.input.border,
+                  borderRadius: '12px',
+                  transition: 'background-color 0.2s',
+                }}
+              />
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '2px',
+                  left: viewMode === 'structured' ? '22px' : '2px',
+                  width: '20px',
+                  height: '20px',
+                  borderRadius: '50%',
+                  backgroundColor: 'white',
+                  transition: 'left 0.2s',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                }}
+              />
+            </label>
+            <span style={{ color: viewMode === 'structured' ? theme.text.primary : theme.text.secondary }}>
+              Structuré
+            </span>
           </div>
-        ) : null}
+        )}
       </div>
       <div 
-        className="estimated-prompt-scroll-container"
         style={{ 
           flex: '1 1 0%', // Utilise flex-basis: 0% pour forcer le respect de la hauteur parent
           minHeight: 0,
@@ -99,23 +134,27 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
         }}
       >
         {formattedPrompt ? (
-          <pre
-            style={{
-              fontFamily: 'monospace',
-              fontSize: '0.85rem',
-              lineHeight: '1.6',
-              color: theme.text.secondary,
-              backgroundColor: theme.background.secondary,
-              padding: '1rem',
-              borderRadius: '4px',
-              border: `1px solid ${theme.border.primary}`,
-              whiteSpace: 'pre-wrap',
-              wordWrap: 'break-word',
-              margin: 0,
-            }}
-          >
-            {formattedPrompt}
-          </pre>
+          viewMode === 'raw' ? (
+            <pre
+              style={{
+                fontFamily: 'monospace',
+                fontSize: '0.85rem',
+                lineHeight: '1.6',
+                color: theme.text.secondary,
+                backgroundColor: theme.background.secondary,
+                padding: '1rem',
+                borderRadius: '4px',
+                border: `1px solid ${theme.border.primary}`,
+                whiteSpace: 'pre-wrap',
+                wordWrap: 'break-word',
+                margin: 0,
+              }}
+            >
+              {formattedPrompt}
+            </pre>
+          ) : (
+            <StructuredPromptView prompt={estimatedPrompt!} />
+          )
         ) : (
           <div
             style={{

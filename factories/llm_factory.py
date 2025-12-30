@@ -30,10 +30,7 @@ class LLMClientFactory:
             Retourne DummyLLMClient si le modèle n'est pas trouvé,
             si la clé API est manquante pour OpenAI, ou en cas d'erreur.
         """
-        logger.info(f"Tentative de création d'un client LLM pour model_id: {model_id}")
-
         if model_id == "dummy":
-            logger.info("Création d'un DummyLLMClient (demandé explicitement).")
             return DummyLLMClient()
 
         # Chercher le modèle par api_identifier (champ dans llm_config.json) ou model_identifier (compatibilité)
