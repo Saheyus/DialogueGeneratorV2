@@ -518,7 +518,7 @@ class ContextBuilder:
             logger.info(f"Historique du dialogue précédent ajouté au contexte.")
         
         # Note: L'objectif de la scène (scene_instruction) n'est PAS ajouté ici car il est déjà
-        # ajouté séparément dans le prompt final par prompt_engine.py::build_prompt().
+        # ajouté séparément dans le prompt final par prompt_engine.py::build_unity_dialogue_prompt().
         # Le contexte doit contenir uniquement les informations GDD.
         
         # Informations sur le GDD avec champs personnalisés
@@ -583,14 +583,25 @@ class ContextBuilder:
                     )
                     
                     if fields_for_element:
+                        # Filtrer les champs avec condition_flag avant de les passer à l'organisateur
+                        filtered_fields = self._filter_fields_by_condition_flags(
+                            element_type,
+                            fields_for_element,
+                            include_dialogue_type=include_dialogue_type
+                        )
+                        
+                        if not filtered_fields:
+                            # Aucun champ après filtrage, passer au suivant
+                            continue
+                        
                         # Récupérer les labels depuis context_config.json
-                        field_labels_map = self._get_field_labels_map(element_type, fields_for_element)
+                        field_labels_map = self._get_field_labels_map(element_type, filtered_fields)
                         
                         # Utiliser l'organisateur avec les champs personnalisés selon le mode
                         info_str = organizer.organize_context(
                             element_data=element_data,
                             element_type=element_type,
-                            fields_to_include=fields_for_element,
+                            fields_to_include=filtered_fields,
                             organization_mode=organization_mode,
                             field_labels_map=field_labels_map,
                             element_mode=element_mode
@@ -677,6 +688,49 @@ class ContextBuilder:
         
         return excerpt_fields if excerpt_fields else None
 
+    def _filter_fields_by_condition_flags(
+        self,
+        element_type: str,
+        fields_to_include: List[str],
+        include_dialogue_type: bool = True
+    ) -> List[str]:
+        """Filtre les champs selon leurs condition_flag.
+        
+        Args:
+            element_type: Type d'élément (character, location, etc.)
+            fields_to_include: Liste des chemins de champs à inclure
+            include_dialogue_type: Si False, exclut les champs avec condition_flag="include_dialogue_type"
+            
+        Returns:
+            Liste filtrée des champs à inclure.
+        """
+        if not fields_to_include:
+            return []
+        
+        filtered_fields = []
+        config_for_type = self.context_config.get(element_type.lower(), {})
+        
+        # Créer un map des condition_flags pour chaque champ
+        field_condition_flags = {}
+        for priority_level, fields in config_for_type.items():
+            for field_config in fields:
+                path = field_config.get("path", "")
+                condition_flag = field_config.get("condition_flag")
+                if path and condition_flag:
+                    field_condition_flags[path] = condition_flag
+        
+        # Filtrer les champs
+        for field_path in fields_to_include:
+            condition_flag = field_condition_flags.get(field_path)
+            
+            # Si le champ a un condition_flag "include_dialogue_type" et que include_dialogue_type est False, l'exclure
+            if condition_flag == "include_dialogue_type" and not include_dialogue_type:
+                continue
+            
+            filtered_fields.append(field_path)
+        
+        return filtered_fields
+
     def _get_field_labels_map(
         self, 
         element_type: str, 
@@ -741,14 +795,17 @@ class ContextBuilder:
         """
         Construit un résumé contextuel basé sur les éléments sélectionnés et une instruction de scène,
         en ignorant toute limite de tokens (plus de troncature ni de refus d'ajout).
+        Utilise le mode "narrative" par défaut pour organiser le contexte en sections logiques.
         """
+        from services.context_organizer import ContextOrganizer
+        
         self._throttled_info_log('start_build', f"Début de la construction du contexte avec max_tokens={max_tokens}.")
         self._throttled_info_log('selected_elements', f"Éléments sélectionnés: {selected_elements}")
         logger.info(f"[build_context] Personnages reçus dans selected_elements: {selected_elements.get('characters', [])}")
         logger.info(f"[build_context] Lieux reçus dans selected_elements: {selected_elements.get('locations', [])}")
         
         context_parts = []
-        # total_tokens = 0  # Plus utilisé
+        organizer = ContextOrganizer()
         level = 3  # Détail maximal
         
         # Contexte du dialogue précédent (si disponible)
@@ -758,7 +815,7 @@ class ContextBuilder:
             logger.info(f"Historique du dialogue précédent ajouté au contexte.")
         
         # Note: L'objectif de la scène (scene_instruction) n'est PAS ajouté ici car il est déjà
-        # ajouté séparément dans le prompt final par prompt_engine.py::build_prompt().
+        # ajouté séparément dans le prompt final par prompt_engine.py::build_unity_dialogue_prompt().
         # Le contexte doit contenir uniquement les informations GDD.
         
         # Informations sur le GDD (personnages, lieux, etc.)
@@ -782,19 +839,77 @@ class ContextBuilder:
                 continue
             category_title = category_key.replace('_', ' ').capitalize()
             gdd_context_parts.append(f"\n--- {category_title.upper()} ---")
-            for name in names_list:
-                element_data = None
-                if category_key == "characters": element_data = self.get_character_details_by_name(name)
-                elif category_key == "locations": element_data = self.get_location_details_by_name(name)
-                elif category_key == "items": element_data = self.get_item_details_by_name(name)
-                elif category_key == "species": element_data = self.get_species_details_by_name(name)
-                elif category_key == "communities": element_data = self.get_community_details_by_name(name)
-                elif category_key == "quests": element_data = self.get_quest_details_by_name(name)
-                if element_data:
-                    info_str = self._get_prioritized_info(element_data, category_key, level, include_dialogue_type=include_dialogue_type)
-                    gdd_context_parts.append(info_str)
-                else:
-                    logger.warning(f"Aucune donnée trouvée pour l'élément '{name}' dans la catégorie '{category_key}'.")
+            
+            # Déterminer le type d'élément pour l'organisateur
+            element_type_map = {
+                "characters": "character",
+                "locations": "location",
+                "items": "item",
+                "species": "species",
+                "communities": "community",
+            }
+            element_type = element_type_map.get(category_key, category_key)
+            
+            # Extraire les champs depuis context_config.json pour ce type
+            config_for_type = self.context_config.get(element_type.lower(), {})
+            fields_to_extract = []
+            field_configs_map = {}  # Pour stocker les configs complètes avec condition_flag
+            
+            for l in range(1, level + 1):
+                for field_config in config_for_type.get(str(l), []):
+                    path = field_config.get("path")
+                    if not path:
+                        continue
+                    # Vérifier le condition_flag pour include_dialogue_type
+                    condition_flag = field_config.get("condition_flag")
+                    if condition_flag == "include_dialogue_type" and not include_dialogue_type:
+                        continue  # Exclure ce champ si include_dialogue_type est False
+                    fields_to_extract.append(path)
+                    field_configs_map[path] = field_config
+            
+            # Si aucun champ configuré, utiliser _get_prioritized_info comme fallback
+            if not fields_to_extract:
+                for name in names_list:
+                    element_data = None
+                    if category_key == "characters": element_data = self.get_character_details_by_name(name)
+                    elif category_key == "locations": element_data = self.get_location_details_by_name(name)
+                    elif category_key == "items": element_data = self.get_item_details_by_name(name)
+                    elif category_key == "species": element_data = self.get_species_details_by_name(name)
+                    elif category_key == "communities": element_data = self.get_community_details_by_name(name)
+                    elif category_key == "quests": element_data = self.get_quest_details_by_name(name)
+                    if element_data:
+                        info_str = self._get_prioritized_info(element_data, category_key, level, include_dialogue_type=include_dialogue_type)
+                        gdd_context_parts.append(info_str)
+                    else:
+                        logger.warning(f"Aucune donnée trouvée pour l'élément '{name}' dans la catégorie '{category_key}'.")
+            else:
+                # Utiliser ContextOrganizer avec le mode "narrative" par défaut
+                # Construire field_labels_map depuis field_configs_map
+                field_labels_map = {path: config.get("label", path.split('.')[-1].replace('_', ' ').capitalize()) 
+                                   for path, config in field_configs_map.items()}
+                
+                for name in names_list:
+                    element_data = None
+                    if category_key == "characters": element_data = self.get_character_details_by_name(name)
+                    elif category_key == "locations": element_data = self.get_location_details_by_name(name)
+                    elif category_key == "items": element_data = self.get_item_details_by_name(name)
+                    elif category_key == "species": element_data = self.get_species_details_by_name(name)
+                    elif category_key == "communities": element_data = self.get_community_details_by_name(name)
+                    elif category_key == "quests": element_data = self.get_quest_details_by_name(name)
+                    if element_data:
+                        # Utiliser l'organisateur avec le mode "narrative"
+                        info_str = organizer.organize_context(
+                            element_data=element_data,
+                            element_type=element_type,
+                            fields_to_include=fields_to_extract,
+                            organization_mode="narrative",
+                            field_labels_map=field_labels_map,
+                            element_mode="full"
+                        )
+                        gdd_context_parts.append(info_str)
+                    else:
+                        logger.warning(f"Aucune donnée trouvée pour l'élément '{name}' dans la catégorie '{category_key}'.")
+        
         if gdd_context_parts:
             context_parts.extend(gdd_context_parts)
         

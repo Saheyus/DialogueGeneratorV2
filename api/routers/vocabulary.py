@@ -31,14 +31,14 @@ router = APIRouter(prefix="/api/vocabulary", tags=["vocabulary"])
     status_code=status.HTTP_200_OK
 )
 async def get_vocabulary(
-    min_importance: Annotated[Optional[str], Query(description="Niveau d'importance minimum (Majeur, Important, Modéré, etc.)")] = None,
+    min_popularité: Annotated[Optional[str], Query(description="Niveau de popularité minimum (Mondialement, Régionalement, Localement, etc.)")] = None,
     vocabulary_service: Annotated[VocabularyService, Depends(get_vocabulary_service)] = None,
     request_id: Annotated[str, Depends(get_request_id)] = None
 ) -> VocabularyResponse:
-    """Récupère le vocabulaire Alteir, filtré par niveau d'importance.
+    """Récupère le vocabulaire Alteir, filtré par niveau de popularité.
     
     Args:
-        min_importance: Niveau d'importance minimum. Si non fourni, retourne tous les termes.
+        min_popularité: Niveau de popularité minimum. Si non fourni, retourne tous les termes.
         vocabulary_service: Service de vocabulaire injecté.
         request_id: ID de la requête.
     
@@ -54,13 +54,13 @@ async def get_vocabulary(
                 terms=[],
                 total=0,
                 filtered_count=0,
-                min_importance=min_importance or "Tous",
+                min_popularité=min_popularité or "Tous",
                 statistics={}
             )
         
-        # Filtrer par importance si spécifié
-        if min_importance:
-            filtered_terms = vocabulary_service.filter_by_importance(all_terms, min_importance)
+        # Filtrer par popularité si spécifié
+        if min_popularité:
+            filtered_terms = vocabulary_service.filter_by_popularity(all_terms, min_popularité)
         else:
             filtered_terms = all_terms
         
@@ -68,18 +68,21 @@ async def get_vocabulary(
         stats = vocabulary_service.get_statistics(all_terms)
         
         # Convertir en VocabularyTerm
-        term_objects = [VocabularyTerm(**term) for term in filtered_terms]
+        term_objects = []
+        for term in filtered_terms:
+            term_dict = dict(term)
+            term_objects.append(VocabularyTerm(**term_dict))
         
         logger.info(
             f"Vocabulaire récupéré: {len(term_objects)}/{len(all_terms)} termes "
-            f"(min_importance: {min_importance or 'Tous'}, request_id: {request_id})"
+            f"(min_popularité: {min_popularité or 'Tous'}, request_id: {request_id})"
         )
         
         return VocabularyResponse(
             terms=term_objects,
             total=len(all_terms),
             filtered_count=len(term_objects),
-            min_importance=min_importance or "Tous",
+            min_popularité=min_popularité or "Tous",
             statistics=stats
         )
     except Exception as e:
@@ -170,7 +173,7 @@ async def get_vocabulary_stats(
         request_id: ID de la requête.
     
     Returns:
-        Statistiques du vocabulaire (nombre par importance, catégorie, type).
+        Statistiques du vocabulaire (nombre par popularité, catégorie, type).
     """
     try:
         all_terms = vocabulary_service.load_vocabulary()
@@ -180,7 +183,7 @@ async def get_vocabulary_stats(
         
         return VocabularyStatsResponse(
             total=stats.get("total", 0),
-            by_importance=stats.get("by_importance", {}),
+            by_popularité=stats.get("by_popularité", {}),
             by_category=stats.get("by_category", {}),
             by_type=stats.get("by_type", {})
         )

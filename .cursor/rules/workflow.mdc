@@ -6,6 +6,10 @@ alwaysApply: true
 
 - **Commandes essentielles (donner en une ligne)** :
   - Développement : `npm run dev` (lance backend sur 4243 + frontend sur 3000 automatiquement)
+  - Développement avec nettoyage cache : `npm run dev:clean` (nettoie cache Vite avant démarrage, utile si changements non visibles)
+  - Vérification processus/ports : `npm run dev:check` (détecte processus zombies, ports bloqués, lockfile stale. Ajouter `--clean` pour nettoyage automatique)
+  - Statut services : `npm run dev:status` (affiche statut backend/frontend en tableau formaté)
+  - Arrêt services : `npm run dev:stop` (arrête proprement tous les services)
   - Tests : `pytest tests/` ou `python -m pytest tests/` (commandes recommandées, fonctionnent avec l'environnement Python actif)
   - Build production : `npm run deploy:build`
   - Vérification déploiement : `npm run deploy:check`
@@ -31,3 +35,9 @@ alwaysApply: true
 - **Avant commit** : `pytest tests/` (backend) + `.\scripts\test-frontend.ps1` (frontend). Si vert : commit + push.
 
 - **Déploiement** : `npm run deploy:build` puis uploader + configurer `ENVIRONMENT=production` et `CORS_ORIGINS`.
+
+- **Diagnostic développement** :
+  - Si ports bloqués ou processus zombies : `npm run dev:check` (vérifie ports 3000/4243, processus liés au projet, lockfile)
+  - Nettoyage automatique : `npm run dev:check --clean` (arrête processus zombies, supprime lockfile stale)
+  - Voir statut : `npm run dev:status` (tableau formaté avec health checks)
+  - Script de vérification : `scripts/dev-check.js` (détecte automatiquement processus liés au projet vs autres)

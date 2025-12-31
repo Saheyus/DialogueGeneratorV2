@@ -31,8 +31,9 @@ describe('Dashboard', () => {
     vi.clearAllMocks()
     
     mockUseGenerationStore.mockReturnValue({
-      estimatedPrompt: '',
-      estimatedTokens: 0,
+      rawPrompt: '',
+      tokenCount: 0,
+      promptHash: null,
       isEstimating: false,
       unityDialogueResponse: null,
       sceneSelection: {
@@ -45,13 +46,14 @@ describe('Dashboard', () => {
       systemPromptOverride: null,
       setDialogueStructure: vi.fn(),
       setSystemPromptOverride: vi.fn(),
-      setEstimatedPrompt: vi.fn(),
+      setRawPrompt: vi.fn(),
       setSceneSelection: vi.fn(),
       setUnityDialogueResponse: vi.fn(),
       tokensUsed: null,
       setTokensUsed: vi.fn(),
       clearGenerationResults: vi.fn(),
     } as ReturnType<typeof useGenerationStore>)
+
     
     mockUseContextStore.mockReturnValue({
       selections: {
@@ -221,8 +223,9 @@ describe('Dashboard', () => {
   it('affiche le prompt estimé dans l\'onglet Prompt', async () => {
     const testPrompt = 'Test prompt content'
     mockUseGenerationStore.mockReturnValue({
-      estimatedPrompt: testPrompt,
-      estimatedTokens: 100,
+      rawPrompt: testPrompt,
+      tokenCount: 100,
+      promptHash: 'hash123',
       isEstimating: false,
       unityDialogueResponse: null,
       sceneSelection: {
@@ -235,13 +238,14 @@ describe('Dashboard', () => {
       systemPromptOverride: null,
       setDialogueStructure: vi.fn(),
       setSystemPromptOverride: vi.fn(),
-      setEstimatedPrompt: vi.fn(),
+      setRawPrompt: vi.fn(),
       setSceneSelection: vi.fn(),
       setUnityDialogueResponse: vi.fn(),
       tokensUsed: null,
       setTokensUsed: vi.fn(),
       clearGenerationResults: vi.fn(),
     } as ReturnType<typeof useGenerationStore>)
+
 
     render(
       <BrowserRouter>
@@ -263,8 +267,9 @@ describe('Dashboard', () => {
     }
 
     mockUseGenerationStore.mockReturnValue({
-      estimatedPrompt: '',
-      estimatedTokens: 0,
+      rawPrompt: '',
+      tokenCount: 0,
+      promptHash: null,
       isEstimating: false,
       unityDialogueResponse: mockUnityResponse,
       sceneSelection: {
@@ -277,13 +282,14 @@ describe('Dashboard', () => {
       systemPromptOverride: null,
       setDialogueStructure: vi.fn(),
       setSystemPromptOverride: vi.fn(),
-      setEstimatedPrompt: vi.fn(),
+      setRawPrompt: vi.fn(),
       setSceneSelection: vi.fn(),
       setUnityDialogueResponse: vi.fn(),
       tokensUsed: null,
       setTokensUsed: vi.fn(),
       clearGenerationResults: vi.fn(),
     } as ReturnType<typeof useGenerationStore>)
+
 
     render(
       <BrowserRouter>

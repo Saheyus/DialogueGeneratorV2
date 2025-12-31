@@ -1,5 +1,5 @@
 """Schémas Pydantic pour la génération de dialogues."""
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from pydantic import BaseModel, Field, field_validator
 import sys
 from pathlib import Path
@@ -109,140 +109,70 @@ class ContextSelection(BaseModel):
         return data
 
 
-class GenerateDialogueVariantsRequest(BaseModel):
-    """Requête pour générer des variantes de dialogue texte.
-    
-    Attributes:
-        k_variants: Nombre de variantes à générer.
-        user_instructions: Instructions spécifiques de l'utilisateur.
-        context_selections: Sélections de contexte GDD.
-        max_context_tokens: Nombre maximum de tokens pour le contexte.
-        structured_output: Générer en format structuré.
-        system_prompt_override: Surcharge du system prompt (optionnel).
-        llm_model_identifier: Identifiant du modèle LLM à utiliser.
-        npc_speaker_id: ID du PNJ interlocuteur (si None, utiliser le premier personnage sélectionné).
-    """
-    k_variants: int = Field(default=1, ge=1, le=10, description="Nombre de variantes à générer")
-    user_instructions: str = Field(..., min_length=1, description="Instructions spécifiques pour la scène")
-    context_selections: ContextSelection = Field(..., description="Sélections de contexte GDD")
-    max_context_tokens: int = Field(default=1500, ge=100, le=Defaults.MAX_CONTEXT_TOKENS, description="Nombre maximum de tokens pour le contexte")
-    structured_output: bool = Field(default=False, description="Générer en format structuré")
-    system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
-    llm_model_identifier: str = Field(default=ModelNames.GPT_5_MINI, description="Identifiant du modèle LLM")
-    npc_speaker_id: Optional[str] = Field(None, description="ID du PNJ interlocuteur (si None, utiliser le premier personnage sélectionné)")
-
+# GenerateDialogueVariantsRequest, DialogueVariantResponse, GenerateDialogueVariantsResponse supprimés - système texte libre obsolète, utiliser Unity JSON à la place
 
 # GenerateInteractionVariantsRequest supprimé - système obsolète remplacé par Unity JSON
 
-
-class DialogueVariantResponse(BaseModel):
-    """Réponse contenant une variante de dialogue.
-    
-    Attributes:
-        id: Identifiant unique de la variante.
-        title: Titre de la variante.
-        content: Contenu de la variante (texte ou JSON).
-        is_new: Indique si c'est une nouvelle variante.
-    """
-    id: str = Field(..., description="Identifiant unique de la variante")
-    title: str = Field(..., description="Titre de la variante")
-    content: str = Field(..., description="Contenu de la variante")
-    is_new: bool = Field(default=True, description="Indique si c'est une nouvelle variante")
-
-
-class GenerateDialogueVariantsResponse(BaseModel):
-    """Réponse pour la génération de variantes de dialogue.
-    
-    Attributes:
-        variants: Liste des variantes générées.
-        prompt_used: Le prompt complet utilisé pour la génération.
-        estimated_tokens: Nombre estimé de tokens utilisés.
-        warning: Avertissement si DummyLLMClient a été utilisé.
-    """
-    variants: List[DialogueVariantResponse] = Field(..., description="Liste des variantes générées")
-    prompt_used: Optional[str] = Field(None, description="Prompt complet utilisé")
-    estimated_tokens: int = Field(..., description="Nombre estimé de tokens")
-    warning: Optional[str] = Field(None, description="Avertissement (ex: DummyLLMClient utilisé)")
-
-
-class EstimateTokensRequest(BaseModel):
-    """Requête pour estimer le nombre de tokens.
-    
-    Attributes:
-        context_selections: Sélections de contexte GDD.
-        user_instructions: Instructions utilisateur (peut être vide si des sélections existent).
-        max_context_tokens: Nombre maximum de tokens pour le contexte.
-        system_prompt_override: Surcharge du system prompt (optionnel).
-        field_configs: Configuration des champs de contexte à inclure (optionnel).
-        organization_mode: Mode d'organisation du contexte (optionnel).
-        vocabulary_min_importance: Niveau d'importance minimum pour le vocabulaire (optionnel).
-        include_narrative_guides: Inclure les guides narratifs dans le prompt (optionnel, défaut: True).
-    """
-    context_selections: ContextSelection = Field(..., description="Sélections de contexte GDD")
-    user_instructions: str = Field(default="", description="Instructions utilisateur")
-    max_context_tokens: int = Field(default=1500, ge=100, le=Defaults.MAX_CONTEXT_TOKENS, description="Nombre maximum de tokens pour le contexte")
-    system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
-    field_configs: Optional[Dict[str, List[str]]] = Field(None, description="Configuration des champs de contexte par type d'élément")
-    organization_mode: Optional[str] = Field(None, description="Mode d'organisation du contexte (default, narrative, minimal)")
-    vocabulary_min_importance: Optional[str] = Field(None, description="Niveau d'importance minimum pour le vocabulaire Alteir")
-    include_narrative_guides: bool = Field(default=True, description="Inclure les guides narratifs dans le prompt")
-
-
-class EstimateTokensResponse(BaseModel):
-    """Réponse pour l'estimation de tokens.
-    
-    Attributes:
-        context_tokens: Nombre de tokens du contexte.
-        total_estimated_tokens: Nombre total estimé de tokens (contexte + prompt).
-        estimated_prompt: Le prompt estimé complet.
-    """
-    context_tokens: int = Field(..., description="Nombre de tokens du contexte")
-    total_estimated_tokens: int = Field(..., description="Nombre total estimé de tokens")
-    estimated_prompt: str | None = Field(default=None, description="Le prompt estimé complet")
-
-
-class GenerateUnityDialogueRequest(BaseModel):
-    """Requête pour générer un nœud de dialogue au format Unity JSON.
-    
-    Attributes:
-        user_instructions: Instructions spécifiques de l'utilisateur.
-        context_selections: Sélections de contexte GDD (doit contenir au moins un personnage).
-        npc_speaker_id: ID du PNJ interlocuteur (si None, utiliser le premier personnage sélectionné).
-        max_context_tokens: Nombre maximum de tokens pour le contexte.
-        system_prompt_override: Surcharge du system prompt (optionnel).
-        llm_model_identifier: Identifiant du modèle LLM à utiliser.
-        max_choices: Nombre maximum de choix à générer (0-8, ou None pour laisser l'IA décider).
-    """
+class BasePromptRequest(BaseModel):
+    """Base pour les requêtes de construction de prompt."""
     user_instructions: str = Field(..., min_length=1, description="Instructions spécifiques pour la scène")
     context_selections: ContextSelection = Field(..., description="Sélections de contexte GDD")
     npc_speaker_id: Optional[str] = Field(None, description="ID du PNJ interlocuteur (si None, utiliser le premier personnage sélectionné)")
     max_context_tokens: int = Field(default=1500, ge=100, le=Defaults.MAX_CONTEXT_TOKENS, description="Nombre maximum de tokens pour le contexte")
     system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
     author_profile: Optional[str] = Field(None, description="Profil d'auteur global (style réutilisable entre scènes)")
-    llm_model_identifier: str = Field(default=ModelNames.GPT_5_MINI, description="Identifiant du modèle LLM")
     max_choices: Optional[int] = Field(None, ge=0, le=8, description="Nombre maximum de choix à générer (0-8, ou None pour laisser l'IA décider librement)")
+    choices_mode: Literal["free", "capped"] = Field(default="free", description="Mode de génération des choix")
     narrative_tags: Optional[List[str]] = Field(None, description="Tags narratifs pour guider le ton (ex: tension, humour, dramatique)")
-    vocabulary_min_importance: Optional[str] = Field(None, description="Niveau d'importance minimum pour le vocabulaire Alteir (Majeur, Important, Modéré, Secondaire, Mineur, Anecdotique)")
-    include_narrative_guides: bool = Field(default=True, description="Inclure les guides narratifs dans le prompt système")
-    previous_dialogue_preview: Optional[str] = Field(None, description="Texte formaté du dialogue précédent (généré par preview_unity_dialogue_for_context) pour continuité narrative")
-    max_completion_tokens: Optional[int] = Field(None, ge=500, le=50000, description="Nombre maximum de tokens pour la génération (completion). Si None, utilise une valeur par défaut selon le modèle (10k pour les modèles thinking, 1.5k pour les autres)")
+    vocabulary_config: Optional[Dict[str, str]] = Field(None, description="Configuration du vocabulaire par niveau")
+    include_narrative_guides: bool = Field(default=True, description="Inclure les guides narratifs dans le prompt")
+    previous_dialogue_preview: Optional[str] = Field(None, description="Texte formaté du dialogue précédent")
 
+class EstimateTokensRequest(BasePromptRequest):
+    """Requête pour estimer le nombre de tokens.
+    
+    Hérite de BasePromptRequest pour garantir que l'estimation utilise les mêmes paramètres que la génération.
+    """
+    field_configs: Optional[Dict[str, List[str]]] = Field(None, description="Configuration des champs de contexte par type d'élément")
+    organization_mode: Optional[str] = Field(None, description="Mode d'organisation du contexte (default, narrative, minimal)")
+
+class EstimateTokensResponse(BaseModel):
+    """Réponse pour l'estimation de tokens.
+    
+    Attributes:
+        context_tokens: Nombre de tokens du contexte.
+        token_count: Nombre total de tokens (contexte + prompt).
+        raw_prompt: Le prompt brut réel qui sera envoyé au LLM.
+        prompt_hash: Hash SHA-256 du prompt pour validation.
+    """
+    context_tokens: int = Field(..., description="Nombre de tokens du contexte")
+    token_count: int = Field(..., description="Nombre total de tokens")
+    raw_prompt: str = Field(..., description="Le prompt brut réel qui sera envoyé au LLM")
+    prompt_hash: str = Field(..., description="Hash SHA-256 du prompt")
+
+class GenerateUnityDialogueRequest(BasePromptRequest):
+    """Requête pour générer un nœud de dialogue au format Unity JSON."""
+    llm_model_identifier: str = Field(default=ModelNames.GPT_5_MINI, description="Identifiant du modèle LLM")
+    max_completion_tokens: Optional[int] = Field(None, ge=500, le=50000, description="Nombre maximum de tokens pour la génération")
 
 class GenerateUnityDialogueResponse(BaseModel):
     """Réponse pour la génération d'un nœud de dialogue Unity JSON.
     
     Attributes:
-        json_content: Contenu JSON du dialogue au format Unity (tableau de nœuds).
+        json_content: Contenu JSON du dialogue au format Unity.
         title: Titre descriptif du dialogue généré par l'IA.
-        prompt_used: Le prompt complet utilisé pour la génération.
+        raw_prompt: Le prompt brut réel utilisé pour la génération (RawPrompt).
+        prompt_hash: Hash SHA-256 du prompt pour validation.
         estimated_tokens: Nombre estimé de tokens utilisés.
-        warning: Avertissement si DummyLLMClient a été utilisé.
+        warning: Avertissement éventuel.
     """
     json_content: str = Field(..., description="Contenu JSON du dialogue au format Unity")
     title: Optional[str] = Field(None, description="Titre descriptif du dialogue généré par l'IA")
-    prompt_used: Optional[str] = Field(None, description="Prompt complet utilisé")
+    raw_prompt: str = Field(..., description="Le prompt brut réel utilisé pour la génération")
+    prompt_hash: str = Field(..., description="Hash SHA-256 du prompt")
     estimated_tokens: int = Field(..., description="Nombre estimé de tokens")
     warning: Optional[str] = Field(None, description="Avertissement (ex: DummyLLMClient utilisé)")
+
 
 
 class ExportUnityDialogueRequest(BaseModel):

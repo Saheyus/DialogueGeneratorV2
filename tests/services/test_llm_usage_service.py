@@ -56,7 +56,7 @@ def test_track_usage(usage_service, mock_repository, mock_pricing_service):
     saved_record = mock_repository.save.call_args[0][0]
     assert isinstance(saved_record, LLMUsageRecord)
     assert saved_record.request_id == "req_123"
-    assert saved_record.model_name == "gpt-4o"
+    assert saved_record.model_name == "gpt-5.2"
     assert saved_record.total_tokens == 1500
 
 

@@ -120,25 +120,32 @@ Cette guidance :
 
 **Action** : Vérifier si ce fichier est utilisé quelque part. S'il ne l'est pas, considérer le supprimer ou documenter son rôle.
 
-### 4. Améliorer la structure du prompt final
+### 4. Structure du prompt final (IMPLÉMENTÉE)
 
-**Recommandation** : Clarifier l'ordre et le rôle de chaque section dans le prompt final :
+**Structure actuelle** : Le prompt est organisé en 4 sections claires :
 
 ```
-1. System Prompt (séparé, passé au LLM)
-   - Rôle de l'IA
-   - Règles générales (caractérisation, progression narrative, format)
+### SECTION 0. CONTRAT GLOBAL (tout en haut)
+- DIRECTIVES D'AUTEUR (GLOBAL) - Style réutilisable
+- TON NARRATIF - Résumé (tags narratifs)
+- RÈGLES DE PRIORITÉ - Hiérarchie des instructions
+- FORMAT DE SORTIE / INTERDICTIONS - Contraintes techniques
 
-2. Prompt User (dans l'ordre) :
-   - Vocabulaire et guides narratifs (si activés)
-   - Format de sortie Unity (instructions techniques)
-   - Compétences et traits disponibles
-   - Lieu de la scène
-   - Contexte GDD
-   - DIRECTIVES D'AUTEUR (GLOBAL) - Style réutilisable
-   - BRIEF DE SCÈNE (LOCAL) - Instructions spécifiques (inclut scene instructions)
-   - Tags narratifs (si présents)
+### SECTION 1. INSTRUCTIONS TECHNIQUES (NORMATIVES)
+- INSTRUCTIONS DE GÉNÉRATION - Règles techniques Unity
+- COMPÉTENCES DISPONIBLES
+- TRAITS DISPONIBLES
+
+### SECTION 2. CONTEXTE (ZONE FRAGILE ASSUMÉE)
+- CONTEXTE GÉNÉRAL DE LA SCÈNE - Personnages, lieux, objets
+- LIEU DE LA SCÈNE
+- VOCABULAIRE ET GUIDES NARRATIFS (si nécessaires)
+
+### SECTION 3. INSTRUCTIONS DE SCÈNE (PRIORITÉ EFFECTIVE)
+- BRIEF DE SCÈNE (LOCAL) - Instructions spécifiques (prévalent sur tout)
 ```
+
+**Principe** : Aucune information indispensable ne doit apparaître uniquement dans la SECTION 2 (contexte fragile). Les instructions critiques sont dans les sections 0, 1 et 3.
 
 ## Hiérarchie recommandée des informations
 

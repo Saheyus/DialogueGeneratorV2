@@ -29,8 +29,27 @@ export function Header() {
       position: 'relative',
     }}>
       {/* Section gauche : Titre */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', minWidth: 0 }}>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
         <h1 style={{ margin: 0, color: theme.text.primary, fontSize: '1.25rem', fontWeight: 600, whiteSpace: 'nowrap' }}>DialogueGenerator</h1>
+        <span style={{ 
+          fontSize: '2rem', 
+          fontWeight: 'bold', 
+          color: 'red', 
+          textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+          marginLeft: '1rem'
+        }}>
+        </span>
+        <span 
+          title={`Date de compilation: ${new Date(__BUILD_DATE__).toLocaleString('fr-FR')}`}
+          style={{ 
+            color: theme.text.secondary, 
+            fontSize: '0.75rem',
+            whiteSpace: 'nowrap',
+            fontFamily: 'monospace',
+          }}
+        >
+          Build: {new Date(__BUILD_DATE__).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+        </span>
       </div>
       
       {/* Section centrale : Barre de recherche */}

@@ -17,6 +17,7 @@ import { KeyboardShortcutsHelp } from '../shared/KeyboardShortcutsHelp'
 import { CommandPalette } from '../shared/CommandPalette'
 import { useGenerationStore } from '../../store/generationStore'
 import { useGenerationActionsStore } from '../../store/generationActionsStore'
+import { useContextConfigStore } from '../../store/contextConfigStore'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { useCommandPalette } from '../../hooks/useCommandPalette'
 import type { CharacterResponse, LocationResponse, ItemResponse, SpeciesResponse, CommunityResponse, UnityDialogueMetadata } from '../../types/api'
@@ -33,9 +34,19 @@ export function Dashboard() {
   const [centerPanelTab, setCenterPanelTab] = useState<'generation' | 'edition'>('generation')
   const [selectedDialogue, setSelectedDialogue] = useState<UnityDialogueMetadata | null>(null)
   const dialogueListRef = useRef<UnityDialogueListRef>(null)
-  const { estimatedPrompt, estimatedTokens, isEstimating, unityDialogueResponse } = useGenerationStore()
+  const { rawPrompt, tokenCount, promptHash, isEstimating, unityDialogueResponse } = useGenerationStore()
   const { actions } = useGenerationActionsStore()
+
+  const { loadDefaultConfig } = useContextConfigStore()
   const commandPalette = useCommandPalette()
+  
+  // Charger la configuration par défaut au démarrage pour initialiser les fieldConfigs
+  // Cela garantit que tous les navigateurs ont la même configuration initiale
+  useEffect(() => {
+    loadDefaultConfig().catch((err) => {
+      console.warn('Erreur lors du chargement de la config par défaut au démarrage:', err)
+    })
+  }, [loadDefaultConfig])
 
   // Raccourcis clavier
   useKeyboardShortcuts(
@@ -115,17 +126,19 @@ export function Dashboard() {
   const rightPanelTabs: Tab[] = useMemo(() => [
     {
       id: 'prompt',
-      label: 'Prompt Estimé',
+      label: 'Prompt (Réel)',
       content: (
         <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%' }}>
           <EstimatedPromptPanel
-            estimatedPrompt={estimatedPrompt}
+            raw_prompt={rawPrompt}
             isEstimating={isEstimating}
-            estimatedTokens={estimatedTokens}
+            tokenCount={tokenCount}
+            promptHash={promptHash}
           />
         </div>
       ),
     },
+
     {
       id: 'dialogue',
       label: 'Dialogue Unity',
@@ -179,7 +192,8 @@ export function Dashboard() {
         </div>
       ),
     },
-  ], [unityDialogueResponse, estimatedPrompt, isEstimating, estimatedTokens, selectedContextItem])
+  ], [unityDialogueResponse, rawPrompt, isEstimating, tokenCount, promptHash, selectedContextItem])
+
 
   return (
     <ResizablePanels

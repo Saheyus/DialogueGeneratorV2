@@ -2,6 +2,17 @@
  * Types TypeScript pour l'API.
  */
 
+// WARNING: Types distincts pour éviter les faux amis
+// RawPrompt = Le prompt brut réellement utilisé pour la génération
+// Ces deux prompts peuvent différer et NE DOIVENT JAMAIS être confondus dans l'UI.
+
+/**
+ * Type pour le prompt brut réellement utilisé pour la génération.
+ * Ce prompt provient de raw_prompt dans EstimateTokensResponse ou GenerateUnityDialogueResponse.
+ * C'est le SEUL prompt qui doit être affiché comme "PROMPT BRUT" dans l'UI.
+ */
+export type RawPrompt = string
+
 // Auth
 export interface LoginRequest {
   username: string
@@ -41,48 +52,39 @@ export interface ContextSelection {
   generation_settings?: Record<string, unknown>
 }
 
-export interface GenerateDialogueVariantsRequest {
-  k_variants: number
+/**
+ * Base pour les requêtes de construction de prompt.
+ */
+export interface BasePromptRequest {
   user_instructions: string
   context_selections: ContextSelection
-  max_context_tokens: number
-  structured_output: boolean
-  system_prompt_override?: string
-  llm_model_identifier: string
   npc_speaker_id?: string
+  max_context_tokens: number
+  system_prompt_override?: string
+  author_profile?: string
+  max_choices?: number | null
+  choices_mode: 'free' | 'capped'
+  narrative_tags?: string[]
+  vocabulary_config?: Record<string, string>
+  include_narrative_guides?: boolean
+  previous_dialogue_preview?: string
 }
 
-/**
- * @deprecated Utiliser GenerateUnityDialogueResponse à la place. Conservé pour compatibilité.
- */
-export interface DialogueVariantResponse {
-  id: string
-  title: string
-  content: string
-  is_new: boolean
-}
-
-/**
- * @deprecated Utiliser GenerateUnityDialogueResponse à la place. Conservé pour compatibilité.
- */
-export interface GenerateDialogueVariantsResponse {
-  variants: DialogueVariantResponse[]
-  prompt_used?: string
-  estimated_tokens: number
-  warning?: string
+export interface EstimateTokensRequest extends BasePromptRequest {
+  field_configs?: Record<string, string[]>
+  organization_mode?: string
 }
 
 export interface EstimateTokensResponse {
   context_tokens: number
-  total_estimated_tokens: number
-  estimated_prompt?: string | null
+  token_count: number
+  raw_prompt: RawPrompt
+  prompt_hash: string
 }
-
-// GenerateInteractionVariantsRequest supprimé - système obsolète
-// DialogueElement et ChoiceElement supprimés - système obsolète remplacé par Unity JSON
 
 // Context
 export interface CharacterResponse {
+
   name: string
   data: Record<string, unknown>
 }
@@ -175,29 +177,20 @@ export interface UnityDialoguesPathResponse {
 // InteractionContextPathResponse supprimé - système obsolète
 
 // Unity Dialogue
-export interface GenerateUnityDialogueRequest {
-  author_profile?: string
-  user_instructions: string
-  context_selections: ContextSelection
-  npc_speaker_id?: string
-  max_context_tokens: number
-  max_completion_tokens?: number | null
-  system_prompt_override?: string
+export interface GenerateUnityDialogueRequest extends BasePromptRequest {
   llm_model_identifier: string
-  max_choices?: number | null
-  narrative_tags?: string[]
-  vocabulary_min_importance?: string
-  include_narrative_guides?: boolean
-  previous_dialogue_preview?: string
+  max_completion_tokens?: number | null
 }
 
 export interface GenerateUnityDialogueResponse {
   json_content: string
   title?: string
-  prompt_used?: string
+  raw_prompt: RawPrompt
+  prompt_hash: string
   estimated_tokens: number
   warning?: string
 }
+
 
 export interface ExportUnityDialogueRequest {
   json_content: string

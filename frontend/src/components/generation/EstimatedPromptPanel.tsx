@@ -1,36 +1,63 @@
 /**
- * Panneau d'affichage du prompt estimé.
+ * Panneau d'affichage du prompt brut (RawPrompt).
+ * Source de vérité unique pour ce qui est envoyé au LLM.
  */
-import { memo, useState } from 'react'
+import { memo, useState, useCallback } from 'react'
 import { usePromptPreview } from '../../hooks/usePromptPreview'
 import { StructuredPromptView } from './StructuredPromptView'
 import { theme } from '../../theme'
+import { useToast } from '../shared'
+import type { RawPrompt } from '../../types/api'
 
 export interface EstimatedPromptPanelProps {
-  /** Le prompt estimé à afficher */
-  estimatedPrompt: string | null | undefined
+  /** Le prompt brut à afficher (RawPrompt) */
+  raw_prompt: RawPrompt | null | undefined
   /** Indique si l'estimation est en cours */
   isEstimating?: boolean
-  /** Nombre de tokens estimés */
-  estimatedTokens?: number | null
+  /** Nombre de tokens */
+  tokenCount?: number | null
+  /** Hash du prompt pour validation */
+  promptHash?: string | null
 }
 
 export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
-  estimatedPrompt,
+  raw_prompt,
   isEstimating = false,
-  estimatedTokens,
+  tokenCount,
+  promptHash,
 }: EstimatedPromptPanelProps) {
-  const { formattedPrompt } = usePromptPreview(estimatedPrompt)
   const [viewMode, setViewMode] = useState<'raw' | 'structured'>('structured')
+  const toast = useToast()
+  
+  const { formattedPrompt, sections } = usePromptPreview(raw_prompt)
+  
+  const handleCopyPrompt = useCallback(() => {
+    if (!raw_prompt) return
+    
+    navigator.clipboard.writeText(raw_prompt)
+      .then(() => {
+        toast('Prompt copié dans le presse-papier', 'success', 2000)
+      })
+      .catch(() => {
+        toast('Erreur lors de la copie', 'error', 2000)
+      })
+  }, [raw_prompt, toast])
+  
+  // Calculer le total comme la somme des tokens de chaque section
+  const calculatedTotal = sections.reduce((sum, section) => {
+    return sum + (section.tokenCount || 0)
+  }, 0)
+  
+  // Utiliser le total calculé à partir des sections si on a des sections, sinon utiliser tokenCount du backend
+  const displayTotal = sections.length > 0 ? calculatedTotal : (tokenCount ?? null)
 
   return (
     <>
-      {/* Pas de styles personnalisés : utilise les scrollbars par défaut du navigateur, comme les autres composants (ContextList, ContextSelector) */}
       <div
         style={{
           flex: 1,
           minHeight: 0,
-          maxHeight: '100%', // Force le conteneur à respecter la hauteur du parent
+          maxHeight: '100%',
           display: 'flex',
           flexDirection: 'column',
           backgroundColor: theme.background.panel,
@@ -45,27 +72,61 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
         justifyContent: 'space-between',
         alignItems: 'center',
       }}>
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
           {isEstimating ? (
             <div style={{ color: theme.text.secondary }}>Estimation en cours...</div>
-          ) : estimatedTokens !== null && estimatedTokens !== undefined ? (
-            <div style={{ color: theme.text.primary }}>
-              <strong>Tokens estimés:</strong> {estimatedTokens.toLocaleString()}
-            </div>
+          ) : displayTotal !== null && displayTotal !== undefined ? (
+            <>
+              <div style={{ color: theme.text.primary }}>
+                <strong>Tokens:</strong> {displayTotal.toLocaleString()}
+              </div>
+              {promptHash && (
+                <div style={{ color: theme.text.tertiary, fontSize: '0.7rem', fontFamily: 'monospace' }}>
+                  HASH: {promptHash.slice(0, 16)}...
+                </div>
+              )}
+            </>
           ) : null}
         </div>
-        {estimatedPrompt && !isEstimating && (
+        {raw_prompt && !isEstimating && (
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '0.5rem',
+              gap: '0.75rem',
               color: theme.text.secondary,
               fontSize: '0.85rem',
             }}
           >
+            {viewMode === 'raw' && (
+              <button
+                type="button"
+                onClick={handleCopyPrompt}
+                style={{
+                  padding: '0.5rem 1rem',
+                  border: `1px solid ${theme.border.primary}`,
+                  borderRadius: '4px',
+                  backgroundColor: theme.background.secondary,
+                  color: theme.text.primary,
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  transition: 'background-color 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = theme.background.panel
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = theme.background.secondary
+                }}
+              >
+                📋 Copier
+              </button>
+            )}
             <span style={{ color: viewMode === 'raw' ? theme.text.primary : theme.text.secondary }}>
-              Brut
+              Brut (Réel)
             </span>
             <label
               style={{
@@ -120,20 +181,17 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
       </div>
       <div 
         style={{ 
-          flex: '1 1 0%', // Utilise flex-basis: 0% pour forcer le respect de la hauteur parent
+          flex: '1 1 0%',
           minHeight: 0,
-          height: 0, // Force le conteneur à respecter la hauteur du parent flex
-          // NE PAS utiliser overflow: 'auto' car React le combine mal avec overflowX/overflowY
-          // Utiliser overflowY et overflowX séparément (comme ContextSelector ligne 330)
-          overflowY: 'auto', // Comme les autres scrollbars visibles de l'app
-          overflowX: 'hidden', // Pas de scroll horizontal
+          height: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
           padding: '1rem',
           boxSizing: 'border-box',
-          // Force la scrollbar à être visible
           scrollbarGutter: 'stable',
         }}
       >
-        {formattedPrompt ? (
+        {raw_prompt ? (
           viewMode === 'raw' ? (
             <pre
               style={{
@@ -150,10 +208,10 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
                 margin: 0,
               }}
             >
-              {formattedPrompt}
+              {raw_prompt}
             </pre>
           ) : (
-            <StructuredPromptView prompt={estimatedPrompt!} />
+            <StructuredPromptView prompt={raw_prompt} />
           )
         ) : (
           <div
@@ -164,8 +222,8 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
             }}
           >
             {isEstimating
-              ? 'Estimation du prompt en cours...'
-              : 'Aucun prompt estimé disponible. Configurez votre génération pour voir le prompt estimé.'}
+              ? 'Construction du prompt...'
+              : 'Aucun prompt disponible. Configurez votre génération.'}
           </div>
         )}
       </div>
@@ -173,4 +231,5 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
     </>
   )
 })
+
 

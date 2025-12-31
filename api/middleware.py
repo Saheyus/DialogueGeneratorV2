@@ -1,4 +1,5 @@
 """Middleware pour l'API FastAPI."""
+import os
 import uuid
 import time
 import logging
@@ -49,6 +50,13 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         
         request_id = getattr(request.state, "request_id", "unknown")
         start_time = time.time()
+        
+        # Log de debug uniquement si DEBUG_MIDDLEWARE=true
+        if os.getenv("DEBUG_MIDDLEWARE", "false").lower() in ("true", "1", "yes") and "/estimate-tokens" in request.url.path:
+            import sys
+            uvicorn_log = logging.getLogger("uvicorn.error")
+            uvicorn_log.warning(f"=== LoggingMiddleware HIT: {request.method} {request.url.path} request_id={request_id} ===")
+            print(f"=== LoggingMiddleware HIT: {request.method} {request.url.path} request_id={request_id} ===", file=sys.stderr, flush=True)
         
         # Log de la requête entrante avec contexte
         request_logger = logging.getLogger("api.middleware")

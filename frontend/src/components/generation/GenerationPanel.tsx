@@ -40,16 +40,21 @@ export function GenerationPanel() {
     sceneSelection,
     dialogueStructure,
     systemPromptOverride,
+    rawPrompt,
+    promptHash,
+    tokenCount,
     setDialogueStructure,
+
     setSystemPromptOverride,
-    setEstimatedPrompt,
+    setRawPrompt,
     setSceneSelection,
+
     setUnityDialogueResponse: setStoreUnityDialogueResponse,
     setTokensUsed,
   } = useGenerationStore()
   
   const {
-    vocabularyMinImportance,
+    vocabularyConfig,
     includeNarrativeGuides,
   } = useVocabularyStore()
   
@@ -63,6 +68,7 @@ export function GenerationPanel() {
   const [maxCompletionTokens, setMaxCompletionTokens] = useState<number | null>(null) // null = valeur par défaut selon le modèle
   const [llmModel, setLlmModel] = useState<string>(DEFAULT_MODEL)
   const [maxChoices, setMaxChoices] = useState<number | null>(null)
+  const [choicesMode, setChoicesMode] = useState<'free' | 'capped'>('free')
   const [availableModels, setAvailableModels] = useState<LLMModelResponse[]>([])
   const [unityDialogueResponse, setUnityDialogueResponse] = useState<GenerateUnityDialogueResponse | null>(null)
   const [estimatedTokens, setEstimatedTokens] = useState<number | null>(null)
@@ -93,8 +99,10 @@ export function GenerationPanel() {
       maxCompletionTokens,
       llmModel,
       maxChoices,
+      choicesMode,
       narrativeTags,
       contextSelections: selections,
+
       selectedRegion,
       selectedSubLocations,
       timestamp: Date.now(),
@@ -136,7 +144,9 @@ export function GenerationPanel() {
           setLlmModel(draft.llmModel)
         }
         if (draft.maxChoices !== undefined) setMaxChoices(draft.maxChoices)
+        if (draft.choicesMode !== undefined) setChoicesMode(draft.choicesMode)
         if (draft.narrativeTags !== undefined) setNarrativeTags(draft.narrativeTags)
+
         // Charger les sélections de contexte
         if (draft.contextSelections !== undefined) {
           const savedRegion = draft.selectedRegion !== undefined ? draft.selectedRegion : null
@@ -289,13 +299,12 @@ export function GenerationPanel() {
     // Permettre l'estimation si on a au moins : instructions, sélections, ou un system prompt
     const hasSystemPrompt = systemPromptOverride && systemPromptOverride.trim().length > 0
     if (!userInstructions.trim() && !hasSelections() && !hasSystemPrompt) {
-      setEstimatedTokens(null)
-      setEstimatedPrompt(null, null, false)
+      setRawPrompt(null, null, null, false)
       return
     }
 
     setIsEstimating(true)
-    setEstimatedPrompt(null, null, true)
+    setRawPrompt(null, null, null, true)
     try {
       const contextSelections = buildContextSelections()
       
@@ -309,30 +318,36 @@ export function GenerationPanel() {
         fieldConfigsWithEssential[elementType] = [...new Set([...essential, ...fields])]
       }
       
-      const response = await dialoguesAPI.estimateTokens(
-        contextSelections,
-        userInstructions,
-        maxContextTokens,
-        systemPromptOverride,
-        Object.keys(fieldConfigsWithEssential).length > 0 ? fieldConfigsWithEssential : undefined,
-        organization,
-        vocabularyMinImportance || undefined,
-        includeNarrativeGuides
-      )
-      setEstimatedTokens(response.total_estimated_tokens)
-      setEstimatedPrompt(response.estimated_prompt || null, response.total_estimated_tokens, false)
+      const response = await dialoguesAPI.estimateTokens({
+        user_instructions: userInstructions,
+        context_selections: contextSelections,
+        npc_speaker_id: sceneSelection.characterB || undefined,
+        max_context_tokens: maxContextTokens,
+        system_prompt_override: systemPromptOverride || undefined,
+        author_profile: authorProfile || undefined,
+        max_choices: maxChoices ?? undefined,
+        choices_mode: choicesMode,
+        narrative_tags: narrativeTags.length > 0 ? narrativeTags : undefined,
+        vocabulary_config: vocabularyConfig || undefined,
+        include_narrative_guides: includeNarrativeGuides,
+        previous_dialogue_preview: previousDialoguePreview || undefined,
+        field_configs: Object.keys(fieldConfigsWithEssential).length > 0 ? fieldConfigsWithEssential : undefined,
+        organization_mode: organization,
+      })
+      
+      setRawPrompt(response.raw_prompt, response.token_count, response.prompt_hash, false)
     } catch (err: any) {
       // Ne logger que les erreurs non liées à la connexion (backend non accessible)
-      // Les erreurs de connexion sont normales si le backend n'est pas encore démarré
       if (err?.code !== 'ERR_NETWORK' && err?.code !== 'ECONNREFUSED' && err?.response?.status !== 401) {
         console.error('Erreur lors de l\'estimation:', err)
       }
-      setEstimatedTokens(null)
-      setEstimatedPrompt(null, null, false)
+      setRawPrompt(null, null, null, false)
     } finally {
       setIsEstimating(false)
     }
-  }, [userInstructions, hasSelections, maxContextTokens, buildContextSelections, setEstimatedPrompt, systemPromptOverride, vocabularyMinImportance, includeNarrativeGuides])
+  }, [userInstructions, authorProfile, maxChoices, choicesMode, narrativeTags, previousDialoguePreview, hasSelections, maxContextTokens, buildContextSelections, setRawPrompt, systemPromptOverride, vocabularyConfig, includeNarrativeGuides, sceneSelection.characterB])
+
+
 
   // Récupérer fieldConfigs et organization depuis le store pour les inclure dans les dépendances
   const { fieldConfigs, organization } = useContextConfigStore()
@@ -358,13 +373,14 @@ export function GenerationPanel() {
       if (userInstructions.trim() || hasAnySelections || hasSystemPrompt) {
         estimateTokens()
       } else {
-        setEstimatedTokens(null)
-        setEstimatedPrompt(null, null, false)
+        setRawPrompt(null, null, null, false)
       }
     }, 500)
 
     return () => clearTimeout(timeoutId)
-  }, [userInstructions, selections.characters_full, selections.characters_excerpt, selections.locations_full, selections.locations_excerpt, selections.items_full, selections.items_excerpt, selections.species_full, selections.species_excerpt, selections.communities_full, selections.communities_excerpt, selections.dialogues_examples, maxContextTokens, estimateTokens, sceneSelection, dialogueStructure, systemPromptOverride, setEstimatedPrompt, fieldConfigs, organization, vocabularyMinImportance, includeNarrativeGuides])
+  }, [userInstructions, selections, authorProfile, maxChoices, choicesMode, narrativeTags, previousDialoguePreview, maxContextTokens, estimateTokens, sceneSelection, dialogueStructure, systemPromptOverride, setRawPrompt, fieldConfigs, organization, vocabularyConfig, includeNarrativeGuides])
+
+
 
   const handleGenerate = useCallback(async () => {
     // Validation minimale
@@ -445,11 +461,13 @@ export function GenerationPanel() {
         author_profile: authorProfile || undefined,
         llm_model_identifier: modelToUse,
         max_choices: maxChoices ?? undefined,
+        choices_mode: choicesMode,
         narrative_tags: narrativeTags.length > 0 ? narrativeTags : undefined,
-        vocabulary_min_importance: vocabularyMinImportance || undefined,
+        vocabulary_config: vocabularyConfig || undefined,
         include_narrative_guides: includeNarrativeGuides,
         previous_dialogue_preview: previousDialoguePreview || undefined,
       }
+
 
       const response = await dialoguesAPI.generateUnityDialogue(request)
       
@@ -463,12 +481,14 @@ export function GenerationPanel() {
       setStoreUnityDialogueResponse(response)
       setIsDirty(false)
       
-      if (response.prompt_used) {
-        setEstimatedPrompt(response.prompt_used, response.estimated_tokens, false)
+      // Valider le hash si on a déjà fait une estimation
+      if (promptHash && response.prompt_hash !== promptHash) {
+        console.warn(`[HASH MISMATCH] Le prompt généré (${response.prompt_hash.slice(0, 8)}) diffère du prompt estimé (${promptHash.slice(0, 8)}).`)
       }
-      if (response.estimated_tokens) {
-        setTokensUsed(response.estimated_tokens)
-      }
+      
+      // Mettre à jour le prompt réel dans le store
+      setRawPrompt(response.raw_prompt, response.estimated_tokens, response.prompt_hash, false)
+
       
       // Fermer le toast de génération en cours et afficher le succès
       if (toastId) {
@@ -497,14 +517,13 @@ export function GenerationPanel() {
     authorProfile,
     maxChoices,
     narrativeTags,
-    vocabularyMinImportance,
+    vocabularyConfig,
     includeNarrativeGuides,
     previousDialoguePreview,
     buildContextSelections,
     toast,
     setStoreUnityDialogueResponse,
     setTokensUsed,
-    setEstimatedPrompt,
   ])
 
   const handlePreview = () => {
@@ -855,10 +874,49 @@ export function GenerationPanel() {
       </div>
 
       <div style={{ marginBottom: '1rem' }}>
+        <label style={{ color: theme.text.primary, display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+          Mode de génération des choix:
+        </label>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: theme.text.primary }}>
+            <input
+              type="radio"
+              name="choicesMode"
+              value="free"
+              checked={choicesMode === 'free'}
+              onChange={() => {
+                setChoicesMode('free')
+                setIsDirty(true)
+                setSaveStatus('unsaved')
+              }}
+              style={{ marginRight: '0.5rem' }}
+            />
+            Libre
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: theme.text.primary }}>
+            <input
+              type="radio"
+              name="choicesMode"
+              value="capped"
+              checked={choicesMode === 'capped'}
+              onChange={() => {
+                setChoicesMode('capped')
+                setIsDirty(true)
+                setSaveStatus('unsaved')
+              }}
+              style={{ marginRight: '0.5rem' }}
+            />
+            Limité
+          </label>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: '1rem', opacity: choicesMode === 'capped' ? 1 : 0.5, pointerEvents: choicesMode === 'capped' ? 'auto' : 'none' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
           <label style={{ color: theme.text.primary, margin: 0 }}>
-            Nombre max de choix:
+            Nombre max de choix (si limité):
           </label>
+
           <div style={{ position: 'relative', display: 'inline-block' }}>
             <button
               type="button"

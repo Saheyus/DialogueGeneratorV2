@@ -15,7 +15,8 @@ def mock_dialogue_service():
     mock_service.context_builder = MagicMock()
     mock_service.context_builder._count_tokens = MagicMock(return_value=100)
     mock_service.prompt_engine = MagicMock()
-    mock_service.prompt_engine.build_prompt = MagicMock(return_value=("prompt", 200))
+    mock_service.prompt_engine.build_unity_dialogue_prompt = MagicMock(return_value=("prompt", 200))
+    mock_service.prompt_engine.system_prompt_template = "Test system prompt"
     return mock_service
 
 
@@ -54,15 +55,25 @@ def client(mock_dialogue_service):
     app.dependency_overrides.clear()
 
 
-def test_estimate_tokens(client, mock_dialogue_service):
+def test_estimate_tokens(client, mock_dialogue_service, monkeypatch):
     """Test d'estimation de tokens."""
     mock_dialogue_service.context_builder.build_context = MagicMock(return_value="context text")
+    
+    # Mock SkillCatalogService et TraitCatalogService pour estimate_tokens
+    mock_skill_service = MagicMock()
+    mock_skill_service.load_skills = MagicMock(return_value=["Skill1", "Skill2"])
+    mock_trait_service = MagicMock()
+    mock_trait_service.load_traits = MagicMock(return_value=[])
+    mock_trait_service.get_trait_labels = MagicMock(return_value=["Trait1", "Trait2"])
+    
+    monkeypatch.setattr("api.routers.dialogues.SkillCatalogService", lambda: mock_skill_service)
+    monkeypatch.setattr("api.routers.dialogues.TraitCatalogService", lambda: mock_trait_service)
     
     response = client.post(
         "/api/v1/dialogues/estimate-tokens",
         json={
             "context_selections": {
-                "characters": [],
+                "characters": ["Character1"],
                 "locations": [],
                 "items": [],
                 "species": [],
@@ -89,54 +100,7 @@ def test_estimate_tokens_invalid_request(client):
     assert response.status_code == 422  # Validation error
 
 
-@pytest.mark.asyncio
-async def test_generate_dialogue_variants(client, mock_dialogue_service, monkeypatch):
-    """Test de génération de variantes de dialogue."""
-    mock_variants = [
-        {"id": "var1", "title": "Variante 1", "content": "Dialogue 1", "is_new": True},
-        {"id": "var2", "title": "Variante 2", "content": "Dialogue 2", "is_new": True}
-    ]
-    mock_dialogue_service.generate_dialogue_variants = AsyncMock(
-        return_value=(mock_variants, "prompt used", 500)
-    )
-    
-    # Mock LLM client factory
-    mock_llm_client = MagicMock()
-    mock_factory = MagicMock()
-    mock_factory.create_client.return_value = mock_llm_client
-    monkeypatch.setattr("factories.llm_factory.LLMClientFactory", mock_factory)
-    
-    response = client.post(
-        "/api/v1/dialogues/generate/variants",
-        json={
-            "k_variants": 2,
-            "max_context_tokens": 1000,
-            "structured_output": False,
-            "user_instructions": "Test",
-            "llm_model_identifier": "gpt-5.2-mini",
-            "context_selections": {
-                "characters": [],
-                "locations": [],
-                "items": [],
-                "species": [],
-                "communities": []
-            }
-        }
-    )
-    
-    # Note: Les appels async peuvent nécessiter un serveur réel ou un mock plus complexe
-    # Pour l'instant, on vérifie juste que l'endpoint existe et répond
-    assert response.status_code in [200, 500]  # 500 si erreur de mock, 200 si ça passe
-
-
-def test_generate_dialogue_variants_invalid_request(client):
-    """Test de génération de variantes avec requête invalide."""
-    response = client.post(
-        "/api/v1/dialogues/generate/variants",
-        json={}
-    )
-    assert response.status_code == 422  # Validation error
-
+# test_generate_dialogue_variants et test_generate_dialogue_variants_invalid_request supprimés - système texte libre obsolète, utiliser Unity JSON à la place
 
 @pytest.mark.skip(reason="Endpoint /generate/interactions supprimé. Utiliser /generate/unity-dialogue à la place.")
 @pytest.mark.asyncio

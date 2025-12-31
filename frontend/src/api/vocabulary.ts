@@ -6,7 +6,7 @@ import apiClient from './client'
 export interface VocabularyTerm {
   term: string
   definition: string
-  importance: string
+  popularité: string
   category: string
   type: string
   origin: string
@@ -16,9 +16,9 @@ export interface VocabularyResponse {
   terms: VocabularyTerm[]
   total: number
   filtered_count: number
-  min_importance: string
+  min_popularité: string
   statistics: {
-    by_importance: Record<string, number>
+    by_popularité: Record<string, number>
     by_category: Record<string, number>
     by_type: Record<string, number>
   }
@@ -53,18 +53,18 @@ export interface NarrativeGuidesSyncResponse {
 
 export interface VocabularyStatsResponse {
   total: number
-  by_importance: Record<string, number>
+  by_popularité: Record<string, number>
   by_category: Record<string, number>
   by_type: Record<string, number>
 }
 
 /**
- * Récupère le vocabulaire Alteir, filtré par niveau d'importance.
+ * Récupère le vocabulaire Alteir, filtré par niveau de popularité.
  */
 export async function getVocabulary(
-  minImportance?: string
+  minPopularité?: string
 ): Promise<VocabularyResponse> {
-  const params = minImportance ? { min_importance: minImportance } : {}
+  const params = minPopularité ? { min_popularité: minPopularité } : {}
   const response = await apiClient.get<VocabularyResponse>('/api/vocabulary', {
     params
   })

@@ -315,6 +315,11 @@ async def get_default_field_config(
     try:
         context_config = config_service.get_context_config()
         
+        # Validation défensive : vérifier que context_config est un dictionnaire
+        if not isinstance(context_config, dict):
+            logger.error(f"context_config n'est pas un dictionnaire: {type(context_config)}")
+            context_config = {}
+        
         # Extraire les champs par défaut et identifier les essentiels
         default_fields: Dict[str, List[str]] = {}
         essential_fields: Dict[str, List[str]] = {}
@@ -324,12 +329,27 @@ async def get_default_field_config(
         ESSENTIAL_TRUNCATE_THRESHOLD = 200
         
         for element_type, priorities in context_config.items():
+            # Validation défensive : vérifier que priorities est un dictionnaire
+            if not isinstance(priorities, dict):
+                logger.warning(f"Priorités pour '{element_type}' ne sont pas un dictionnaire: {type(priorities)}. Ignoré.")
+                continue
+                
             default_fields[element_type] = []
             essential_fields[element_type] = []
             
             # Parcourir toutes les priorités (1, 2, 3)
             for priority_level, fields in priorities.items():
+                # Validation défensive : vérifier que fields est une liste
+                if not isinstance(fields, list):
+                    logger.warning(f"Champs pour '{element_type}' priorité '{priority_level}' ne sont pas une liste: {type(fields)}. Ignoré.")
+                    continue
+                    
                 for field_config in fields:
+                    # Validation défensive : vérifier que field_config est un dictionnaire
+                    if not isinstance(field_config, dict):
+                        logger.warning(f"Configuration de champ pour '{element_type}' priorité '{priority_level}' n'est pas un dictionnaire: {type(field_config)}. Ignoré.")
+                        continue
+                        
                     path = field_config.get("path", "")
                     if path:
                         default_fields[element_type].append(path)
@@ -863,4 +883,28 @@ async def get_author_profile_templates(
             details={"error": str(e)},
             request_id=request_id
         )
+
+
+@router.get(
+    "/debug/prompt-engine",
+    status_code=status.HTTP_200_OK
+)
+async def debug_prompt_engine_loaded_code() -> JSONResponse:
+    """Expose des infos de debug sur le PromptEngine chargé côté serveur (dev)."""
+    import inspect
+    import prompt_engine as pe_module
+    from prompt_engine import PromptEngine
+
+    try:
+        src = inspect.getsource(PromptEngine.build_unity_dialogue_prompt)
+    except Exception:
+        src = ""
+
+    return JSONResponse(
+        content={
+            "prompt_engine_module_file": getattr(pe_module, "__file__", None),
+            "has_section0_in_source": "### SECTION 0. CONTRAT GLOBAL" in src,
+            "has_old_dash_header_in_source": "--- INSTRUCTIONS DE GÉNÉRATION ---" in src,
+        }
+    )
 

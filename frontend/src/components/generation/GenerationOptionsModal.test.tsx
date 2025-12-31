@@ -25,6 +25,7 @@ describe('GenerationOptionsModal', () => {
   const mockGetPreview = vi.fn()
   const mockDetectFields = vi.fn()
   const mockLoadSuggestions = vi.fn()
+  const mockLoadDefaultConfig = vi.fn().mockResolvedValue(undefined)
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -43,6 +44,7 @@ describe('GenerationOptionsModal', () => {
       getPreview: mockGetPreview,
       detectFields: mockDetectFields,
       loadSuggestions: mockLoadSuggestions,
+      loadDefaultConfig: mockLoadDefaultConfig,
       availableFields: {},
       suggestions: {},
       isLoading: false,
@@ -88,9 +90,8 @@ describe('GenerationOptionsModal', () => {
     )
     
     expect(screen.getByText(/contexte/i)).toBeInTheDocument()
-    expect(screen.getByText(/unity/i)).toBeInTheDocument()
-    expect(screen.getByText(/organisation/i)).toBeInTheDocument()
-    expect(screen.getByText(/guidance/i)).toBeInTheDocument()
+    expect(screen.getByText(/général/i)).toBeInTheDocument()
+    expect(screen.getByText(/vocabulaire/i)).toBeInTheDocument()
   })
 
   it('devrait permettre de changer d\'onglet', async () => {
@@ -103,10 +104,11 @@ describe('GenerationOptionsModal', () => {
       />
     )
     
-    const unityTab = screen.getByText(/unity/i)
-    await user.click(unityTab)
+    const generalTab = screen.getByText(/général/i)
+    await user.click(generalTab)
     
     expect(screen.getByText(/configuration unity/i)).toBeInTheDocument()
+    expect(screen.getByText(/organisation du prompt/i)).toBeInTheDocument()
   })
 
   it('devrait fermer le modal quand on clique sur le bouton de fermeture', async () => {
@@ -168,9 +170,9 @@ describe('GenerationOptionsModal', () => {
       />
     )
     
-    // Changer vers l'onglet Unity
-    const unityTab = screen.getByText(/unity/i)
-    await userEvent.click(unityTab)
+    // Changer vers l'onglet Général
+    const generalTab = screen.getByText(/général/i)
+    await userEvent.click(generalTab)
     
     await waitFor(() => {
       expect(mockConfigAPI.getUnityDialoguesPath).toHaveBeenCalled()

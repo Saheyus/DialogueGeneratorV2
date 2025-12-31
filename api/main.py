@@ -54,6 +54,38 @@ async def lifespan(app: FastAPI):
     logger.info("Démarrage de l'API DialogueGenerator...")
     logger.info(f"Timestamp: {datetime.now(timezone.utc).isoformat()}Z")
     
+    # Log minimal impossible à rater - vérification que le code est chargé
+    import logging
+    uvicorn_log = logging.getLogger("uvicorn.error")
+    uvicorn_log.warning("=== APP STARTUP - CODE LOADED ===")
+    
+    # #region agent log
+    import sys
+    import json
+    from pathlib import Path
+    import time
+    try:
+        log_path = Path(__file__).parent.parent / ".cursor" / "debug.log"
+        log_entry = {
+            "id": f"log_{int(time.time() * 1000)}",
+            "timestamp": int(time.time() * 1000),
+            "location": "api/main.py:lifespan:startup",
+            "message": "Application startup - vérification singletons",
+            "data": {
+                "app_id": id(app),
+                "api_dependencies_module": "api.dependencies" in sys.modules,
+                "api_dependencies_module_id": id(sys.modules.get("api.dependencies")) if "api.dependencies" in sys.modules else None
+            },
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "A"
+        }
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception:
+        pass
+    # #endregion
+    
     # Valider la configuration de sécurité
     try:
         _validate_security_config()
@@ -68,9 +100,82 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Erreur lors du nettoyage des logs au démarrage: {e}")
     
+    # Réinitialiser les singletons au démarrage (important pour uvicorn reload)
+    try:
+        from api.dependencies import reset_singletons
+        reset_singletons()
+        logger.info("Singletons réinitialisés au démarrage.")
+    except Exception as e:
+        logger.warning(f"Erreur lors de la réinitialisation des singletons: {e}")
+    
+    # Debug: Liste TOUTES les routes réelles au runtime (seulement si DEBUG_ROUTES=true)
+    if os.getenv("DEBUG_ROUTES", "false").lower() in ("true", "1", "yes"):
+        from fastapi.routing import APIRoute
+        import sys
+        log_routes = logging.getLogger("uvicorn.error")
+        log_routes.warning("=== TOUTES LES ROUTES API AU RUNTIME ===")
+        routes_by_path = {}
+        for r in app.routes:
+            if isinstance(r, APIRoute):
+                endpoint_str = str(r.endpoint)
+                # Extraire le nom du fichier et de la fonction depuis l'endpoint
+                if hasattr(r.endpoint, '__module__') and hasattr(r.endpoint, '__name__'):
+                    endpoint_str = f"{r.endpoint.__module__}.{r.endpoint.__name__}"
+                methods_str = ', '.join(sorted(r.methods)) if r.methods else 'N/A'
+                route_key = f"{methods_str} {r.path}"
+                if route_key not in routes_by_path:
+                    routes_by_path[route_key] = []
+                routes_by_path[route_key].append(endpoint_str)
+        
+        # Trier par chemin pour un affichage ordonné
+        for route_key in sorted(routes_by_path.keys()):
+            endpoints = routes_by_path[route_key]
+            for endpoint in endpoints:
+                log_routes.warning("ROUTE: %s -> %s", route_key, endpoint)
+                print(f"ROUTE: {route_key} -> {endpoint}", file=sys.stderr, flush=True)
+        
+        log_routes.warning("=== TOTAL: %d routes API ===", len(routes_by_path))
+        print(f"=== TOTAL: {len(routes_by_path)} routes API ===", file=sys.stderr, flush=True)
+        
+        # Liste spécifique pour estimate-tokens
+        log_routes.warning("=== ROUTES ESTIMATE-TOKENS ===")
+        found_any = False
+        for r in app.routes:
+            if isinstance(r, APIRoute) and "estimate-tokens" in r.path:
+                found_any = True
+                endpoint_str = str(r.endpoint)
+                if hasattr(r.endpoint, '__module__') and hasattr(r.endpoint, '__name__'):
+                    endpoint_str = f"{r.endpoint.__module__}.{r.endpoint.__name__}"
+                log_routes.warning("ROUTE: %s %s -> %s", r.methods, r.path, endpoint_str)
+                print(f"ROUTE: {r.methods} {r.path} -> {endpoint_str}", file=sys.stderr, flush=True)
+        if not found_any:
+            log_routes.warning("AUCUNE ROUTE estimate-tokens trouvée!")
+            print("AUCUNE ROUTE estimate-tokens trouvée!", file=sys.stderr, flush=True)
+        log_routes.warning("=== FIN LISTE ROUTES ===")
+    
     yield
     # Shutdown
     logger.info("Arrêt de l'API DialogueGenerator...")
+    
+    # #region agent log
+    try:
+        log_entry = {
+            "id": f"log_{int(time.time() * 1000)}",
+            "timestamp": int(time.time() * 1000),
+            "location": "api/main.py:lifespan:shutdown",
+            "message": "Application shutdown",
+            "data": {
+                "app_id": id(app)
+            },
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "A"
+        }
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception:
+        pass
+    # #endregion
 
 
 # Création de l'application FastAPI
@@ -109,6 +214,24 @@ app.add_middleware(
 # Middleware personnalisés
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(LoggingMiddleware)
+
+# Middleware anti-cache en développement (doit être avant le cache HTTP)
+if not is_production_env:
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.responses import Response
+    
+    class DevNoCacheMiddleware(BaseHTTPMiddleware):
+        """Middleware qui désactive le cache en développement pour garantir le rafraîchissement."""
+        async def dispatch(self, request: Request, call_next):
+            response = await call_next(request)
+            # Ajouter des headers anti-cache pour toutes les réponses en développement
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+            return response
+    
+    app.add_middleware(DevNoCacheMiddleware)
+    logger.info("Middleware anti-cache activé en développement")
 
 # Middleware de cache HTTP (doit être après RequestID et Logging pour avoir les headers)
 from api.middleware.http_cache import setup_http_cache
@@ -303,6 +426,27 @@ from api.routers import vocabulary, narrative_guides
 app.include_router(vocabulary.router)
 app.include_router(narrative_guides.router)
 
+# Debug endpoint (dev only): inspect PromptEngine code loaded by server
+@app.get("/debug/prompt-engine", tags=["Debug"])
+async def debug_prompt_engine() -> JSONResponse:
+    """Expose basic PromptEngine debug info (development only)."""
+    import inspect
+    import prompt_engine as pe_module
+    from prompt_engine import PromptEngine
+
+    try:
+        src = inspect.getsource(PromptEngine.build_unity_dialogue_prompt)
+    except Exception:
+        src = ""
+
+    return JSONResponse(
+        content={
+            "prompt_engine_module_file": getattr(pe_module, "__file__", None),
+            "has_section0_in_source": "### SECTION 0. CONTRAT GLOBAL" in src,
+            "has_old_dash_header_in_source": "--- INSTRUCTIONS DE GÉNÉRATION ---" in src,
+        }
+    )
+
 # Servir le frontend statique si le dossier dist existe (APRÈS les routes API)
 # Fonctionne en production ET en development si le frontend est buildé
 try:
@@ -344,6 +488,9 @@ if __name__ == "__main__":
         # lors de modifications dans frontend/, tests/, docs/, etc.)
         project_root = Path(__file__).parent.parent
         reload_dirs = [
+            # Inclure la racine pour capter les modules "top-level" (ex: prompt_engine.py)
+            # tout en excluant explicitement les dossiers bruyants ci-dessous.
+            str(project_root),
             str(project_root / "api"),
             str(project_root / "services"),
             str(project_root / "core"),
@@ -355,6 +502,21 @@ if __name__ == "__main__":
         reload_config = {
             "reload": True,
             "reload_dirs": reload_dirs,
+            # Garder un reload rapide mais éviter les redémarrages liés aux assets non-Python.
+            # Uvicorn (watchfiles) gère les patterns glob ici.
+            "reload_includes": ["*.py"],
+            "reload_excludes": [
+                "frontend/*",
+                "node_modules/*",
+                "tests/*",
+                "docs/*",
+                "Assets/*",
+                "data/*",
+                "*.log",
+                "*.txt",
+                "*.json",
+                "*.yarn",
+            ],
             "reload_delay": 1.0,  # Délai de 1 seconde pour éviter les redémarrages trop fréquents
         }
     else:

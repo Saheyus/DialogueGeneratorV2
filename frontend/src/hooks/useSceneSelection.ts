@@ -28,6 +28,8 @@ export function useSceneSelection() {
   const toggleCharacter = useContextStore((state) => state.toggleCharacter)
   const setRegion = useContextStore((state) => state.setRegion)
   const toggleSubLocation = useContextStore((state) => state.toggleSubLocation)
+  const toggleLocation = useContextStore((state) => state.toggleLocation)
+  const locations = useContextStore((state) => state.locations)
   
   // Récupérer sceneSelection depuis le store pour synchronisation
   const storeSceneSelection = useGenerationStore((state) => state.sceneSelection)
@@ -45,6 +47,13 @@ export function useSceneSelection() {
   })
   const [isLoading, setIsLoading] = useState(false)
   const isInitialMount = useRef(true)
+  const prevSelection = useRef<SceneSelection>({
+    characterA: null,
+    characterB: null,
+    sceneRegion: null,
+    subLocation: null,
+  })
+  const isSwappingRef = useRef(false)
 
   const loadCharacters = useCallback(async () => {
     try {
@@ -202,18 +211,53 @@ export function useSceneSelection() {
 
   // Synchronisation inverse : mettre à jour contextStore quand sceneSelection change
   useEffect(() => {
+    // Ignorer si c'est le montage initial (pas encore de sélection précédente)
+    if (isInitialMount.current) {
+      prevSelection.current = { ...selection }
+      return
+    }
+
+    // Détecter si c'est un échange de personnages
+    const isSwap = 
+      prevSelection.current.characterA === selection.characterB &&
+      prevSelection.current.characterB === selection.characterA &&
+      prevSelection.current.characterA !== null &&
+      prevSelection.current.characterB !== null
+
     // Fusionner les listes full et excerpt pour vérifier si les personnages sont déjà sélectionnés
     const allCharacters = [
       ...(Array.isArray(contextSelections.characters_full) ? contextSelections.characters_full : []),
       ...(Array.isArray(contextSelections.characters_excerpt) ? contextSelections.characters_excerpt : [])
     ]
     
-    // Ajouter characterA et characterB aux sélections de personnages s'ils ne sont pas déjà présents
-    if (selection.characterA && !allCharacters.includes(selection.characterA)) {
-      toggleCharacter(selection.characterA, 'full') // Par défaut en mode full
+    // Gérer characterA
+    if (selection.characterA !== prevSelection.current.characterA) {
+      if (prevSelection.current.characterA && !isSwap) {
+        // Désélectionner l'ancien characterA seulement si ce n'est pas un swap
+        // (et seulement s'il n'est pas characterB)
+        if (prevSelection.current.characterA !== selection.characterB && allCharacters.includes(prevSelection.current.characterA)) {
+          toggleCharacter(prevSelection.current.characterA)
+        }
+      }
+      // Sélectionner le nouveau characterA s'il n'est pas déjà sélectionné
+      if (selection.characterA && !allCharacters.includes(selection.characterA)) {
+        toggleCharacter(selection.characterA, 'full')
+      }
     }
-    if (selection.characterB && !allCharacters.includes(selection.characterB)) {
-      toggleCharacter(selection.characterB, 'full') // Par défaut en mode full
+    
+    // Gérer characterB
+    if (selection.characterB !== prevSelection.current.characterB) {
+      if (prevSelection.current.characterB && !isSwap) {
+        // Désélectionner l'ancien characterB seulement si ce n'est pas un swap
+        // (et seulement s'il n'est pas characterA)
+        if (prevSelection.current.characterB !== selection.characterA && allCharacters.includes(prevSelection.current.characterB)) {
+          toggleCharacter(prevSelection.current.characterB)
+        }
+      }
+      // Sélectionner le nouveau characterB s'il n'est pas déjà sélectionné
+      if (selection.characterB && !allCharacters.includes(selection.characterB)) {
+        toggleCharacter(selection.characterB, 'full')
+      }
     }
     
     // Mettre à jour la région si elle change
@@ -221,17 +265,72 @@ export function useSceneSelection() {
       setRegion(selection.sceneRegion)
     }
     
+    // Fusionner les listes full et excerpt pour vérifier les lieux sélectionnés
+    const allLocations = [
+      ...(Array.isArray(contextSelections.locations_full) ? contextSelections.locations_full : []),
+      ...(Array.isArray(contextSelections.locations_excerpt) ? contextSelections.locations_excerpt : [])
+    ]
+    
+    // Gérer la région
+    if (selection.sceneRegion !== prevSelection.current.sceneRegion) {
+      // Désélectionner l'ancienne région comme lieu si elle existe et n'est plus sélectionnée
+      if (prevSelection.current.sceneRegion) {
+        const prevRegionExistsInLocations = locations.some((loc) => loc.name === prevSelection.current.sceneRegion)
+        if (prevRegionExistsInLocations && allLocations.includes(prevSelection.current.sceneRegion)) {
+          // Vérifier que cette région n'est pas aussi le nouveau sous-lieu
+          if (prevSelection.current.sceneRegion !== selection.subLocation) {
+            toggleLocation(prevSelection.current.sceneRegion)
+          }
+        }
+      }
+      
+      // Sélectionner la nouvelle région comme lieu dans le panneau de contexte
+      if (selection.sceneRegion) {
+        const regionExistsInLocations = locations.some((loc) => loc.name === selection.sceneRegion)
+        if (regionExistsInLocations && !allLocations.includes(selection.sceneRegion)) {
+          toggleLocation(selection.sceneRegion, 'full')
+        }
+      }
+    }
+    
     // Mettre à jour le sous-lieu si il change et que la région est définie
     if (selection.subLocation && selection.sceneRegion && !contextSubLocations.includes(selection.subLocation)) {
       toggleSubLocation(selection.subLocation)
     }
-  }, [selection.characterA, selection.characterB, selection.sceneRegion, selection.subLocation, contextSelections.characters_full, contextSelections.characters_excerpt, contextRegion, contextSubLocations, toggleCharacter, setRegion, toggleSubLocation])
+    
+    // Gérer le sous-lieu
+    if (selection.subLocation !== prevSelection.current.subLocation) {
+      // Désélectionner l'ancien sous-lieu comme lieu si il existe et n'est plus sélectionné
+      if (prevSelection.current.subLocation) {
+        const prevSubLocationExistsInLocations = locations.some((loc) => loc.name === prevSelection.current.subLocation)
+        if (prevSubLocationExistsInLocations && allLocations.includes(prevSelection.current.subLocation)) {
+          // Vérifier que ce sous-lieu n'est pas aussi la nouvelle région
+          if (prevSelection.current.subLocation !== selection.sceneRegion) {
+            toggleLocation(prevSelection.current.subLocation)
+          }
+        }
+      }
+      
+      // Sélectionner le nouveau sous-lieu comme lieu dans le panneau de contexte
+      if (selection.subLocation) {
+        const subLocationExistsInLocations = locations.some((loc) => loc.name === selection.subLocation)
+        if (subLocationExistsInLocations && !allLocations.includes(selection.subLocation)) {
+          toggleLocation(selection.subLocation, 'full')
+        }
+      }
+    }
+    
+    // Mettre à jour la référence pour la prochaine itération
+    prevSelection.current = { ...selection }
+    isSwappingRef.current = false
+  }, [selection.characterA, selection.characterB, selection.sceneRegion, selection.subLocation, contextSelections.characters_full, contextSelections.characters_excerpt, contextSelections.locations_full, contextSelections.locations_excerpt, contextRegion, contextSubLocations, toggleCharacter, setRegion, toggleSubLocation, toggleLocation, locations])
 
   const updateSelection = useCallback((updates: Partial<SceneSelection>) => {
     setSelection((prev) => ({ ...prev, ...updates }))
   }, [])
 
   const swapCharacters = useCallback(() => {
+    isSwappingRef.current = true
     setSelection((prev) => ({
       ...prev,
       characterA: prev.characterB,

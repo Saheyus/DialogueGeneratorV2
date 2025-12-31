@@ -123,10 +123,10 @@ class DummyLLMClient(ILLMClient):
                         log_file.write(json.dumps(log_data) + "\n")
                 except: pass
                 # #endregion
-                # Format texte libre au lieu de Yarn (Yarn n'est plus utilisé)
-                variant_text = f"Texte de dialogue variante {i+1} généré par DummyLLMClient.\n\nLe personnage A dit : \"Bonjour, je suis une variante de test.\"\n\nLe personnage B répond : \"Moi aussi, c'est pour tester le système sans format Yarn.\""
+                # DummyLLMClient : génération de variante factice (structured output ou texte)
+                variant_text = f"Variante {i+1} générée par DummyLLMClient (mode test)"
                 variants.append(variant_text)
-                logger.info(f"DummyLLMClient: Variante textuelle {i+1} générée (format texte libre, pas Yarn).")
+                logger.info(f"DummyLLMClient: Variante {i+1} générée (mode test).")
         return variants
 
     def get_max_tokens(self) -> int:

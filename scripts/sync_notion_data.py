@@ -99,7 +99,7 @@ def process_vocabulary_pages(pages: List[Dict[str, Any]]) -> List[Dict[str, Any]
             # Extraire les propriétés
             terme = properties.get("Terme", "")
             definition = properties.get("Définition", "")
-            importance = properties.get("Importance", "Anecdotique")
+            popularité = properties.get("Popularité", "Occulte")
             categorie = properties.get("Catégorie", "Autre")
             type_term = properties.get("Type", "")
             origine = properties.get("Origine", "")
@@ -108,7 +108,7 @@ def process_vocabulary_pages(pages: List[Dict[str, Any]]) -> List[Dict[str, Any]
                 terms.append({
                     "term": terme,
                     "definition": definition or "",
-                    "importance": importance or "Anecdotique",
+                    "popularité": popularité or "Occulte",
                     "category": categorie or "Autre",
                     "type": type_term or "",
                     "origin": origine or ""

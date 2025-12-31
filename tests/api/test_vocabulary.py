@@ -20,7 +20,7 @@ def sample_vocabulary_data():
             {
                 "term": "Alteir",
                 "definition": "Le monde principal",
-                "importance": "Majeur",
+                "popularité": "Mondialement",
                 "category": "Géographie",
                 "type": "Nom propre",
                 "origin": "Création originale"
@@ -28,7 +28,7 @@ def sample_vocabulary_data():
             {
                 "term": "Mana",
                 "definition": "Énergie magique",
-                "importance": "Important",
+                "popularité": "Régionalement",
                 "category": "Magie",
                 "type": "Concept",
                 "origin": "Fantasy classique"
@@ -63,15 +63,15 @@ class TestVocabularyEndpoints:
         assert data["total"] == 2
     
     @patch('services.vocabulary_service.get_notion_cache')
-    def test_get_vocabulary_with_min_importance(self, mock_get_cache, client, mock_cache):
-        """Test GET /api/vocabulary avec filtrage par importance."""
+    def test_get_vocabulary_with_min_popularite(self, mock_get_cache, client, mock_cache):
+        """Test GET /api/vocabulary avec filtrage par popularité."""
         mock_get_cache.return_value = mock_cache
         
-        response = client.get("/api/vocabulary?min_importance=Important")
+        response = client.get("/api/vocabulary?min_popularité=Régionalement")
         
         assert response.status_code == 200
         data = response.json()
-        # Devrait inclure Majeur + Important = 2 termes
+        # Devrait inclure Mondialement + Régionalement = 2 termes
         assert data["filtered_count"] == 2
     
     @patch('services.vocabulary_service.get_notion_cache')
@@ -101,7 +101,7 @@ class TestVocabularyEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert "total" in data
-        assert "by_importance" in data
+        assert "by_popularité" in data
         assert "by_category" in data
         assert "by_type" in data
         assert data["total"] == 2
@@ -113,9 +113,13 @@ class TestVocabularyEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert "success" in data
-        # Pour l'instant, la sync retourne False car elle nécessite MCP
-        assert data["success"] is False
-        assert "error" in data
+        # La sync peut réussir si l'API Notion est disponible
+        assert isinstance(data["success"], bool)
+        if data["success"]:
+            assert "terms_count" in data
+            assert data["terms_count"] > 0
+        else:
+            assert "error" in data
 
 
 class TestNarrativeGuidesEndpoints:
@@ -163,7 +167,11 @@ class TestNarrativeGuidesEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert "success" in data
-        # Pour l'instant, la sync retourne False car elle nécessite MCP
-        assert data["success"] is False
-        assert "error" in data
+        # La sync peut réussir si l'API Notion est disponible
+        assert isinstance(data["success"], bool)
+        if data["success"]:
+            assert "dialogue_guide_length" in data
+            assert "narrative_guide_length" in data
+        else:
+            assert "error" in data
 

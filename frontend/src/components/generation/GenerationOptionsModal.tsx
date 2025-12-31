@@ -11,6 +11,7 @@ import { theme } from '../../theme'
 import { getAllShortcuts, formatShortcut } from '../../hooks/useKeyboardShortcuts'
 import * as configAPI from '../../api/config'
 import { getErrorMessage } from '../../types/errors'
+import { InfoIcon } from '../shared/Tooltip'
 
 export interface GenerationOptionsModalProps {
   isOpen: boolean
@@ -18,7 +19,7 @@ export interface GenerationOptionsModalProps {
   onApply?: () => void
 }
 
-type TabId = 'context' | 'metadata' | 'unity' | 'organization' | 'guidance' | 'vocabulary' | 'prompts' | 'shortcuts'
+type TabId = 'context' | 'metadata' | 'general' | 'vocabulary' | 'prompts' | 'shortcuts'
 
 interface Tab {
   id: TabId
@@ -134,9 +135,7 @@ export function GenerationOptionsModal({
   const tabs: Tab[] = [
     { id: 'context', label: 'Contexte' },
     { id: 'metadata', label: 'Métadonnées' },
-    { id: 'unity', label: 'Unity' },
-    { id: 'organization', label: 'Organisation' },
-    { id: 'guidance', label: 'Guidance' },
+    { id: 'general', label: 'Général' },
     { id: 'vocabulary', label: 'Vocabulaire & Guides' },
     { id: 'prompts', label: 'Prompts' },
     { id: 'shortcuts', label: 'Raccourcis' },
@@ -252,19 +251,14 @@ export function GenerationOptionsModal({
             />
           )}
 
-          {activeTab === 'unity' && (
-            <UnityTab
+          {activeTab === 'general' && (
+            <GeneralTab
               unityPath={unityPath}
               setUnityPath={setUnityPath}
-              isLoading={isLoadingUnity}
-              isSaving={isSavingUnity}
-              error={unityError}
-              onSave={handleSaveUnity}
-            />
-          )}
-
-          {activeTab === 'organization' && (
-            <OrganizationTab
+              isLoadingUnity={isLoadingUnity}
+              isSavingUnity={isSavingUnity}
+              unityError={unityError}
+              onSaveUnity={handleSaveUnity}
               organization={organization}
               setOrganization={setOrganization}
               previewText={previewText}
@@ -272,10 +266,6 @@ export function GenerationOptionsModal({
               isLoadingPreview={isLoadingPreview}
               onPreview={handlePreview}
             />
-          )}
-
-          {activeTab === 'guidance' && (
-            <GuidanceTab />
           )}
 
           {activeTab === 'vocabulary' && (
@@ -420,19 +410,32 @@ function ContextTab({
             </option>
           ))}
         </select>
-        <button
-          onClick={onDetectAll}
-          style={{
-            padding: '0.5rem 1rem',
-            border: `1px solid ${theme.border.primary}`,
-            borderRadius: '4px',
-            backgroundColor: theme.button.default.background,
-            color: theme.button.default.color,
-            cursor: 'pointer',
-          }}
-        >
-          Détecter automatiquement tous les champs
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button
+            onClick={onDetectAll}
+            style={{
+              padding: '0.5rem 1rem',
+              border: `1px solid ${theme.border.primary}`,
+              borderRadius: '4px',
+              backgroundColor: theme.button.default.background,
+              color: theme.button.default.color,
+              cursor: 'pointer',
+            }}
+          >
+            Détecter automatiquement tous les champs
+          </button>
+          <InfoIcon
+            content={
+              <div>
+                <div style={{ marginBottom: '0.5rem', fontWeight: 'bold' }}>Conseil</div>
+                <div style={{ fontSize: '0.875rem' }}>
+                  Utilisez ce bouton pour découvrir automatiquement tous les champs disponibles dans vos fiches GDD.
+                </div>
+              </div>
+            }
+            position="bottom"
+          />
+        </div>
         {!showOnlyEssential && (
           <>
             <button
@@ -505,81 +508,13 @@ function ContextTab({
   )
 }
 
-function UnityTab({
+function GeneralTab({
   unityPath,
   setUnityPath,
-  isLoading,
-  isSaving,
-  error,
-  onSave,
-}: {
-  unityPath: string
-  setUnityPath: (path: string) => void
-  isLoading: boolean
-  isSaving: boolean
-  error: string | null
-  onSave: () => void
-}) {
-  return (
-    <div>
-      <h3 style={{ marginTop: 0, color: theme.text.primary }}>Configuration Unity</h3>
-
-      {error && (
-        <div
-          style={{
-            padding: '0.5rem',
-            backgroundColor: theme.state.error.background,
-            color: theme.state.error.color,
-            marginBottom: '1rem',
-            borderRadius: '4px',
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      <div style={{ marginBottom: '1rem' }}>
-        <label style={{ display: 'block', marginBottom: '0.5rem', color: theme.text.primary }}>
-          Chemin vers le dossier Unity des dialogues:
-        </label>
-        <input
-          type="text"
-          value={unityPath}
-          onChange={(e) => setUnityPath(e.target.value)}
-          disabled={isLoading}
-          placeholder="Ex: F:/Unity/Alteir/Alteir_Cursor/Assets/Dialogue/generated"
-          style={{
-            width: '100%',
-            padding: '0.5rem',
-            boxSizing: 'border-box',
-            backgroundColor: theme.input.background,
-            border: `1px solid ${theme.input.border}`,
-            color: theme.input.color,
-            borderRadius: '4px',
-          }}
-        />
-      </div>
-
-      <button
-        onClick={onSave}
-        disabled={isSaving || isLoading}
-        style={{
-          padding: '0.5rem 1rem',
-          border: 'none',
-          borderRadius: '4px',
-          backgroundColor: theme.button.primary.background,
-          color: theme.button.primary.color,
-          cursor: isSaving || isLoading ? 'not-allowed' : 'pointer',
-          opacity: isSaving || isLoading ? 0.6 : 1,
-        }}
-      >
-        {isSaving ? 'Enregistrement...' : 'Enregistrer'}
-      </button>
-    </div>
-  )
-}
-
-function OrganizationTab({
+  isLoadingUnity,
+  isSavingUnity,
+  unityError,
+  onSaveUnity,
   organization,
   setOrganization,
   previewText,
@@ -587,6 +522,12 @@ function OrganizationTab({
   isLoadingPreview,
   onPreview,
 }: {
+  unityPath: string
+  setUnityPath: (path: string) => void
+  isLoadingUnity: boolean
+  isSavingUnity: boolean
+  unityError: string | null
+  onSaveUnity: () => void
   organization: 'default' | 'narrative' | 'minimal'
   setOrganization: (mode: 'default' | 'narrative' | 'minimal') => void
   previewText: string
@@ -596,124 +537,160 @@ function OrganizationTab({
 }) {
   return (
     <div>
-      <h3 style={{ marginTop: 0, color: theme.text.primary }}>Organisation du Prompt</h3>
+      {/* Section Unity */}
+      <div style={{ marginBottom: '2rem' }}>
+        <h3 style={{ marginTop: 0, color: theme.text.primary }}>Configuration Unity</h3>
 
-      <div style={{ marginBottom: '1rem' }}>
-        <label style={{ display: 'block', marginBottom: '0.5rem', color: theme.text.primary }}>
-          Mode d'organisation:
-        </label>
-        <select
-          value={organization}
-          onChange={(e) => setOrganization(e.target.value as 'default' | 'narrative' | 'minimal')}
-          style={{
-            width: '100%',
-            padding: '0.5rem',
-            border: `1px solid ${theme.border.primary}`,
-            borderRadius: '4px',
-            backgroundColor: theme.input.background,
-            color: theme.input.color,
-          }}
-        >
-          <option value="default">Par défaut (ordre de la config)</option>
-          <option value="narrative">Narratif (groupé par pertinence)</option>
-          <option value="minimal">Minimal (seulement l'essentiel)</option>
-        </select>
-      </div>
+        {unityError && (
+          <div
+            style={{
+              padding: '0.5rem',
+              backgroundColor: theme.state.error.background,
+              color: theme.state.error.color,
+              marginBottom: '1rem',
+              borderRadius: '4px',
+            }}
+          >
+            {unityError}
+          </div>
+        )}
 
-      <div style={{ marginBottom: '1rem' }}>
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{ display: 'block', marginBottom: '0.5rem', color: theme.text.primary }}>
+            Chemin vers le dossier Unity des dialogues:
+          </label>
+          <input
+            type="text"
+            value={unityPath}
+            onChange={(e) => setUnityPath(e.target.value)}
+            disabled={isLoadingUnity}
+            placeholder="Ex: F:/Unity/Alteir/Alteir_Cursor/Assets/Dialogue/generated"
+            style={{
+              width: '100%',
+              padding: '0.5rem',
+              boxSizing: 'border-box',
+              backgroundColor: theme.input.background,
+              border: `1px solid ${theme.input.border}`,
+              color: theme.input.color,
+              borderRadius: '4px',
+            }}
+          />
+        </div>
+
         <button
-          onClick={onPreview}
-          disabled={isLoadingPreview}
+          onClick={onSaveUnity}
+          disabled={isSavingUnity || isLoadingUnity}
           style={{
             padding: '0.5rem 1rem',
-            border: `1px solid ${theme.border.primary}`,
+            border: 'none',
             borderRadius: '4px',
-            backgroundColor: theme.button.default.background,
-            color: theme.button.default.color,
-            cursor: isLoadingPreview ? 'not-allowed' : 'pointer',
-            opacity: isLoadingPreview ? 0.6 : 1,
+            backgroundColor: theme.button.primary.background,
+            color: theme.button.primary.color,
+            cursor: isSavingUnity || isLoadingUnity ? 'not-allowed' : 'pointer',
+            opacity: isSavingUnity || isLoadingUnity ? 0.6 : 1,
           }}
         >
-          {isLoadingPreview ? 'Chargement...' : 'Prévisualiser le contexte'}
+          {isSavingUnity ? 'Enregistrement...' : 'Enregistrer'}
         </button>
       </div>
 
-      {previewText && (
-        <div>
-          <div style={{ marginBottom: '0.5rem', color: theme.text.secondary, fontSize: '0.9rem' }}>
-            Tokens estimés: {previewTokens}
+      {/* Section Organisation */}
+      <div>
+        <h3 style={{ marginTop: 0, color: theme.text.primary }}>Organisation du Prompt</h3>
+
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <label style={{ color: theme.text.primary }}>
+              Mode d'organisation:
+            </label>
+            <InfoIcon
+              content={
+                <div>
+                  <div style={{ marginBottom: '0.5rem', fontWeight: 'bold' }}>Modes d'Organisation</div>
+                  <div style={{ fontSize: '0.875rem' }}>
+                    <p style={{ margin: '0.25rem 0' }}><strong>Par défaut :</strong> Ordre linéaire selon la configuration</p>
+                    <p style={{ margin: '0.25rem 0' }}><strong>Narratif :</strong> Groupement logique (Identité → Caractérisation → Voix → Background → Mécaniques)</p>
+                    <p style={{ margin: '0.25rem 0' }}><strong>Minimal :</strong> Seulement les champs essentiels pour la génération</p>
+                  </div>
+                  <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: `1px solid ${theme.border.primary}`, fontSize: '0.875rem' }}>
+                    <strong>Conseil :</strong> Le mode "Narratif" améliore la compréhension du LLM en organisant logiquement les informations.
+                  </div>
+                </div>
+              }
+              position="right"
+            />
           </div>
-          <pre
+          <select
+            value={organization}
+            onChange={(e) => setOrganization(e.target.value as 'default' | 'narrative' | 'minimal')}
             style={{
-              padding: '1rem',
-              backgroundColor: theme.background.secondary,
+              width: '100%',
+              padding: '0.5rem',
               border: `1px solid ${theme.border.primary}`,
               borderRadius: '4px',
-              overflow: 'auto',
-              maxHeight: '400px',
-              fontSize: '0.85rem',
-              color: theme.text.primary,
-              whiteSpace: 'pre-wrap',
+              backgroundColor: theme.input.background,
+              color: theme.input.color,
             }}
           >
-            {previewText}
-          </pre>
+            <option value="default">Par défaut (ordre de la config)</option>
+            <option value="narrative">Narratif (groupé par pertinence)</option>
+            <option value="minimal">Minimal (seulement l'essentiel)</option>
+          </select>
         </div>
-      )}
-    </div>
-  )
-}
 
-function GuidanceTab() {
-  return (
-    <div>
-      <h3 style={{ marginTop: 0, color: theme.text.primary }}>Guide d'Utilisation</h3>
-
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h4 style={{ color: theme.text.primary, marginBottom: '0.5rem' }}>Indicateurs Visuels</h4>
-        <ul style={{ color: theme.text.secondary, paddingLeft: '1.5rem' }}>
-          <li>
-            <span style={{ color: theme.state.success.color }}>✓</span> Vert : Champ suggéré/recommandé
-          </li>
-          <li>
-            <span style={{ color: theme.state.info.color }}>⭐</span> Bleu : Champ essentiel
-          </li>
-          <li>
-            <span style={{ color: theme.text.secondary }}>ⓘ</span> Gris : Champ commun
-          </li>
-          <li>
-            <span style={{ color: theme.text.tertiary }}>○</span> Gris clair : Champ rare
-          </li>
-        </ul>
-      </div>
-
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h4 style={{ color: theme.text.primary, marginBottom: '0.5rem' }}>Champs Recommandés par Type de Scène</h4>
-        <div style={{ color: theme.text.secondary, fontSize: '0.9rem' }}>
-          <p><strong>Dialogue :</strong> Dialogue Type, Caractérisation, Relations</p>
-          <p><strong>Action :</strong> Pouvoirs, Compétences, Stats</p>
-          <p><strong>Émotionnel :</strong> Caractérisation, Relations, Background</p>
-          <p><strong>Révélation :</strong> Background, Évènements marquants, Arcs Narratifs</p>
+        <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button
+            onClick={onPreview}
+            disabled={isLoadingPreview}
+            style={{
+              padding: '0.5rem 1rem',
+              border: `1px solid ${theme.border.primary}`,
+              borderRadius: '4px',
+              backgroundColor: theme.button.default.background,
+              color: theme.button.default.color,
+              cursor: isLoadingPreview ? 'not-allowed' : 'pointer',
+              opacity: isLoadingPreview ? 0.6 : 1,
+            }}
+          >
+            {isLoadingPreview ? 'Chargement...' : 'Prévisualiser le contexte'}
+          </button>
+          <InfoIcon
+            content={
+              <div>
+                <div style={{ marginBottom: '0.5rem', fontWeight: 'bold' }}>Conseils</div>
+                <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.875rem' }}>
+                  <li style={{ marginBottom: '0.25rem' }}>Utilisez "Détecter automatiquement" pour découvrir tous les champs disponibles</li>
+                  <li style={{ marginBottom: '0.25rem' }}>Les champs suggérés sont particulièrement pertinents pour le type de génération</li>
+                  <li>Utilisez la prévisualisation pour vérifier le contexte avant de générer</li>
+                </ul>
+              </div>
+            }
+            position="right"
+          />
         </div>
-      </div>
 
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h4 style={{ color: theme.text.primary, marginBottom: '0.5rem' }}>Modes d'Organisation</h4>
-        <div style={{ color: theme.text.secondary, fontSize: '0.9rem' }}>
-          <p><strong>Par défaut :</strong> Ordre linéaire selon la configuration</p>
-          <p><strong>Narratif :</strong> Groupement logique (Identité → Caractérisation → Voix → Background → Mécaniques)</p>
-          <p><strong>Minimal :</strong> Seulement les champs essentiels pour la génération</p>
-        </div>
-      </div>
-
-      <div>
-        <h4 style={{ color: theme.text.primary, marginBottom: '0.5rem' }}>Conseils</h4>
-        <ul style={{ color: theme.text.secondary, paddingLeft: '1.5rem', fontSize: '0.9rem' }}>
-          <li>Utilisez "Détecter automatiquement" pour découvrir tous les champs disponibles</li>
-          <li>Les champs suggérés sont particulièrement pertinents pour le type de génération</li>
-          <li>Le mode "Narratif" améliore la compréhension du LLM en organisant logiquement les informations</li>
-          <li>Utilisez la prévisualisation pour vérifier le contexte avant de générer</li>
-        </ul>
+        {previewText && (
+          <div>
+            <div style={{ marginBottom: '0.5rem', color: theme.text.secondary, fontSize: '0.9rem' }}>
+              Tokens estimés: {previewTokens}
+            </div>
+            <pre
+              style={{
+                padding: '1rem',
+                backgroundColor: theme.background.secondary,
+                border: `1px solid ${theme.border.primary}`,
+                borderRadius: '4px',
+                overflow: 'auto',
+                maxHeight: '400px',
+                fontSize: '0.85rem',
+                color: theme.text.primary,
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {previewText}
+            </pre>
+          </div>
+        )}
       </div>
     </div>
   )

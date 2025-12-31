@@ -9,17 +9,26 @@ import type {
   NarrativeGuideResponse,
 } from '../api/vocabulary'
 
-export type ImportanceLevel =
-  | 'Majeur'
-  | 'Important'
-  | 'Modéré'
-  | 'Secondaire'
-  | 'Mineur'
-  | 'Anecdotique'
+export type PopularityLevel =
+  | 'Mondialement'
+  | 'Régionalement'
+  | 'Localement'
+  | 'Communautaire'
+  | 'Occulte'
+
+export type VocabularyMode = 'all' | 'auto' | 'none'
+
+export interface VocabularyConfig {
+  Mondialement: VocabularyMode
+  Régionalement: VocabularyMode
+  Localement: VocabularyMode
+  Communautaire: VocabularyMode
+  Occulte: VocabularyMode
+}
 
 interface VocabularyState {
   // État du vocabulaire
-  vocabularyMinImportance: ImportanceLevel | null
+  vocabularyConfig: VocabularyConfig
   includeNarrativeGuides: boolean
   vocabularyTerms: VocabularyTerm[]
   vocabularyStats: VocabularyResponse['statistics'] | null
@@ -33,9 +42,10 @@ interface VocabularyState {
   isSyncing: boolean
   
   // Actions
-  setMinImportance: (level: ImportanceLevel | null) => void
+  setVocabularyConfig: (config: VocabularyConfig) => void
+  setLevelMode: (level: PopularityLevel, mode: VocabularyMode) => void
   toggleGuides: () => void
-  loadVocabulary: (minImportance?: ImportanceLevel) => Promise<void>
+  loadVocabulary: () => Promise<void>
   loadNarrativeGuides: (skipLastSyncUpdate?: boolean) => Promise<void>
   syncFromNotion: () => Promise<void>
   loadStats: () => Promise<void>
@@ -43,8 +53,16 @@ interface VocabularyState {
   error: string | null
 }
 
+const DEFAULT_VOCABULARY_CONFIG: VocabularyConfig = {
+  Mondialement: 'all',
+  Régionalement: 'all',
+  Localement: 'none',
+  Communautaire: 'none',
+  Occulte: 'none',
+}
+
 export const useVocabularyStore = create<VocabularyState>((set, get) => ({
-  vocabularyMinImportance: 'Important',
+  vocabularyConfig: DEFAULT_VOCABULARY_CONFIG,
   includeNarrativeGuides: true,
   vocabularyTerms: [],
   vocabularyStats: null,
@@ -54,12 +72,17 @@ export const useVocabularyStore = create<VocabularyState>((set, get) => ({
   isSyncing: false,
   error: null,
 
-  setMinImportance: (level) => {
-    set({ vocabularyMinImportance: level })
-    // Recharger le vocabulaire avec le nouveau niveau
-    if (level) {
-      get().loadVocabulary(level).catch(console.error)
-    }
+  setVocabularyConfig: (config) => {
+    set({ vocabularyConfig: config })
+  },
+
+  setLevelMode: (level, mode) => {
+    set((state) => ({
+      vocabularyConfig: {
+        ...state.vocabularyConfig,
+        [level]: mode,
+      },
+    }))
   },
 
   toggleGuides: () => {
@@ -68,13 +91,11 @@ export const useVocabularyStore = create<VocabularyState>((set, get) => ({
     }))
   },
 
-  loadVocabulary: async (minImportance) => {
+  loadVocabulary: async () => {
     try {
       set({ error: null })
-      const level = minImportance || get().vocabularyMinImportance
-      if (!level) return
-
-      const response = await vocabularyAPI.getVocabulary(level)
+      // Charger tous les termes (le filtrage sera fait côté backend lors de la génération)
+      const response = await vocabularyAPI.getVocabulary()
       set({
         vocabularyTerms: response.terms,
         totalTerms: response.total,
@@ -162,7 +183,7 @@ export const useVocabularyStore = create<VocabularyState>((set, get) => ({
       const stats = await vocabularyAPI.getVocabularyStats()
       set({
         vocabularyStats: {
-          by_importance: stats.by_importance,
+          by_popularité: stats.by_popularité,
           by_category: stats.by_category,
           by_type: stats.by_type,
         },

@@ -56,7 +56,7 @@ class NotionImportService:
                 
                 terme = self._extract_title(properties.get("Terme", {}))
                 definition = self._extract_text(properties.get("Définition", {}))
-                importance = self._extract_select(properties.get("Importance", {}))
+                popularité = self._extract_select(properties.get("Popularité", {}))
                 categorie = self._extract_select(properties.get("Catégorie", {}))
                 type_term = self._extract_select(properties.get("Type", {}))
                 origine = self._extract_text(properties.get("Origine", {}))
@@ -65,7 +65,7 @@ class NotionImportService:
                     terms.append({
                         "term": terme,
                         "definition": definition or "",
-                        "importance": importance or "Anecdotique",
+                        "popularité": popularité or "Occulte",
                         "category": categorie or "Autre",
                         "type": type_term or "",
                         "origin": origine or ""
@@ -109,7 +109,7 @@ class NotionImportService:
             # Extraire les propriétés
             terme = properties.get("Terme", "")
             definition = properties.get("Définition", "")
-            importance = properties.get("Importance", "Anecdotique")
+            popularité = properties.get("Popularité", "Occulte")
             categorie = properties.get("Catégorie", "Autre")
             type_term = properties.get("Type", "")
             origine = properties.get("Origine", "")
@@ -120,7 +120,7 @@ class NotionImportService:
             return {
                 "term": terme,
                 "definition": definition or "",
-                "importance": importance or "Anecdotique",
+                "popularité": popularité or "Occulte",
                 "category": categorie or "Autre",
                 "type": type_term or "",
                 "origin": origine or ""
@@ -340,7 +340,7 @@ class NotionImportService:
                 # Utiliser la méthode complète d'extraction (comme dans main.py)
                 terme = self._extract_property_value(properties.get("Terme", {}))
                 definition = self._extract_property_value(properties.get("Définition", {}))
-                importance = self._extract_property_value(properties.get("Importance", {}))
+                popularité = self._extract_property_value(properties.get("Popularité", {}))
                 categorie = self._extract_property_value(properties.get("Catégorie", {}))
                 type_term = self._extract_property_value(properties.get("Type", {}))
                 origine = self._extract_property_value(properties.get("Origine", {}))
@@ -349,7 +349,7 @@ class NotionImportService:
                     terms.append({
                         "term": terme,
                         "definition": definition or "",
-                        "importance": importance or "Anecdotique",
+                        "popularité": popularité or "Occulte",
                         "category": categorie or "Autre",
                         "type": type_term or "",
                         "origin": origine or ""

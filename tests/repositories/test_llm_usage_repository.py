@@ -89,6 +89,7 @@ def test_get_statistics(repository, sample_record):
 def test_filter_by_model(repository, sample_record):
     """Teste le filtrage par modèle."""
     record_gpt4 = sample_record.model_copy()
+    record_gpt4.model_name = "gpt-4o"
     record_gpt35 = sample_record.model_copy()
     record_gpt35.request_id = "req_456"
     record_gpt35.model_name = "gpt-3.5-turbo"

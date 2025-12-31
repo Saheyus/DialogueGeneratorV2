@@ -4,6 +4,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useContextConfigStore, type FieldInfo } from '../../store/contextConfigStore'
 import { theme } from '../../theme'
+import { InfoIcon } from '../shared/Tooltip'
 
 export interface ContextFieldSelectorProps {
   elementType: string
@@ -420,26 +421,48 @@ export function ContextFieldSelector({
   const selectedCount = visibleSelectedCount
   const totalFieldsToDisplay = totalFields
 
+  const visualIndicatorsTooltip = (
+    <div>
+      <div style={{ marginBottom: '0.5rem', fontWeight: 'bold' }}>Indicateurs Visuels</div>
+      <ul style={{ margin: 0, paddingLeft: '1.25rem', listStyle: 'none' }}>
+        <li style={{ marginBottom: '0.25rem' }}>
+          <span style={{ color: theme.state.success.color }}>✓</span> Vert : Champ suggéré/recommandé
+        </li>
+        <li style={{ marginBottom: '0.25rem' }}>
+          <span style={{ color: theme.state.info.color }}>⭐</span> Bleu : Champ essentiel
+        </li>
+        <li style={{ marginBottom: '0.25rem' }}>
+          <span style={{ color: theme.text.secondary }}>ⓘ</span> Gris : Champ commun
+        </li>
+        <li>
+          <span style={{ color: theme.text.tertiary }}>○</span> Gris clair : Champ rare
+        </li>
+      </ul>
+    </div>
+  )
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ marginBottom: '1rem' }}>
-        <input
-          type="text"
-          placeholder="Rechercher un champ..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{
-            width: '100%',
-            padding: '0.5rem',
-            border: `1px solid ${theme.border.primary}`,
-            borderRadius: '4px',
-            backgroundColor: theme.input.background,
-            color: theme.input.color,
-          }}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.5rem' }}>
+          <input
+            type="text"
+            placeholder="Rechercher un champ..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              flex: 1,
+              padding: '0.5rem',
+              border: `1px solid ${theme.border.primary}`,
+              borderRadius: '4px',
+              backgroundColor: theme.input.background,
+              color: theme.input.color,
+            }}
+          />
+          <InfoIcon content={visualIndicatorsTooltip} position="bottom" />
+        </div>
         <div
           style={{
-            marginTop: '0.5rem',
             fontSize: '0.85rem',
             color: theme.text.secondary,
           }}

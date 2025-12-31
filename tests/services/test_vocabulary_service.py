@@ -2,7 +2,7 @@
 import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch
-from services.vocabulary_service import VocabularyService, IMPORTANCE_ORDER, DEFAULT_MIN_IMPORTANCE
+from services.vocabulary_service import VocabularyService, POPULARITY_ORDER, DEFAULT_MIN_POPULARITY
 from api.utils.notion_cache import NotionCache
 
 
@@ -21,7 +21,7 @@ def sample_vocabulary_data():
             {
                 "term": "Alteir",
                 "definition": "Le monde principal du jeu",
-                "importance": "Majeur",
+                "popularité": "Mondialement",
                 "category": "Géographie",
                 "type": "Nom propre",
                 "origin": "Création originale"
@@ -29,7 +29,7 @@ def sample_vocabulary_data():
             {
                 "term": "Mana",
                 "definition": "Énergie magique",
-                "importance": "Important",
+                "popularité": "Régionalement",
                 "category": "Magie",
                 "type": "Concept",
                 "origin": "Fantasy classique"
@@ -37,7 +37,7 @@ def sample_vocabulary_data():
             {
                 "term": "Guildes",
                 "definition": "Organisations de métier",
-                "importance": "Modéré",
+                "popularité": "Localement",
                 "category": "Société",
                 "type": "Institution",
                 "origin": "Médiéval"
@@ -45,7 +45,7 @@ def sample_vocabulary_data():
             {
                 "term": "Tavernier",
                 "definition": "Propriétaire de taverne",
-                "importance": "Secondaire",
+                "popularité": "Communautaire",
                 "category": "Métier",
                 "type": "Profession",
                 "origin": "Médiéval"
@@ -82,46 +82,46 @@ class TestVocabularyService:
         
         assert len(terms) == 0
     
-    def test_filter_by_importance_majeur(self, vocabulary_service):
-        """Test du filtrage par niveau Majeur."""
+    def test_filter_by_popularity_mondialement(self, vocabulary_service):
+        """Test du filtrage par niveau Mondialement."""
         all_terms = vocabulary_service.load_vocabulary()
-        filtered = vocabulary_service.filter_by_importance(all_terms, "Majeur")
+        filtered = vocabulary_service.filter_by_popularity(all_terms, "Mondialement")
         
         assert len(filtered) == 1
         assert filtered[0]["term"] == "Alteir"
-        assert filtered[0]["importance"] == "Majeur"
+        assert filtered[0]["popularité"] == "Mondialement"
     
-    def test_filter_by_importance_important(self, vocabulary_service):
-        """Test du filtrage par niveau Important (inclut Majeur + Important)."""
+    def test_filter_by_popularity_regionalement(self, vocabulary_service):
+        """Test du filtrage par niveau Régionalement (inclut Mondialement + Régionalement)."""
         all_terms = vocabulary_service.load_vocabulary()
-        filtered = vocabulary_service.filter_by_importance(all_terms, "Important")
+        filtered = vocabulary_service.filter_by_popularity(all_terms, "Régionalement")
         
         assert len(filtered) == 2
-        assert all(t["importance"] in ["Majeur", "Important"] for t in filtered)
-        # Vérifier le tri par importance puis alphabétique
-        assert filtered[0]["importance"] == "Majeur"
-        assert filtered[1]["importance"] == "Important"
+        assert all(t["popularité"] in ["Mondialement", "Régionalement"] for t in filtered)
+        # Vérifier le tri par popularité puis alphabétique
+        assert filtered[0]["popularité"] == "Mondialement"
+        assert filtered[1]["popularité"] == "Régionalement"
     
-    def test_filter_by_importance_modere(self, vocabulary_service):
-        """Test du filtrage par niveau Modéré (inclut Majeur + Important + Modéré)."""
+    def test_filter_by_popularity_localement(self, vocabulary_service):
+        """Test du filtrage par niveau Localement (inclut Mondialement + Régionalement + Localement)."""
         all_terms = vocabulary_service.load_vocabulary()
-        filtered = vocabulary_service.filter_by_importance(all_terms, "Modéré")
+        filtered = vocabulary_service.filter_by_popularity(all_terms, "Localement")
         
         assert len(filtered) == 3
-        assert all(t["importance"] in ["Majeur", "Important", "Modéré"] for t in filtered)
+        assert all(t["popularité"] in ["Mondialement", "Régionalement", "Localement"] for t in filtered)
     
-    def test_filter_by_importance_invalid_level(self, vocabulary_service):
+    def test_filter_by_popularity_invalid_level(self, vocabulary_service):
         """Test du filtrage avec un niveau invalide (utilise le défaut)."""
         all_terms = vocabulary_service.load_vocabulary()
-        filtered = vocabulary_service.filter_by_importance(all_terms, "InvalidLevel")
+        filtered = vocabulary_service.filter_by_popularity(all_terms, "InvalidLevel")
         
-        # Devrait utiliser le défaut (Important)
+        # Devrait utiliser le défaut (Régionalement)
         assert len(filtered) == 2
     
     def test_format_for_prompt(self, vocabulary_service):
         """Test du formatage pour injection dans le prompt."""
         all_terms = vocabulary_service.load_vocabulary()
-        filtered = vocabulary_service.filter_by_importance(all_terms, "Important")
+        filtered = vocabulary_service.filter_by_popularity(all_terms, "Régionalement")
         formatted = vocabulary_service.format_for_prompt(filtered)
         
         assert "[VOCABULAIRE ALTEIR]" in formatted
@@ -152,17 +152,17 @@ class TestVocabularyService:
         stats = vocabulary_service.get_statistics(all_terms)
         
         assert stats["total"] == 4
-        assert stats["by_importance"]["Majeur"] == 1
-        assert stats["by_importance"]["Important"] == 1
-        assert stats["by_importance"]["Modéré"] == 1
-        assert stats["by_importance"]["Secondaire"] == 1
+        assert stats["by_popularité"]["Mondialement"] == 1
+        assert stats["by_popularité"]["Régionalement"] == 1
+        assert stats["by_popularité"]["Localement"] == 1
+        assert stats["by_popularité"]["Communautaire"] == 1
         assert stats["by_category"]["Magie"] == 1
         assert stats["by_category"]["Géographie"] == 1
     
-    def test_count_terms_by_importance(self, vocabulary_service):
-        """Test du comptage des termes par niveau d'importance."""
+    def test_count_terms_by_popularity(self, vocabulary_service):
+        """Test du comptage des termes par niveau de popularité."""
         all_terms = vocabulary_service.load_vocabulary()
-        count = vocabulary_service.count_terms_by_importance(all_terms, "Important")
+        filtered = vocabulary_service.filter_by_popularity(all_terms, "Régionalement")
         
-        assert count == 2  # Majeur + Important
+        assert len(filtered) == 2  # Mondialement + Régionalement
 

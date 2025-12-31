@@ -163,6 +163,12 @@ class ConfigurationService:
     # --- Context Config specific methods ---
     def get_context_config(self) -> Dict[str, Any]:
         """Gets the context configuration."""
+        if self.context_config is None:
+            logger.warning("context_config is None, returning empty dict")
+            return {}
+        if not isinstance(self.context_config, dict):
+            logger.warning(f"context_config is not a dict: {type(self.context_config)}, returning empty dict")
+            return {}
         return self.context_config.copy()
 
     def save_context_config(self, config: Dict[str, Any]) -> bool:

@@ -105,9 +105,11 @@ class DefaultFieldConfigResponse(BaseModel):
     """Réponse contenant la configuration par défaut des champs.
     
     Attributes:
-        config: Configuration par défaut.
+        essential_fields: Champs essentiels (courts, toujours sélectionnés) par type d'élément.
+        default_fields: Tous les champs par défaut (priorités 1, 2, 3) par type d'élément.
     """
-    config: dict = Field(..., description="Configuration par défaut")
+    essential_fields: Dict[str, List[str]] = Field(..., description="Champs essentiels par type d'élément")
+    default_fields: Dict[str, List[str]] = Field(..., description="Champs par défaut par type d'élément")
 
 
 class SceneInstructionTemplate(BaseModel):

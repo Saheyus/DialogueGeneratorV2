@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:clean": "node ../scripts/clear-vite-cache.js && vite",
+    "dev:force": "node ../scripts/clear-vite-cache.js && vite --force",
     "build": "vite build",
     "build:check": "tsc && vite build",
     "preview": "vite preview",

@@ -265,7 +265,18 @@ def setup_http_cache(app: Any) -> None:
     Args:
         app: Application FastAPI.
     """
-    enabled = os.getenv("HTTP_CACHE_ENABLED", "true").lower() in ("true", "1", "yes")
+    # Désactiver le cache en développement pour garantir des changements toujours visibles
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    is_development = environment == "development"
+    
+    # En développement, désactiver le cache par défaut
+    # (peut être forcé avec HTTP_CACHE_ENABLED=true)
+    if is_development:
+        cache_enabled_env = os.getenv("HTTP_CACHE_ENABLED", "false")
+    else:
+        cache_enabled_env = os.getenv("HTTP_CACHE_ENABLED", "true")
+    
+    enabled = cache_enabled_env.lower() in ("true", "1", "yes")
     ttl_gdd = int(os.getenv("HTTP_CACHE_TTL_GDD", "30"))
     ttl_static = int(os.getenv("HTTP_CACHE_TTL_STATIC", "300"))
     max_size = int(os.getenv("HTTP_CACHE_MAX_SIZE", "1000"))
@@ -279,5 +290,8 @@ def setup_http_cache(app: Any) -> None:
             max_size=max_size
         )
         logger.info("Middleware de cache HTTP configuré")
+    else:
+        if is_development:
+            logger.info("Middleware de cache HTTP désactivé en développement (pour garantir le rafraîchissement)")
 
 

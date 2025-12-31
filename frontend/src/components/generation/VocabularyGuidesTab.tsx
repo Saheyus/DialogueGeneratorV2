@@ -2,21 +2,26 @@
  * Onglet pour configurer le vocabulaire Alteir et les guides narratifs.
  */
 import { useState, useEffect } from 'react'
-import { useVocabularyStore, type ImportanceLevel } from '../../store/vocabularyStore'
+import { useVocabularyStore, type PopularityLevel, type VocabularyMode, type VocabularyConfig } from '../../store/vocabularyStore'
 import { theme } from '../../theme'
 
-const IMPORTANCE_LEVELS: ImportanceLevel[] = [
-  'Majeur',
-  'Important',
-  'Modéré',
-  'Secondaire',
-  'Mineur',
-  'Anecdotique',
+const POPULARITY_LEVELS: PopularityLevel[] = [
+  'Mondialement',
+  'Régionalement',
+  'Localement',
+  'Communautaire',
+  'Occulte',
+]
+
+const VOCABULARY_MODES: { value: VocabularyMode; label: string }[] = [
+  { value: 'all', label: 'Tout' },
+  { value: 'auto', label: 'Automatique' },
+  { value: 'none', label: 'Non' },
 ]
 
 export function VocabularyGuidesTab() {
   const {
-    vocabularyMinImportance,
+    vocabularyConfig,
     includeNarrativeGuides,
     vocabularyTerms,
     totalTerms,
@@ -24,7 +29,7 @@ export function VocabularyGuidesTab() {
     lastSyncTime,
     isSyncing,
     error,
-    setMinImportance,
+    setLevelMode,
     toggleGuides,
     loadVocabulary,
     loadNarrativeGuides,
@@ -65,40 +70,23 @@ export function VocabularyGuidesTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasInitialized])
 
-  // Calculer le nombre de termes selon le niveau sélectionné
-  const getFilteredCount = (level: ImportanceLevel | null): number => {
-    if (!level || !vocabularyStats || !vocabularyStats.by_importance) {
-      return totalTerms || 0
+  // Calculer le nombre de termes selon le niveau et le mode
+  const getFilteredCount = (level: PopularityLevel, mode: VocabularyMode): number => {
+    if (!vocabularyStats || !vocabularyStats.by_popularité) {
+      return 0
     }
 
-    const order: Record<ImportanceLevel, number> = {
-      Majeur: 1,
-      Important: 2,
-      Modéré: 3,
-      Secondaire: 4,
-      Mineur: 5,
-      Anecdotique: 6,
-    }
-
-    const levelOrder = order[level]
-    if (!levelOrder) return totalTerms || 0
-
-    // Itérer sur les statistiques disponibles plutôt que sur l'ordre
-    // pour s'assurer que les clés correspondent exactement
-    let count = 0
-    const stats = vocabularyStats.by_importance || {}
+    const stats = vocabularyStats.by_popularité || {}
     
-    // Parcourir toutes les importances dans l'ordre
-    const allLevels: ImportanceLevel[] = ['Majeur', 'Important', 'Modéré', 'Secondaire', 'Mineur', 'Anecdotique']
-    for (const importance of allLevels) {
-      const importanceOrder = order[importance]
-      if (importanceOrder && importanceOrder <= levelOrder) {
-        // Utiliser la clé exacte des statistiques
-        count += stats[importance] || 0
-      }
+    if (mode === 'none') {
+      return 0
+    } else if (mode === 'all') {
+      // Pour "all", compter uniquement les termes de ce niveau spécifique
+      return stats[level] || 0
+    } else {
+      // Pour "auto", on ne peut pas savoir sans le contexte, donc on retourne juste le nombre du niveau
+      return stats[level] || 0
     }
-    
-    return count
   }
 
   const handleSync = async () => {
@@ -173,59 +161,105 @@ export function VocabularyGuidesTab() {
           Vocabulaire Alteir
         </h3>
 
-        {/* Sélecteur de niveau d'importance */}
+        {/* Configuration par niveau de popularité */}
         <div style={{ marginBottom: '1rem' }}>
           <label
             style={{
               display: 'block',
-              marginBottom: '0.5rem',
+              marginBottom: '1rem',
               color: theme.text.primary,
               fontWeight: 'bold',
             }}
           >
-            Niveau d'importance minimum
+            Configuration du vocabulaire par niveau de popularité
           </label>
-          <select
-            value={vocabularyMinImportance || ''}
-            onChange={(e) =>
-              setMinImportance(
-                (e.target.value as ImportanceLevel) || null
-              )
-            }
-            style={{
-              padding: '0.5rem',
-              border: `1px solid ${theme.border.primary}`,
-              borderRadius: '4px',
-              backgroundColor: theme.input.background,
-              color: theme.input.color,
-              width: '100%',
-              maxWidth: '300px',
-            }}
-          >
-            <option value="">Tous les termes</option>
-            {IMPORTANCE_LEVELS.map((level) => (
-              <option key={level} value={level}>
-                {level}
-              </option>
-            ))}
-          </select>
-          {vocabularyMinImportance && (
-            <p
-              style={{
-                margin: '0.5rem 0 0 0',
-                color: theme.text.secondary,
-                fontSize: '0.9rem',
-              }}
-            >
-              {getFilteredCount(vocabularyMinImportance)} terme(s) seront inclus
-              (niveau {vocabularyMinImportance} + tous les niveaux plus
-              importants)
-            </p>
-          )}
+          
+          {POPULARITY_LEVELS.map((level) => {
+            const currentMode = vocabularyConfig[level]
+            const count = getFilteredCount(level, currentMode)
+            
+            return (
+              <div
+                key={level}
+                style={{
+                  marginBottom: '1.5rem',
+                  padding: '1rem',
+                  border: `1px solid ${theme.border.primary}`,
+                  borderRadius: '4px',
+                  backgroundColor: theme.background.panel,
+                }}
+              >
+                <div
+                  style={{
+                    marginBottom: '0.75rem',
+                    fontWeight: 'bold',
+                    color: theme.text.primary,
+                  }}
+                >
+                  {level}
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '1.5rem',
+                    alignItems: 'center',
+                  }}
+                >
+                  {VOCABULARY_MODES.map((modeOption) => (
+                    <label
+                      key={modeOption.value}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name={`vocab-mode-${level}`}
+                        value={modeOption.value}
+                        checked={currentMode === modeOption.value}
+                        onChange={() => setLevelMode(level, modeOption.value)}
+                        style={{
+                          width: '1.2rem',
+                          height: '1.2rem',
+                          cursor: 'pointer',
+                        }}
+                      />
+                      <span style={{ color: theme.text.primary }}>
+                        {modeOption.label}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {currentMode !== 'none' && (
+                  <div
+                    style={{
+                      marginTop: '0.5rem',
+                      color: theme.text.secondary,
+                      fontSize: '0.85rem',
+                    }}
+                  >
+                    {currentMode === 'all' && (
+                      <span>
+                        {count} terme(s) du niveau {level} seront inclus
+                      </span>
+                    )}
+                    {currentMode === 'auto' && (
+                      <span>
+                        Seuls les termes de niveau {level} mentionnés dans le contexte seront inclus ({vocabularyStats?.by_popularité?.[level] || 0} terme(s) au total pour ce niveau)
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
 
         {/* Statistiques */}
-        {vocabularyStats && vocabularyStats.by_importance && (
+        {vocabularyStats && vocabularyStats.by_popularité && (
           <div
             style={{
               marginTop: '1rem',
@@ -240,10 +274,10 @@ export function VocabularyGuidesTab() {
             </strong>
             <ul style={{ margin: '0.5rem 0', paddingLeft: '1.5rem' }}>
               <li>Total : {totalTerms || 0} termes</li>
-              {Object.entries(vocabularyStats.by_importance).map(
-                ([importance, count]) => (
-                  <li key={importance}>
-                    {importance} : {count || 0} terme(s)
+              {Object.entries(vocabularyStats.by_popularité).map(
+                ([popularité, count]) => (
+                  <li key={popularité}>
+                    {popularité} : {count || 0} terme(s)
                   </li>
                 )
               )}

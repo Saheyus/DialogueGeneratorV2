@@ -116,7 +116,9 @@ def test_api_endpoint_uses_correct_llm_client(client_with_real_config):
     mock_dialogue_service = MagicMock()
     mock_dialogue_service.context_builder = mock_context_builder
     mock_dialogue_service.prompt_engine = MagicMock()
-    mock_dialogue_service.prompt_engine.build_prompt = MagicMock(return_value=("prompt", 200))
+    mock_dialogue_service.prompt_engine.build_unity_dialogue_prompt = MagicMock(return_value=("prompt", 200))
+    mock_dialogue_service.prompt_engine.system_prompt_template = "Test system prompt"
+    mock_dialogue_service.prompt_engine._count_tokens = MagicMock(return_value=100)
     
     app.dependency_overrides[get_dialogue_generation_service] = lambda: mock_dialogue_service
     

@@ -1,0 +1,37 @@
+---
+description: Debugging critique — méthodologie
+alwaysApply: true
+---
+
+# Debugging problème critique
+
+Tu n'écris aucun code tant que le point d'entrée réel n'est pas prouvé.
+
+## Invariants avant tout
+- Tu commences par Network (DevTools) et tu me donnes : URL complète, méthode, status, port, initiator.
+- Tu identifies qui répond (Node, Python, proxy) et tu cites le fichier ou la config qui route (vite.config, dev.js, middleware, router FastAPI).
+
+## Interdictions
+- Tu ne dis pas "rafraîchis" ou "redémarre" sans expliquer quel cache ou quel process est visé et comment le vérifier.
+- Tu ne proposes pas de logs dans un fichier tant que tu n'as pas prouvé que ce fichier est dans le chemin d'exécution.
+- Tu ne supposes pas l'architecture. Si tu ne sais pas, tu dis "Je ne sais pas" et tu demandes une preuve réseau.
+
+## Preuves minimales à exiger
+- Preuve 1. Une requête visible (Network ou access log).
+- Preuve 2. Un log top-level "MODULE LOADED" dans le module ciblé OU un header "X-Build" renvoyé par la route.
+- Preuve 3. Un grep de la route exacte (/api/v1/...) dans le repo pour trouver l'owner.
+
+## Procédure courte quand un log n'apparaît pas
+1) Vérifie que la requête existe (Network).
+2) Si URL = :3000, tu assumes proxy Node et tu cherches l'owner côté Node.
+3) Active access log ou middleware global "REQ method path" au niveau app.
+4) Ajoute un header "X-Build" sur la route réellement hit.
+5) Seulement après, tu instrumentes le builder (prompt_engine).
+
+## Stop condition
+- Si après 2 itérations tu n'as pas prouvé le chemin réseau, tu t'arrêtes et tu reviens à "Network ou access log". Aucun nouveau code.
+
+## Output attendu de ta part (format)
+- 3 lignes. Point d'entrée. Owner fichier. Prochaine preuve à collecter.
+
+SI BESOIN : Liste des routes réelles au runtime dans api/main.py, après tous les include_router !!!
