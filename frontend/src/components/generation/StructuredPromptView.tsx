@@ -2,14 +2,17 @@
  * Composant pour afficher le prompt structuré avec sections dépliables.
  */
 import { useState, useMemo } from 'react'
-import { parsePromptSections, type PromptSection } from '../../hooks/usePromptPreview'
+import { parsePromptSections, parsePromptFromJson, type PromptSection } from '../../hooks/usePromptPreview'
 import { renderMarkdown } from '../../utils/markdownRenderer'
 import { prettifyJsonInText } from '../../utils/jsonPrettifier'
 import { theme } from '../../theme'
+import type { PromptStructure } from '../../types/prompt'
 
 export interface StructuredPromptViewProps {
-  /** Le prompt complet à afficher */
+  /** Le prompt complet à afficher (texte brut, fallback si structuredPrompt absent) */
   prompt: string
+  /** Structure JSON du prompt (prioritaire si disponible) */
+  structuredPrompt?: PromptStructure | null
 }
 
 /**
@@ -149,27 +152,9 @@ function AccordionSection({
             lineHeight: '1.6',
           }}
         >
-          {/* Afficher les enfants comme accordéons imbriqués s'il y en a */}
-          {hasChildren && (
-            <div style={{ marginBottom: hasContent ? '1rem' : '0' }}>
-              {section.children!.map((child, index) => (
-                <AccordionSection
-                  key={`${child.title}-${index}`}
-                  section={child}
-                  defaultExpanded={false}
-                  isControlled={true}
-                  level={level + 1}
-                  sectionKey={`${sectionKey}-${index}`}
-                  expandedKeys={expandedKeys}
-                  onToggleKey={onToggleKey}
-                />
-              ))}
-            </div>
-          )}
-          
-          {/* Afficher le contenu s'il y en a */}
+          {/* Afficher le contenu (remainingContent) AVANT les enfants pour respecter l'ordre du prompt */}
           {hasContent && (
-            <>
+            <div style={{ marginBottom: hasChildren ? '1rem' : '0' }}>
               {isMainlyJson ? (
                 <pre
                   style={{
@@ -190,7 +175,25 @@ function AccordionSection({
                   {renderMarkdown(processedContent)}
                 </div>
               )}
-            </>
+            </div>
+          )}
+          
+          {/* Afficher les enfants comme accordéons imbriqués après le contenu */}
+          {hasChildren && (
+            <div>
+              {section.children!.map((child, index) => (
+                <AccordionSection
+                  key={`${child.title}-${index}`}
+                  section={child}
+                  defaultExpanded={false}
+                  isControlled={true}
+                  level={level + 1}
+                  sectionKey={`${sectionKey}-${index}`}
+                  expandedKeys={expandedKeys}
+                  onToggleKey={onToggleKey}
+                />
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -213,10 +216,15 @@ function collectAllKeys(sections: PromptSection[], prefix: string = ''): string[
   return keys
 }
 
-export function StructuredPromptView({ prompt }: StructuredPromptViewProps) {
+export function StructuredPromptView({ prompt, structuredPrompt }: StructuredPromptViewProps) {
   const sections = useMemo(() => {
+    // Priorité au JSON structuré si disponible
+    if (structuredPrompt) {
+      return parsePromptFromJson(structuredPrompt)
+    }
+    // Fallback sur parsing texte
     return parsePromptSections(prompt)
-  }, [prompt])
+  }, [prompt, structuredPrompt])
   
   const [allExpanded, setAllExpanded] = useState(false)
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())

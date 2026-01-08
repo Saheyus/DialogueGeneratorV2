@@ -4,17 +4,20 @@
 import { memo } from 'react'
 import { theme } from '../../theme'
 import type { UnityDialogueMetadata } from '../../types/api'
+import { highlightText } from '../../utils/textHighlight'
 
 interface UnityDialogueItemProps {
   dialogue: UnityDialogueMetadata
   onClick: () => void
   isSelected: boolean
+  searchQuery?: string
 }
 
 export const UnityDialogueItem = memo(function UnityDialogueItem({
   dialogue,
   onClick,
   isSelected,
+  searchQuery = '',
 }: UnityDialogueItemProps) {
   const formatSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`
@@ -63,7 +66,12 @@ export const UnityDialogueItem = memo(function UnityDialogueItem({
       }}
     >
       <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>
-        {formatFilename(dialogue.filename)}
+        {highlightText(formatFilename(dialogue.filename), searchQuery)}
+        {dialogue.title && dialogue.title !== formatFilename(dialogue.filename) && (
+          <div style={{ fontSize: '0.85rem', color: theme.text.secondary, marginTop: '0.25rem' }}>
+            {highlightText(dialogue.title, searchQuery)}
+          </div>
+        )}
       </div>
       <div
         style={{

@@ -21,9 +21,8 @@
     "3": [
       {"path": "Background.Contexte", "label": "Contexte Background", "truncate": 1200},
       {"path": "Background.Apparence", "label": "Apparence", "truncate": 1000},
-      {"path": "Dialogue Type.Registre de langage du personnage", "label": "Style de dialogue", "truncate": 700, "condition_flag": "include_dialogue_type"},
-      {"path": "Dialogue Type.Champs lexicaux utilisés", "label": "Champs lexicaux", "truncate": 500, "condition_flag": "include_dialogue_type"},
-      {"path": "Dialogue Type.Expressions courantes", "label": "Expressions courantes", "truncate": 500, "condition_flag": "include_dialogue_type"},
+      {"path": "Registre de langage du personnage", "label": "Style de dialogue", "truncate": 700, "condition_flag": "include_dialogue_type"},
+      {"path": "Expressions courantes", "label": "Expressions courantes", "truncate": 500, "condition_flag": "include_dialogue_type"},
       {"path": "Héritage des Âges (Pouvoirs Post-Méridiens)", "label": "Pouvoirs (extrait)", "truncate": 1200}
     ]
   },

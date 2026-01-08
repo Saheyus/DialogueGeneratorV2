@@ -13,4 +13,5 @@ export { KeyboardShortcutsHelp } from './KeyboardShortcutsHelp'
 export { CommandPalette } from './CommandPalette'
 export { SaveStatusIndicator } from './SaveStatusIndicator'
 export { ResizablePanels } from './ResizablePanels'
+export { ConfirmDialog, type ConfirmDialogProps } from './ConfirmDialog'
 

@@ -21,7 +21,7 @@ import type {
 import { DialogueStructureWidget } from './DialogueStructureWidget'
 import { SystemPromptEditor } from './SystemPromptEditor'
 import { SceneSelectionWidget } from './SceneSelectionWidget'
-import { useToast, toastManager, SaveStatusIndicator } from '../shared'
+import { useToast, toastManager, SaveStatusIndicator, ConfirmDialog } from '../shared'
 import { CONTEXT_TOKENS_LIMITS, DEFAULT_MODEL } from '../../constants'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import type { SaveStatus } from '../shared/SaveStatusIndicator'
@@ -35,6 +35,7 @@ export function GenerationPanel() {
     setSelections,
     setRegion,
     restoreState: restoreContextState,
+    clearSelections,
   } = useContextStore()
   const {
     sceneSelection,
@@ -71,14 +72,17 @@ export function GenerationPanel() {
   const [choicesMode, setChoicesMode] = useState<'free' | 'capped'>('free')
   const [availableModels, setAvailableModels] = useState<LLMModelResponse[]>([])
   const [unityDialogueResponse, setUnityDialogueResponse] = useState<GenerateUnityDialogueResponse | null>(null)
-  const [estimatedTokens, setEstimatedTokens] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isEstimating, setIsEstimating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [isDirty, setIsDirty] = useState(false)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved')
   const [narrativeTags, setNarrativeTags] = useState<string[]>([])
   const [previousDialoguePreview, setPreviousDialoguePreview] = useState<string | null>(null)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [resetMenuOpen, setResetMenuOpen] = useState(false)
+  const resetMenuRef = useRef<HTMLDivElement>(null)
   const toast = useToast()
   const sliderRef = useRef<HTMLInputElement>(null)
 
@@ -299,12 +303,12 @@ export function GenerationPanel() {
     // Permettre l'estimation si on a au moins : instructions, sélections, ou un system prompt
     const hasSystemPrompt = systemPromptOverride && systemPromptOverride.trim().length > 0
     if (!userInstructions.trim() && !hasSelections() && !hasSystemPrompt) {
-      setRawPrompt(null, null, null, false)
+      setRawPrompt(null, null, null, false, null)
       return
     }
 
     setIsEstimating(true)
-    setRawPrompt(null, null, null, true)
+      setRawPrompt(null, null, null, true, null)
     try {
       const contextSelections = buildContextSelections()
       
@@ -328,30 +332,65 @@ export function GenerationPanel() {
         max_choices: maxChoices ?? undefined,
         choices_mode: choicesMode,
         narrative_tags: narrativeTags.length > 0 ? narrativeTags : undefined,
-        vocabulary_config: vocabularyConfig || undefined,
+        vocabulary_config: vocabularyConfig ? (vocabularyConfig as unknown as Record<string, string>) : undefined,
         include_narrative_guides: includeNarrativeGuides,
         previous_dialogue_preview: previousDialoguePreview || undefined,
         field_configs: Object.keys(fieldConfigsWithEssential).length > 0 ? fieldConfigsWithEssential : undefined,
         organization_mode: organization,
       })
       
-      setRawPrompt(response.raw_prompt, response.token_count, response.prompt_hash, false)
+      setRawPrompt(response.raw_prompt, response.token_count, response.prompt_hash, false, response.structured_prompt || null)
     } catch (err: any) {
       // Ne logger que les erreurs non liées à la connexion (backend non accessible)
       if (err?.code !== 'ERR_NETWORK' && err?.code !== 'ECONNREFUSED' && err?.response?.status !== 401) {
         console.error('Erreur lors de l\'estimation:', err)
+        // Afficher un toast pour informer l'utilisateur de l'erreur
+        const errorMessage = getErrorMessage(err)
+        toast(errorMessage, 'error', 5000)
       }
-      setRawPrompt(null, null, null, false)
+      // Ne pas effacer le prompt existant si l'estimation échoue
+      // Le prompt précédent reste visible pour l'utilisateur, seule l'indication d'estimation est désactivée
+      // On conserve le prompt précédent au lieu de le mettre à null
+      // Lire les valeurs depuis le store pour éviter les dépendances qui causent une boucle infinie
+      const currentState = useGenerationStore.getState()
+      setRawPrompt(currentState.rawPrompt, currentState.tokenCount, currentState.promptHash, false, null)
     } finally {
       setIsEstimating(false)
     }
-  }, [userInstructions, authorProfile, maxChoices, choicesMode, narrativeTags, previousDialoguePreview, hasSelections, maxContextTokens, buildContextSelections, setRawPrompt, systemPromptOverride, vocabularyConfig, includeNarrativeGuides, sceneSelection.characterB])
+  }, [userInstructions, authorProfile, maxChoices, choicesMode, narrativeTags, previousDialoguePreview, hasSelections, maxContextTokens, buildContextSelections, setRawPrompt, systemPromptOverride, vocabularyConfig, includeNarrativeGuides, sceneSelection.characterB, toast])
 
 
 
   // Récupérer fieldConfigs et organization depuis le store pour les inclure dans les dépendances
   const { fieldConfigs, organization } = useContextConfigStore()
   
+  // Validation en temps réel
+  useEffect(() => {
+    const errors: Record<string, string> = {}
+    
+    if (maxContextTokens < CONTEXT_TOKENS_LIMITS.MIN) {
+      errors.maxContextTokens = `Minimum ${CONTEXT_TOKENS_LIMITS.MIN.toLocaleString()} tokens`
+    }
+    if (maxContextTokens > CONTEXT_TOKENS_LIMITS.MAX) {
+      errors.maxContextTokens = `Maximum ${CONTEXT_TOKENS_LIMITS.MAX.toLocaleString()} tokens`
+    }
+    
+    if (maxCompletionTokens !== null) {
+      if (maxCompletionTokens < 500) {
+        errors.maxCompletionTokens = 'Minimum 500 tokens'
+      }
+      if (maxCompletionTokens > 50000) {
+        errors.maxCompletionTokens = 'Maximum 50 000 tokens'
+      }
+    }
+    
+    if (tokenCount && tokenCount > maxContextTokens) {
+      errors.tokenCount = `Les tokens estimés (${tokenCount.toLocaleString()}) dépassent la limite (${maxContextTokens.toLocaleString()})`
+    }
+    
+    setValidationErrors(errors)
+  }, [maxContextTokens, maxCompletionTokens, tokenCount])
+
   useEffect(() => {
     // Estimer les tokens quand les sélections, les instructions, le system prompt, ou les fieldConfigs changent
     const hasAnySelections = 
@@ -373,7 +412,7 @@ export function GenerationPanel() {
       if (userInstructions.trim() || hasAnySelections || hasSystemPrompt) {
         estimateTokens()
       } else {
-        setRawPrompt(null, null, null, false)
+        setRawPrompt(null, null, null, false, null)
       }
     }, 500)
 
@@ -391,8 +430,18 @@ export function GenerationPanel() {
 
     setIsLoading(true)
     setError(null)
-    // Toast sans durée (0) pour qu'il reste affiché pendant la génération
-    const toastId = toast('Génération en cours...', 'info', 0)
+    // Toast sans durée (0) pour qu'il reste affiché pendant la génération, avec action d'annulation
+    const cancelGeneration = () => {
+      setIsLoading(false)
+      setError('Génération annulée')
+    }
+    const toastId = toast('Génération en cours...', 'info', 0, [
+      {
+        label: 'Annuler',
+        action: cancelGeneration,
+        style: 'secondary',
+      },
+    ])
 
     try {
       const contextSelections = buildContextSelections()
@@ -411,13 +460,29 @@ export function GenerationPanel() {
       // Calculer les tokens envoyés avant la génération
       let tokensSent = 0
       try {
-        const estimateResponse = await dialoguesAPI.estimateTokens(
-          contextSelections,
-          userInstructions,
-          maxContextTokens,
-          systemPromptOverride
-        )
-        tokensSent = estimateResponse.total_estimated_tokens
+        const { fieldConfigs: fieldConfigsForEstimate, essentialFields, organization: organizationForEstimate } = useContextConfigStore.getState()
+        const fieldConfigsWithEssential: Record<string, string[]> = {}
+        for (const [elementType, fields] of Object.entries(fieldConfigsForEstimate)) {
+          const essential = essentialFields[elementType] || []
+          fieldConfigsWithEssential[elementType] = [...new Set([...essential, ...fields])]
+        }
+        const estimateResponse = await dialoguesAPI.estimateTokens({
+          user_instructions: userInstructions,
+          context_selections: contextSelections,
+          npc_speaker_id: sceneSelection.characterB || undefined,
+          max_context_tokens: maxContextTokens,
+          system_prompt_override: systemPromptOverride || undefined,
+          author_profile: authorProfile || undefined,
+          max_choices: maxChoices ?? undefined,
+          choices_mode: choicesMode,
+        narrative_tags: narrativeTags.length > 0 ? narrativeTags : undefined,
+        vocabulary_config: vocabularyConfig ? (vocabularyConfig as unknown as Record<string, string>) : undefined,
+        include_narrative_guides: includeNarrativeGuides,
+          previous_dialogue_preview: previousDialoguePreview || undefined,
+          field_configs: Object.keys(fieldConfigsWithEssential).length > 0 ? fieldConfigsWithEssential : undefined,
+          organization_mode: organizationForEstimate,
+        })
+        tokensSent = estimateResponse.token_count
         setTokensUsed(tokensSent)
       } catch (err) {
         console.warn('Impossible d\'estimer les tokens:', err)
@@ -463,7 +528,7 @@ export function GenerationPanel() {
         max_choices: maxChoices ?? undefined,
         choices_mode: choicesMode,
         narrative_tags: narrativeTags.length > 0 ? narrativeTags : undefined,
-        vocabulary_config: vocabularyConfig || undefined,
+        vocabulary_config: vocabularyConfig ? (vocabularyConfig as unknown as Record<string, string>) : undefined,
         include_narrative_guides: includeNarrativeGuides,
         previous_dialogue_preview: previousDialoguePreview || undefined,
       }
@@ -487,7 +552,7 @@ export function GenerationPanel() {
       }
       
       // Mettre à jour le prompt réel dans le store
-      setRawPrompt(response.raw_prompt, response.estimated_tokens, response.prompt_hash, false)
+      setRawPrompt(response.raw_prompt, response.estimated_tokens, response.prompt_hash, false, response.structured_prompt || null)
 
       
       // Fermer le toast de génération en cours et afficher le succès
@@ -538,12 +603,65 @@ export function GenerationPanel() {
   }
 
   const handleReset = useCallback(() => {
+    if (isDirty) {
+      setShowResetConfirm(true)
+      return
+    }
+    performReset()
+  }, [isDirty])
+
+  const performReset = useCallback(() => {
     setUserInstructions('')
     setUnityDialogueResponse(null)
     setError(null)
     setIsDirty(false)
+    setShowResetConfirm(false)
+    setResetMenuOpen(false)
+    // Réinitialiser aussi le store
+    setStoreUnityDialogueResponse(null)
     toast('Formulaire réinitialisé', 'info')
+  }, [toast, setStoreUnityDialogueResponse])
+
+  const handleResetAll = useCallback(() => {
+    if (isDirty) {
+      setShowResetConfirm(true)
+      return
+    }
+    performResetAll()
+  }, [isDirty])
+
+  const performResetAll = useCallback(() => {
+    setUserInstructions('')
+    setUnityDialogueResponse(null)
+    setError(null)
+    setIsDirty(false)
+    setShowResetConfirm(false)
+    setResetMenuOpen(false)
+    setSystemPromptOverride(null)
+    setDialogueStructure(['PNJ', 'PJ', 'Stop', '', '', ''])
+    setSceneSelection({ characterA: null, characterB: null, sceneRegion: null, subLocation: null })
+    setMaxContextTokens(CONTEXT_TOKENS_LIMITS.DEFAULT)
+    setMaxCompletionTokens(null)
+    setMaxChoices(null)
+    setChoicesMode('free')
+    setNarrativeTags([])
+    setStoreUnityDialogueResponse(null)
+    clearSelections()
+    toast('Tout a été réinitialisé', 'info')
+  }, [toast, setStoreUnityDialogueResponse, setSystemPromptOverride, setDialogueStructure, setSceneSelection, clearSelections])
+
+  const handleResetInstructions = useCallback(() => {
+    setUserInstructions('')
+    setIsDirty(true)
+    setResetMenuOpen(false)
+    toast('Instructions réinitialisées', 'info')
   }, [toast])
+
+  const handleResetSelections = useCallback(() => {
+    clearSelections()
+    setResetMenuOpen(false)
+    toast('Sélections réinitialisées', 'info')
+  }, [clearSelections, toast])
 
   // Raccourcis clavier
   useKeyboardShortcuts(
@@ -577,6 +695,9 @@ export function GenerationPanel() {
     handlePreview,
     handleExportUnity,
     handleReset,
+    handleResetAll,
+    handleResetInstructions,
+    handleResetSelections,
   })
   
   // Mettre à jour la ref quand les handlers changent
@@ -586,8 +707,11 @@ export function GenerationPanel() {
       handlePreview,
       handleExportUnity,
       handleReset,
+      handleResetAll,
+      handleResetInstructions,
+      handleResetSelections,
     }
-  }, [handleGenerate, handlePreview, handleExportUnity, handleReset])
+  }, [handleGenerate, handlePreview, handleExportUnity, handleReset, handleResetAll, handleResetInstructions, handleResetSelections])
 
   // Exposer les handlers via le store pour Dashboard
   // Mettre à jour au montage initial et quand isLoading ou isDirty changent
@@ -700,6 +824,11 @@ export function GenerationPanel() {
       <div style={{ marginBottom: '1rem' }}>
         <label style={{ color: theme.text.primary, display: 'block' }}>
           Max tokens contexte:
+          {validationErrors.maxContextTokens && (
+            <div style={{ fontSize: '0.85rem', color: theme.state.error.color, marginTop: '0.25rem' }}>
+              {validationErrors.maxContextTokens}
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem' }}>
             <input
               ref={sliderRef}
@@ -781,6 +910,11 @@ export function GenerationPanel() {
       <div style={{ marginBottom: '1rem' }}>
         <label style={{ color: theme.text.primary, display: 'block' }}>
           Max tokens génération:
+          {validationErrors.maxCompletionTokens && (
+            <div style={{ fontSize: '0.85rem', color: theme.state.error.color, marginTop: '0.25rem' }}>
+              {validationErrors.maxCompletionTokens}
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem' }}>
             <input
               type="range"
@@ -1020,19 +1154,24 @@ export function GenerationPanel() {
         </div>
       </div>
 
-      {estimatedTokens !== null && (
+      {tokenCount !== null && (
         <div style={{ 
           marginBottom: '1rem', 
           padding: '0.5rem', 
-          backgroundColor: theme.state.info.background, 
-          color: theme.state.info.color,
+          backgroundColor: validationErrors.tokenCount ? theme.state.error.background : theme.state.info.background, 
+          color: validationErrors.tokenCount ? theme.state.error.color : theme.state.info.color,
           borderRadius: '4px' 
         }}>
           {isEstimating ? (
             <span>Estimation en cours...</span>
           ) : (
             <span>
-              <strong>Tokens estimés:</strong> {estimatedTokens.toLocaleString()}
+              <strong>Tokens estimés:</strong> {tokenCount.toLocaleString()}
+              {validationErrors.tokenCount && (
+                <div style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>
+                  {validationErrors.tokenCount}
+                </div>
+              )}
             </span>
           )}
         </div>
@@ -1053,6 +1192,16 @@ export function GenerationPanel() {
         </div>
       )}
       </div>
+      <ConfirmDialog
+        isOpen={showResetConfirm}
+        title="Réinitialiser le formulaire"
+        message="Vous avez des modifications non sauvegardées. Êtes-vous sûr de vouloir tout réinitialiser ? Cette action est irréversible."
+        confirmLabel="Réinitialiser"
+        cancelLabel="Annuler"
+        variant="warning"
+        onConfirm={performReset}
+        onCancel={() => setShowResetConfirm(false)}
+      />
     </div>
   )
 }

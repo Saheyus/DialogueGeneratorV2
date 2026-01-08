@@ -451,13 +451,25 @@ async function startBackend(port = 4243) {
   // Démarrer le backend
   console.log(`🔄 Démarrage du backend sur le port ${port}...`);
   
+  // Valeurs par défaut: garder `npm run dev` lisible, même si l'environnement a LOG_LEVEL=DEBUG.
+  // Les flags `--debug/--verbose/--log-level` peuvent définir LOG_CONSOLE_LEVEL via scripts/dev.js.
+  // LOG_FILE_LEVEL reste plus bas par défaut pour conserver des logs utiles sans explosion.
+  const defaultConsoleLevel = 'WARNING';
+  const defaultFileLevel = 'INFO';
+  const consoleLevel = process.env.LOG_CONSOLE_LEVEL || defaultConsoleLevel;
+  const fileLevel = process.env.LOG_FILE_LEVEL || defaultFileLevel;
+
   const spawnOptions = {
     cwd: PROJECT_ROOT,
     stdio: 'inherit',
     shell: true,
     env: Object.assign({}, process.env, {
       RELOAD: 'true',
-      API_PORT: port.toString()
+      API_PORT: port.toString(),
+      // Forcer un niveau console lisible par défaut (override d'un LOG_LEVEL=DEBUG global)
+      LOG_CONSOLE_LEVEL: consoleLevel,
+      // Garder les logs fichiers utiles (et consultables) sans trop de verbosité
+      LOG_FILE_LEVEL: fileLevel,
     })
   };
   

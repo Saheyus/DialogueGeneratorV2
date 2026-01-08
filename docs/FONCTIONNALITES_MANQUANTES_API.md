@@ -1,12 +1,16 @@
 # Fonctionnalités manquantes dans l'API REST
 
-Ce document liste les fonctionnalités qui étaient présentes dans l'ancienne interface desktop mais qui ne sont pas encore implémentées dans l'API REST.
+Ce document liste les fonctionnalités qui étaient présentes dans l'ancienne interface desktop mais qui ne sont pas encore implémentées dans l'API REST, ainsi que les fonctionnalités mentionnées dans le README qui sont partiellement ou non implémentées.
 
 **Note** : Ce document a été mis à jour le 2025-12-25. Unity n'utilise plus le format Yarn (.yarn) mais le format JSON (voir spécification dans ce dossier).
 
+**Dernière vérification** : 2026-01-02 - La plupart des fonctionnalités sont maintenant implémentées.
+
+**Vérification approfondie** : 2026-01-02 - Vérification complète de l'existant pour identifier les fonctionnalités réellement manquantes.
+
 ## Résumé exécutif
 
-L'API REST couvre les fonctionnalités principales, mais plusieurs fonctionnalités avancées de l'ancienne interface ne sont pas encore exposées via l'API.
+L'API REST couvre les fonctionnalités principales. La plupart des fonctionnalités de l'ancienne interface sont implémentées. Quelques fonctionnalités avancées mentionnées dans le README restent à implémenter.
 
 ---
 
@@ -104,16 +108,21 @@ GET /api/v1/context/locations/regions/{name}/sub-locations  # Sous-lieux d'une r
   - Récupération du chemin complet d'une interaction (parents jusqu'à la racine)
   - Méthode `ContextBuilder.set_previous_dialogue_context()` pour définir le contexte
   - Le contexte précédent est inclus dans `build_context()` via `_format_previous_dialogue_for_context()`
-- **API REST** : ✅ Implémenté - `GET /api/v1/interactions/{id}/context-path`, `previous_interaction_id` dans `POST /api/v1/dialogues/generate/interactions`
-- **Impact** : Fonctionnalité disponible via l'API
+- **API REST** : ✅ Partiellement implémenté
+  - Les endpoints de génération acceptent `previous_dialogue_preview` (texte formaté) dans `BasePromptRequest`
+  - Endpoint `POST /api/v1/unity-dialogues/preview` pour générer un preview texte depuis un dialogue Unity JSON
+  - ⚠️ Pas d'endpoint pour récupérer le chemin complet d'une interaction (parents/enfants)
+- **Impact** : La continuité est possible via preview texte, mais pas de gestion automatique des relations parent/enfant
 
-**Endpoints nécessaires** :
+**Endpoints disponibles** :
 ```
-GET /api/v1/interactions/{id}/context-path         # Récupère le chemin complet (parents)
-POST /api/v1/dialogues/generate/interactions       # Doit accepter previous_interaction_id dans le body
+POST /api/v1/unity-dialogues/preview  # Génère un preview texte depuis un dialogue Unity JSON
+Body: { "json_content": "..." }
+Response: { "preview_text": "...", "node_count": 5 }
 ```
 
-**Note** : Le service `DialogueGenerationService` utilise déjà `ContextBuilder` qui supporte `previous_dialogue_context`, mais cette fonctionnalité n'est pas exposée via l'API.
+**Champ dans les requêtes de génération** :
+- `previous_dialogue_preview: Optional[str]` dans `BasePromptRequest` (utilisé par tous les endpoints de génération)
 
 ---
 
@@ -165,25 +174,204 @@ Body: { "path": "string" }
 
 ---
 
+## 8. Sélection multiple de personnages
+
+### Sélection explicite de plusieurs personnages (Acteur A, Acteur B)
+- **Ancienne UI** : 
+  - Sélection de plusieurs personnages pour définir les protagonistes de la scène
+- **API REST** : ✅ **DÉJÀ IMPLÉMENTÉ**
+  - Le frontend utilise `characterA` et `characterB` dans `SceneSelection`
+  - Ces valeurs sont transmises via `scene_protagonists` dans `ContextSelection`
+  - Le champ `npc_speaker_id` permet de spécifier le PNJ interlocuteur
+  - Référence : `frontend/src/components/generation/GenerationPanel.tsx:270-278`, `api/schemas/dialogue.py:45`
+
+**Implémentation** :
+- `ContextSelection.scene_protagonists` : Dictionnaire avec `personnage_a` et `personnage_b`
+- `BasePromptRequest.npc_speaker_id` : ID du PNJ interlocuteur (par défaut : premier personnage sélectionné)
+- Frontend : `SceneSelectionWidget` avec sélecteurs pour `characterA` et `characterB`
+
+---
+
+## 9. Paramètres de génération avancés
+
+### Contrôle du ton, style, température, et autres paramètres LLM
+- **Ancienne UI** : 
+  - Interface pour configurer température, ton, style, etc.
+- **API REST** : ⚠️ **PARTIELLEMENT IMPLÉMENTÉ**
+  - ✅ `narrative_tags` : Tags narratifs pour guider le ton (ex: tension, humour, dramatique)
+  - ✅ `author_profile` : Profil d'auteur global (style réutilisable entre scènes)
+  - ✅ `max_choices` et `choices_mode` : Contrôle du nombre de choix
+  - ✅ `vocabulary_config` : Configuration du vocabulaire par niveau
+  - ✅ Sélection de modèle LLM : `llm_model_identifier`
+  - ⚠️ `temperature` : **Présent dans la config backend mais non exposé dans l'API/UI**
+  - ❌ `top_p`, `frequency_penalty`, `presence_penalty` : Non implémentés
+
+**État actuel** :
+- `temperature` est configuré dans `llm_config.json` et utilisé par `OpenAIClient` (`llm_client.py:146, 292-295`)
+- La température par défaut est définie par modèle dans `config/llm_config.json`
+- **Comportement** : `temperature` est ajoutée seulement si le modèle le supporte (exclu pour `gpt-5-mini` et `gpt-5-nano`)
+- **Manque** : Exposition de `temperature` dans les schémas API et l'interface utilisateur pour permettre un contrôle dynamique
+
+**Paramètres disponibles mais non utilisés** (Chat Completions API) :
+- `top_p` : Contrôle la diversité (alternative/complément à temperature)
+- `frequency_penalty` : Réduit la répétition de tokens (utile pour dialogues)
+- `presence_penalty` : Encourage l'utilisation de nouveaux tokens (créativité)
+
+**Paramètres disponibles uniquement via Responses API** (non utilisée actuellement) :
+- `reasoning.effort` : Contrôle la profondeur de raisonnement (`none`, `low`, `medium`, `high`, `xhigh`)
+- `verbosity` : Contrôle la longueur des réponses (`low`, `medium`, `high`)
+- `previous_response_id` : Passe le chain-of-thought précédent (améliore latence et cache)
+
+**Action nécessaire** :
+- Ajouter `temperature: Optional[float]` dans `BasePromptRequest` ou `GenerateUnityDialogueRequest`
+- Exposer `temperature` dans l'interface utilisateur (slider ou input)
+- Passer `temperature` au client LLM lors de la création
+- **Optionnel** : Ajouter `frequency_penalty` et `presence_penalty` pour améliorer la qualité des dialogues
+
+**Référence** : Voir `docs/ANALYSE_PARAMETRES_OPENAI.md` pour une analyse détaillée des paramètres disponibles.
+
+---
+
+## 10. Structured Output (Sorties Structurées)
+
+### Utilisation de JSON Schema avec l'API OpenAI pour un output plus fiable
+- **README** : Mentionné comme fonctionnalité à explorer
+- **API REST** : ✅ **DÉJÀ IMPLÉMENTÉ**
+  - Utilise Function Calling avec `tools` et `tool_choice` dans OpenAI API
+  - Modèle Pydantic `UnityDialogueGenerationResponse` converti en schéma JSON
+  - Implémenté dans `UnityDialogueGenerationService` et `OpenAIClient`
+  - Référence : `llm_client.py:219-246`, `services/unity_dialogue_generation_service.py:46-52`
+  - Documentation : `docs/STRUCTURED_OUTPUT_EXPLANATION.md`
+
+**Implémentation** :
+- Le schéma Pydantic est converti en JSON Schema via `model_json_schema()`
+- Le schéma est passé comme paramètre d'une fonction que l'IA doit appeler
+- Garantit la structure JSON, les types, et la conformité au schéma
+
+---
+
+## 11. UnityJsonRenderer
+
+### Module pour convertir les Interactions en fichiers JSON Unity
+- **README** : Mentionné comme fonctionnalité à implémenter
+- **API REST** : ✅ **DÉJÀ IMPLÉMENTÉ**
+  - Module `UnityJsonRenderer` dans `services/json_renderer/unity_json_renderer.py`
+  - Utilisé pour normaliser et exporter les dialogues Unity JSON
+  - Méthode `render_unity_nodes()` pour convertir une liste de nœuds en JSON formaté
+  - Référence : `services/json_renderer/unity_json_renderer.py:146-178`
+
+**Implémentation** :
+- Normalise les nœuds selon les règles Unity (supprime champs vides, valeurs par défaut)
+- Valide les nœuds avant rendu
+- Utilisé dans l'endpoint `/api/v1/dialogues/generate/unity-dialogue`
+
+---
+
+## 12. GitService
+
+### Intégration Git pour commit/push automatique des dialogues générés
+- **README** : Mentionné comme fonctionnalité à implémenter
+- **Spécification technique** : `git add .; git commit -m "Generate …"` via subprocess
+- **API REST** : ❌ **NON IMPLÉMENTÉ**
+  - Aucun service Git trouvé dans le codebase
+  - Aucun endpoint API pour les opérations Git
+
+**Action nécessaire** :
+- Créer `services/git_service.py` avec méthodes pour :
+  - `commit_dialogue(filename, message)` : Commit un fichier de dialogue
+  - `push_changes()` : Push les changements vers le repo distant
+  - Gestion des credentials (store Windows ou token)
+- Créer endpoint API `POST /api/v1/dialogues/git/commit` (optionnel, peut être appelé depuis le frontend après export)
+
+**Référence** : `docs/Spécification technique.md:113-117`
+
+---
+
+## 13. Événements Notables (Stratégie Avancée)
+
+### Génération de variantes basée sur des événements narratifs et leurs états
+- **README** : Concept détaillé dans la section "Stratégie Avancée de Génération de Variantes"
+- **API REST** : ❌ **NON IMPLÉMENTÉ**
+  - Concept décrit mais aucun code trouvé
+  - Aucun endpoint pour gérer les événements notables
+  - Aucun système de génération combinatoire de variantes
+
+**Concept** :
+- Chaque événement narratif (ex: `decision_guilde_voleurs`) peut avoir plusieurs états
+- Chaque état a une description textuelle pour le LLM
+- Le système génère automatiquement une variante pour chaque combinaison d'états
+- Exemple : 1 événement avec 3 états → 3 variantes, 2 événements (3×2 états) → 6 variantes
+
+**Action nécessaire** :
+- Créer un système de gestion des événements notables :
+  - Modèle de données pour les événements et leurs états
+  - Endpoint pour définir/gérer les événements
+  - Logique de génération combinatoire dans `UnityDialogueGenerationService`
+  - Interface utilisateur pour sélectionner les événements et leurs états
+- **Défi** : Explosion combinatoire des variantes (nécessite une UI pour limiter les combinaisons)
+
+**Référence** : `README.md:147-178`
+
+---
+
 ## Priorités recommandées
 
-1. **Haute priorité** (fonctionnalités bloquantes) :
-   - Espèces et communautés (catégories GDD manquantes)
-   - Régions et sous-lieux (hiérarchie des lieux)
+### ✅ Fonctionnalités déjà implémentées
 
-2. **Moyenne priorité** (fonctionnalités importantes) :
-   - Linked Selector (améliore l'UX)
-   - Configuration Unity Dialogues Path (utile pour l'intégration Unity)
+1. **Catégories GDD** :
+   - ✅ Espèces et communautés (endpoints API)
+   - ✅ Régions et sous-lieux (hiérarchie des lieux)
+   - ✅ Linked Selector (suggestion d'éléments liés)
+   - ✅ Configuration Unity Dialogues Path
+   - ✅ Sélection multiple de personnages (characterA/characterB)
+   - ✅ Structured Output (via Function Calling OpenAI)
+   - ✅ UnityJsonRenderer (normalisation et export JSON Unity)
+   - ✅ System Prompt Override
+   - ✅ Dialogue Structure personnalisable
 
-3. **Basse priorité** (fonctionnalités avancées) :
-   - Continuité (previous interactions) - déjà partiellement supporté, manque juste l'intégration
+### 🔧 Fonctionnalités à compléter (priorité haute)
+
+1. **Exposition de `temperature` dans l'API/UI** :
+   - Impact : Contrôle fin de la créativité des réponses LLM
+   - Complexité : Faible (ajout d'un champ dans les schémas et l'UI)
+   - Référence : Section 9 ci-dessus
+
+### 🚀 Fonctionnalités à implémenter (priorité moyenne)
+
+2. **GitService** :
+   - Impact : Complète le pipeline de production (génération → export → commit → Unity)
+   - Complexité : Moyenne (service Git + gestion credentials)
+   - Référence : Section 12 ci-dessus
+
+3. **Continuité complète (relations parent/enfant)** :
+   - Impact : Gestion automatique des arbres de dialogues
+   - Complexité : Moyenne (endpoint pour récupérer le chemin complet d'une interaction)
+   - Référence : Section 4 ci-dessus
+
+### 🎯 Fonctionnalités avancées (priorité basse)
+
+4. **Paramètres LLM avancés** (`top_p`, `frequency_penalty`, `presence_penalty`) :
+   - Impact : Contrôle encore plus fin des réponses LLM
+   - Complexité : Faible (similaire à `temperature`)
+   - Référence : Section 9 ci-dessus
+
+5. **Événements Notables** :
+   - Impact : Génération de variantes contextuelles basées sur les événements narratifs
+   - Complexité : Élevée (système complet de gestion d'événements + génération combinatoire)
+   - Référence : Section 13 ci-dessus
 
 ---
 
 ## Notes techniques
 
-- Tous les services backend nécessaires existent déjà dans le codebase Python
-- Il s'agit principalement de créer des routers FastAPI qui exposent ces services
-- Les schémas Pydantic existants peuvent être réutilisés/étendus
-- Aucune modification du code métier n'est nécessaire, seulement l'exposition via l'API
+- **Services backend existants** : La plupart des services backend nécessaires existent déjà dans le codebase Python. Pour les nouvelles fonctionnalités (GitService, Événements Notables), il faudra créer de nouveaux services.
+
+- **Exposition via API** : Pour les fonctionnalités partiellement implémentées (temperature, continuité), il s'agit principalement de créer des routers FastAPI qui exposent ces services ou d'étendre les schémas existants.
+
+- **Schémas Pydantic** : Les schémas Pydantic existants peuvent être réutilisés/étendus. Pour `temperature`, ajouter un champ optionnel dans `BasePromptRequest` ou `GenerateUnityDialogueRequest`.
+
 - **Format Unity** : Unity utilise maintenant le format JSON (tableau de nœuds `[{...}, {...}]`), pas Yarn. Voir la spécification dans ce dossier pour les détails du format attendu.
+
+- **Structured Output** : Déjà implémenté via Function Calling OpenAI. Le système garantit la structure JSON mais nécessite toujours des instructions explicites pour la logique métier (voir `docs/STRUCTURED_OUTPUT_EXPLANATION.md`).
+
+- **Frontend** : L'interface React (`frontend/`) est l'interface principale. Les fonctionnalités manquantes doivent être exposées via l'API REST puis intégrées dans l'interface React.

@@ -66,18 +66,18 @@ class DialogueGenerationService:
         # Extraire _element_modes si présent
         element_modes = context_selections.pop("_element_modes", None) if isinstance(context_selections, dict) else None
         
-        # Utiliser build_context_with_custom_fields si field_configs est fourni
-        if field_configs and hasattr(self.context_builder, 'build_context_with_custom_fields'):
-            return self.context_builder.build_context_with_custom_fields(
-                selected_elements=context_selections,
-                scene_instruction=user_instructions,
-                field_configs=field_configs,
-                organization_mode=organization_mode or "default",
-                max_tokens=max_tokens,
-                element_modes=element_modes
-            )
-        else:
-            return self.context_builder.build_context(context_selections, user_instructions, max_tokens=max_tokens)
+        # Utiliser build_context_json (obligatoire, plus de fallback)
+        structured_context = self.context_builder.build_context_json(
+            selected_elements=context_selections,
+            scene_instruction=user_instructions,
+            field_configs=field_configs,
+            organization_mode=organization_mode or "narrative",
+            max_tokens=max_tokens,
+            include_dialogue_type=True,
+            element_modes=element_modes
+        )
+        # Sérialiser en texte pour compatibilité avec l'ancienne signature
+        return self.context_builder._context_serializer.serialize_to_text(structured_context)
 
     def _restore_prompt_on_error(self, original_system_prompt: Optional[str]):
         if original_system_prompt is not None:

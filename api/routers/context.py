@@ -378,13 +378,18 @@ async def build_context(
         # Convertir ContextSelection en dict pour le service (avec préfixes underscore)
         context_selections_dict = request_data.context_selections.to_service_dict()
         
-        context_text = context_builder.build_context(
+        # Construire le contexte JSON (obligatoire, plus de fallback)
+        structured_context = context_builder.build_context_json(
             selected_elements=context_selections_dict,
             scene_instruction=request_data.user_instructions,
+            field_configs=None,
+            organization_mode="narrative",
             max_tokens=request_data.max_tokens,
-            include_dialogue_type=request_data.include_dialogue_type
+            include_dialogue_type=request_data.include_dialogue_type,
+            element_modes=context_selections_dict.get("_element_modes")
         )
-        
+        # Sérialiser en texte
+        context_text = context_builder._context_serializer.serialize_to_text(structured_context)
         token_count = context_builder._count_tokens(context_text)
         
         return BuildContextResponse(
@@ -427,12 +432,18 @@ async def estimate_context_tokens(
         # Convertir ContextSelection en dict pour le service
         context_selections_dict = request_data.context_selections.to_service_dict()
         
-        context_text = context_builder.build_context(
+        # Construire le contexte JSON (obligatoire, plus de fallback)
+        structured_context = context_builder.build_context_json(
             selected_elements=context_selections_dict,
             scene_instruction=request_data.user_instructions,
-            max_tokens=request_data.max_tokens
+            field_configs=None,
+            organization_mode="narrative",
+            max_tokens=request_data.max_tokens,
+            include_dialogue_type=True,
+            element_modes=context_selections_dict.get("_element_modes")
         )
-        
+        # Sérialiser en texte
+        context_text = context_builder._context_serializer.serialize_to_text(structured_context)
         token_count = context_builder._count_tokens(context_text)
         
         return EstimateTokensResponse(

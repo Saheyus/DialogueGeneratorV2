@@ -90,12 +90,28 @@ export function GenerationOptionsModal({
       // Utiliser les sélections du store de contexte
       const { selections } = await import('../../store/contextStore').then(m => m.useContextStore.getState())
       
+      // Fusionner les listes full et excerpt pour chaque type
       const selectedElements: Record<string, string[]> = {
-        characters: selections.characters,
-        locations: selections.locations,
-        items: selections.items,
-        species: selections.species,
-        communities: selections.communities,
+        characters: [
+          ...(Array.isArray(selections.characters_full) ? selections.characters_full : []),
+          ...(Array.isArray(selections.characters_excerpt) ? selections.characters_excerpt : [])
+        ],
+        locations: [
+          ...(Array.isArray(selections.locations_full) ? selections.locations_full : []),
+          ...(Array.isArray(selections.locations_excerpt) ? selections.locations_excerpt : [])
+        ],
+        items: [
+          ...(Array.isArray(selections.items_full) ? selections.items_full : []),
+          ...(Array.isArray(selections.items_excerpt) ? selections.items_excerpt : [])
+        ],
+        species: [
+          ...(Array.isArray(selections.species_full) ? selections.species_full : []),
+          ...(Array.isArray(selections.species_excerpt) ? selections.species_excerpt : [])
+        ],
+        communities: [
+          ...(Array.isArray(selections.communities_full) ? selections.communities_full : []),
+          ...(Array.isArray(selections.communities_excerpt) ? selections.communities_excerpt : [])
+        ],
       }
 
       const response = await getPreview(
@@ -709,7 +725,7 @@ function ShortcutsTab() {
       { key: 'ctrl+enter', description: 'Générer un dialogue' },
       { key: 'alt+s', description: 'Échanger les personnages (swap)' },
       { key: 'ctrl+k', description: 'Ouvrir la palette de commandes' },
-      { key: '/', description: 'Ouvrir la palette de commandes' },
+      { key: '/', description: 'Filtrer dans le panneau de gauche' },
       { key: 'ctrl+e', description: 'Exporter le dialogue Unity' },
       { key: 'ctrl+s', description: 'Sauvegarder le dialogue' },
       { key: 'ctrl+n', description: 'Nouveau dialogue (réinitialiser)' },

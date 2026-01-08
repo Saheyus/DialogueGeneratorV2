@@ -133,6 +133,53 @@ def get_log_level() -> str:
     valid_levels = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
     return level if level in valid_levels else "INFO"
 
+def _normalize_level(level: str, default: str) -> str:
+    """Normalise un niveau de log en valeur valide.
+    
+    Args:
+        level: Valeur brute (env var).
+        default: Niveau par défaut si invalide.
+        
+    Returns:
+        Niveau normalisé (DEBUG/INFO/WARNING/ERROR/CRITICAL).
+    """
+    valid_levels = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+    value = (level or "").upper().strip()
+    return value if value in valid_levels else default
+
+
+def get_console_log_level() -> str:
+    """Retourne le niveau de log pour la console.
+    
+    Variables:
+        - LOG_CONSOLE_LEVEL: niveau console (prioritaire)
+        - LOG_LEVEL: fallback historique
+    """
+    return _normalize_level(os.getenv("LOG_CONSOLE_LEVEL", ""), get_log_level())
+
+
+def get_file_log_level() -> str:
+    """Retourne le niveau de log pour le fichier.
+    
+    Variables:
+        - LOG_FILE_LEVEL: niveau fichier (prioritaire)
+        - LOG_LEVEL: fallback historique
+    """
+    return _normalize_level(os.getenv("LOG_FILE_LEVEL", ""), get_log_level())
+
+
+def _min_level(*levels: str) -> str:
+    """Retourne le niveau le plus permissif (min) parmi plusieurs niveaux.
+    
+    Exemple: min(INFO, WARNING) = INFO.
+    """
+    order = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
+    min_val = min(order.get(l, 20) for l in levels if l)
+    for k, v in order.items():
+        if v == min_val:
+            return k
+    return "INFO"
+
 
 def setup_logging() -> None:
     """Configure le logging structuré pour l'API.
@@ -142,6 +189,8 @@ def setup_logging() -> None:
     """
     log_format = get_log_format()
     log_level = get_log_level()
+    console_level = get_console_log_level()
+    file_level = get_file_log_level()
     environment = os.getenv("ENVIRONMENT", "development")
     
     # Créer le formateur approprié
@@ -156,11 +205,12 @@ def setup_logging() -> None:
     # Configurer le handler console
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
-    console_handler.setLevel(getattr(logging, log_level))
+    console_handler.setLevel(getattr(logging, console_level))
     
     # Configurer le root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(getattr(logging, log_level))
+    # Le root doit accepter au moins les niveaux nécessaires aux handlers
+    root_logger.setLevel(getattr(logging, _min_level(console_level, file_level)))
     root_logger.handlers = []  # Nettoyer les handlers existants
     root_logger.addHandler(console_handler)
     
@@ -181,7 +231,7 @@ def setup_logging() -> None:
                 retention_days=retention_days,
                 max_file_size_mb=int(os.getenv("LOG_MAX_FILE_SIZE_MB", "100"))
             )
-            file_handler.setLevel(getattr(logging, log_level))
+            file_handler.setLevel(getattr(logging, file_level))
             # Utiliser JSONFormatter pour les fichiers (même si console est en texte)
             file_formatter = JSONFormatter()
             file_handler.setFormatter(file_formatter)
@@ -203,7 +253,12 @@ def setup_logging() -> None:
     
     # Réduire la verbosité de certains loggers spécifiques
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-    logging.getLogger("uvicorn.error").setLevel(logging.INFO)
+    # Uvicorn est très verbeux; si la console est en WARNING/ERROR, on le rend silencieux.
+    # En DEBUG/INFO, conserver les infos utiles de démarrage.
+    if console_level in ("WARNING", "ERROR", "CRITICAL"):
+        logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
+    else:
+        logging.getLogger("uvicorn.error").setLevel(logging.INFO)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("sentry_sdk").setLevel(logging.WARNING)
@@ -225,7 +280,7 @@ def setup_logging() -> None:
     # Logger la configuration
     logger = logging.getLogger(__name__)
     logger.info(
-        f"Logging configuré: format={log_format}, level={log_level}, environment={environment}, fichier={'activé' if log_file_enabled else 'désactivé'}",
+        f"Logging configuré: format={log_format}, level={log_level}, console={console_level}, file={file_level}, environment={environment}, fichier={'activé' if log_file_enabled else 'désactivé'}",
         extra={"environment": environment}
     )
 

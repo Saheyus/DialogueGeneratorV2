@@ -177,6 +177,25 @@ Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux m
         *   Adaptation de l'interface utilisateur de `DialogueGenerator`.
     *   Cette approche représente une évolution significative pour la génération de dialogues dynamiques et contextuellement conscients.
 
+## Warnings connus (non bloquants)
+
+### Warning Node.js `util._extend` déprécié
+
+Lors du démarrage avec `npm run dev`, vous pouvez voir un warning Node.js :
+```
+(node:xxxxx) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+```
+
+**Ce warning est normal et non bloquant.** Il provient de la dépendance `concurrently` (via `spawn-command`) qui utilise une API Node.js dépréciée. Cela n'affecte pas le fonctionnement de l'application. Ce warning sera résolu lorsque les dépendances seront mises à jour.
+
+### Warnings de validation GDD
+
+Au démarrage, vous pouvez voir des warnings concernant la validation des champs GDD :
+- Champs invalides détectés (normal si certains champs ne sont pas dans la configuration)
+- Fichiers GDD manquants (normal si certains fichiers sont optionnels)
+
+Ces warnings sont informatifs et n'empêchent pas l'application de fonctionner. Pour plus de détails, utilisez `STARTUP_REPORT=full npm run dev`.
+
 ## Dépannage
 
 ### Erreur Git "fatal: bad object refs/heads/desktop.ini" (Windows)

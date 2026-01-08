@@ -1,3 +1,19 @@
+"""Tests unitaires du ContextBuilder avec données mockées.
+
+Ce module contient des tests unitaires qui utilisent des données mockées
+et des fixtures temporaires. Ces tests sont rapides et isolés, ne dépendant
+pas des vraies données GDD du projet.
+
+Types de tests :
+- Tests unitaires : Utilisent des données mockées/fixtures temporaires
+- Tests rapides : Pas de chargement de fichiers réels
+
+Pour exécuter uniquement ces tests :
+    pytest tests/test_context_builder.py -m unit
+
+Pour exécuter les tests d'intégration (avec vraies données) :
+    pytest tests/test_context_builder_real_data.py -m integration
+"""
 import pytest
 import json
 from pathlib import Path
@@ -108,6 +124,7 @@ def mock_gdd_project_root(monkeypatch, temp_test_dir: Path):
 
     return temp_test_dir
 
+@pytest.mark.unit
 class TestContextBuilderInitialization:
     def test_init_with_dummy_config_file(self, dummy_context_config_file: Path, mock_project_root_for_context_builder):
         """Tests ContextBuilder initialization with a valid dummy config file."""
@@ -140,6 +157,8 @@ class TestContextBuilderInitialization:
         assert f"Erreur de décodage JSON pour le fichier de configuration {malformed_config_file}" in caplog.text
 
     @patch('context_builder.tiktoken', None)
+    @patch('services.context_truncator.tiktoken', None)
+    @patch('services.context_truncator.TIKTOKEN_AVAILABLE', False)
     def test_init_without_tiktoken(self, dummy_context_config_file: Path, mock_project_root_for_context_builder, caplog):
         """Tests ContextBuilder initialization when tiktoken is not available."""
         cb = ContextBuilder(config_file_path=dummy_context_config_file)
@@ -149,6 +168,7 @@ class TestContextBuilderInitialization:
 # More test classes and methods will follow for other functionalities
 # e.g., TestContextBuilderGDDLoading, TestContextBuilderDataAccess, TestContextBuilderContextBuilding, etc.
 
+@pytest.mark.unit
 class TestContextBuilderGDDLoading:
     def test_load_gdd_files_successfully(self, mock_gdd_project_root, dummy_context_config_file):
         """Tests successful loading of GDD files from mocked project root."""
@@ -261,6 +281,7 @@ class TestContextBuilderGDDLoading:
                f"Expected info substring '{micro_message_part}' not found in infos: {caplog.text}"
 
 # Placeholder for future tests
+@pytest.mark.unit
 class TestContextBuilderDataAccess:
     @pytest.fixture
     def cb_with_data(self, mock_gdd_project_root, dummy_context_config_file) -> ContextBuilder:
@@ -470,6 +491,7 @@ class TestContextBuilderDataAccess:
         sub_locs_inexistant = cb_with_data.get_sub_locations("Région Inexistante")
         assert sub_locs_inexistant == []
 
+@pytest.mark.unit
 class TestContextBuilderContextBuilding:
     @pytest.fixture
     def cb_for_context(self, mock_gdd_project_root, dummy_context_config_file) -> ContextBuilder:
@@ -579,30 +601,30 @@ class TestContextBuilderContextBuilding:
 
     def test_extract_from_dict(self, cb_for_context: ContextBuilder):
         data = {"user": {"name": "John", "details": {"age": 30}}}
-        assert cb_for_context._extract_from_dict(data, "user.name") == "John"
-        assert cb_for_context._extract_from_dict(data, "user.details.age") == 30
-        assert cb_for_context._extract_from_dict(data, "user.address", default="N/A") == "N/A"
-        assert cb_for_context._extract_from_dict(data, "non.existent.path") == "N/A" # Default default
-        assert cb_for_context._extract_from_dict({}, "any.path", default="Empty") == "Empty"
+        assert cb_for_context._context_formatter._extract_from_dict(data, "user.name") == "John"
+        assert cb_for_context._context_formatter._extract_from_dict(data, "user.details.age") == 30
+        assert cb_for_context._context_formatter._extract_from_dict(data, "user.address", default="N/A") == "N/A"
+        assert cb_for_context._context_formatter._extract_from_dict(data, "non.existent.path") == "N/A" # Default default
+        assert cb_for_context._context_formatter._extract_from_dict({}, "any.path", default="Empty") == "Empty"
 
     def test_format_list(self, cb_for_context: ContextBuilder):
-        assert cb_for_context._format_list(["a", "b", "c"]) == "a, b, c"
-        assert cb_for_context._format_list(["a", "b", "c", "d", "e", "f"], max_items=3) == "a, b, c, et 3 autre(s)"
-        assert cb_for_context._format_list([], max_items=3) == "N/A"
-        assert cb_for_context._format_list("item1, item2, item3") == "item1, item2, item3"
-        assert cb_for_context._format_list(None) == "None"
-        assert cb_for_context._format_list(123) == "123"
+        assert cb_for_context._context_formatter._format_list(["a", "b", "c"]) == "a, b, c"
+        assert cb_for_context._context_formatter._format_list(["a", "b", "c", "d", "e", "f"], max_items=3) == "a, b, c, et 3 autre(s)"
+        assert cb_for_context._context_formatter._format_list([], max_items=3) == "N/A"
+        assert cb_for_context._context_formatter._format_list("item1, item2, item3") == "item1, item2, item3"
+        assert cb_for_context._context_formatter._format_list(None) == "None"
+        assert cb_for_context._context_formatter._format_list(123) == "123"
 
     def test_get_prioritized_info_character(self, cb_for_context: ContextBuilder):
         elara_data = cb_for_context.get_character_details_by_name("Elara")
         # Test avec level=1
-        info_lvl1 = cb_for_context._get_prioritized_info(elara_data, "characters", 1)
+        info_lvl1 = cb_for_context._context_formatter.format_element(elara_data, "characters", 1)
         assert "Nom: Elara" in info_lvl1 
         assert "Occupation: Mage" in info_lvl1
         assert 'Background: {"Origine": "Une tour lointaine et mystérieuse"}' in info_lvl1
 
         # Test avec level=2
-        info_lvl2 = cb_for_context._get_prioritized_info(elara_data, "characters", 2)
+        info_lvl2 = cb_for_context._context_formatter.format_element(elara_data, "characters", 2)
         assert "Nom: Elara" in info_lvl2
         assert "Occupation: Mage" in info_lvl2
         assert 'Background: {"Origine": "Une tour lointaine et mystérieuse"}' in info_lvl2
@@ -611,14 +633,14 @@ class TestContextBuilderContextBuilding:
     def test_get_prioritized_info_item_condition_path_not_exists(self, cb_for_context: ContextBuilder):
         amulette = cb_for_context.get_item_details_by_name("Amulette de Clairvoyance")
         # Amulette n'a pas Attributs.Statistiques, donc Fonctionnement.Texte devrait s'afficher
-        info_amulette = cb_for_context._get_prioritized_info(amulette, "item", 1)
+        info_amulette = cb_for_context._context_formatter.format_element(amulette, "item", 1)
         assert "Objet: Amulette de Clairvoyance" in info_amulette
         assert "Effet Principal: Permet de voir l'invisible brièvement" in info_amulette
         assert "Stats (prioritaire)" not in info_amulette
 
         orbe = cb_for_context.get_item_details_by_name("Orbe des Tempêtes")
         # Orbe a Attributs.Statistiques, donc cela devrait s'afficher, et PAS Fonctionnement.Texte
-        info_orbe = cb_for_context._get_prioritized_info(orbe, "item", 1)
+        info_orbe = cb_for_context._context_formatter.format_element(orbe, "item", 1)
         assert "Objet: Orbe des Tempêtes" in info_orbe
         assert "Stats (prioritaire): +10 Foudre, -5 Feu" in info_orbe
         assert "Effet Principal" not in info_orbe
@@ -626,11 +648,11 @@ class TestContextBuilderContextBuilding:
     def test_get_prioritized_info_dialogue_example_conditional_flag(self, cb_for_context: ContextBuilder):
         dialogue_data = cb_for_context.get_dialogue_example_details_by_title("Le Secret d'Elara")
         
-        info_with_type = cb_for_context._get_prioritized_info(dialogue_data, "dialogue_example", 1, include_dialogue_type=True)
+        info_with_type = cb_for_context._context_formatter.format_element(dialogue_data, "dialogue_example", 1, include_dialogue_type=True)
         assert "Titre Dialogue: Le Secret d'Elara" in info_with_type
         assert "Type de Dialogue: Révélation" in info_with_type
         
-        info_without_type = cb_for_context._get_prioritized_info(dialogue_data, "dialogue_example", 1, include_dialogue_type=False)
+        info_without_type = cb_for_context._context_formatter.format_element(dialogue_data, "dialogue_example", 1, include_dialogue_type=False)
         assert "Titre Dialogue: Le Secret d'Elara" in info_without_type
         assert "Type de Dialogue: Révélation" not in info_without_type
 
@@ -728,6 +750,72 @@ class TestContextBuilderContextBuilding:
         assert "Le Pic du Destin" in context_str
         assert "Amulette de Clairvoyance" in context_str
 
+    def test_build_context_with_custom_fields_includes_element_markers(self, cb_for_context: ContextBuilder):
+        """Test que le prompt généré inclut des marqueurs explicites pour chaque élément."""
+        selected = {
+            "characters": ["Elara", "Grog"],
+            "locations": ["La Bibliothèque Infinie"],
+            "items": ["Amulette de Clairvoyance"],
+        }
+        field_configs = {
+            "character": ["Nom", "Occupation"],
+            "location": ["Nom", "Description"],
+            "item": ["Nom"],
+        }
+        
+        context_str = cb_for_context.build_context_with_custom_fields(
+            selected_elements=selected,
+            scene_instruction="Test",
+            field_configs=field_configs,
+            organization_mode="default",
+            max_tokens=10000
+        )
+        
+        # Vérifier la présence des marqueurs pour les personnages
+        assert "--- PNJ 1 ---" in context_str
+        assert "--- PNJ 2 ---" in context_str
+        assert "--- CHARACTERS ---" in context_str
+        
+        # Vérifier la présence des marqueurs pour les lieux
+        assert "--- LIEU 1 ---" in context_str
+        assert "--- LOCATIONS ---" in context_str
+        
+        # Vérifier la présence des marqueurs pour les objets
+        assert "--- OBJET 1 ---" in context_str
+        assert "--- ITEMS ---" in context_str
+        
+        # Vérifier que les marqueurs sont dans le bon ordre (PNJ 1 avant PNJ 2)
+        pnj1_idx = context_str.find("--- PNJ 1 ---")
+        pnj2_idx = context_str.find("--- PNJ 2 ---")
+        assert pnj1_idx < pnj2_idx, "PNJ 1 devrait apparaître avant PNJ 2"
+        
+        # Vérifier que le contenu suit les marqueurs
+        assert "Elara" in context_str
+        assert "Grog" in context_str
+        assert "La Bibliothèque Infinie" in context_str
+        assert "Amulette de Clairvoyance" in context_str
+
+    def test_build_context_with_custom_fields_markers_with_narrative_mode(self, cb_for_context: ContextBuilder):
+        """Test que les marqueurs sont présents même en mode narrative."""
+        selected = {"characters": ["Elara", "Grog"]}
+        field_configs = {"character": ["Nom", "Occupation"]}
+        
+        context_str = cb_for_context.build_context_with_custom_fields(
+            selected_elements=selected,
+            scene_instruction="Test",
+            field_configs=field_configs,
+            organization_mode="narrative",
+            max_tokens=10000
+        )
+        
+        # Les marqueurs doivent être présents même en mode narrative
+        assert "--- PNJ 1 ---" in context_str
+        assert "--- PNJ 2 ---" in context_str
+        assert "--- CHARACTERS ---" in context_str
+        
+        # En mode narrative, il peut y avoir des sections de niveau 4 (IDENTITÉ, etc.)
+        # mais les marqueurs d'éléments (PNJ 1, PNJ 2) doivent toujours être présents
+
 class TestContextBuilderLinkedElements:
     @pytest.fixture
     def cb_for_linking(self, mock_gdd_project_root, dummy_context_config_file) -> ContextBuilder:
@@ -786,12 +874,14 @@ class TestContextBuilderLinkedElements:
         assert ContextBuilder.potential_related_names_from_text("Quelqu'un", []) == set()
 
     def test_extract_linked_names(self, cb_for_linking: ContextBuilder):
+        from services.element_linker import ElementLinker
+        linker = ElementLinker()
         item_names = cb_for_linking.get_items_names()
         field_text = "Dague Empoisonnée, Messages Codés, Artefact Inconnu"
-        extracted = cb_for_linking._extract_linked_names(field_text, item_names)
+        extracted = linker.extract_linked_names(field_text, item_names)
         assert extracted == {"Dague Empoisonnée", "Messages Codés"}
-        assert cb_for_linking._extract_linked_names(None, item_names) == set()
-        assert cb_for_linking._extract_linked_names("", item_names) == set()
+        assert linker.extract_linked_names(None, item_names) == set()
+        assert linker.extract_linked_names("", item_names) == set()
 
     def test_get_linked_elements_for_character_alice(self, cb_for_linking: ContextBuilder):
         linked = cb_for_linking.get_linked_elements(character_name="Alice")
@@ -820,17 +910,23 @@ class TestContextBuilderLinkedElements:
         assert "Taverne du Rat Crevé" not in linked["locations"]
 
 class TestContextBuilderTokenization:
-    @patch('context_builder.tiktoken')
-    def test_count_tokens_with_tiktoken(self, mock_tiktoken, dummy_context_config_file):
-        mock_encoder = mock_tiktoken.get_encoding.return_value
-        mock_encoder.encode.return_value = [0, 0, 0, 0, 0] # Simulate 5 tokens
+    @patch('services.context_truncator.ContextTruncator')
+    def test_count_tokens_with_tiktoken(self, mock_truncator_class, dummy_context_config_file):
+        # Créer un mock de ContextTruncator avec un tokenizer mocké
+        from unittest.mock import MagicMock
+        mock_truncator = mock_truncator_class.return_value
+        mock_encoder = MagicMock()
+        mock_encoder.encode.return_value = [0, 0, 0, 0, 0]  # Simulate 5 tokens
+        mock_truncator.tokenizer = mock_encoder
+        mock_truncator.count_tokens.return_value = 5
 
         cb = ContextBuilder(config_file_path=dummy_context_config_file)
         assert cb._count_tokens("some text") == 5
-        mock_tiktoken.get_encoding.assert_called_once_with("cl100k_base")
-        mock_encoder.encode.assert_called_once_with("some text")
+        mock_truncator.count_tokens.assert_called_once_with("some text")
 
     @patch('context_builder.tiktoken', None)
+    @patch('services.context_truncator.tiktoken', None)
+    @patch('services.context_truncator.TIKTOKEN_AVAILABLE', False)
     def test_count_tokens_without_tiktoken(self, dummy_context_config_file):
         cb = ContextBuilder(config_file_path=dummy_context_config_file)
         assert cb.tokenizer is None
@@ -994,16 +1090,18 @@ class TestContextBuilderCustomFieldsWithModes:
         assert "... (extrait)" in context_str
     
     def test_get_field_config_for_mode_full(self, cb_for_modes: ContextBuilder):
-        """Test _get_field_config_for_mode en mode full."""
+        """Test get_field_config_for_mode en mode full via ContextFieldManager."""
         # Mode full avec custom_fields
         custom_fields = ["Nom", "Occupation", "Background.Origine"]
-        result = cb_for_modes._get_field_config_for_mode("character", "full", custom_fields)
+        assert cb_for_modes._context_field_manager is not None
+        result = cb_for_modes._context_field_manager.get_field_config_for_mode("character", "full", custom_fields)
         assert result == custom_fields  # Devrait retourner les custom_fields tels quels
     
     def test_get_field_config_for_mode_excerpt(self, cb_for_modes: ContextBuilder):
-        """Test _get_field_config_for_mode en mode excerpt."""
+        """Test get_field_config_for_mode en mode excerpt via ContextFieldManager."""
         # Mode excerpt sans custom_fields - devrait utiliser les champs "(extrait)" de la config
-        result = cb_for_modes._get_field_config_for_mode("character", "excerpt", None)
+        assert cb_for_modes._context_field_manager is not None
+        result = cb_for_modes._context_field_manager.get_field_config_for_mode("character", "excerpt", None)
         assert result is not None
         assert isinstance(result, list)
         # Devrait contenir les champs avec "(extrait)" dans le label
@@ -1012,7 +1110,7 @@ class TestContextBuilderCustomFieldsWithModes:
     def test_apply_excerpt_truncation(self, cb_for_modes: ContextBuilder):
         """Test _apply_excerpt_truncation."""
         long_text = "A" * 200  # Texte de 200 caractères
-        result = cb_for_modes._apply_excerpt_truncation(long_text, "character")
+        result = cb_for_modes._context_formatter._apply_excerpt_truncation(long_text, "character")
         
         # Si la troncature est appliquée, le texte devrait être plus court
         # ou contenir "... (extrait)"

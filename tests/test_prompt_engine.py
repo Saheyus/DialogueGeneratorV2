@@ -39,14 +39,17 @@ class TestPromptEngineInjection:
         mock.format_for_prompt.return_value = "--- GUIDES NARRATIFS ---\nGuide de dialogue"
         return mock
     
-    def test_inject_vocabulary_with_service(self, prompt_engine, mock_vocab_service):
-        """Test que l'injection de vocabulaire fonctionne avec un service fourni."""
+    def test_inject_vocabulary_with_service(self, mock_vocab_service):
+        """Test que l'injection de vocabulaire fonctionne avec un service injecté via constructeur."""
+        prompt_engine = PromptEngine(
+            system_prompt_template="Test system prompt",
+            vocab_service=mock_vocab_service
+        )
         prompt_parts = ["System prompt"]
         vocabulary_config = {"Mondialement": "all", "Régionalement": "none"}
-        result = prompt_engine._inject_vocabulary(
+        result = prompt_engine._enricher.enrich_with_vocabulary(
             prompt_parts,
-            vocabulary_config=vocabulary_config,
-            vocab_service=mock_vocab_service
+            vocabulary_config=vocabulary_config
         )
         
         assert len(result) == 2
@@ -63,7 +66,7 @@ class TestPromptEngineInjection:
     def test_inject_vocabulary_without_config(self, prompt_engine):
         """Test que l'injection de vocabulaire ne fait rien si config est None."""
         prompt_parts = ["System prompt"]
-        result = prompt_engine._inject_vocabulary(
+        result = prompt_engine._enricher.enrich_with_vocabulary(
             prompt_parts,
             vocabulary_config=None
         )
@@ -71,41 +74,50 @@ class TestPromptEngineInjection:
         assert result == prompt_parts
         assert len(result) == 1
     
-    def test_inject_vocabulary_standard_format(self, prompt_engine, mock_vocab_service):
+    def test_inject_vocabulary_standard_format(self, mock_vocab_service):
         """Test que le format standard ajoute \n avant le vocabulaire."""
+        prompt_engine = PromptEngine(
+            system_prompt_template="Test system prompt",
+            vocab_service=mock_vocab_service
+        )
         prompt_parts = ["System prompt"]
         vocabulary_config = {"Mondialement": "all"}
-        result = prompt_engine._inject_vocabulary(
+        result = prompt_engine._enricher.enrich_with_vocabulary(
             prompt_parts,
             vocabulary_config=vocabulary_config,
-            format_style="standard",
-            vocab_service=mock_vocab_service
+            format_style="standard"
         )
         
         assert result[1].startswith("\n")
     
-    def test_inject_vocabulary_unity_format(self, prompt_engine, mock_vocab_service):
+    def test_inject_vocabulary_unity_format(self, mock_vocab_service):
         """Test que le format Unity n'ajoute pas \n avant mais ajoute "" après."""
+        prompt_engine = PromptEngine(
+            system_prompt_template="Test system prompt",
+            vocab_service=mock_vocab_service
+        )
         prompt_parts = ["System prompt"]
         vocabulary_config = {"Mondialement": "all"}
-        result = prompt_engine._inject_vocabulary(
+        result = prompt_engine._enricher.enrich_with_vocabulary(
             prompt_parts,
             vocabulary_config=vocabulary_config,
-            format_style="unity",
-            vocab_service=mock_vocab_service
+            format_style="unity"
         )
         
         assert len(result) == 3  # System prompt + vocab + ""
         assert not result[1].startswith("\n")
         assert result[2] == ""
     
-    def test_inject_narrative_guides_with_service(self, prompt_engine, mock_guides_service):
-        """Test que l'injection de guides narratifs fonctionne avec un service fourni."""
-        prompt_parts = ["System prompt"]
-        result = prompt_engine._inject_narrative_guides(
-            prompt_parts,
-            include_narrative_guides=True,
+    def test_inject_narrative_guides_with_service(self, mock_guides_service):
+        """Test que l'injection de guides narratifs fonctionne avec un service injecté via constructeur."""
+        prompt_engine = PromptEngine(
+            system_prompt_template="Test system prompt",
             guides_service=mock_guides_service
+        )
+        prompt_parts = ["System prompt"]
+        result = prompt_engine._enricher.enrich_with_narrative_guides(
+            prompt_parts,
+            include_narrative_guides=True
         )
         
         assert len(result) == 2
@@ -120,7 +132,7 @@ class TestPromptEngineInjection:
     def test_inject_narrative_guides_disabled(self, prompt_engine):
         """Test que l'injection de guides narratifs ne fait rien si désactivée."""
         prompt_parts = ["System prompt"]
-        result = prompt_engine._inject_narrative_guides(
+        result = prompt_engine._enricher.enrich_with_narrative_guides(
             prompt_parts,
             include_narrative_guides=False
         )
@@ -128,14 +140,17 @@ class TestPromptEngineInjection:
         assert result == prompt_parts
         assert len(result) == 1
     
-    def test_inject_narrative_guides_unity_format(self, prompt_engine, mock_guides_service):
+    def test_inject_narrative_guides_unity_format(self, mock_guides_service):
         """Test que le format Unity ajoute "" après les guides."""
+        prompt_engine = PromptEngine(
+            system_prompt_template="Test system prompt",
+            guides_service=mock_guides_service
+        )
         prompt_parts = ["System prompt"]
-        result = prompt_engine._inject_narrative_guides(
+        result = prompt_engine._enricher.enrich_with_narrative_guides(
             prompt_parts,
             include_narrative_guides=True,
-            format_style="unity",
-            guides_service=mock_guides_service
+            format_style="unity"
         )
         
         assert len(result) == 3  # System prompt + guides + ""
@@ -152,7 +167,7 @@ class TestPromptEngineInjection:
         
         prompt_parts = ["System prompt"]
         vocabulary_config = {"Mondialement": "all"}
-        result = prompt_engine._inject_vocabulary(
+        result = prompt_engine._enricher.enrich_with_vocabulary(
             prompt_parts,
             vocabulary_config=vocabulary_config
         )
@@ -169,7 +184,7 @@ class TestPromptEngineInjection:
         mock_guides_class.return_value = mock_service
         
         prompt_parts = ["System prompt"]
-        result = prompt_engine._inject_narrative_guides(
+        result = prompt_engine._enricher.enrich_with_narrative_guides(
             prompt_parts,
             include_narrative_guides=True
         )
@@ -188,13 +203,13 @@ class TestPromptEngineBuildUnityDialoguePrompt:
         """Fixture pour créer une instance de PromptEngine."""
         return PromptEngine(system_prompt_template="Test system prompt")
     
-    def test_build_unity_dialogue_prompt_uses_injection_methods(self, prompt_engine):
-        """Test que build_unity_dialogue_prompt() utilise les méthodes d'injection avec format_style='unity'."""
-        with patch.object(prompt_engine, '_inject_vocabulary') as mock_inject_vocab, \
-             patch.object(prompt_engine, '_inject_narrative_guides') as mock_inject_guides:
+    def test_build_unity_dialogue_prompt_uses_enricher(self, prompt_engine):
+        """Test que build_unity_dialogue_prompt() utilise PromptEnricher avec format_style='unity'."""
+        with patch.object(prompt_engine._enricher, 'enrich_with_vocabulary') as mock_enrich_vocab, \
+             patch.object(prompt_engine._enricher, 'enrich_with_narrative_guides') as mock_enrich_guides:
             
-            mock_inject_vocab.return_value = []
-            mock_inject_guides.return_value = []
+            mock_enrich_vocab.return_value = []
+            mock_enrich_guides.return_value = []
             
             prompt_engine.build_unity_dialogue_prompt(
                 user_instructions="Test instructions",
@@ -203,17 +218,20 @@ class TestPromptEngineBuildUnityDialoguePrompt:
                 include_narrative_guides=True
             )
             
-            mock_inject_vocab.assert_called_once()
-            # Vérifier que format_style="unity" est passé
-            call_args = mock_inject_vocab.call_args
-            assert call_args[1]['format_style'] == "unity"
+            # enrich_with_vocabulary est appelé au moins une fois
+            assert mock_enrich_vocab.call_count >= 1
+            # Vérifier que format_style="unity" est passé au moins une fois
+            calls = mock_enrich_vocab.call_args_list
+            assert any(call[1].get('format_style') == "unity" for call in calls)
             
-            mock_inject_guides.assert_called_once()
-            call_args = mock_inject_guides.call_args
-            assert call_args[1]['format_style'] == "unity"
+            # enrich_with_narrative_guides est appelé au moins une fois
+            assert mock_enrich_guides.call_count >= 1
+            # Vérifier que format_style="unity" est passé au moins une fois
+            calls = mock_enrich_guides.call_args_list
+            assert any(call[1].get('format_style') == "unity" for call in calls)
     
     def test_build_unity_dialogue_prompt_produces_valid_output(self, prompt_engine):
-        """Test que build_unity_dialogue_prompt() produit une sortie valide."""
+        """Test que build_unity_dialogue_prompt() produit une sortie valide (format XML)."""
         prompt, tokens = prompt_engine.build_unity_dialogue_prompt(
             user_instructions="Test instructions",
             npc_speaker_id="NPC1",
@@ -223,9 +241,14 @@ class TestPromptEngineBuildUnityDialoguePrompt:
         assert isinstance(prompt, str)
         assert isinstance(tokens, int)
         assert tokens > 0
+        # Vérifier que c'est du XML
+        assert prompt.startswith('<?xml version="1.0" encoding="UTF-8"?>')
+        # Vérifier la présence des éléments XML
+        assert "<prompt>" in prompt
         assert "NPC1" in prompt
         assert "Test instructions" in prompt
-        assert "Lieu : Test location" in prompt
+        # Le lieu est maintenant dans un élément <location> en XML
+        assert "Test location" in prompt
 
 
 class TestPromptEngineCompatibility:

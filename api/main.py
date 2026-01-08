@@ -54,37 +54,40 @@ async def lifespan(app: FastAPI):
     logger.info("Démarrage de l'API DialogueGenerator...")
     logger.info(f"Timestamp: {datetime.now(timezone.utc).isoformat()}Z")
     
-    # Log minimal impossible à rater - vérification que le code est chargé
-    import logging
-    uvicorn_log = logging.getLogger("uvicorn.error")
-    uvicorn_log.warning("=== APP STARTUP - CODE LOADED ===")
+    # Debug probe optionnel (désactivé par défaut pour éviter le bruit)
+    if os.getenv("STARTUP_PROBE", "false").lower() in ("true", "1", "yes"):
+        import logging
+        uvicorn_log = logging.getLogger("uvicorn.error")
+        uvicorn_log.warning("=== APP STARTUP - CODE LOADED ===")
     
-    # #region agent log
-    import sys
-    import json
-    from pathlib import Path
-    import time
-    try:
-        log_path = Path(__file__).parent.parent / ".cursor" / "debug.log"
-        log_entry = {
-            "id": f"log_{int(time.time() * 1000)}",
-            "timestamp": int(time.time() * 1000),
-            "location": "api/main.py:lifespan:startup",
-            "message": "Application startup - vérification singletons",
-            "data": {
-                "app_id": id(app),
-                "api_dependencies_module": "api.dependencies" in sys.modules,
-                "api_dependencies_module_id": id(sys.modules.get("api.dependencies")) if "api.dependencies" in sys.modules else None
-            },
-            "sessionId": "debug-session",
-            "runId": "run1",
-            "hypothesisId": "A"
-        }
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(log_entry) + "\n")
-    except Exception:
-        pass
-    # #endregion
+    # Debug Cursor optionnel (désactivé par défaut)
+    if os.getenv("CURSOR_DEBUG_LOG", "false").lower() in ("true", "1", "yes"):
+        # #region cursor debug log
+        import sys
+        import json
+        from pathlib import Path
+        import time
+        try:
+            log_path = Path(__file__).parent.parent / ".cursor" / "debug.log"
+            log_entry = {
+                "id": f"log_{int(time.time() * 1000)}",
+                "timestamp": int(time.time() * 1000),
+                "location": "api/main.py:lifespan:startup",
+                "message": "Application startup - vérification singletons",
+                "data": {
+                    "app_id": id(app),
+                    "api_dependencies_module": "api.dependencies" in sys.modules,
+                    "api_dependencies_module_id": id(sys.modules.get("api.dependencies")) if "api.dependencies" in sys.modules else None
+                },
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "A"
+            }
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception:
+            pass
+        # #endregion
     
     # Valider la configuration de sécurité
     try:
@@ -99,6 +102,48 @@ async def lifespan(app: FastAPI):
         cleanup_on_startup()
     except Exception as e:
         logger.warning(f"Erreur lors du nettoyage des logs au démarrage: {e}")
+    
+    # Valider que context_config.json ne référence que des champs existants
+    try:
+        from services.context_field_validator import ContextFieldValidator
+        from api.dependencies import get_context_builder, get_config_service
+        
+        context_builder = get_context_builder()
+        config_service = get_config_service()
+        context_config = config_service.get_context_config()
+        
+        if context_config:
+            validator = ContextFieldValidator(context_builder)
+            validation_results = validator.validate_all_configs(context_config)
+            
+            # Compter les erreurs et warnings
+            total_errors = sum(1 for r in validation_results.values() if r.has_errors())
+            total_warnings = sum(1 for r in validation_results.values() if r.has_warnings())
+            
+            if total_errors > 0 or total_warnings > 0:
+                # Par défaut: résumé concis (le rapport complet est verbeux)
+                logger.warning(
+                    "Validation des champs GDD: %d erreur(s) critique(s), %d avertissement(s). "
+                    "Pour le rapport complet: STARTUP_REPORT=full",
+                    total_errors,
+                    total_warnings,
+                )
+                
+                startup_report_mode = os.getenv("STARTUP_REPORT", "summary").lower().strip()
+                if startup_report_mode in ("full", "true", "1", "yes"):
+                    report = validator.get_validation_report(context_config)
+                    logger.warning(f"Validation des champs GDD (rapport complet):\n{report}")
+                
+                # En production, fail-fast sur les erreurs critiques
+                environment = os.getenv("ENVIRONMENT", "development")
+                if environment == "production" and total_errors > 0:
+                    logger.critical("Champs invalides détectés dans context_config.json - l'application ne peut pas démarrer en production.")
+                    raise ValueError(f"Configuration invalide: {total_errors} champs invalides détectés")
+            else:
+                logger.info("Validation des champs GDD: tous les champs sont valides")
+    except Exception as e:
+        # Ne pas bloquer le démarrage si la validation échoue (mais logger l'erreur)
+        logger.error(f"Erreur lors de la validation des champs GDD au démarrage: {e}", exc_info=True)
     
     # Réinitialiser les singletons au démarrage (important pour uvicorn reload)
     try:
@@ -156,26 +201,28 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     logger.info("Arrêt de l'API DialogueGenerator...")
-    
-    # #region agent log
-    try:
-        log_entry = {
-            "id": f"log_{int(time.time() * 1000)}",
-            "timestamp": int(time.time() * 1000),
-            "location": "api/main.py:lifespan:shutdown",
-            "message": "Application shutdown",
-            "data": {
-                "app_id": id(app)
-            },
-            "sessionId": "debug-session",
-            "runId": "run1",
-            "hypothesisId": "A"
-        }
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(log_entry) + "\n")
-    except Exception:
-        pass
-    # #endregion
+    if os.getenv("CURSOR_DEBUG_LOG", "false").lower() in ("true", "1", "yes"):
+        # #region cursor debug log
+        try:
+            import json
+            import time
+            from pathlib import Path
+            log_path = Path(__file__).parent.parent / ".cursor" / "debug.log"
+            log_entry = {
+                "id": f"log_{int(time.time() * 1000)}",
+                "timestamp": int(time.time() * 1000),
+                "location": "api/main.py:lifespan:shutdown",
+                "message": "Application shutdown",
+                "data": {"app_id": id(app)},
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "A",
+            }
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception:
+            pass
+        # #endregion
 
 
 # Création de l'application FastAPI

@@ -41,7 +41,7 @@ class LinkedSelectorService:
     def get_all_character_names(self) -> List[str]:
         """Retrieves all character names from the ContextBuilder."""
         # Example method - will implement others based on GenerationPanel needs
-        return self.context_builder.get_all_character_names()
+        return self.context_builder.get_characters_names()
 
     # ------------------------------------------------------------------
     # Helper (interne)

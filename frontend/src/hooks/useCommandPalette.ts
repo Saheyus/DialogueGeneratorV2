@@ -1,7 +1,8 @@
 /**
  * Hook pour gérer la commande palette (recherche globale).
+ * Utilise un store Zustand global pour partager l'état entre tous les composants.
  */
-import { useState, useCallback } from 'react'
+import { useCommandPaletteStore } from '../store/commandPaletteStore'
 
 export interface CommandPaletteItem {
   id: string
@@ -20,21 +21,7 @@ export interface UseCommandPaletteReturn {
 }
 
 export function useCommandPalette(): UseCommandPaletteReturn {
-  const [isOpen, setIsOpen] = useState(false)
-
-  const open = useCallback(() => {
-    setIsOpen(true)
-  }, [])
-
-  const close = useCallback(() => {
-    setIsOpen(false)
-  }, [])
-
-  const toggle = useCallback(() => {
-    setIsOpen((prev) => !prev)
-  }, [])
-
-  return { isOpen, open, close, toggle }
+  return useCommandPaletteStore()
 }
 
 /**

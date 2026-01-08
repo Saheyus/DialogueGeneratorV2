@@ -17,6 +17,8 @@ export interface FieldInfo {
   is_metadata?: boolean  // Si le champ est une métadonnée (avant "Introduction" dans le JSON)
   is_essential?: boolean  // Si le champ est essentiel (contexte OU métadonnées) selon ESSENTIAL_*_FIELDS
   is_unique?: boolean  // Si le champ est unique (n'apparaît que dans une seule fiche)
+  is_in_config?: boolean  // Si le champ est référencé dans context_config.json
+  is_valid?: boolean  // Si le champ existe réellement dans les données GDD
 }
 
 export interface ContextFieldsResponse {
@@ -283,8 +285,10 @@ export const useContextConfigStore = create<ContextConfigState>()(
           return acc
         }, {} as Record<string, number>)
       }
-      // Log via console car fetch peut échouer dans le store
-      console.log('[DEBUG] loadDefaultConfig', logData)
+      // Log via console car fetch peut échouer dans le store (uniquement en développement)
+      if (import.meta.env.DEV) {
+        console.log('[DEBUG] loadDefaultConfig', logData)
+      }
       // #endregion
       
       if (!hasExistingConfigs) {

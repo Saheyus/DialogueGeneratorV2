@@ -6,11 +6,18 @@ import { theme } from '../../theme'
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning'
 
+export interface ToastAction {
+  label: string
+  action: () => void
+  style?: 'primary' | 'secondary'
+}
+
 export interface Toast {
   id: string
   message: string
   type: ToastType
   duration?: number
+  actions?: ToastAction[]
 }
 
 interface ToastProps {
@@ -77,7 +84,37 @@ function ToastComponent({ toast, onRemove }: ToastProps) {
 
   return (
     <div style={getStyles()}>
-      <span>{toast.message}</span>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <span>{toast.message}</span>
+        {toast.actions && toast.actions.length > 0 && (
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+            {toast.actions.map((action, index) => (
+              <button
+                key={index}
+                onClick={() => {
+                  action.action()
+                  onRemove(toast.id)
+                }}
+                style={{
+                  padding: '0.25rem 0.75rem',
+                  border: action.style === 'secondary' ? `1px solid ${theme.border.primary}` : 'none',
+                  borderRadius: '4px',
+                  backgroundColor:
+                    action.style === 'secondary'
+                      ? theme.button.default.background
+                      : 'rgba(255, 255, 255, 0.2)',
+                  color: 'inherit',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: action.style === 'primary' ? 'bold' : 'normal',
+                }}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <button
         onClick={() => onRemove(toast.id)}
         style={{
@@ -90,6 +127,7 @@ function ToastComponent({ toast, onRemove }: ToastProps) {
           marginLeft: '1rem',
           opacity: 0.7,
           padding: 0,
+          alignSelf: 'flex-start',
         }}
         aria-label="Fermer"
       >
@@ -116,12 +154,13 @@ class ToastManager {
     this.listeners.forEach((listener) => listener([...this.toasts]))
   }
 
-  show(message: string, type: ToastType = 'info', duration?: number) {
+  show(message: string, type: ToastType = 'info', duration?: number, actions?: ToastAction[]) {
     const toast: Toast = {
       id: `toast-${toastIdCounter++}`,
       message,
       type,
       duration,
+      actions,
     }
     this.toasts.push(toast)
     this.notify()
@@ -195,8 +234,8 @@ export function ToastContainer() {
 // Hook pour utiliser les toasts facilement
 export function useToast() {
   return useCallback(
-    (message: string, type: ToastType = 'info', duration?: number): string => {
-      return toastManager.show(message, type, duration)
+    (message: string, type: ToastType = 'info', duration?: number, actions?: ToastAction[]): string => {
+      return toastManager.show(message, type, duration, actions)
     },
     []
   )

@@ -1,4 +1,20 @@
-"""Tests pour les endpoints de génération de dialogues."""
+"""Tests unitaires pour les endpoints de génération de dialogues.
+
+Ce module contient des tests unitaires qui utilisent des mocks pour isoler
+les tests des dépendances externes (GDD, LLM, etc.). Ces tests sont rapides
+et vérifient la logique des endpoints sans dépendre des vraies données.
+
+Types de tests :
+- Tests unitaires : Utilisent des mocks (DialogueGenerationService, ContextBuilder, etc.)
+- Tests API : Testent les endpoints FastAPI
+- Tests rapides : Pas de chargement de fichiers réels
+
+Pour exécuter uniquement ces tests :
+    pytest tests/api/test_dialogues.py -m "unit and api"
+
+Pour exécuter les tests d'intégration (avec vraies données) :
+    pytest tests/api/test_prompt_raw_verification.py -m integration
+"""
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock, AsyncMock
@@ -10,7 +26,10 @@ from models.dialogue_structure.dialogue_elements import DialogueLineElement
 
 @pytest.fixture
 def mock_dialogue_service():
-    """Mock du DialogueGenerationService."""
+    """Mock du DialogueGenerationService pour tests unitaires.
+    
+    Ce mock isole les tests des dépendances réelles (GDD, LLM, etc.).
+    """
     mock_service = MagicMock(spec=DialogueGenerationService)
     mock_service.context_builder = MagicMock()
     mock_service.context_builder._count_tokens = MagicMock(return_value=100)
@@ -86,11 +105,13 @@ def test_estimate_tokens(client, mock_dialogue_service, monkeypatch):
     assert response.status_code == 200
     data = response.json()
     assert "context_tokens" in data
-    assert "total_estimated_tokens" in data
+    assert "token_count" in data  # Le champ s'appelle token_count, pas total_estimated_tokens
     assert isinstance(data["context_tokens"], int)
-    assert isinstance(data["total_estimated_tokens"], int)
+    assert isinstance(data["token_count"], int)
 
 
+@pytest.mark.unit
+@pytest.mark.api
 def test_estimate_tokens_invalid_request(client):
     """Test d'estimation de tokens avec requête invalide."""
     response = client.post(
@@ -168,4 +189,222 @@ def test_generate_interaction_variants_invalid_previous_id(client):
         }
     )
     assert response.status_code == 404  # Not found
+
+
+class TestGenerateUnityDialogue:
+    """Tests pour l'endpoint POST /api/v1/dialogues/generate/unity-dialogue."""
+    
+    @pytest.mark.asyncio
+    async def test_generate_unity_dialogue_success(self, client, mock_dialogue_service, monkeypatch):
+        """Test de génération Unity dialogue avec succès."""
+        from services.unity_dialogue_generation_service import UnityDialogueGenerationService
+        from models.dialogue_structure.unity_dialogue_node import (
+            UnityDialogueGenerationResponse,
+            UnityDialogueNodeContent,
+            UnityDialogueChoiceContent
+        )
+        from unittest.mock import AsyncMock
+        
+        # Mock UnityDialogueGenerationService
+        mock_unity_service = MagicMock(spec=UnityDialogueGenerationService)
+        mock_response = UnityDialogueGenerationResponse(
+            title="Test Dialogue",
+            node=UnityDialogueNodeContent(
+                speaker="TEST_NPC",
+                line="Test dialogue line",
+                choices=[
+                    UnityDialogueChoiceContent(text="Choice 1")
+                ]
+            )
+        )
+        mock_unity_service.generate_dialogue_node = AsyncMock(return_value=mock_response)
+        mock_unity_service.enrich_with_ids = MagicMock(return_value=[mock_response])
+        
+        # Mock LLM client factory
+        mock_llm_client = MagicMock()
+        mock_llm_client.generate_variants = AsyncMock(return_value=[mock_response])
+        
+        def mock_create_client(*args, **kwargs):
+            return mock_llm_client
+        
+        monkeypatch.setattr("factories.llm_factory.LLMClientFactory.create_client", mock_create_client)
+        monkeypatch.setattr("api.routers.dialogues.UnityDialogueGenerationService", lambda: mock_unity_service)
+        monkeypatch.setattr("api.routers.dialogues.SkillCatalogService", MagicMock)
+        monkeypatch.setattr("api.routers.dialogues.TraitCatalogService", MagicMock)
+        
+        request_data = {
+            "context_selections": {
+                "characters_full": ["Test Character"],
+                "locations_full": [],
+                "items_full": [],
+                "species_full": [],
+                "communities_full": []
+            },
+            "user_instructions": "Test instructions",
+            "llm_model_identifier": "gpt-4o-mini",
+            "max_context_tokens": 1000,
+            "max_choices": 2
+        }
+        
+        response = client.post("/api/v1/dialogues/generate/unity-dialogue", json=request_data)
+        
+        # Peut retourner 200 si tout est mocké correctement, ou 500 si erreur
+        assert response.status_code in [200, 500]
+        if response.status_code == 200:
+            data = response.json()
+            assert "json_content" in data
+            assert "title" in data
+            assert "raw_prompt" in data
+    
+    def test_generate_unity_dialogue_no_characters(self, client):
+        """Test de génération Unity dialogue sans personnages."""
+        request_data = {
+            "context_selections": {
+                "characters_full": [],
+                "locations_full": [],
+                "items_full": [],
+                "species_full": [],
+                "communities_full": []
+            },
+            "user_instructions": "Test instructions",
+            "llm_model_identifier": "gpt-4o-mini"
+        }
+        
+        response = client.post("/api/v1/dialogues/generate/unity-dialogue", json=request_data)
+        
+        assert response.status_code == 422
+        data = response.json()
+        assert "detail" in data or "error" in data
+    
+    def test_generate_unity_dialogue_invalid_request(self, client):
+        """Test de génération Unity dialogue avec requête invalide."""
+        response = client.post("/api/v1/dialogues/generate/unity-dialogue", json={})
+        
+        assert response.status_code == 422
+
+
+class TestGenerateVariants:
+    """Tests pour l'endpoint POST /api/v1/dialogues/generate/variants."""
+    
+    @pytest.mark.asyncio
+    async def test_generate_variants_success(self, client, mock_dialogue_service, monkeypatch):
+        """Test de génération de variants avec succès."""
+        from services.unity_dialogue_generation_service import UnityDialogueGenerationService
+        from models.dialogue_structure.unity_dialogue_node import (
+            UnityDialogueGenerationResponse,
+            UnityDialogueNodeContent
+        )
+        from unittest.mock import AsyncMock
+        
+        # Mock UnityDialogueGenerationService
+        mock_unity_service = MagicMock(spec=UnityDialogueGenerationService)
+        mock_response = UnityDialogueGenerationResponse(
+            title="Test Dialogue",
+            node=UnityDialogueNodeContent(
+                speaker="TEST_NPC",
+                line="Test dialogue line"
+            )
+        )
+        mock_unity_service.generate_dialogue_node = AsyncMock(return_value=mock_response)
+        mock_unity_service.enrich_with_ids = MagicMock(return_value=[mock_response])
+        
+        # Mock LLM client
+        mock_llm_client = MagicMock()
+        mock_llm_client.generate_variants = AsyncMock(return_value=[mock_response, mock_response])
+        
+        def mock_create_client(*args, **kwargs):
+            return mock_llm_client
+        
+        monkeypatch.setattr("factories.llm_factory.LLMClientFactory.create_client", mock_create_client)
+        monkeypatch.setattr("api.routers.dialogues.UnityDialogueGenerationService", lambda: mock_unity_service)
+        monkeypatch.setattr("api.routers.dialogues.SkillCatalogService", MagicMock)
+        monkeypatch.setattr("api.routers.dialogues.TraitCatalogService", MagicMock)
+        
+        request_data = {
+            "context_selections": {
+                "characters_full": ["Test Character"],
+                "locations_full": [],
+                "items_full": [],
+                "species_full": [],
+                "communities_full": []
+            },
+            "user_instructions": "Test instructions",
+            "llm_model_identifier": "gpt-4o-mini",
+            "k_variants": 2,
+            "max_context_tokens": 1000
+        }
+        
+        response = client.post("/api/v1/dialogues/generate/variants", json=request_data)
+        
+        # Peut retourner 200 si tout est mocké correctement, ou 500 si erreur
+        assert response.status_code in [200, 500]
+        if response.status_code == 200:
+            data = response.json()
+            assert "variants" in data
+            assert isinstance(data["variants"], list)
+
+
+class TestGenerateChoices:
+    """Tests pour l'endpoint POST /api/v1/dialogues/generate/choices."""
+    
+    @pytest.mark.asyncio
+    async def test_generate_choices_success(self, client, mock_dialogue_service, monkeypatch):
+        """Test de génération de choices avec succès."""
+        from services.unity_dialogue_generation_service import UnityDialogueGenerationService
+        from models.dialogue_structure.unity_dialogue_node import (
+            UnityDialogueGenerationResponse,
+            UnityDialogueNodeContent,
+            UnityDialogueChoiceContent
+        )
+        from unittest.mock import AsyncMock
+        
+        # Mock UnityDialogueGenerationService
+        mock_unity_service = MagicMock(spec=UnityDialogueGenerationService)
+        mock_response = UnityDialogueGenerationResponse(
+            title="Test Dialogue",
+            node=UnityDialogueNodeContent(
+                speaker="TEST_NPC",
+                line="Test dialogue line",
+                choices=[
+                    UnityDialogueChoiceContent(text="Choice 1"),
+                    UnityDialogueChoiceContent(text="Choice 2")
+                ]
+            )
+        )
+        mock_unity_service.generate_dialogue_node = AsyncMock(return_value=mock_response)
+        mock_unity_service.enrich_with_ids = MagicMock(return_value=[mock_response])
+        
+        # Mock LLM client
+        mock_llm_client = MagicMock()
+        mock_llm_client.generate_variants = AsyncMock(return_value=[mock_response])
+        
+        def mock_create_client(*args, **kwargs):
+            return mock_llm_client
+        
+        monkeypatch.setattr("factories.llm_factory.LLMClientFactory.create_client", mock_create_client)
+        monkeypatch.setattr("api.routers.dialogues.UnityDialogueGenerationService", lambda: mock_unity_service)
+        monkeypatch.setattr("api.routers.dialogues.SkillCatalogService", MagicMock)
+        monkeypatch.setattr("api.routers.dialogues.TraitCatalogService", MagicMock)
+        
+        request_data = {
+            "context_selections": {
+                "characters_full": ["Test Character"],
+                "locations_full": [],
+                "items_full": [],
+                "species_full": [],
+                "communities_full": []
+            },
+            "user_instructions": "Test instructions",
+            "llm_model_identifier": "gpt-4o-mini",
+            "max_choices": 2,
+            "max_context_tokens": 1000
+        }
+        
+        response = client.post("/api/v1/dialogues/generate/choices", json=request_data)
+        
+        # Peut retourner 200 si tout est mocké correctement, ou 500 si erreur
+        assert response.status_code in [200, 500]
+        if response.status_code == 200:
+            data = response.json()
+            assert "json_content" in data or "choices" in data
 

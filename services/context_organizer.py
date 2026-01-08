@@ -5,9 +5,33 @@ from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
+# Import des modèles de structure JSON
+try:
+    from models.prompt_structure import ContextItem, ItemSection
+except ImportError:
+    # Fallback si les modèles ne sont pas encore disponibles
+    ContextItem = None
+    ItemSection = None
+
 
 class ContextOrganizer:
-    """Organise les champs du contexte en sections logiques pour le prompt."""
+    """Organise les champs du contexte en sections logiques pour le prompt.
+    
+    IMPORTANT - Format du prompt généré :
+    Le prompt généré par ContextBuilder inclut des marqueurs explicites pour chaque élément :
+    - `--- PNJ 1 ---`, `--- PNJ 2 ---` pour les personnages
+    - `--- LIEU 1 ---`, `--- LIEU 2 ---` pour les lieux
+    - `--- OBJET 1 ---` pour les objets
+    - `--- ESPÈCE 1 ---` pour les espèces
+    - `--- COMMUNAUTÉ 1 ---` pour les communautés
+    - `--- QUÊTE 1 ---` pour les quêtes
+    
+    Ces marqueurs sont ajoutés par ContextBuilder AVANT l'appel à organize_context().
+    Ils permettent au frontend de parser la structure de manière fiable et garantissent
+    une source de vérité unique entre le prompt brut et le mode structuré.
+    
+    Voir docs/PROMPT_STRUCTURE.md pour la spécification complète du format.
+    """
     
     # Ordre des sections pour le mode "narrative"
     NARRATIVE_SECTIONS = [
@@ -37,8 +61,8 @@ class ContextOrganizer:
         "character": [
             # Minimum utile pour écrire une scène/dialogue :
             "Introduction.Résumé de la fiche",
-            "Dialogue Type.Registre de langage du personnage",
-            "Dialogue Type.Expressions courantes",
+            "Registre de langage du personnage",
+            "Expressions courantes",
             "Caractérisation.Désir",
             "Caractérisation.Faiblesse",
             "Background.Relations",
@@ -106,6 +130,37 @@ class ContextOrganizer:
         Returns:
             Texte formaté avec les champs organisés.
         """
+        # Valider que les champs existent réellement (filtrage silencieux avec log)
+        if fields_to_include:
+            try:
+                from services.context_field_detector import ContextFieldDetector
+                from context_builder import ContextBuilder
+                
+                # Essayer de récupérer le ContextBuilder depuis le contexte (si disponible)
+                # Sinon, on valide uniquement en extrayant les valeurs
+                validated_fields = []
+                for field_path in fields_to_include:
+                    # Vérifier que le champ peut être extrait des données
+                    value = self._extract_field_value(element_data, field_path)
+                    if value is not None:
+                        validated_fields.append(field_path)
+                    else:
+                        logger.debug(
+                            f"[{element_type}] Champ '{field_path}' ignoré: "
+                            f"non trouvé dans les données de l'élément"
+                        )
+                
+                if len(validated_fields) < len(fields_to_include):
+                    logger.warning(
+                        f"[{element_type}] {len(fields_to_include) - len(validated_fields)} "
+                        f"champ(s) invalide(s) filtré(s) sur {len(fields_to_include)} total"
+                    )
+                
+                fields_to_include = validated_fields
+            except Exception as e:
+                logger.warning(f"Impossible de valider les champs pour '{element_type}': {e}")
+                # Continuer avec les champs fournis si la validation échoue
+        
         if organization_mode == "minimal":
             return self._organize_minimal(element_data, element_type, fields_to_include, field_labels_map, element_mode)
         elif organization_mode == "narrative":
@@ -310,4 +365,201 @@ class ContextOrganizer:
             return "identity"
         
         return None
+    
+    def organize_context_json(
+        self,
+        element_data: Dict,
+        element_type: str,
+        fields_to_include: List[str],
+        organization_mode: str = "default",
+        field_labels_map: Optional[Dict[str, str]] = None,
+        element_mode: Optional[str] = None
+    ) -> Optional['ContextItem']:
+        """Organise les champs d'un élément selon le mode d'organisation et retourne une structure JSON.
+        
+        Args:
+            element_data: Données complètes de l'élément
+            element_type: Type d'élément ("character", "location", etc.)
+            fields_to_include: Liste des chemins de champs à inclure
+            organization_mode: Mode d'organisation ("default", "narrative", "minimal")
+            field_labels_map: Dictionnaire {field_path: label} depuis context_config.json (optionnel)
+            element_mode: Mode de sélection ("full" ou "excerpt") pour adapter les labels (optionnel)
+            
+        Returns:
+            ContextItem structuré avec sections, ou None si les modèles ne sont pas disponibles.
+        """
+        if ContextItem is None or ItemSection is None:
+            logger.warning("Modèles de structure JSON non disponibles, impossible de créer ContextItem")
+            return None
+        
+        # Valider les champs
+        validated_fields = []
+        for field_path in fields_to_include:
+            value = self._extract_field_value(element_data, field_path)
+            if value is not None:
+                validated_fields.append(field_path)
+        
+        if not validated_fields:
+            return None
+        
+        # Organiser selon le mode
+        if organization_mode == "narrative":
+            sections = self._organize_narrative_json(
+                element_data, element_type, validated_fields, field_labels_map, element_mode
+            )
+        elif organization_mode == "minimal":
+            sections = self._organize_minimal_json(
+                element_data, element_type, validated_fields, field_labels_map, element_mode
+            )
+        else:  # default
+            sections = self._organize_default_json(
+                element_data, element_type, validated_fields, field_labels_map, element_mode
+            )
+        
+        # Calculer le token count total
+        total_token_count = sum(section.tokenCount or 0 for section in sections)
+        
+        # Extraire le nom de l'élément pour les métadonnées
+        element_name = element_data.get("Nom", "Unknown")
+        
+        return ContextItem(
+            id="",  # Sera défini par le caller
+            name="",  # Sera défini par le caller
+            sections=sections,
+            tokenCount=total_token_count,
+            metadata={"element_name": element_name}
+        )
+    
+    def _organize_default_json(
+        self,
+        element_data: Dict,
+        element_type: str,
+        fields_to_include: List[str],
+        field_labels_map: Optional[Dict[str, str]] = None,
+        element_mode: Optional[str] = None
+    ) -> List['ItemSection']:
+        """Organisation par défaut : ordre linéaire des champs en JSON.
+        
+        Retourne directement le contenu sans wrapper "INFORMATIONS" pour éviter un niveau inutile.
+        Le contenu sera affiché directement dans l'item parent.
+        """
+        sections = []
+        content_parts = []
+        
+        for field_path in fields_to_include:
+            value = self._extract_field_value(element_data, field_path)
+            if value is None:
+                continue
+            
+            label = self._generate_label(field_path, field_labels_map, element_mode)
+            formatted_value = self._format_value(value)
+            content_parts.append(f"{label}: {formatted_value}")
+        
+        if content_parts:
+            content = "\n".join(content_parts)
+            token_count = self._estimate_tokens(content)
+            # Retourner directement le contenu sans wrapper "INFORMATIONS"
+            # Le frontend aplatira cette structure
+            sections.append(ItemSection(
+                title="",  # Titre vide pour indiquer que c'est le contenu direct
+                content=content,
+                tokenCount=token_count
+            ))
+        
+        return sections
+    
+    def _organize_narrative_json(
+        self,
+        element_data: Dict,
+        element_type: str,
+        fields_to_include: List[str],
+        field_labels_map: Optional[Dict[str, str]] = None,
+        element_mode: Optional[str] = None
+    ) -> List['ItemSection']:
+        """Organisation narrative : groupement par sections logiques en JSON."""
+        sections = []
+        
+        # Grouper les champs par catégorie
+        fields_by_category = defaultdict(list)
+        for field_path in fields_to_include:
+            category = self._categorize_field(field_path, element_type)
+            fields_by_category[category or "other"].append(field_path)
+        
+        # Construire les sections dans l'ordre défini
+        for section_key in self.NARRATIVE_SECTIONS:
+            if section_key in fields_by_category:
+                section_label = self.SECTION_LABELS.get(section_key, section_key.upper())
+                section_fields = fields_by_category[section_key]
+                
+                content_parts = []
+                for field_path in section_fields:
+                    value = self._extract_field_value(element_data, field_path)
+                    if value is None:
+                        continue
+                    
+                    label = self._generate_label(field_path, field_labels_map, element_mode)
+                    formatted_value = self._format_value(value)
+                    content_parts.append(f"{label}: {formatted_value}")
+                
+                if content_parts:
+                    content = "\n".join(content_parts)
+                    token_count = self._estimate_tokens(content)
+                    sections.append(ItemSection(
+                        title=section_label,
+                        content=content,
+                        tokenCount=token_count
+                    ))
+        
+        # Ajouter les champs non catégorisés
+        if "other" in fields_by_category:
+            other_fields = fields_by_category["other"]
+            if other_fields:
+                content_parts = []
+                for field_path in other_fields:
+                    value = self._extract_field_value(element_data, field_path)
+                    if value is None:
+                        continue
+                    
+                    label = self._generate_label(field_path, field_labels_map, element_mode)
+                    formatted_value = self._format_value(value)
+                    content_parts.append(f"{label}: {formatted_value}")
+                
+                if content_parts:
+                    content = "\n".join(content_parts)
+                    token_count = self._estimate_tokens(content)
+                    sections.append(ItemSection(
+                        title="AUTRES INFORMATIONS",
+                        content=content,
+                        tokenCount=token_count
+                    ))
+        
+        return sections
+    
+    def _organize_minimal_json(
+        self,
+        element_data: Dict,
+        element_type: str,
+        fields_to_include: List[str],
+        field_labels_map: Optional[Dict[str, str]] = None,
+        element_mode: Optional[str] = None
+    ) -> List['ItemSection']:
+        """Organisation minimale : seulement les champs essentiels en JSON."""
+        # Filtrer pour ne garder que les champs essentiels
+        essential_fields = self.ESSENTIAL_CONTEXT_FIELDS.get(element_type, [])
+        
+        minimal_fields = [
+            f for f in fields_to_include 
+            if f in essential_fields or any(essential in f for essential in essential_fields)
+        ]
+        
+        if not minimal_fields:
+            minimal_fields = fields_to_include[:5]  # Limiter à 5 champs
+        
+        return self._organize_default_json(element_data, element_type, minimal_fields, field_labels_map, element_mode)
+    
+    def _estimate_tokens(self, text: str) -> int:
+        """Estime le nombre de tokens dans un texte."""
+        # Estimation simple : ~4 caractères par token
+        # Pour une estimation plus précise, il faudrait utiliser tiktoken
+        return len(text) // 4
 

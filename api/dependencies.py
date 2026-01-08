@@ -22,6 +22,7 @@ from factories.llm_factory import LLMClientFactory
 from services.vocabulary_service import VocabularyService
 from services.narrative_guides_service import NarrativeGuidesService
 from services.notion_import_service import NotionImportService
+from services.prompt_enricher import PromptEnricher
 from constants import FilePaths, Defaults
 
 logger = logging.getLogger(__name__)
@@ -204,7 +205,21 @@ def get_prompt_engine() -> PromptEngine:
     )
     # #endregion
     if _prompt_engine is None:
-        _prompt_engine = PromptEngine()
+        # Injecter ContextBuilder et services pour éviter les instanciations redondantes
+        context_builder = get_context_builder()
+        vocab_service = get_vocabulary_service()
+        guides_service = get_narrative_guides_service()
+        # Créer PromptEnricher avec les services injectés
+        enricher = PromptEnricher(
+            vocab_service=vocab_service,
+            guides_service=guides_service
+        )
+        _prompt_engine = PromptEngine(
+            context_builder=context_builder,
+            vocab_service=vocab_service,
+            guides_service=guides_service,
+            enricher=enricher
+        )
         # #region agent log
         _debug_log(
             "api/dependencies.py:get_prompt_engine:created",
@@ -216,7 +231,7 @@ def get_prompt_engine() -> PromptEngine:
             "A"
         )
         # #endregion
-        logger.info("PromptEngine initialisé (singleton).")
+        logger.info("PromptEngine initialisé (singleton) avec ContextBuilder, VocabularyService et NarrativeGuidesService injectés.")
     # #region agent log
     _debug_log(
         "api/dependencies.py:get_prompt_engine:exit",
@@ -240,7 +255,7 @@ def reset_singletons() -> None:
     Cette fonction doit être appelée au startup du lifespan pour garantir
     que les singletons sont réinitialisés après un reload d'uvicorn.
     """
-    global _context_builder, _config_service, _prompt_engine
+    global _context_builder, _config_service, _prompt_engine, _vocab_service, _guides_service
     # #region agent log
     _debug_log(
         "api/dependencies.py:reset_singletons:entry",
@@ -249,6 +264,8 @@ def reset_singletons() -> None:
             "_context_builder_id_before": id(_context_builder) if _context_builder is not None else None,
             "_config_service_id_before": id(_config_service) if _config_service is not None else None,
             "_prompt_engine_id_before": id(_prompt_engine) if _prompt_engine is not None else None,
+            "_vocab_service_id_before": id(_vocab_service) if _vocab_service is not None else None,
+            "_guides_service_id_before": id(_guides_service) if _guides_service is not None else None,
             "module_id": id(sys.modules[__name__])
         },
         "A"
@@ -257,6 +274,8 @@ def reset_singletons() -> None:
     _context_builder = None
     _config_service = None
     _prompt_engine = None
+    _vocab_service = None
+    _guides_service = None
     # #region agent log
     _debug_log(
         "api/dependencies.py:reset_singletons:exit",
@@ -265,6 +284,8 @@ def reset_singletons() -> None:
             "_context_builder_id_after": id(_context_builder) if _context_builder is not None else None,
             "_config_service_id_after": id(_config_service) if _config_service is not None else None,
             "_prompt_engine_id_after": id(_prompt_engine) if _prompt_engine is not None else None,
+            "_vocab_service_id_after": id(_vocab_service) if _vocab_service is not None else None,
+            "_guides_service_id_after": id(_guides_service) if _guides_service is not None else None,
             "module_id": id(sys.modules[__name__])
         },
         "A"
@@ -379,13 +400,21 @@ def get_request_id(request: Request) -> str:
     return getattr(request.state, "request_id", "unknown")
 
 
+_vocab_service: VocabularyService | None = None
+_guides_service: NarrativeGuidesService | None = None
+
+
 def get_vocabulary_service() -> VocabularyService:
     """Retourne le service de vocabulaire (singleton).
     
     Returns:
         Instance de VocabularyService.
     """
-    return VocabularyService()
+    global _vocab_service
+    if _vocab_service is None:
+        _vocab_service = VocabularyService()
+        logger.info("VocabularyService initialisé (singleton).")
+    return _vocab_service
 
 
 def get_narrative_guides_service() -> NarrativeGuidesService:
@@ -394,7 +423,11 @@ def get_narrative_guides_service() -> NarrativeGuidesService:
     Returns:
         Instance de NarrativeGuidesService.
     """
-    return NarrativeGuidesService()
+    global _guides_service
+    if _guides_service is None:
+        _guides_service = NarrativeGuidesService()
+        logger.info("NarrativeGuidesService initialisé (singleton).")
+    return _guides_service
 
 
 def get_notion_import_service() -> NotionImportService:

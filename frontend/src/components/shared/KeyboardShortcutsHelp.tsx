@@ -14,7 +14,7 @@ const DEFAULT_SHORTCUTS = [
   { key: 'ctrl+enter', description: 'Générer un dialogue' },
   { key: 'alt+s', description: 'Échanger les personnages (swap)' },
   { key: 'ctrl+k', description: 'Ouvrir la palette de commandes' },
-  { key: '/', description: 'Ouvrir la palette de commandes' },
+  { key: '/', description: 'Filtrer dans le panneau de gauche' },
   { key: 'ctrl+e', description: 'Exporter le dialogue Unity' },
   { key: 'ctrl+s', description: 'Sauvegarder le dialogue' },
   { key: 'ctrl+n', description: 'Nouveau dialogue (réinitialiser)' },

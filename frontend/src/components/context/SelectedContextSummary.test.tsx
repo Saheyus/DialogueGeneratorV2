@@ -1,7 +1,7 @@
 /**
  * Tests pour SelectedContextSummary - détection de doublons et vérification du compteur.
  */
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SelectedContextSummary } from './SelectedContextSummary'
@@ -16,11 +16,16 @@ describe('SelectedContextSummary', () => {
 
   it('affiche "Aucune sélection" quand il n\'y a pas de sélections', () => {
     const emptySelections: ContextSelection = {
-      characters: [],
-      locations: [],
-      items: [],
-      species: [],
-      communities: [],
+      characters_full: [],
+      characters_excerpt: [],
+      locations_full: [],
+      locations_excerpt: [],
+      items_full: [],
+      items_excerpt: [],
+      species_full: [],
+      species_excerpt: [],
+      communities_full: [],
+      communities_excerpt: [],
       dialogues_examples: [],
     }
 
@@ -31,11 +36,16 @@ describe('SelectedContextSummary', () => {
 
   it('affiche le compteur total correct', () => {
     const selections: ContextSelection = {
-      characters: ['Personnage 1', 'Personnage 2'],
-      locations: ['Lieu 1'],
-      items: [],
-      species: ['Espèce 1'],
-      communities: [],
+      characters_full: ['Personnage 1'],
+      characters_excerpt: ['Personnage 2'],
+      locations_full: ['Lieu 1'],
+      locations_excerpt: [],
+      items_full: [],
+      items_excerpt: [],
+      species_full: ['Espèce 1'],
+      species_excerpt: [],
+      communities_full: [],
+      communities_excerpt: [],
       dialogues_examples: [],
     }
 
@@ -48,11 +58,16 @@ describe('SelectedContextSummary', () => {
   it('affiche les catégories avec leurs compteurs corrects', async () => {
     const user = userEvent.setup()
     const selections: ContextSelection = {
-      characters: ['Personnage 1', 'Personnage 2'],
-      locations: ['Lieu 1', 'Lieu 2'],
-      items: ['Objet 1'],
-      species: [],
-      communities: ['Communauté 1'],
+      characters_full: ['Personnage 1', 'Personnage 2'],
+      characters_excerpt: [],
+      locations_full: ['Lieu 1', 'Lieu 2'],
+      locations_excerpt: [],
+      items_full: ['Objet 1'],
+      items_excerpt: [],
+      species_full: [],
+      species_excerpt: [],
+      communities_full: ['Communauté 1'],
+      communities_excerpt: [],
       dialogues_examples: [],
     }
 
@@ -89,11 +104,16 @@ describe('SelectedContextSummary', () => {
     const user = userEvent.setup()
     // Cas avec doublon : "Akthar-Neth Amatru" et "l'Exégète" sont le même personnage
     const selectionsWithDuplicates: ContextSelection = {
-      characters: ['Akthar-Neth Amatru', 'l\'Exégète', 'Personnage 2'],
-      locations: [],
-      items: [],
-      species: [],
-      communities: [],
+      characters_full: ['Akthar-Neth Amatru', 'l\'Exégète', 'Personnage 2'],
+      characters_excerpt: [],
+      locations_full: [],
+      locations_excerpt: [],
+      items_full: [],
+      items_excerpt: [],
+      species_full: [],
+      species_excerpt: [],
+      communities_full: [],
+      communities_excerpt: [],
       dialogues_examples: [],
     }
 
@@ -122,11 +142,16 @@ describe('SelectedContextSummary', () => {
   it('appelle onClear quand on clique sur "Tout effacer"', async () => {
     const user = userEvent.setup()
     const selections: ContextSelection = {
-      characters: ['Personnage 1'],
-      locations: [],
-      items: [],
-      species: [],
-      communities: [],
+      characters_full: ['Personnage 1'],
+      characters_excerpt: [],
+      locations_full: [],
+      locations_excerpt: [],
+      items_full: [],
+      items_excerpt: [],
+      species_full: [],
+      species_excerpt: [],
+      communities_full: [],
+      communities_excerpt: [],
       dialogues_examples: [],
     }
 
@@ -140,11 +165,16 @@ describe('SelectedContextSummary', () => {
 
   it('affiche correctement le total avec toutes les catégories', () => {
     const selections: ContextSelection = {
-      characters: ['P1', 'P2'], // 2
-      locations: ['L1', 'L2', 'L3'], // 3
-      items: ['I1'], // 1
-      species: ['S1'], // 1
-      communities: ['C1'], // 1
+      characters_full: ['P1', 'P2'], // 2
+      characters_excerpt: [],
+      locations_full: ['L1', 'L2', 'L3'], // 3
+      locations_excerpt: [],
+      items_full: ['I1'], // 1
+      items_excerpt: [],
+      species_full: ['S1'], // 1
+      species_excerpt: [],
+      communities_full: ['C1'], // 1
+      communities_excerpt: [],
       dialogues_examples: ['D1', 'D2'], // 2
     }
 
@@ -158,11 +188,16 @@ describe('SelectedContextSummary', () => {
     // Test avec des tableaux qui pourraient contenir des doublons
     // Si le store autorise les doublons, le compteur sera faux
     const selectionsWithPotentialDuplicates: ContextSelection = {
-      characters: ['Personnage 1', 'Personnage 1'], // Doublon réel dans le tableau
-      locations: ['Lieu 1'],
-      items: [],
-      species: [],
-      communities: [],
+      characters_full: ['Personnage 1', 'Personnage 1'], // Doublon réel dans le tableau
+      characters_excerpt: [],
+      locations_full: ['Lieu 1'],
+      locations_excerpt: [],
+      items_full: [],
+      items_excerpt: [],
+      species_full: [],
+      species_excerpt: [],
+      communities_full: [],
+      communities_excerpt: [],
       dialogues_examples: [],
     }
 
@@ -176,11 +211,16 @@ describe('SelectedContextSummary', () => {
   it('affiche la liste complète des éléments quand développé', async () => {
     const user = userEvent.setup()
     const selections: ContextSelection = {
-      characters: ['Personnage A', 'Personnage B', 'Personnage C'],
-      locations: [],
-      items: [],
-      species: [],
-      communities: [],
+      characters_full: ['Personnage A', 'Personnage B', 'Personnage C'],
+      characters_excerpt: [],
+      locations_full: [],
+      locations_excerpt: [],
+      items_full: [],
+      items_excerpt: [],
+      species_full: [],
+      species_excerpt: [],
+      communities_full: [],
+      communities_excerpt: [],
       dialogues_examples: [],
     }
 

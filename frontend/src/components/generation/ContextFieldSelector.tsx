@@ -79,9 +79,22 @@ export function ContextFieldSelector({
         
         if (!nodeMap.has(currentPath)) {
           const isLeaf = i === parts.length - 1
+          // Pour les nœuds feuilles, extraire uniquement le dernier segment du label
+          // (le backend génère "Parent > Child" mais on veut juste "Child" ici)
+          // Pour les nœuds intermédiaires, générer le label à partir de la partie du path
+          let nodeLabel: string
+          if (isLeaf) {
+            // Extraire uniquement le dernier segment du label (après le dernier " > ")
+            const labelParts = fieldInfo.label.split(' > ')
+            nodeLabel = labelParts[labelParts.length - 1] || fieldInfo.label
+          } else {
+            // Générer le label à partir de la partie du path
+            nodeLabel = part.replace(/_/g, ' ').replace(/-/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+          }
+          
           const node: FieldNode = {
             path: currentPath,
-            label: isLeaf ? fieldInfo.label : part.replace(/_/g, ' ').replace(/-/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+            label: nodeLabel,
             fieldInfo: isLeaf ? fieldInfo : {
               path: currentPath,
               label: part,
@@ -119,19 +132,34 @@ export function ContextFieldSelector({
             const flattenedChild = flattenSingleChildNodes([child])[0]
             // Fusionner le nœud avec son enfant unique
             // Préserver le path et fieldInfo de l'enfant final (la feuille)
+            // Éviter la duplication si les labels sont identiques
+            const childLabel = flattenedChild.label.includes(' > ') 
+              ? flattenedChild.label.split(' > ').slice(-1)[0] // Prendre uniquement le dernier segment
+              : flattenedChild.label
+            const mergedLabel = node.label === childLabel 
+              ? node.label 
+              : `${node.label} > ${childLabel}`
             return {
               ...flattenedChild,
               path: flattenedChild.path, // Garder le path original de la feuille
-              label: `${node.label} > ${flattenedChild.label}`,
+              label: mergedLabel,
               parent: node.parent,
             }
           } else {
             // L'enfant est une feuille, fusionner directement
             // Préserver le path et fieldInfo de l'enfant (la feuille)
+            // Éviter la duplication si les labels sont identiques
+            // Le label du backend peut contenir "Parent > Child", on prend juste "Child"
+            const childLabel = child.label.includes(' > ') 
+              ? child.label.split(' > ').slice(-1)[0] // Prendre uniquement le dernier segment
+              : child.label
+            const mergedLabel = node.label === childLabel 
+              ? node.label 
+              : `${node.label} > ${childLabel}`
             return {
               ...child,
               path: child.path, // Garder le path original de la feuille
-              label: `${node.label} > ${child.label}`,
+              label: mergedLabel,
               parent: node.parent,
             }
           }
@@ -207,6 +235,13 @@ export function ContextFieldSelector({
       (fieldInfo.frequency >= 0.8 ? 'essential' : 
        fieldInfo.frequency >= 0.2 ? 'common' : 'rare')
     const isEssential = fieldInfo.is_essential === true
+    const isInvalid = fieldInfo.is_valid === false
+    const isInConfig = fieldInfo.is_in_config === true
+    
+    // Afficher un avertissement si le champ est invalide
+    if (isInvalid) {
+      return { icon: '⚠️', color: theme.state.error.color, title: 'Champ invalide (n\'existe pas dans les données GDD)' }
+    }
     
     if (isSuggested) {
       return { icon: '✓', color: theme.state.success.color, title: 'Champ suggéré' }
@@ -215,6 +250,11 @@ export function ContextFieldSelector({
     // ⭐ doit représenter les champs essentiels (is_essential), pas la fréquence.
     if (isEssential) {
       return { icon: '⭐', color: theme.state.info.color, title: 'Champ essentiel' }
+    }
+    
+    // Indicateur pour les champs dans la config mais non essentiels
+    if (isInConfig) {
+      return { icon: '📋', color: theme.text.secondary, title: 'Champ dans la configuration' }
     }
     
     switch (importance) {
@@ -426,10 +466,16 @@ export function ContextFieldSelector({
       <div style={{ marginBottom: '0.5rem', fontWeight: 'bold' }}>Indicateurs Visuels</div>
       <ul style={{ margin: 0, paddingLeft: '1.25rem', listStyle: 'none' }}>
         <li style={{ marginBottom: '0.25rem' }}>
+          <span style={{ color: theme.state.error.color }}>⚠️</span> Rouge : Champ invalide (n'existe pas dans les données GDD)
+        </li>
+        <li style={{ marginBottom: '0.25rem' }}>
           <span style={{ color: theme.state.success.color }}>✓</span> Vert : Champ suggéré/recommandé
         </li>
         <li style={{ marginBottom: '0.25rem' }}>
           <span style={{ color: theme.state.info.color }}>⭐</span> Bleu : Champ essentiel
+        </li>
+        <li style={{ marginBottom: '0.25rem' }}>
+          <span style={{ color: theme.text.secondary }}>📋</span> Gris : Champ dans la configuration
         </li>
         <li style={{ marginBottom: '0.25rem' }}>
           <span style={{ color: theme.text.secondary }}>ⓘ</span> Gris : Champ commun

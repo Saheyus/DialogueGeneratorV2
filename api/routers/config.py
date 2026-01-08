@@ -1,6 +1,6 @@
 """Router pour la configuration."""
 import logging
-from typing import Annotated, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, Request, status, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -457,6 +457,79 @@ async def set_unity_dialogues_path(
         )
 
 
+# IMPORTANT: Cette route doit être définie AVANT /context-fields/{element_type}
+# pour éviter que "validate" soit interprété comme un type d'élément
+@router.get(
+    "/context-fields/validate",
+    status_code=status.HTTP_200_OK
+)
+async def validate_context_fields(
+    request: Request,
+    context_builder: Annotated[ContextBuilder, Depends(get_context_builder)],
+    config_service: Annotated[ConfigurationService, Depends(get_config_service)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> Dict[str, Any]:
+    """Valide que context_config.json ne référence que des champs existants.
+    
+    Args:
+        request: La requête HTTP.
+        context_builder: ContextBuilder injecté.
+        config_service: ConfigurationService injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        Rapport de validation avec les champs valides et invalides.
+    """
+    try:
+        from services.context_field_validator import ContextFieldValidator
+        
+        context_config = config_service.get_context_config()
+        validator = ContextFieldValidator(context_builder)
+        validation_results = validator.validate_all_configs(context_config)
+        
+        # Construire la réponse
+        report = {
+            "summary": {
+                "total_element_types": len(validation_results),
+                "total_errors": sum(1 for r in validation_results.values() if r.has_errors()),
+                "total_warnings": sum(1 for r in validation_results.values() if r.has_warnings()),
+            },
+            "results": {}
+        }
+        
+        for element_type, result in validation_results.items():
+            report["results"][element_type] = {
+                "total_fields_in_config": result.total_fields_in_config,
+                "total_fields_detected": result.total_fields_detected,
+                "valid_fields_count": len(result.valid_fields),
+                "invalid_fields_count": len(result.invalid_fields),
+                "has_errors": result.has_errors(),
+                "has_warnings": result.has_warnings(),
+                "invalid_fields": [
+                    {
+                        "path": issue.field_path,
+                        "issue_type": issue.issue_type,
+                        "severity": issue.severity,
+                        "message": issue.message,
+                        "suggested_path": issue.suggested_path
+                    }
+                    for issue in result.invalid_fields
+                ]
+            }
+        
+        # Ajouter le rapport texte complet
+        report["text_report"] = validator.get_validation_report(context_config)
+        
+        return report
+    except Exception as e:
+        logger.exception(f"Erreur lors de la validation des champs (request_id: {request_id})")
+        raise InternalServerException(
+            message="Erreur lors de la validation des champs",
+            details={"error": str(e)},
+            request_id=request_id
+        )
+
+
 @router.get(
     "/context-fields/{element_type}",
     response_model=ContextFieldsResponse,
@@ -502,10 +575,28 @@ async def get_context_fields(
             except Exception as e:
                 logger.warning(f"Impossible de re-marquer les champs essentiels depuis le cache: {e}", exc_info=True)
             
+            # Extraire les chemins de champs depuis context_config.json pour marquer is_in_config
+            config_paths = set()
+            try:
+                default_config = config_service.get_context_config()
+                element_config = default_config.get(element_type, {})
+                if isinstance(element_config, dict):
+                    for priority_level, fields in element_config.items():
+                        if isinstance(fields, list):
+                            for field_config in fields:
+                                path = field_config.get("path", "")
+                                if path:
+                                    config_paths.add(path)
+            except Exception as e:
+                logger.warning(f"Impossible d'extraire les chemins depuis context_config.json: {e}")
+            
             # Convertir les FieldInfo du cache en schémas API
             fields_dict = {}
             for path, field_info in cached_fields.items():
                 if isinstance(field_info, DetectorFieldInfo):
+                    is_in_config = path in config_paths
+                    is_valid = True  # Tous les champs détectés existent par définition
+                    
                     fields_dict[path] = FieldInfo(
                         path=field_info.path,
                         label=field_info.label,
@@ -517,7 +608,9 @@ async def get_context_fields(
                         importance=ContextFieldDetector(None).classify_field_importance(field_info.frequency),
                         is_metadata=getattr(field_info, 'is_metadata', False),
                         is_essential=getattr(field_info, 'is_essential', False),
-                        is_unique=getattr(field_info, 'is_unique', False)
+                        is_unique=getattr(field_info, 'is_unique', False),
+                        is_in_config=is_in_config,
+                        is_valid=is_valid
                     )
             
             # Détecter les champs uniques regroupés par fiche
@@ -533,7 +626,7 @@ async def get_context_fields(
                 element_type=element_type,
                 fields=fields_dict,
                 total=len(fields_dict),
-                unique_fields_by_item=unique_fields_by_item
+                unique_fields_by_item=len(unique_fields_by_item) if isinstance(unique_fields_by_item, dict) else 0
             )
         
         # Détecter les champs
@@ -567,6 +660,21 @@ async def get_context_fields(
         except Exception as e:
             logger.warning(f"Impossible de détecter les champs uniques: {e}", exc_info=True)
         
+        # Extraire les chemins de champs depuis context_config.json pour marquer is_in_config
+        config_paths = set()
+        try:
+            default_config = config_service.get_context_config()
+            element_config = default_config.get(element_type, {})
+            if isinstance(element_config, dict):
+                for priority_level, fields in element_config.items():
+                    if isinstance(fields, list):
+                        for field_config in fields:
+                            path = field_config.get("path", "")
+                            if path:
+                                config_paths.add(path)
+        except Exception as e:
+            logger.warning(f"Impossible d'extraire les chemins depuis context_config.json: {e}")
+        
         # Convertir en schémas API
         fields_dict = {}
         essential_in_response = 0
@@ -575,6 +683,9 @@ async def get_context_fields(
             is_essential = field_info.is_essential
             is_metadata = field_info.is_metadata
             is_unique = getattr(field_info, 'is_unique', False)
+            is_in_config = path in config_paths
+            is_valid = True  # Tous les champs détectés existent par définition
+            
             if is_essential:
                 essential_in_response += 1
             if is_metadata:
@@ -590,7 +701,9 @@ async def get_context_fields(
                 importance=detector.classify_field_importance(field_info.frequency),
                 is_metadata=is_metadata,
                 is_essential=is_essential,
-                is_unique=is_unique
+                is_unique=is_unique,
+                is_in_config=is_in_config,
+                is_valid=is_valid
             )
         
         return ContextFieldsResponse(
@@ -686,31 +799,34 @@ async def preview_context(
         if isinstance(request_data.selected_elements, dict):
             element_modes = request_data.selected_elements.pop("_element_modes", None)
         
-        # Utiliser build_context_with_custom_fields si disponible
-        # Sinon, utiliser build_context normal avec les champs sélectionnés
-        if hasattr(context_builder, 'build_context_with_custom_fields'):
-            preview_text = context_builder.build_context_with_custom_fields(
-                selected_elements=request_data.selected_elements,
-                scene_instruction=request_data.scene_instruction or "",
-                field_configs=request_data.field_configs,
-                organization_mode=request_data.organization_mode or "default",
-                max_tokens=request_data.max_tokens,
-                element_modes=element_modes
-            )
-        else:
-            # Fallback: utiliser build_context normal
-            preview_text = context_builder.build_context(
-                selected_elements=request_data.selected_elements,
-                scene_instruction=request_data.scene_instruction or "",
-                max_tokens=request_data.max_tokens
-            )
+        # Construire le contexte JSON (obligatoire, plus de fallback)
+        structured_context = context_builder.build_context_json(
+            selected_elements=request_data.selected_elements,
+            scene_instruction=request_data.scene_instruction or "",
+            field_configs=request_data.field_configs,
+            organization_mode=request_data.organization_mode or "default",
+            max_tokens=request_data.max_tokens,
+            include_dialogue_type=True,
+            element_modes=element_modes
+        )
+        # Sérialiser en texte pour compatibilité
+        preview_text = context_builder._context_serializer.serialize_to_text(structured_context)
         
         # Compter les tokens
         tokens = context_builder._count_tokens(preview_text)
         
+        # Convertir structured_context en dict pour la réponse
+        structured_prompt_dict = None
+        if structured_context:
+            try:
+                structured_prompt_dict = structured_context.model_dump()
+            except Exception as e:
+                logger.warning(f"Erreur lors de la conversion du structured_context en dict: {e}")
+        
         return ContextPreviewResponse(
-            preview=preview_text,
-            tokens=tokens
+            preview=preview_text or "",
+            tokens=tokens,
+            structured_prompt=structured_prompt_dict
         )
     except Exception as e:
         logger.exception(f"Erreur lors de la prévisualisation du contexte (request_id: {request_id})")

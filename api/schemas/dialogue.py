@@ -144,11 +144,13 @@ class EstimateTokensResponse(BaseModel):
         token_count: Nombre total de tokens (contexte + prompt).
         raw_prompt: Le prompt brut réel qui sera envoyé au LLM.
         prompt_hash: Hash SHA-256 du prompt pour validation.
+        structured_prompt: Structure JSON du prompt (optionnel).
     """
     context_tokens: int = Field(..., description="Nombre de tokens du contexte")
     token_count: int = Field(..., description="Nombre total de tokens")
     raw_prompt: str = Field(..., description="Le prompt brut réel qui sera envoyé au LLM")
     prompt_hash: str = Field(..., description="Hash SHA-256 du prompt")
+    structured_prompt: Optional[Dict[str, Any]] = Field(None, description="Structure JSON du prompt pour affichage structuré")
 
 class GenerateUnityDialogueRequest(BasePromptRequest):
     """Requête pour générer un nœud de dialogue au format Unity JSON."""
@@ -165,6 +167,7 @@ class GenerateUnityDialogueResponse(BaseModel):
         prompt_hash: Hash SHA-256 du prompt pour validation.
         estimated_tokens: Nombre estimé de tokens utilisés.
         warning: Avertissement éventuel.
+        structured_prompt: Structure JSON du prompt (optionnel).
     """
     json_content: str = Field(..., description="Contenu JSON du dialogue au format Unity")
     title: Optional[str] = Field(None, description="Titre descriptif du dialogue généré par l'IA")
@@ -172,6 +175,7 @@ class GenerateUnityDialogueResponse(BaseModel):
     prompt_hash: str = Field(..., description="Hash SHA-256 du prompt")
     estimated_tokens: int = Field(..., description="Nombre estimé de tokens")
     warning: Optional[str] = Field(None, description="Avertissement (ex: DummyLLMClient utilisé)")
+    structured_prompt: Optional[Dict[str, Any]] = Field(None, description="Structure JSON du prompt pour affichage structuré")
 
 
 

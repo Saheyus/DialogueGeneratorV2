@@ -7,7 +7,9 @@ import { usePromptPreview } from '../../hooks/usePromptPreview'
 import { StructuredPromptView } from './StructuredPromptView'
 import { theme } from '../../theme'
 import { useToast } from '../shared'
+import { useGenerationStore } from '../../store/generationStore'
 import type { RawPrompt } from '../../types/api'
+import type { PromptStructure } from '../../types/prompt'
 
 export interface EstimatedPromptPanelProps {
   /** Le prompt brut à afficher (RawPrompt) */
@@ -18,6 +20,8 @@ export interface EstimatedPromptPanelProps {
   tokenCount?: number | null
   /** Hash du prompt pour validation */
   promptHash?: string | null
+  /** Structure JSON du prompt (optionnel) */
+  structuredPrompt?: PromptStructure | null
 }
 
 export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
@@ -25,11 +29,16 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
   isEstimating = false,
   tokenCount,
   promptHash,
+  structuredPrompt: structuredPromptProp,
 }: EstimatedPromptPanelProps) {
   const [viewMode, setViewMode] = useState<'raw' | 'structured'>('structured')
   const toast = useToast()
   
-  const { formattedPrompt, sections } = usePromptPreview(raw_prompt)
+  // Récupérer structuredPrompt depuis le store si non fourni en prop
+  const structuredPromptFromStore = useGenerationStore((state) => state.structuredPrompt)
+  const structuredPrompt = structuredPromptProp ?? structuredPromptFromStore
+  
+  const { formattedPrompt, sections } = usePromptPreview(raw_prompt, structuredPrompt)
   
   const handleCopyPrompt = useCallback(() => {
     if (!raw_prompt) return
@@ -211,7 +220,7 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
               {raw_prompt}
             </pre>
           ) : (
-            <StructuredPromptView prompt={raw_prompt} />
+            <StructuredPromptView prompt={raw_prompt} structuredPrompt={structuredPrompt} />
           )
         ) : (
           <div

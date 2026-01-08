@@ -1,5 +1,5 @@
 """Schémas Pydantic pour les endpoints de configuration."""
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
 
@@ -18,6 +18,8 @@ class FieldInfo(BaseModel):
         is_metadata: Si True, le champ est une métadonnée.
         is_essential: Si True, le champ est considéré comme essentiel.
         is_unique: Si True, le champ est unique (n'apparaît que dans une seule fiche).
+        is_in_config: Si True, le champ est référencé dans context_config.json.
+        is_valid: Si True, le champ existe réellement dans les données GDD.
     """
     path: str = Field(..., description="Chemin du champ")
     label: str = Field(..., description="Libellé du champ")
@@ -30,6 +32,8 @@ class FieldInfo(BaseModel):
     is_metadata: bool = Field(default=False, description="Si True, le champ est une métadonnée")
     is_essential: bool = Field(default=False, description="Si True, le champ est essentiel")
     is_unique: bool = Field(default=False, description="Si True, le champ est unique")
+    is_in_config: bool = Field(default=False, description="Si True, le champ est dans context_config.json")
+    is_valid: bool = Field(default=True, description="Si True, le champ existe dans les données GDD")
 
 
 class ContextFieldsResponse(BaseModel):
@@ -94,11 +98,13 @@ class ContextPreviewResponse(BaseModel):
     """Réponse contenant un aperçu du contexte.
     
     Attributes:
+        structured_prompt: Structure JSON du contexte (optionnel).
         preview: Texte de l'aperçu.
         tokens: Nombre estimé de tokens.
     """
     preview: str = Field(..., description="Texte de l'aperçu")
     tokens: int = Field(..., description="Nombre estimé de tokens")
+    structured_prompt: Optional[Dict[str, Any]] = Field(None, description="Structure JSON du contexte pour affichage structuré")
 
 
 class DefaultFieldConfigResponse(BaseModel):

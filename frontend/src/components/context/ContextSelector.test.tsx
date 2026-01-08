@@ -60,18 +60,23 @@ describe('ContextSelector', () => {
     // Mock des appels API par défaut
     vi.mocked(contextAPI.listCharacters).mockResolvedValue({
       characters: [mockCharacter],
+      total: 1,
     })
     vi.mocked(contextAPI.listLocations).mockResolvedValue({
       locations: [mockLocation],
+      total: 1,
     })
     vi.mocked(contextAPI.listItems).mockResolvedValue({
       items: [mockItem],
+      total: 1,
     })
     vi.mocked(contextAPI.listSpecies).mockResolvedValue({
       species: [],
+      total: 0,
     })
     vi.mocked(contextAPI.listCommunities).mockResolvedValue({
       communities: [],
+      total: 0,
     })
   })
 

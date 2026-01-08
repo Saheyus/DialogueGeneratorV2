@@ -147,7 +147,8 @@ class ContextFieldDetector:
             )
         
         unique_count = sum(1 for f in fields.values() if f.is_unique)
-        logger.info(f"Détecté {len(fields)} champs pour '{element_type}' sur {total_items} fiches ({unique_count} champs uniques)")
+        # Log en DEBUG par défaut (visible seulement si LOG_CONSOLE_LEVEL=DEBUG ou --debug)
+        logger.debug(f"Détecté {len(fields)} champs pour '{element_type}' sur {total_items} fiches ({unique_count} champs uniques)")
         return fields
     
     def _get_item_name(self, item: Dict) -> Optional[str]:
@@ -229,7 +230,7 @@ class ContextFieldDetector:
                     label = self._generate_label(path)
                     unique_fields_by_item[item_name][path] = label
         
-        logger.info(f"Détecté {len(unique_fields_by_item)} fiches avec des champs uniques pour '{element_type}'")
+        logger.debug(f"Détecté {len(unique_fields_by_item)} fiches avec des champs uniques pour '{element_type}'")
         return dict(unique_fields_by_item)
     
     def _get_sample_data(self, element_type: str) -> List[Dict]:
@@ -394,7 +395,7 @@ class ContextFieldDetector:
             essential_fields.add(field_path)
             logger.debug(f"Champ essentiel (métadonnée) pour '{element_type}': '{field_path}'")
         
-        logger.info(f"Champs essentiels identifiés pour '{element_type}': {len(essential_fields)} champs")
+        logger.debug(f"Champs essentiels identifiés pour '{element_type}': {len(essential_fields)} champs")
         return essential_fields
     
     def _is_metadata_field(self, path: str, root_keys_order: List[str]) -> bool:

@@ -57,8 +57,17 @@ describe('ContextFieldSelector', () => {
   })
 
   it('devrait afficher un message de chargement quand isLoading est true', () => {
+    const defaultReturn = {
+      availableFields: { character: {} },
+      fieldConfigs: { character: [] },
+      suggestions: { character: [] },
+      toggleField: mockToggleField,
+      detectFields: mockDetectFields,
+      isLoading: false,
+      error: null,
+    }
     mockUseContextConfigStore.mockReturnValue({
-      ...mockUseContextConfigStore(),
+      ...defaultReturn,
       isLoading: true,
     } as any)
 
@@ -68,8 +77,17 @@ describe('ContextFieldSelector', () => {
   })
 
   it('devrait afficher une erreur quand error est défini', () => {
+    const defaultReturn = {
+      availableFields: { character: {} },
+      fieldConfigs: { character: [] },
+      suggestions: { character: [] },
+      toggleField: mockToggleField,
+      detectFields: mockDetectFields,
+      isLoading: false,
+      error: null,
+    }
     mockUseContextConfigStore.mockReturnValue({
-      ...mockUseContextConfigStore(),
+      ...defaultReturn,
       error: 'Erreur de test',
     } as any)
 
@@ -80,9 +98,18 @@ describe('ContextFieldSelector', () => {
 
   it('devrait appeler detectFields au montage si aucun champ n\'est disponible', async () => {
     const mockDetectFieldsWithPromise = vi.fn(() => Promise.resolve())
-    
+
+    const defaultReturn = {
+      availableFields: { character: {} },
+      fieldConfigs: { character: [] },
+      suggestions: { character: [] },
+      toggleField: mockToggleField,
+      detectFields: mockDetectFields,
+      isLoading: false,
+      error: null,
+    }
     mockUseContextConfigStore.mockReturnValue({
-      ...mockUseContextConfigStore(),
+      ...defaultReturn,
       availableFields: {
         character: {},
       },

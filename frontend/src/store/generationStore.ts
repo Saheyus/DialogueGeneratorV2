@@ -4,6 +4,7 @@
 import { create } from 'zustand'
 import type { SceneSelection } from '../types/generation'
 import type { GenerateUnityDialogueResponse, RawPrompt } from '../types/api'
+import type { PromptStructure } from '../types/prompt'
 
 interface GenerationState {
   // Sélection de scène
@@ -18,6 +19,7 @@ interface GenerationState {
   
   // Source de vérité unique pour le prompt
   rawPrompt: RawPrompt | null
+  structuredPrompt: PromptStructure | null
   promptHash: string | null
   tokenCount: number | null
   isEstimating: boolean
@@ -32,7 +34,7 @@ interface GenerationState {
   setSystemPromptOverride: (prompt: string | null) => void
   setDefaultSystemPrompt: (prompt: string | null) => void
   resetSystemPrompt: () => void
-  setRawPrompt: (prompt: RawPrompt | null, tokens: number | null, hash: string | null, isEstimating: boolean) => void
+  setRawPrompt: (prompt: RawPrompt | null, tokens: number | null, hash: string | null, isEstimating: boolean, structuredPrompt?: PromptStructure | null) => void
   setUnityDialogueResponse: (response: GenerateUnityDialogueResponse | null) => void
   setTokensUsed: (tokens: number | null) => void
   clearGenerationResults: () => void
@@ -54,6 +56,7 @@ export const useGenerationStore = create<GenerationState>((set) => ({
   systemPromptOverride: null,
   defaultSystemPrompt: null,
   rawPrompt: null,
+  structuredPrompt: null,
   promptHash: null,
   tokenCount: null,
   isEstimating: false,
@@ -79,8 +82,8 @@ export const useGenerationStore = create<GenerationState>((set) => ({
       systemPromptOverride: state.defaultSystemPrompt,
     })),
 
-  setRawPrompt: (prompt, tokens, hash, isEstimating) =>
-    set({ rawPrompt: prompt, tokenCount: tokens, promptHash: hash, isEstimating }),
+  setRawPrompt: (prompt, tokens, hash, isEstimating, structuredPrompt = null) =>
+    set({ rawPrompt: prompt, structuredPrompt, tokenCount: tokens, promptHash: hash, isEstimating }),
 
   setUnityDialogueResponse: (response) =>
     set({ unityDialogueResponse: response }),

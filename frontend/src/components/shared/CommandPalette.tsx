@@ -104,8 +104,12 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
         )
 
         // Personnages
+        const allSelectedCharacters = [
+          ...(Array.isArray(selections.characters_full) ? selections.characters_full : []),
+          ...(Array.isArray(selections.characters_excerpt) ? selections.characters_excerpt : [])
+        ]
         charactersRes.characters.forEach((char) => {
-          const isSelected = selections.characters.includes(char.name)
+          const isSelected = allSelectedCharacters.includes(char.name)
           newItems.push({
             id: `character:${char.name}`,
             label: `${isSelected ? '✓ ' : ''}${char.name}`,
@@ -120,8 +124,12 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
         })
 
         // Lieux
+        const allSelectedLocations = [
+          ...(Array.isArray(selections.locations_full) ? selections.locations_full : []),
+          ...(Array.isArray(selections.locations_excerpt) ? selections.locations_excerpt : [])
+        ]
         locationsRes.locations.forEach((loc) => {
-          const isSelected = selections.locations.includes(loc.name)
+          const isSelected = allSelectedLocations.includes(loc.name)
           newItems.push({
             id: `location:${loc.name}`,
             label: `${isSelected ? '✓ ' : ''}${loc.name}`,
@@ -136,8 +144,12 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
         })
 
         // Objets
+        const allSelectedItems = [
+          ...(Array.isArray(selections.items_full) ? selections.items_full : []),
+          ...(Array.isArray(selections.items_excerpt) ? selections.items_excerpt : [])
+        ]
         itemsRes.items.forEach((item) => {
-          const isSelected = selections.items.includes(item.name)
+          const isSelected = allSelectedItems.includes(item.name)
           newItems.push({
             id: `item:${item.name}`,
             label: `${isSelected ? '✓ ' : ''}${item.name}`,

@@ -15,6 +15,38 @@ const backendOnly = args.includes('--backend') || args.includes('--back');
 const frontendOnly = args.includes('--frontend') || args.includes('--front');
 const stopOnly = args.includes('--stop');
 
+// Parse log level flags
+let logLevel = null;
+if (args.includes('--debug') || args.includes('-d')) {
+  logLevel = 'DEBUG';
+} else if (args.includes('--verbose') || args.includes('-v')) {
+  logLevel = 'INFO';
+} else if (args.includes('--quiet') || args.includes('-q')) {
+  logLevel = 'WARNING';
+} else {
+  // Chercher --log-level=VALUE ou --log-level VALUE
+  const logLevelIndex = args.findIndex(arg => arg.startsWith('--log-level'));
+  if (logLevelIndex !== -1) {
+    const arg = args[logLevelIndex];
+    if (arg.includes('=')) {
+      logLevel = arg.split('=')[1].toUpperCase();
+    } else if (args[logLevelIndex + 1]) {
+      logLevel = args[logLevelIndex + 1].toUpperCase();
+    }
+  }
+}
+
+// Valider le niveau de log
+if (logLevel && !['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'].includes(logLevel)) {
+  console.error(`❌ Niveau de log invalide: ${logLevel}. Valeurs acceptées: DEBUG, INFO, WARNING, ERROR, CRITICAL`);
+  process.exit(1);
+}
+
+// Exporter pour dev-services.js
+if (logLevel) {
+  process.env.LOG_CONSOLE_LEVEL = logLevel;
+}
+
 // Vérifier que Node.js et Python sont disponibles
 function checkCommand(command, errorMsg) {
   return new Promise((resolve) => {

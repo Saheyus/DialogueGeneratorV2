@@ -80,6 +80,7 @@ export interface EstimateTokensResponse {
   token_count: number
   raw_prompt: RawPrompt
   prompt_hash: string
+  structured_prompt?: import('./prompt').PromptStructure
 }
 
 // Context
@@ -189,6 +190,7 @@ export interface GenerateUnityDialogueResponse {
   prompt_hash: string
   estimated_tokens: number
   warning?: string
+  structured_prompt?: import('./prompt').PromptStructure
 }
 
 

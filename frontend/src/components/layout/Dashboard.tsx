@@ -14,7 +14,6 @@ import { Tabs, type Tab } from '../shared/Tabs'
 import { UnityDialogueList, type UnityDialogueListRef } from '../unityDialogues/UnityDialogueList'
 import { UnityDialogueDetails } from '../unityDialogues/UnityDialogueDetails'
 import { KeyboardShortcutsHelp } from '../shared/KeyboardShortcutsHelp'
-import { CommandPalette } from '../shared/CommandPalette'
 import { useGenerationStore } from '../../store/generationStore'
 import { useGenerationActionsStore } from '../../store/generationActionsStore'
 import { useContextConfigStore } from '../../store/contextConfigStore'
@@ -35,6 +34,10 @@ export function Dashboard() {
   const [selectedDialogue, setSelectedDialogue] = useState<UnityDialogueMetadata | null>(null)
   const dialogueListRef = useRef<UnityDialogueListRef>(null)
   const { rawPrompt, tokenCount, promptHash, isEstimating, unityDialogueResponse } = useGenerationStore()
+  const generationState = useGenerationStore((state) => ({
+    isEstimating: state.isEstimating,
+    unityDialogueResponse: state.unityDialogueResponse,
+  }))
   const { actions } = useGenerationActionsStore()
 
   const { loadDefaultConfig } = useContextConfigStore()
@@ -53,13 +56,6 @@ export function Dashboard() {
     [
       {
         key: 'ctrl+k',
-        handler: () => {
-          commandPalette.open()
-        },
-        description: 'Ouvrir la palette de commandes',
-      },
-      {
-        key: '/',
         handler: () => {
           commandPalette.open()
         },
@@ -126,7 +122,7 @@ export function Dashboard() {
   const rightPanelTabs: Tab[] = useMemo(() => [
     {
       id: 'prompt',
-      label: 'Prompt (Réel)',
+      label: 'Prompt',
       content: (
         <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%' }}>
           <EstimatedPromptPanel
@@ -378,22 +374,39 @@ export function Dashboard() {
             >
               Exporter (Unity)
             </button>
-            <button
-              onClick={actions.handleReset || (() => {})}
-              disabled={actions.isLoading}
+            <div
               style={{
-                padding: '0.4rem 0.8rem',
-                fontSize: '0.85rem',
-                backgroundColor: theme.button.default.background,
-                color: theme.button.default.color,
-                border: `1px solid ${theme.border.primary}`,
-                borderRadius: '4px',
-                cursor: actions.isLoading ? 'not-allowed' : 'pointer',
-                opacity: actions.isLoading ? 0.6 : 1,
+                position: 'relative',
+                display: 'inline-block',
               }}
             >
-              Reset
-            </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (actions.handleReset) {
+                    actions.handleReset()
+                  }
+                }}
+                disabled={actions.isLoading}
+                style={{
+                  padding: '0.4rem 0.8rem',
+                  fontSize: '0.85rem',
+                  backgroundColor: theme.button.default.background,
+                  color: theme.button.default.color,
+                  border: `1px solid ${theme.border.primary}`,
+                  borderRadius: '4px',
+                  cursor: actions.isLoading ? 'not-allowed' : 'pointer',
+                  opacity: actions.isLoading ? 0.6 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                }}
+                title="Réinitialiser (menu déroulant)"
+              >
+                Reset
+                <span style={{ fontSize: '0.7rem' }}>▼</span>
+              </button>
+            </div>
             {actions.isDirty && (
               <div
                 style={{
@@ -422,15 +435,15 @@ export function Dashboard() {
           <Tabs
             tabs={rightPanelTabs}
             activeTabId={rightPanelTab}
-            onTabChange={(tabId) => setRightPanelTab(tabId as 'prompt' | 'variants' | 'details')}
+            onTabChange={(tabId) => setRightPanelTab(tabId as 'prompt' | 'dialogue' | 'details')}
             style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}
             // Important: overflow: 'hidden' pour éviter le double scroll, mais scrollbar-gutter réserve l'espace
             // Le contenu enfant gère son propre scroll avec scrollbar-gutter: stable
             contentStyle={{ overflow: 'hidden', scrollbarGutter: 'stable' }}
           />
         </div>
-        {/* Gros bouton Générer en bas (visible sur Prompt, Variantes et Dialogue Unity) */}
-        {actions.handleGenerate && (rightPanelTab === 'prompt' || rightPanelTab === 'variants' || rightPanelTab === 'dialogue') && (
+        {/* Gros bouton Générer en bas (visible sur Prompt et Dialogue Unity) */}
+        {actions.handleGenerate && (rightPanelTab === 'prompt' || rightPanelTab === 'dialogue') && (
           <div
             style={{
               padding: '0.75rem 1rem',
@@ -444,7 +457,7 @@ export function Dashboard() {
             }}
           >
             {/* Barre de progression */}
-            {actions.isLoading && (
+            {(actions.isLoading || generationState.isEstimating) && (
               <>
                 <div
                   style={{
@@ -468,6 +481,22 @@ export function Dashboard() {
                       animation: 'loading-slide 1.5s ease-in-out infinite',
                     }}
                   />
+                </div>
+                <div
+                  style={{
+                    fontSize: '0.85rem',
+                    color: theme.text.secondary,
+                    textAlign: 'center',
+                    marginBottom: '0.5rem',
+                  }}
+                >
+                  {generationState.isEstimating && !actions.isLoading
+                    ? 'Estimation des tokens...'
+                    : actions.isLoading && !generationState.unityDialogueResponse
+                    ? 'Génération du dialogue...'
+                    : actions.isLoading
+                    ? 'Validation et finalisation...'
+                    : 'Traitement en cours...'}
                 </div>
                 <style>{`
                   @keyframes loading-slide {

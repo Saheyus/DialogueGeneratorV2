@@ -4,7 +4,6 @@
 import apiClient from './client'
 import { API_TIMEOUTS } from '../constants'
 import type {
-  ContextSelection,
   GenerateUnityDialogueRequest,
   GenerateUnityDialogueResponse,
   ExportUnityDialogueRequest,
