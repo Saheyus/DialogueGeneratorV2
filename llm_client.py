@@ -145,6 +145,7 @@ class OpenAIClient(ILLMClient):
         self.model_name = self.llm_config.get("default_model", "gpt-5.2")
         self.temperature = self.llm_config.get("temperature", 0.7)
         self.max_tokens = self.llm_config.get("max_tokens", 1500)
+        self.reasoning_effort = self.llm_config.get("reasoning_effort", None)  # none, low, medium, high, xhigh
         
         self.system_prompt_template = self.llm_config.get(
             "system_prompt_template", 
@@ -277,48 +278,178 @@ class OpenAIClient(ILLMClient):
                 except: pass
                 # #endregion
                 
-                # Créer une fonction wrapper pour l'appel API avec retry et circuit breaker
-                # Certains modèles (comme gpt-5.2) nécessitent max_completion_tokens au lieu de max_tokens
-                # Certains modèles (gpt-5-mini, gpt-5-nano) ne supportent pas le paramètre temperature
-                api_params = {
+                # Choix API OpenAI:
+                # - GPT-5.2 / GPT-5.2-pro: utiliser Responses API (supporte reasoning.effort)
+                # - Autres modèles: Chat Completions API (historique)
+                use_responses_api = bool(self.model_name and self.model_name.startswith("gpt-5.2"))
+
+                # Paramètres pour Chat Completions (legacy)
+                chat_params: Dict[str, Any] = {
                     "model": self.model_name,
                     "messages": messages,
                     "n": 1,
                     "tools": [tool_definition] if tool_definition else NOT_GIVEN,
                     "tool_choice": tool_choice_option,
                 }
-                
-                # Ajouter temperature seulement si le modèle le supporte
-                if self.model_name and self.model_name not in ModelNames.MODELS_WITHOUT_CUSTOM_TEMPERATURE:
-                    api_params["temperature"] = self.temperature
-                elif self.model_name and self.model_name in ModelNames.MODELS_WITHOUT_CUSTOM_TEMPERATURE:
-                    logger.debug(f"Le modèle {self.model_name} ne supporte pas le paramètre temperature. Il sera omis de la requête API.")
-                
-                # Utiliser max_completion_tokens pour les modèles récents (gpt-5.x), max_tokens pour les anciens
+
+                # Paramètres pour Responses API (nouvelle norme)
+                responses_params: Dict[str, Any] = {
+                    "model": self.model_name,
+                    "input": messages,
+                    "tools": [tool_definition] if tool_definition else NOT_GIVEN,
+                }
+                if tool_definition:
+                    # Forcer l'appel du tool de structured output côté Responses
+                    responses_params["tool_choice"] = {
+                        "type": "allowed_tools",
+                        "mode": "required",
+                        "tools": [{"type": "function", "name": "generate_interaction"}],
+                    }
+
+                # Gestion tokens: Chat completions utilise max_completion_tokens / max_tokens,
+                # Responses utilise max_output_tokens.
                 if self.model_name and "gpt-5" in self.model_name:
-                    # Les modèles "thinking" (mini, nano) nécessitent plus de tokens car ils utilisent des reasoning_tokens
-                    # avant de générer la réponse finale
+                    # Les modèles "thinking" (mini, nano) peuvent nécessiter plus de tokens (reasoning + output).
+                    # Note: mini/nano restent sur Chat Completions dans ce code.
                     if self.model_name and ("gpt-5-mini" in self.model_name or "gpt-5-nano" in self.model_name):
-                        # Augmenter la limite pour les modèles thinking (reasoning + output)
-                        # Si max_tokens a été explicitement défini (par l'utilisateur), l'utiliser, sinon utiliser 10k par défaut
                         if self.max_tokens >= 10000:
-                            # L'utilisateur a déjà défini une valeur élevée, l'utiliser
                             max_completion_tokens = self.max_tokens
                         else:
-                            # Utiliser 10k par défaut pour les modèles thinking
                             max_completion_tokens = 10000
-                        api_params["max_completion_tokens"] = max_completion_tokens
+                        chat_params["max_completion_tokens"] = max_completion_tokens
                         logger.info(f"Modèle thinking détecté ({self.model_name}), utilisation de max_completion_tokens={max_completion_tokens}")
                     else:
-                        api_params["max_completion_tokens"] = self.max_tokens
+                        chat_params["max_completion_tokens"] = self.max_tokens
+                    # Responses API: max_output_tokens
+                    responses_params["max_output_tokens"] = self.max_tokens
                 else:
-                    api_params["max_tokens"] = self.max_tokens
+                    chat_params["max_tokens"] = self.max_tokens
+                    responses_params["max_output_tokens"] = self.max_tokens
+
+                # Reasoning effort: uniquement via Responses API
+                if use_responses_api and self.reasoning_effort is not None:
+                    responses_params["reasoning"] = {"effort": self.reasoning_effort}
+                    logger.info(f"Utilisation de reasoning effort '{self.reasoning_effort}' pour {self.model_name} (Responses API)")
+
+                # Temperature: Chat Completions OK; Responses API uniquement si reasoning.effort == "none" (ou non spécifié)
+                if self.model_name and self.model_name not in ModelNames.MODELS_WITHOUT_CUSTOM_TEMPERATURE:
+                    chat_params["temperature"] = self.temperature
+                    if use_responses_api and (self.reasoning_effort in (None, "none")):
+                        responses_params["temperature"] = self.temperature
+                    elif use_responses_api and (self.reasoning_effort not in (None, "none")):
+                        logger.debug(
+                            f"Temperature omise (Responses API) car reasoning_effort='{self.reasoning_effort}' "
+                            f"(temperature supportée uniquement avec reasoning.effort='none')."
+                        )
+                elif self.model_name and self.model_name in ModelNames.MODELS_WITHOUT_CUSTOM_TEMPERATURE:
+                    logger.debug(f"Le modèle {self.model_name} ne supporte pas le paramètre temperature. Il sera omis de la requête API.")
+
+                # Logger les paramètres API (sans prompt complet) pour debug
+                if use_responses_api:
+                    safe_params = {k: v for k, v in responses_params.items() if k not in ("input",)}
+                    logger.info(f"Paramètres API (Responses) pour {self.model_name}: {json.dumps(safe_params, indent=2, ensure_ascii=False)}")
+                else:
+                    safe_params = {k: v for k, v in chat_params.items() if k not in ("messages",)}
+                    logger.info(f"Paramètres API (ChatCompletions) pour {self.model_name}: {json.dumps(safe_params, indent=2, ensure_ascii=False)}")
                 
-                # Logger les paramètres API pour comparaison entre modèles
-                logger.info(f"Paramètres API pour {self.model_name}: {json.dumps({k: v for k, v in api_params.items() if k != 'messages'}, indent=2, ensure_ascii=False)}")
+                # #region agent log
+                log_data = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "A",
+                    "location": "llm_client.py:320",
+                    "message": "Paramètres API avant appel OpenAI",
+                    "data": {
+                        "model_name": self.model_name,
+                        "api_type": "responses" if use_responses_api else "chat_completions",
+                        "reasoning_effort": self.reasoning_effort,
+                        "has_tools": bool((responses_params if use_responses_api else chat_params).get("tools")),
+                        "has_tool_choice": bool((responses_params if use_responses_api else chat_params).get("tool_choice")),
+                        "temperature": (responses_params if use_responses_api else chat_params).get("temperature"),
+                        "max_output_tokens": (responses_params if use_responses_api else {}).get("max_output_tokens"),
+                        "max_completion_tokens": chat_params.get("max_completion_tokens"),
+                        "max_tokens": chat_params.get("max_tokens")
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }
+                try:
+                    with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                        log_file.write(json.dumps(log_data) + "\n")
+                except: pass
+                # #endregion
                 
                 async def _make_api_call():
-                    return await self.client.chat.completions.create(**api_params)
+                    # #region agent log
+                    log_data = {
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "B",
+                        "location": "llm_client.py:_make_api_call:entry",
+                        "message": "Appel API OpenAI - début",
+                        "data": {
+                            "model": self.model_name,
+                            "api_type": "responses" if use_responses_api else "chat_completions",
+                            "has_tools": bool((responses_params if use_responses_api else chat_params).get("tools")),
+                            "has_tool_choice": bool((responses_params if use_responses_api else chat_params).get("tool_choice"))
+                        },
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    try:
+                        with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                            log_file.write(json.dumps(log_data) + "\n")
+                    except: pass
+                    # #endregion
+                    try:
+                        if use_responses_api:
+                            result = await self.client.responses.create(**responses_params)
+                        else:
+                            result = await self.client.chat.completions.create(**chat_params)
+                        # #region agent log
+                        log_data = {
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "B",
+                            "location": "llm_client.py:_make_api_call:success",
+                            "message": "Appel API OpenAI - succès",
+                            "data": {
+                                "model": self.model_name,
+                                "api_type": "responses" if use_responses_api else "chat_completions",
+                                "response_model": getattr(result, "model", None),
+                                "has_choices": bool(getattr(result, "choices", None)),
+                                "has_output": bool(getattr(result, "output", None))
+                            },
+                            "timestamp": int(time.time() * 1000)
+                        }
+                        try:
+                            with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                                log_file.write(json.dumps(log_data) + "\n")
+                        except: pass
+                        # #endregion
+                        return result
+                    except Exception as api_error:
+                        # #region agent log
+                        log_data = {
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "C",
+                            "location": "llm_client.py:_make_api_call:error",
+                            "message": "Appel API OpenAI - erreur",
+                            "data": {
+                                "model": self.model_name,
+                                "api_type": "responses" if use_responses_api else "chat_completions",
+                                "error_type": type(api_error).__name__,
+                                "error_message": str(api_error),
+                                "error_code": getattr(api_error, "code", None),
+                                "error_status_code": getattr(api_error, "status_code", None)
+                            },
+                            "timestamp": int(time.time() * 1000)
+                        }
+                        try:
+                            with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                                log_file.write(json.dumps(log_data) + "\n")
+                        except: pass
+                        # #endregion
+                        raise
                 
                 # Appliquer retry et circuit breaker si disponibles
                 # Le retry doit envelopper le circuit breaker
@@ -339,90 +470,192 @@ class OpenAIClient(ILLMClient):
                 
                 # Extraire les métriques d'utilisation
                 if hasattr(response, 'usage') and response.usage:
-                    prompt_tokens = response.usage.prompt_tokens or 0
-                    completion_tokens = response.usage.completion_tokens or 0
-                    total_tokens = response.usage.total_tokens or 0
-                
-                logger.info(f"Réponse BRUTE de l'API OpenAI reçue pour la variante {i+1} (modèle: {self.model_name}):\n{response.model_dump_json(indent=2)}")
-                
-                # Logger spécifiquement les tool_calls pour comparaison
-                if response.choices and response.choices[0].message:
-                    has_tool_calls = hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls
-                    has_content = hasattr(response.choices[0].message, 'content') and response.choices[0].message.content
-                    finish_reason = getattr(response.choices[0], 'finish_reason', 'unknown')
-                    logger.info(f"Analyse réponse {self.model_name}: tool_calls={bool(has_tool_calls)}, content={bool(has_content)}, finish_reason={finish_reason}")
+                    # Chat Completions
+                    if hasattr(response.usage, "prompt_tokens"):
+                        prompt_tokens = response.usage.prompt_tokens or 0
+                        completion_tokens = response.usage.completion_tokens or 0
+                        total_tokens = response.usage.total_tokens or 0
+                    # Responses
+                    elif hasattr(response.usage, "input_tokens"):
+                        prompt_tokens = getattr(response.usage, "input_tokens", 0) or 0
+                        completion_tokens = getattr(response.usage, "output_tokens", 0) or 0
+                        total_tokens = prompt_tokens + completion_tokens
 
-                if response_model and response.choices[0].message.tool_calls:
-                    tool_call = response.choices[0].message.tool_calls[0]
-                    if tool_call.function.name == "generate_interaction":
-                        function_args_raw = tool_call.function.arguments
-                        logger.debug(f"Arguments bruts de la fonction reçus: {function_args_raw}")
-                        try:
-                            parsed_output = response_model.model_validate_json(function_args_raw)
-                            generated_results.append(parsed_output)
-                            logger.info(f"Variante {i+1} générée et validée avec succès (structured).")
-                            success = True
-                        except Exception as e:
-                            logger.error(f"Erreur de validation Pydantic pour la variante {i+1}: {e}")
-                            logger.error(f"Données JSON qui ont échoué à la validation: {function_args_raw}")
-                            generated_results.append(f"Erreur de validation: {e} - Données: {function_args_raw}")
-                            error_message = f"Validation error: {e}"
-                    else:
-                        logger.warning(f"Outil inattendu appelé: {tool_call.function.name}")
-                        generated_results.append(f"Erreur: Outil inattendu {tool_call.function.name}")
-                        error_message = f"Unexpected tool: {tool_call.function.name}"
-
-                elif response_model and response.choices and response.choices[0].message and response.choices[0].message.content:
-                    # Cas critique: response_model requis mais le modèle a retourné du texte au lieu de tool_calls
-                    text_output = response.choices[0].message.content.strip()
-                    finish_reason = response.choices[0].finish_reason if hasattr(response.choices[0], 'finish_reason') else "unknown"
-                    
-                    error_msg = (
-                        f"Le modèle {self.model_name} n'a pas retourné de structured output (tool_calls) alors qu'un response_model était requis. "
-                        f"Finish reason: {finish_reason}. "
-                        f"Le modèle a retourné du texte à la place. "
-                        f"Cela peut indiquer que le modèle ne supporte pas correctement le structured output (function calling). "
-                        f"Essayez d'utiliser un modèle différent comme 'gpt-5.2'. "
-                        f"Réponse reçue (premiers 500 caractères): {text_output[:500]}"
+                try:
+                    logger.info(
+                        f"Réponse BRUTE de l'API OpenAI reçue pour la variante {i+1} "
+                        f"(modèle: {self.model_name}, api={'responses' if use_responses_api else 'chat_completions'}):\n"
+                        f"{response.model_dump_json(indent=2)}"
                     )
-                    logger.error(error_msg)
-                    generated_results.append(f"Erreur: {error_msg}")
-                    error_message = f"Structured output not supported by {self.model_name}: model returned text instead of tool_calls"
-                    success = False
+                except Exception:
+                    logger.info(
+                        f"Réponse reçue (non sérialisable) pour la variante {i+1} "
+                        f"(modèle: {self.model_name}, api={'responses' if use_responses_api else 'chat_completions'})."
+                    )
 
-                elif response.choices and response.choices[0].message and response.choices[0].message.content:
-                    text_output = response.choices[0].message.content.strip()
+                # --- Parsing: Responses API ---
+                if use_responses_api:
+                    # Debug: types d'items output
+                    output_items = getattr(response, "output", None) or []
+                    output_types = [getattr(it, "type", None) for it in output_items]
                     # #region agent log
                     log_data = {
                         "sessionId": "debug-session",
                         "runId": "run1",
                         "hypothesisId": "B",
-                        "location": "llm_client.py:221",
-                        "message": "OpenAIClient réponse texte reçue",
+                        "location": "llm_client.py:responses:output",
+                        "message": "Responses API output types",
                         "data": {
-                            "variant_index": i+1,
-                            "output_preview": text_output[:300],
-                            "contains_yarn_title": "---title:" in text_output,
-                            "contains_yarn_separator": "===" in text_output
+                            "variant_index": i + 1,
+                            "output_len": len(output_items),
+                            "output_types": output_types[:20],
                         },
-                        "timestamp": int(time.time() * 1000)
+                        "timestamp": int(time.time() * 1000),
                     }
                     try:
                         with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
                             log_file.write(json.dumps(log_data) + "\n")
-                    except: pass
+                    except:  # noqa: E722
+                        pass
                     # #endregion
-                    generated_results.append(text_output)
-                    logger.info(f"Variante {i+1} générée avec succès (texte simple).")
-                    success = True
+
+                    function_args_raw: Optional[str] = None
+                    function_name: Optional[str] = None
+                    for item in output_items:
+                        item_type = getattr(item, "type", None)
+                        if item_type in ("function_call", "tool_call", "function"):
+                            name = getattr(item, "name", None)
+                            args = getattr(item, "arguments", None)
+                            # Certains SDK encapsulent sous item.function
+                            if name is None and getattr(item, "function", None) is not None:
+                                name = getattr(item.function, "name", None)
+                                args = getattr(item.function, "arguments", None)
+                            if name:
+                                function_name = name
+                            if name == "generate_interaction" and args:
+                                function_args_raw = args
+                                break
+
+                    if response_model and function_args_raw:
+                        logger.debug(f"Arguments bruts de la fonction reçus (Responses API): {function_args_raw}")
+                        try:
+                            parsed_output = response_model.model_validate_json(function_args_raw)
+                            generated_results.append(parsed_output)
+                            logger.info(f"Variante {i+1} générée et validée avec succès (structured, Responses API).")
+                            success = True
+                        except Exception as e:
+                            logger.error(f"Erreur de validation Pydantic pour la variante {i+1} (Responses API): {e}")
+                            logger.error(f"Données JSON qui ont échoué à la validation (Responses API): {function_args_raw}")
+                            generated_results.append(f"Erreur de validation: {e} - Données: {function_args_raw}")
+                            error_message = f"Validation error: {e}"
+                    elif response_model and not function_args_raw:
+                        # Cas critique: response_model requis mais aucun tool call attendu trouvé
+                        text_output = getattr(response, "output_text", None)
+                        text_preview = (text_output or "")[:500]
+                        error_msg = (
+                            f"Le modèle {self.model_name} n'a pas retourné de structured output (function_call) alors qu'un response_model était requis (Responses API). "
+                            f"Outil appelé: {function_name}. "
+                            f"Réponse texte (premiers 500 caractères): {text_preview}"
+                        )
+                        logger.error(error_msg)
+                        generated_results.append(f"Erreur: {error_msg}")
+                        error_message = "Structured output not received from Responses API"
+                        success = False
+                    else:
+                        # Texte simple
+                        text_output = getattr(response, "output_text", "") or ""
+                        text_output = text_output.strip()
+                        if text_output:
+                            generated_results.append(text_output)
+                            logger.info(f"Variante {i+1} générée avec succès (texte simple, Responses API).")
+                            success = True
+                        else:
+                            error_msg = f"Réponse vide ou inattendue pour la variante {i+1} (Responses API)"
+                            generated_results.append(f"Erreur: {error_msg}")
+                            error_message = error_msg
+                            success = False
+
+                # --- Parsing: Chat Completions API ---
                 else:
-                    logger.warning(f"Aucun contenu ou appel de fonction dans la réponse pour la variante {i+1}.")
-                    finish_reason = response.choices[0].finish_reason if (response.choices and response.choices[0] and hasattr(response.choices[0], 'finish_reason')) else "unknown"
-                    error_msg = f"Réponse vide ou inattendue pour la variante {i+1} (finish_reason: {finish_reason})"
-                    if response_model:
-                        error_msg += f". Structured output (response_model) était requis mais non reçu du modèle {self.model_name}."
-                    generated_results.append(f"Erreur: {error_msg}")
-                    error_message = error_msg
+                    # Logger spécifiquement les tool_calls pour comparaison
+                    if response.choices and response.choices[0].message:
+                        has_tool_calls = hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls
+                        has_content = hasattr(response.choices[0].message, 'content') and response.choices[0].message.content
+                        finish_reason = getattr(response.choices[0], 'finish_reason', 'unknown')
+                        logger.info(f"Analyse réponse {self.model_name}: tool_calls={bool(has_tool_calls)}, content={bool(has_content)}, finish_reason={finish_reason}")
+
+                    if response_model and response.choices[0].message.tool_calls:
+                        tool_call = response.choices[0].message.tool_calls[0]
+                        if tool_call.function.name == "generate_interaction":
+                            function_args_raw = tool_call.function.arguments
+                            logger.debug(f"Arguments bruts de la fonction reçus: {function_args_raw}")
+                            try:
+                                parsed_output = response_model.model_validate_json(function_args_raw)
+                                generated_results.append(parsed_output)
+                                logger.info(f"Variante {i+1} générée et validée avec succès (structured).")
+                                success = True
+                            except Exception as e:
+                                logger.error(f"Erreur de validation Pydantic pour la variante {i+1}: {e}")
+                                logger.error(f"Données JSON qui ont échoué à la validation: {function_args_raw}")
+                                generated_results.append(f"Erreur de validation: {e} - Données: {function_args_raw}")
+                                error_message = f"Validation error: {e}"
+                        else:
+                            logger.warning(f"Outil inattendu appelé: {tool_call.function.name}")
+                            generated_results.append(f"Erreur: Outil inattendu {tool_call.function.name}")
+                            error_message = f"Unexpected tool: {tool_call.function.name}"
+
+                    elif response_model and response.choices and response.choices[0].message and response.choices[0].message.content:
+                        # Cas critique: response_model requis mais le modèle a retourné du texte au lieu de tool_calls
+                        text_output = response.choices[0].message.content.strip()
+                        finish_reason = response.choices[0].finish_reason if hasattr(response.choices[0], 'finish_reason') else "unknown"
+                        
+                        error_msg = (
+                            f"Le modèle {self.model_name} n'a pas retourné de structured output (tool_calls) alors qu'un response_model était requis. "
+                            f"Finish reason: {finish_reason}. "
+                            f"Le modèle a retourné du texte à la place. "
+                            f"Cela peut indiquer que le modèle ne supporte pas correctement le structured output (function calling). "
+                            f"Essayez d'utiliser un modèle différent comme 'gpt-5.2'. "
+                            f"Réponse reçue (premiers 500 caractères): {text_output[:500]}"
+                        )
+                        logger.error(error_msg)
+                        generated_results.append(f"Erreur: {error_msg}")
+                        error_message = f"Structured output not supported by {self.model_name}: model returned text instead of tool_calls"
+                        success = False
+
+                    elif response.choices and response.choices[0].message and response.choices[0].message.content:
+                        text_output = response.choices[0].message.content.strip()
+                        # #region agent log
+                        log_data = {
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "B",
+                            "location": "llm_client.py:221",
+                            "message": "OpenAIClient réponse texte reçue",
+                            "data": {
+                                "variant_index": i+1,
+                                "output_preview": text_output[:300],
+                                "contains_yarn_title": "---title:" in text_output,
+                                "contains_yarn_separator": "===" in text_output
+                            },
+                            "timestamp": int(time.time() * 1000)
+                        }
+                        try:
+                            with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                                log_file.write(json.dumps(log_data) + "\n")
+                        except:  # noqa: E722
+                            pass
+                        # #endregion
+                        generated_results.append(text_output)
+                        logger.info(f"Variante {i+1} générée avec succès (texte simple).")
+                        success = True
+                    else:
+                        logger.warning(f"Aucun contenu ou appel de fonction dans la réponse pour la variante {i+1}.")
+                        finish_reason = response.choices[0].finish_reason if (response.choices and response.choices[0] and hasattr(response.choices[0], 'finish_reason')) else "unknown"
+                        error_msg = f"Réponse vide ou inattendue pour la variante {i+1} (finish_reason: {finish_reason})"
+                        if response_model:
+                            error_msg += f". Structured output (response_model) était requis mais non reçu du modèle {self.model_name}."
+                        generated_results.append(f"Erreur: {error_msg}")
+                        error_message = error_msg
             
             except APIError as e:
                 logger.error(f"Erreur API OpenAI lors de la génération de la variante {i+1}: {e}")

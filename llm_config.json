@@ -16,9 +16,9 @@
       "notes": "Version compacte et rapide, idéale pour les développeurs et les tâches nécessitant moins de ressources. ⚠️ ATTENTION: Ce modèle peut avoir des problèmes avec le structured output (génération JSON). Utilisez GPT-5.2 si vous avez des erreurs de génération JSON."
     },
     {
-      "display_name": "GPT-5.2 Thinking",
-      "api_identifier": "gpt-5.2-thinking",
-      "notes": "Modèle conçu pour des tâches complexes nécessitant un raisonnement approfondi."
+      "display_name": "GPT-5.2 Pro",
+      "api_identifier": "gpt-5.2-pro",
+      "notes": "Modèle avec plus de compute pour des problèmes complexes nécessitant un raisonnement approfondi. Utilise plus de ressources mais fournit des réponses plus cohérentes et meilleures."
     }
   ],
   "default_model_identifier": "gpt-5.2",

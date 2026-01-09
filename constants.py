@@ -36,7 +36,9 @@ class ModelNames:
     """
     # Modèles GPT-5.2
     GPT_5_2 = "gpt-5.2"
-    GPT_5_2_THINKING = "gpt-5.2-thinking"
+    GPT_5_2_PRO = "gpt-5.2-pro"
+    # Alias pour compatibilité (déprécié, utiliser GPT_5_2_PRO)
+    GPT_5_2_THINKING = "gpt-5.2-pro"
     
     # Modèles GPT-5 (versions allégées)
     GPT_5_MINI = "gpt-5-mini"
@@ -50,7 +52,7 @@ class ModelNames:
     DUMMY = "dummy"
     
     # Liste des modèles qui nécessitent max_completion_tokens (au lieu de max_tokens)
-    MODELS_USING_MAX_COMPLETION_TOKENS = [GPT_5_2, GPT_5_2_THINKING, GPT_5_MINI, GPT_5_NANO]
+    MODELS_USING_MAX_COMPLETION_TOKENS = [GPT_5_2, GPT_5_2_PRO, GPT_5_2_THINKING, GPT_5_MINI, GPT_5_NANO]
     
     # Liste des modèles qui ne supportent pas la température personnalisée
     MODELS_WITHOUT_CUSTOM_TEMPERATURE = [GPT_5_MINI, GPT_5_NANO]

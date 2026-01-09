@@ -1,4 +1,6 @@
 import os
+import json
+import time
 import logging
 from typing import Optional, Any
 from llm_client import ILLMClient, OpenAIClient, DummyLLMClient
@@ -32,6 +34,14 @@ class LLMClientFactory:
         """
         if model_id == "dummy":
             return DummyLLMClient()
+
+        # Mapper les anciens identifiants vers les nouveaux (compatibilité)
+        model_id_mapping = {
+            "gpt-5.2-thinking": "gpt-5.2-pro"  # Ancien identifiant inexistant → nouveau identifiant valide
+        }
+        if model_id in model_id_mapping:
+            logger.warning(f"Modèle '{model_id}' est déprécié. Utilisation de '{model_id_mapping[model_id]}' à la place.")
+            model_id = model_id_mapping[model_id]
 
         # Chercher le modèle par api_identifier (champ dans llm_config.json) ou model_identifier (compatibilité)
         model_config = next(
@@ -71,6 +81,27 @@ class LLMClientFactory:
                     if "max_tokens" in model_config["parameters"]:
                         client_config["max_tokens"] = model_config["parameters"]["max_tokens"]
                 logger.info(f"Création d'un OpenAIClient pour model_id: {model_id} (default_model: {model_identifier})")
+                # #region agent log
+                log_data = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "D",
+                    "location": "llm_factory.py:create_client",
+                    "message": "Création OpenAIClient - modèle sélectionné",
+                    "data": {
+                        "model_id": model_id,
+                        "model_identifier": model_identifier,
+                        "api_identifier": model_config.get("api_identifier"),
+                        "model_identifier_from_config": model_config.get("model_identifier"),
+                        "display_name": model_config.get("display_name")
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }
+                try:
+                    with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                        log_file.write(json.dumps(log_data) + "\n")
+                except: pass
+                # #endregion
                 return OpenAIClient(
                     api_key=api_key,
                     config=client_config,

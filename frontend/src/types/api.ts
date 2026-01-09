@@ -181,6 +181,7 @@ export interface UnityDialoguesPathResponse {
 export interface GenerateUnityDialogueRequest extends BasePromptRequest {
   llm_model_identifier: string
   max_completion_tokens?: number | null
+  reasoning_effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null
 }
 
 export interface GenerateUnityDialogueResponse {

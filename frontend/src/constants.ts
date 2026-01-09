@@ -13,8 +13,10 @@
 export const MODEL_NAMES = {
   /** GPT-5.2 - Modèle principal */
   GPT_5_2: 'gpt-5.2',
-  /** GPT-5.2 Thinking - Modèle pour raisonnement approfondi */
-  GPT_5_2_THINKING: 'gpt-5.2-thinking',
+  /** GPT-5.2 Pro - Modèle avec plus de compute pour raisonnement approfondi */
+  GPT_5_2_PRO: 'gpt-5.2-pro',
+  /** GPT-5.2 Thinking - Alias pour GPT-5.2 Pro (déprécié, utiliser GPT_5_2_PRO) */
+  GPT_5_2_THINKING: 'gpt-5.2-pro',
   /** GPT-5 Mini - Version économique et rapide */
   GPT_5_MINI: 'gpt-5-mini',
   /** GPT-5 Nano - Version compacte */

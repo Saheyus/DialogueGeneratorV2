@@ -156,6 +156,7 @@ class GenerateUnityDialogueRequest(BasePromptRequest):
     """Requête pour générer un nœud de dialogue au format Unity JSON."""
     llm_model_identifier: str = Field(default=ModelNames.GPT_5_MINI, description="Identifiant du modèle LLM")
     max_completion_tokens: Optional[int] = Field(None, ge=500, le=50000, description="Nombre maximum de tokens pour la génération")
+    reasoning_effort: Optional[Literal["none", "low", "medium", "high", "xhigh"]] = Field(None, description="Niveau de raisonnement pour GPT-5.2 (none=rapide, xhigh=très approfondi). Disponible uniquement pour GPT-5.2 et GPT-5.2-pro.")
 
 class GenerateUnityDialogueResponse(BaseModel):
     """Réponse pour la génération d'un nœud de dialogue Unity JSON.

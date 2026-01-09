@@ -320,6 +320,10 @@ async def generate_unity_dialogue(
         if request_data.max_completion_tokens is not None:
             llm_client.max_tokens = request_data.max_completion_tokens
         
+        # Configurer le reasoning effort si fourni (uniquement pour GPT-5.2)
+        if request_data.reasoning_effort is not None:
+            llm_client.reasoning_effort = request_data.reasoning_effort
+        
         # 7. Générer via Structured Output
         unity_service = UnityDialogueGenerationService()
         generation_response = await unity_service.generate_dialogue_node(

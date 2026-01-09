@@ -69,7 +69,8 @@ class PromptEngine:
     # Les modèles GPT récents (GPT-4, GPT-4-turbo, etc.) utilisent cl100k_base
     _MODEL_ENCODING_MAP = {
         "gpt-5.2": "cl100k_base",
-        "gpt-5.2-thinking": "cl100k_base",
+        "gpt-5.2-pro": "cl100k_base",
+        "gpt-5.2-thinking": "cl100k_base",  # Alias pour compatibilité
         "gpt-5-mini": "cl100k_base",
         "gpt-5-nano": "cl100k_base",
     }

@@ -68,6 +68,7 @@ export function GenerationPanel() {
   const [maxContextTokens, setMaxContextTokens] = useState<number>(CONTEXT_TOKENS_LIMITS.DEFAULT)
   const [maxCompletionTokens, setMaxCompletionTokens] = useState<number | null>(null) // null = valeur par défaut selon le modèle
   const [llmModel, setLlmModel] = useState<string>(DEFAULT_MODEL)
+  const [reasoningEffort, setReasoningEffort] = useState<'none' | 'low' | 'medium' | 'high' | 'xhigh' | null>(null)
   const [maxChoices, setMaxChoices] = useState<number | null>(null)
   const [choicesMode, setChoicesMode] = useState<'free' | 'capped'>('free')
   const [availableModels, setAvailableModels] = useState<LLMModelResponse[]>([])
@@ -102,6 +103,7 @@ export function GenerationPanel() {
       maxContextTokens,
       maxCompletionTokens,
       llmModel,
+      reasoningEffort,
       maxChoices,
       choicesMode,
       narrativeTags,
@@ -119,7 +121,7 @@ export function GenerationPanel() {
       console.error('Erreur lors de la sauvegarde automatique:', err)
       setSaveStatus('error')
     }
-  }, [userInstructions, authorProfile, systemPromptOverride, dialogueStructure, sceneSelection, maxContextTokens, maxCompletionTokens, llmModel, maxChoices, narrativeTags, selections, selectedRegion, selectedSubLocations])
+  }, [userInstructions, authorProfile, systemPromptOverride, dialogueStructure, sceneSelection, maxContextTokens, maxCompletionTokens, llmModel, reasoningEffort, maxChoices, narrativeTags, selections, selectedRegion, selectedSubLocations])
 
   // Charger le brouillon au démarrage (AVANT loadModels pour préserver le modèle sauvegardé)
   useEffect(() => {
@@ -147,6 +149,7 @@ export function GenerationPanel() {
           // Ne charger le modèle du draft que s'il est valide (sera validé plus tard lors du chargement des modèles)
           setLlmModel(draft.llmModel)
         }
+        if (draft.reasoningEffort !== undefined) setReasoningEffort(draft.reasoningEffort)
         if (draft.maxChoices !== undefined) setMaxChoices(draft.maxChoices)
         if (draft.choicesMode !== undefined) setChoicesMode(draft.choicesMode)
         if (draft.narrativeTags !== undefined) setNarrativeTags(draft.narrativeTags)
@@ -525,6 +528,7 @@ export function GenerationPanel() {
         system_prompt_override: systemPromptOverride || undefined,
         author_profile: authorProfile || undefined,
         llm_model_identifier: modelToUse,
+        reasoning_effort: reasoningEffort ?? undefined,
         max_choices: maxChoices ?? undefined,
         choices_mode: choicesMode,
         narrative_tags: narrativeTags.length > 0 ? narrativeTags : undefined,
@@ -800,6 +804,10 @@ export function GenerationPanel() {
                 setLlmModel(newValue)
                 setIsDirty(true)
                 setSaveStatus('unsaved')
+                // Réinitialiser reasoning_effort si le modèle ne supporte pas ce paramètre
+                if (newValue !== "gpt-5.2" && newValue !== "gpt-5.2-pro") {
+                  setReasoningEffort(null)
+                }
               }
             }}
             style={{ 
@@ -820,6 +828,41 @@ export function GenerationPanel() {
           </select>
         </label>
       </div>
+
+      {(llmModel === "gpt-5.2" || llmModel === "gpt-5.2-pro") && (
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{ color: theme.text.primary }}>
+            Niveau de raisonnement:
+            <select
+              value={reasoningEffort || 'none'}
+              onChange={(e) => {
+                const newValue = e.target.value as 'none' | 'low' | 'medium' | 'high' | 'xhigh'
+                setReasoningEffort(newValue === 'none' ? null : newValue)
+                setIsDirty(true)
+                setSaveStatus('unsaved')
+              }}
+              style={{ 
+                width: '100%', 
+                padding: '0.5rem', 
+                marginTop: '0.5rem', 
+                boxSizing: 'border-box',
+                backgroundColor: theme.input.background,
+                border: `1px solid ${theme.input.border}`,
+                color: theme.input.color,
+              }}
+            >
+              <option value="none">Aucun (rapide, latence minimale)</option>
+              <option value="low">Faible (raisonnement minimal)</option>
+              <option value="medium">Moyen (équilibré, recommandé)</option>
+              <option value="high">Élevé (raisonnement approfondi)</option>
+              <option value="xhigh">Très élevé (raisonnement maximal)</option>
+            </select>
+            <div style={{ fontSize: '0.875rem', color: theme.text.secondary, marginTop: '0.25rem' }}>
+              Contrôle la profondeur de raisonnement du modèle. Plus élevé = meilleure qualité mais plus lent et plus coûteux.
+            </div>
+          </label>
+        </div>
+      )}
 
       <div style={{ marginBottom: '1rem' }}>
         <label style={{ color: theme.text.primary, display: 'block' }}>
