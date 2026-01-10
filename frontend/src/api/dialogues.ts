@@ -9,7 +9,9 @@ import type {
   ExportUnityDialogueRequest,
   ExportUnityDialogueResponse,
   EstimateTokensRequest,
-  EstimateTokensResponse
+  EstimateTokensResponse,
+  PreviewPromptRequest,
+  PreviewPromptResponse
 } from '../types/api'
 
 // NOTE: generateDialogueVariants et generateInteractionVariants ont été supprimés. Utiliser generateUnityDialogue à la place.
@@ -34,11 +36,27 @@ export async function generateUnityDialogue(
 
 /**
  * Estime le nombre de tokens pour un contexte donné.
+ * 
+ * Retourne également le prompt brut construit, mais pour la prévisualisation
+ * uniquement (sans estimation), utiliser previewPrompt à la place.
  */
 export async function estimateTokens(
   request: EstimateTokensRequest
 ): Promise<EstimateTokensResponse> {
   const response = await apiClient.post<EstimateTokensResponse>('/api/v1/dialogues/estimate-tokens', request)
+  return response.data
+}
+
+/**
+ * Prévisualise le prompt brut construit sans estimer les tokens.
+ * 
+ * Utilisé pour la prévisualisation du prompt avant génération.
+ * Pour estimer les tokens, utiliser estimateTokens à la place.
+ */
+export async function previewPrompt(
+  request: PreviewPromptRequest
+): Promise<PreviewPromptResponse> {
+  const response = await apiClient.post<PreviewPromptResponse>('/api/v1/dialogues/preview-prompt', request)
   return response.data
 }
 

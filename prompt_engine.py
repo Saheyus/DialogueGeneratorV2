@@ -14,6 +14,7 @@ from utils.xml_utils import (
     create_xml_document,
     extract_text_from_element
 )
+from services.prompt_xml_parsers import build_narrative_guides_xml, build_vocabulary_xml
 
 # Essayer d'importer tiktoken, mais continuer si non disponible
 try:
@@ -44,6 +45,7 @@ class PromptInput:
     traits_list: Optional[List[str]] = None
     vocabulary_config: Optional[Dict[str, str]] = None
     include_narrative_guides: bool = True
+    in_game_flags: Optional[List[Dict[str, Any]]] = None  # Flags in-game sélectionnés
 
 @dataclass
 class BuiltPrompt:
@@ -87,7 +89,8 @@ class PromptEngine:
         context_builder: Optional[Any] = None,
         vocab_service: Optional[Any] = None,
         guides_service: Optional[Any] = None,
-        enricher: Optional[Any] = None
+        enricher: Optional[Any] = None,
+        prompt_builder: Optional[Any] = None
     ) -> None:
         """
         Initialise le PromptEngine.
@@ -124,6 +127,15 @@ class PromptEngine:
                 guides_service=self._guides_service
             )
         self._enricher: Optional[Any] = enricher
+        
+        # Créer PromptBuilder si non fourni
+        if prompt_builder is None:
+            from services.prompt_builder import PromptBuilder
+            prompt_builder = PromptBuilder(
+                context_builder=self._context_builder,
+                enricher=self._enricher
+            )
+        self._prompt_builder: Optional[Any] = prompt_builder
 
     def _load_default_system_prompt(self) -> str:
         """
@@ -239,8 +251,12 @@ class PromptEngine:
 
     # build_prompt() supprimé - système texte libre obsolète, utiliser build_unity_dialogue_prompt() à la place
     
+    # Les méthodes _build_*_section() ont été déplacées vers PromptBuilder
+    # Elles sont conservées ici pour compatibilité mais déléguent à PromptBuilder
     def _build_contract_section(self, input: PromptInput) -> Optional[ET.Element]:
-        """Construit la section <contract> directement en XML.
+        """Construit la section <contract> (délègue à PromptBuilder).
+        
+        DEPRECATED: Utiliser PromptBuilder directement.
         
         Args:
             input: Objet PromptInput contenant les paramètres.
@@ -248,42 +264,12 @@ class PromptEngine:
         Returns:
             Élément XML <contract> ou None si la section est vide.
         """
-        contract_elem = ET.Element("contract")
-        has_content = False
-        
-        # DIRECTIVES D'AUTEUR (GLOBAL)
-        if input.author_profile and input.author_profile.strip():
-            author_elem = ET.SubElement(contract_elem, "author_directives")
-            author_elem.text = escape_xml_text(input.author_profile)
-            has_content = True
-        
-        # TON NARRATIF
-        if input.narrative_tags and len(input.narrative_tags) > 0:
-            tags_text = ", ".join([f"#{tag}" for tag in input.narrative_tags])
-            if tags_text.strip():
-                tone_elem = ET.SubElement(contract_elem, "narrative_tone")
-                tone_elem.text = escape_xml_text(f"Ton : {tags_text}. Adapte le style, le rythme et l'intensité émotionnelle en fonction de ces tags.")
-                has_content = True
-        
-        # RÈGLES DE PRIORITÉ (toujours présentes car essentielles)
-        priority_text = "En cas de conflit entre les instructions, l'ordre de priorité est :\n1. Instructions de scène (SECTION 3) - prévalent sur tout\n2. Directives d'auteur (SECTION 0) - modulent le style global\n3. System prompt - règles générales de base"
-        if priority_text.strip():
-            priority_elem = ET.SubElement(contract_elem, "priority_rules")
-            priority_elem.text = escape_xml_text(priority_text)
-            has_content = True
-        
-        # FORMAT DE SORTIE / INTERDICTIONS (toujours présentes car essentielles)
-        format_text = "**IMPORTANT : Génère UN SEUL nœud de dialogue (un nœud = une réplique du PNJ + choix du joueur).**\nNe génère PAS de séquence de nœuds. Le Structured Output garantit le format JSON, mais tu dois respecter cette logique métier."
-        if format_text.strip():
-            format_elem = ET.SubElement(contract_elem, "output_format")
-            format_elem.text = escape_xml_text(format_text)
-            has_content = True
-        
-        # Ne retourner que si au moins un élément a du contenu
-        return contract_elem if has_content else None
+        return self._prompt_builder._build_contract_section(input)
     
     def _build_technical_section(self, input: PromptInput) -> Optional[ET.Element]:
-        """Construit la section <technical> directement en XML.
+        """Construit la section <technical> (délègue à PromptBuilder).
+        
+        DEPRECATED: Utiliser PromptBuilder directement.
         
         Args:
             input: Objet PromptInput contenant les paramètres.
@@ -291,54 +277,12 @@ class PromptEngine:
         Returns:
             Élément XML <technical> ou None si la section est vide.
         """
-        technical_elem = ET.Element("technical")
-        has_content = False
-        
-        # INSTRUCTIONS DE GÉNÉRATION
-        gen_elem = ET.SubElement(technical_elem, "generation_instructions")
-        gen_parts = [
-            "Règles de contenu :",
-            f"- Speaker (qui parle) : {input.npc_speaker_id} (PNJ interlocuteur)",
-            f"- Choix (choices) : Options du joueur ({input.player_character_id})",
-            "- Tests d'attributs : Format 'AttributeType+SkillId:DD' (ex: 'Raison+Rhétorique:8'). La compétence est obligatoire."
-        ]
-        
-        # Instructions sur le nombre de choix
-        if input.choices_mode == "capped" and input.max_choices is not None:
-            if input.max_choices == 0:
-                gen_parts.append("- Ce nœud ne doit PAS avoir de choix (choices). Si le nœud n'a ni line ni choices, il termine le dialogue.")
-            else:
-                gen_parts.append(f"- Nombre de choix : Entre 1 et {input.max_choices} selon ce qui est approprié pour la scène.")
-        else:
-            gen_parts.append("- Nombre de choix : L'IA décide librement entre 2 et 8 choix selon ce qui est approprié pour la scène. Le nœud DOIT avoir au moins 2 choix.")
-        
-        gen_elem.text = escape_xml_text("\n".join(gen_parts))
-        has_content = True
-        
-        # COMPÉTENCES DISPONIBLES
-        if input.skills_list:
-            skills_elem = ET.SubElement(technical_elem, "available_skills")
-            skills_text = ", ".join(input.skills_list[:50])
-            if len(input.skills_list) > 50:
-                skills_text += f" (et {len(input.skills_list) - 50} autres compétences)"
-            skills_content = f"Compétences disponibles: {skills_text}\nUtilise ces compétences dans les tests d'attributs (format: 'AttributeType+NomCompétence:DD')."
-            skills_elem.text = escape_xml_text(skills_content)
-            has_content = True
-        
-        # TRAITS DISPONIBLES
-        if input.traits_list:
-            traits_elem = ET.SubElement(technical_elem, "available_traits")
-            traits_text = ", ".join(input.traits_list[:30])
-            if len(input.traits_list) > 30:
-                traits_text += f" (et {len(input.traits_list) - 30} autres traits)"
-            traits_content = f"Traits disponibles: {traits_text}\nUtilise ces traits dans traitRequirements des choix (format: [{{'trait': 'NomTrait', 'minValue': 5}}]).\nLes traits peuvent être positifs (ex: 'Courageux') ou négatifs (ex: 'Lâche')."
-            traits_elem.text = escape_xml_text(traits_content)
-            has_content = True
-        
-        return technical_elem if has_content else None
+        return self._prompt_builder._build_technical_section(input)
     
     def _build_context_section(self, input: PromptInput) -> Optional[ET.Element]:
-        """Construit la section <context> directement en XML.
+        """Construit la section <context> (délègue à PromptBuilder).
+        
+        DEPRECATED: Utiliser PromptBuilder directement.
         
         Args:
             input: Objet PromptInput contenant les paramètres.
@@ -346,56 +290,13 @@ class PromptEngine:
         Returns:
             Élément XML <context> ou None si la section est vide.
         """
-        # Si on a un contexte structuré, utiliser serialize_context_to_xml
-        if input.structured_context:
-            try:
-                # Utiliser le ContextBuilder injecté ou en créer un si nécessaire
-                if self._context_builder is None:
-                    from context_builder import ContextBuilder
-                    self._context_builder = ContextBuilder()
-                
-                # serialize_to_xml retourne maintenant directement un ET.Element
-                context_root = self._context_builder._context_serializer.serialize_to_xml(input.structured_context)
-                
-                if context_root is None:
-                    raise ValueError("serialize_context_to_xml a retourné None")
-                
-                # Valider que c'est bien un élément <context>
-                if context_root.tag != "context":
-                    logger.warning(f"Élément XML inattendu: {context_root.tag}, attendu 'context'")
-                    raise ValueError(f"Tag XML inattendu: {context_root.tag}")
-                
-                return context_root
-            except Exception as e:
-                logger.error(
-                    f"Erreur lors de la conversion du contexte structuré en XML: {e}. "
-                    f"Type d'erreur: {type(e).__name__}. "
-                    f"Le système nécessite structured_context pour fonctionner correctement.",
-                    exc_info=True
-                )
-                # Lever une exception claire plutôt que de fallback
-                raise ValueError(
-                    f"Impossible de sérialiser le contexte structuré en XML: {e}"
-                ) from e
-        
-        # Si pas de structured_context, vérifier si on a au moins un lieu de scène
-        # (certains cas peuvent ne pas nécessiter de contexte GDD)
-        if input.scene_location:
-            context_elem = ET.Element("context")
-            location_elem = ET.SubElement(context_elem, "location")
-            lieu = input.scene_location.get("lieu", "Non spécifié")
-            sous_lieu = input.scene_location.get("sous_lieu")
-            location_text = f"Lieu : {lieu}"
-            if sous_lieu:
-                location_text += f"\nSous-Lieu : {sous_lieu}"
-            location_elem.text = escape_xml_text(location_text)
-            return context_elem
-        
-        # Aucun contexte disponible
-        return None
+        return self._prompt_builder._build_context_section(input)
     
     def _build_narrative_guides_xml(self, guides_text: str) -> ET.Element:
         """Parse le texte des guides narratifs et crée une structure XML.
+        
+        DEPRECATED: Utiliser build_narrative_guides_xml() du module prompt_xml_parsers directement.
+        Cette méthode est conservée pour compatibilité mais délègue au module.
         
         Args:
             guides_text: Texte formaté des guides (format Markdown simplifié).
@@ -403,113 +304,12 @@ class PromptEngine:
         Returns:
             Élément XML <narrative_guides> avec structure hiérarchique.
         """
-        guides_elem = ET.Element("narrative_guides")
-        
-        if not guides_text or not guides_text.strip():
-            return guides_elem
-        
-        lines = guides_text.split('\n')
-        current_section = None
-        current_subsection = None
-        current_content = []
-        
-        i = 0
-        while i < len(lines):
-            line = lines[i].strip()
-            
-            # Détecter les sections principales
-            if line.startswith("--- GUIDE DES DIALOGUES ---"):
-                if current_section is not None and current_content:
-                    # Finaliser la section précédente
-                    if current_subsection is not None:
-                        current_subsection.text = escape_xml_text("\n".join(current_content))
-                    current_content = []
-                
-                current_section = ET.SubElement(guides_elem, "dialogue_guide")
-                current_subsection = None
-                i += 1
-                continue
-            elif line.startswith("--- GUIDE DE NARRATION ---"):
-                if current_section is not None and current_content:
-                    # Finaliser la section précédente
-                    if current_subsection is not None:
-                        current_subsection.text = escape_xml_text("\n".join(current_content))
-                    current_content = []
-                
-                current_section = ET.SubElement(guides_elem, "narrative_guide")
-                current_subsection = None
-                i += 1
-                continue
-            elif line.startswith("--- RÈGLES CLÉS EXTRAITES ---"):
-                if current_section is not None and current_content:
-                    # Finaliser la section précédente
-                    if current_subsection is not None:
-                        current_subsection.text = escape_xml_text("\n".join(current_content))
-                    current_content = []
-                
-                current_section = ET.SubElement(guides_elem, "extracted_rules")
-                current_subsection = None
-                i += 1
-                continue
-            
-            # Détecter les sous-sections dans le guide des dialogues
-            if current_section is not None and current_section.tag == "dialogue_guide":
-                if line.startswith("# ") or line.startswith("## "):
-                    # Titre de sous-section
-                    if current_subsection is not None and current_content:
-                        current_subsection.text = escape_xml_text("\n".join(current_content))
-                        current_content = []
-                    
-                    # Extraire le titre (enlever # et espaces)
-                    title = line.lstrip("# ").strip()
-                    # Mapper vers des tags sémantiques
-                    title_lower = title.lower()
-                    if "habillage" in title_lower:
-                        tag = "habillage"
-                    elif "technique" in title_lower:
-                        tag = "technique"
-                    elif "interactivité" in title_lower or "interactivite" in title_lower:
-                        tag = "interactivity"
-                    else:
-                        tag = title_lower.replace(" ", "_").replace("é", "e")
-                    
-                    current_subsection = ET.SubElement(current_section, tag)
-                    i += 1
-                    continue
-                elif line.startswith("TON:") or line.startswith("STRUCTURE:") or line.startswith("INTERDITS:"):
-                    # Sous-section dans extracted_rules
-                    if current_subsection is not None and current_content:
-                        current_subsection.text = escape_xml_text("\n".join(current_content))
-                        current_content = []
-                    
-                    rule_type = line.rstrip(":").lower()
-                    current_subsection = ET.SubElement(current_section, rule_type)
-                    i += 1
-                    continue
-            
-            # Ajouter le contenu à la sous-section courante ou à la section
-            if line or current_content:  # Garder les lignes vides si on a déjà du contenu
-                if current_subsection is not None:
-                    current_content.append(lines[i])  # Garder l'original avec espaces
-                elif current_section is not None:
-                    # Pas de sous-section, ajouter directement à la section
-                    if not current_content:
-                        current_content = []
-                    current_content.append(lines[i])
-            
-            i += 1
-        
-        # Finaliser la dernière section
-        if current_subsection is not None and current_content:
-            current_subsection.text = escape_xml_text("\n".join(current_content))
-        elif current_section is not None and current_content and current_section.tag != "dialogue_guide":
-            # Section sans sous-sections, mettre le contenu directement
-            current_section.text = escape_xml_text("\n".join(current_content))
-        
-        return guides_elem
+        return build_narrative_guides_xml(guides_text)
     
     def _build_narrative_guides_section(self, input: PromptInput) -> Optional[ET.Element]:
-        """Construit la section <narrative_guides> directement en XML.
+        """Construit la section <narrative_guides> (délègue à PromptBuilder).
+        
+        DEPRECATED: Utiliser PromptBuilder directement.
         
         Args:
             input: Objet PromptInput contenant les paramètres.
@@ -517,21 +317,13 @@ class PromptEngine:
         Returns:
             Élément XML <narrative_guides> ou None si la section est vide.
         """
-        if not input.include_narrative_guides:
-            return None
-        
-        guides_parts = []
-        guides_parts = self._enricher.enrich_with_narrative_guides(guides_parts, input.include_narrative_guides, format_style="unity")
-        
-        if not guides_parts:
-            return None
-        
-        # Utiliser la nouvelle méthode pour structurer en XML
-        guides_text = "\n".join(guides_parts)
-        return self._build_narrative_guides_xml(guides_text)
+        return self._prompt_builder._build_narrative_guides_section(input)
     
     def _build_vocabulary_xml(self, vocab_text: str) -> ET.Element:
         """Parse le texte du vocabulaire et crée une structure XML.
+        
+        DEPRECATED: Utiliser build_vocabulary_xml() du module prompt_xml_parsers directement.
+        Cette méthode est conservée pour compatibilité mais délègue au module.
         
         Args:
             vocab_text: Texte formaté du vocabulaire (format "Terme: Définition").
@@ -539,76 +331,12 @@ class PromptEngine:
         Returns:
             Élément XML <vocabulary> avec structure hiérarchique par niveau de popularité.
         """
-        vocab_elem = ET.Element("vocabulary")
-        
-        if not vocab_text or not vocab_text.strip():
-            return vocab_elem
-        
-        lines = vocab_text.split('\n')
-        current_scope = None
-        current_scope_level = None
-        
-        # Mapping des niveaux de popularité vers les valeurs d'attribut
-        level_mapping = {
-            "mondialement": "mondial",
-            "régionalement": "regional",
-            "regionalement": "regional",
-            "localement": "local",
-            "communautaire": "communautaire",
-            "occulte": "occulte",
-        }
-        
-        i = 0
-        while i < len(lines):
-            line = lines[i].strip()
-            
-            # Ignorer les lignes vides et les en-têtes
-            if not line or line.startswith("[VOCABULAIRE"):
-                i += 1
-                continue
-            
-            # Détecter un niveau de popularité (format "Mondialement:" ou "Mondialement")
-            line_lower = line.lower().rstrip(":")
-            if line_lower in level_mapping:
-                # Finaliser le scope précédent si nécessaire
-                if current_scope and current_scope_level:
-                    # Le scope est déjà créé, continuer à ajouter des termes
-                    pass
-                else:
-                    # Créer un nouveau scope
-                    scope_level = level_mapping[line_lower]
-                    current_scope = ET.SubElement(vocab_elem, "scope")
-                    current_scope.set("level", scope_level)
-                    current_scope_level = scope_level
-                i += 1
-                continue
-            
-            # Détecter un terme (format "Terme: Définition")
-            if ':' in line:
-                parts = line.split(':', 1)
-                if len(parts) == 2:
-                    term_name = parts[0].strip()
-                    term_definition = parts[1].strip()
-                    
-                    if term_name:
-                        # Si pas de scope actuel, créer un scope par défaut
-                        if current_scope is None:
-                            current_scope = ET.SubElement(vocab_elem, "scope")
-                            current_scope.set("level", "mondial")  # Par défaut
-                            current_scope_level = "mondial"
-                        
-                        # Créer l'élément term
-                        term_elem = ET.SubElement(current_scope, "term")
-                        term_elem.set("name", escape_xml_text(term_name))
-                        if term_definition:
-                            term_elem.text = escape_xml_text(term_definition)
-            
-            i += 1
-        
-        return vocab_elem
+        return build_vocabulary_xml(vocab_text)
     
     def _build_vocabulary_section(self, input: PromptInput) -> Optional[ET.Element]:
-        """Construit la section <vocabulary> directement en XML.
+        """Construit la section <vocabulary> (délègue à PromptBuilder).
+        
+        DEPRECATED: Utiliser PromptBuilder directement.
         
         Args:
             input: Objet PromptInput contenant les paramètres.
@@ -616,21 +344,12 @@ class PromptEngine:
         Returns:
             Élément XML <vocabulary> ou None si la section est vide.
         """
-        if not input.vocabulary_config:
-            return None
-        
-        vocab_parts = []
-        vocab_parts = self._enricher.enrich_with_vocabulary(vocab_parts, input.vocabulary_config, input.context_summary, format_style="unity")
-        
-        if not vocab_parts:
-            return None
-        
-        # Utiliser la nouvelle méthode pour structurer en XML
-        vocab_text = "\n".join(vocab_parts)
-        return self._build_vocabulary_xml(vocab_text)
+        return self._prompt_builder._build_vocabulary_section(input)
     
     def _build_scene_instructions_section(self, input: PromptInput) -> Optional[ET.Element]:
-        """Construit la section <scene_instructions> directement en XML.
+        """Construit la section <scene_instructions> (délègue à PromptBuilder).
+        
+        DEPRECATED: Utiliser PromptBuilder directement.
         
         Args:
             input: Objet PromptInput contenant les paramètres.
@@ -638,14 +357,7 @@ class PromptEngine:
         Returns:
             Élément XML <scene_instructions> ou None si la section est vide.
         """
-        if not input.user_instructions or not input.user_instructions.strip():
-            return None
-        
-        scene_elem = ET.Element("scene_instructions")
-        scene_elem.set("priority", "high")
-        scene_elem.text = escape_xml_text(input.user_instructions)
-        
-        return scene_elem
+        return self._prompt_builder._build_scene_instructions_section(input)
     
     def _parse_xml_to_prompt_structure(
         self, 
@@ -764,38 +476,8 @@ class PromptEngine:
         if input.structured_context:
             structured_context = input.structured_context
         
-        # ASSEMBLAGE FINAL EN XML (construction directe)
-        root = ET.Element("prompt")
-        
-        # Section 0 : Contrat global
-        contract_elem = self._build_contract_section(input)
-        if contract_elem is not None:
-            root.append(contract_elem)
-        
-        # Section 1 : Instructions techniques
-        technical_elem = self._build_technical_section(input)
-        if technical_elem is not None:
-            root.append(technical_elem)
-        
-        # Section 2A : Contexte GDD
-        context_elem = self._build_context_section(input)
-        if context_elem is not None:
-            root.append(context_elem)
-        
-        # Section 2B : Guides narratifs
-        guides_elem = self._build_narrative_guides_section(input)
-        if guides_elem is not None:
-            root.append(guides_elem)
-        
-        # Section 2C : Vocabulaire
-        vocab_elem = self._build_vocabulary_section(input)
-        if vocab_elem is not None:
-            root.append(vocab_elem)
-        
-        # Section 3 : Instructions de scène
-        scene_elem = self._build_scene_instructions_section(input)
-        if scene_elem is not None:
-            root.append(scene_elem)
+        # ASSEMBLAGE FINAL EN XML (construction via PromptBuilder)
+        root = self._prompt_builder.build_structure(input)
         
         # Créer le document XML complet avec déclaration
         full_prompt = create_xml_document(root)

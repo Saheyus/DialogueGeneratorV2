@@ -106,7 +106,13 @@ class ContextOrganizer:
     
     def __init__(self):
         """Initialise l'organisateur."""
-        pass
+        # Importer le déduplicateur
+        try:
+            from services.context_serializer.deduplicator import FieldDeduplicator
+            self.deduplicator = FieldDeduplicator()
+        except ImportError:
+            logger.warning("FieldDeduplicator non disponible, déduplication désactivée")
+            self.deduplicator = None
     
     def organize_context(
         self,
@@ -281,8 +287,22 @@ class ContextOrganizer:
         
         return current
     
-    def _format_value(self, value: any) -> str:
-        """Formate une valeur pour l'affichage."""
+    def _format_value(self, value: any, for_json: bool = False) -> any:
+        """Formate une valeur pour l'affichage.
+        
+        Args:
+            value: Valeur à formater
+            for_json: Si True, retourne la structure Python directement (pour raw_content).
+                     Si False, convertit en string (pour compatibilité avec l'ancien format texte).
+        
+        Returns:
+            Structure Python (dict/list) si for_json=True, sinon string.
+        """
+        if for_json:
+            # Mode JSON : retourner la structure telle quelle
+            return value
+        
+        # Mode texte (compatibilité) : convertir en string
         if isinstance(value, dict):
             # Pour les dicts, essayer de trouver un résumé ou convertir en JSON
             if "Résumé" in value or "Résumé de la fiche" in value:
@@ -392,6 +412,15 @@ class ContextOrganizer:
             logger.warning("Modèles de structure JSON non disponibles, impossible de créer ContextItem")
             return None
         
+        # Dédupliquer les champs AVANT l'organisation
+        if self.deduplicator and fields_to_include:
+            deduplicated_fields = self.deduplicator.deduplicate_fields(fields_to_include, element_data)
+            if len(deduplicated_fields) < len(fields_to_include):
+                logger.info(
+                    f"[{element_type}] Déduplication: {len(fields_to_include)} -> {len(deduplicated_fields)} champs"
+                )
+            fields_to_include = deduplicated_fields
+        
         # Valider les champs
         validated_fields = []
         for field_path in fields_to_include:
@@ -444,7 +473,7 @@ class ContextOrganizer:
         Le contenu sera affiché directement dans l'item parent.
         """
         sections = []
-        content_parts = []
+        section_content = {}
         
         for field_path in fields_to_include:
             value = self._extract_field_value(element_data, field_path)
@@ -452,18 +481,16 @@ class ContextOrganizer:
                 continue
             
             label = self._generate_label(field_path, field_labels_map, element_mode)
-            formatted_value = self._format_value(value)
-            content_parts.append(f"{label}: {formatted_value}")
+            # Stocker la structure Python directement
+            section_content[label] = value
         
-        if content_parts:
-            content = "\n".join(content_parts)
-            token_count = self._estimate_tokens(content)
-            # Retourner directement le contenu sans wrapper "INFORMATIONS"
-            # Le frontend aplatira cette structure
+        if section_content:
+            # Retourner avec raw_content (structure Python) au lieu de content (texte)
             sections.append(ItemSection(
                 title="",  # Titre vide pour indiquer que c'est le contenu direct
-                content=content,
-                tokenCount=token_count
+                content="",  # Vide pour compatibilité
+                raw_content=section_content,
+                tokenCount=self._estimate_tokens(str(section_content))
             ))
         
         return sections
@@ -491,46 +518,45 @@ class ContextOrganizer:
                 section_label = self.SECTION_LABELS.get(section_key, section_key.upper())
                 section_fields = fields_by_category[section_key]
                 
-                content_parts = []
+                # Collecter les valeurs structurées
+                section_content = {}
                 for field_path in section_fields:
                     value = self._extract_field_value(element_data, field_path)
                     if value is None:
                         continue
                     
                     label = self._generate_label(field_path, field_labels_map, element_mode)
-                    formatted_value = self._format_value(value)
-                    content_parts.append(f"{label}: {formatted_value}")
+                    # Stocker la structure Python directement, pas de conversion en texte
+                    section_content[label] = value
                 
-                if content_parts:
-                    content = "\n".join(content_parts)
-                    token_count = self._estimate_tokens(content)
+                if section_content:
+                    # Créer une section avec raw_content (structure Python) au lieu de content (texte)
                     sections.append(ItemSection(
                         title=section_label,
-                        content=content,
-                        tokenCount=token_count
+                        content="",  # Vide pour compatibilité, raw_content sera utilisé en priorité
+                        raw_content=section_content,
+                        tokenCount=self._estimate_tokens(str(section_content))
                     ))
         
         # Ajouter les champs non catégorisés
         if "other" in fields_by_category:
             other_fields = fields_by_category["other"]
             if other_fields:
-                content_parts = []
+                section_content = {}
                 for field_path in other_fields:
                     value = self._extract_field_value(element_data, field_path)
                     if value is None:
                         continue
                     
                     label = self._generate_label(field_path, field_labels_map, element_mode)
-                    formatted_value = self._format_value(value)
-                    content_parts.append(f"{label}: {formatted_value}")
+                    section_content[label] = value
                 
-                if content_parts:
-                    content = "\n".join(content_parts)
-                    token_count = self._estimate_tokens(content)
+                if section_content:
                     sections.append(ItemSection(
                         title="AUTRES INFORMATIONS",
-                        content=content,
-                        tokenCount=token_count
+                        content="",
+                        raw_content=section_content,
+                        tokenCount=self._estimate_tokens(str(section_content))
                     ))
         
         return sections

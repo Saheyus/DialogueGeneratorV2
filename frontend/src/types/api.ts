@@ -13,6 +13,14 @@
  */
 export type RawPrompt = string
 
+// Flags in-game
+export interface InGameFlag {
+  id: string
+  value: boolean | number | string
+  category?: string
+  timestamp?: string
+}
+
 // Auth
 export interface LoginRequest {
   username: string
@@ -68,6 +76,7 @@ export interface BasePromptRequest {
   vocabulary_config?: Record<string, string>
   include_narrative_guides?: boolean
   previous_dialogue_preview?: string
+  in_game_flags?: InGameFlag[]
 }
 
 export interface EstimateTokensRequest extends BasePromptRequest {
@@ -78,6 +87,17 @@ export interface EstimateTokensRequest extends BasePromptRequest {
 export interface EstimateTokensResponse {
   context_tokens: number
   token_count: number
+  raw_prompt: RawPrompt
+  prompt_hash: string
+  structured_prompt?: import('./prompt').PromptStructure
+}
+
+export interface PreviewPromptRequest extends BasePromptRequest {
+  field_configs?: Record<string, string[]>
+  organization_mode?: string
+}
+
+export interface PreviewPromptResponse {
   raw_prompt: RawPrompt
   prompt_hash: string
   structured_prompt?: import('./prompt').PromptStructure

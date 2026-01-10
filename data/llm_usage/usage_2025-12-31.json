@@ -1,0 +1,47 @@
+{
+  "date": "2025-12-31",
+  "records": [
+    {
+      "request_id": "ad2a2890-6b24-446e-b590-c00f68adbb7e",
+      "timestamp": "2025-12-31T00:39:57.096067+00:00",
+      "model_name": "gpt-5-mini",
+      "prompt_tokens": 11450,
+      "completion_tokens": 1626,
+      "total_tokens": 13076,
+      "estimated_cost": 0.0026931,
+      "duration_ms": 26399,
+      "success": true,
+      "endpoint": "generate/unity-dialogue",
+      "k_variants": 1,
+      "error_message": null
+    },
+    {
+      "request_id": "e1be4b47-8209-4c8f-95ac-e0bd88a679e3",
+      "timestamp": "2025-12-31T00:59:29.957848+00:00",
+      "model_name": "gpt-5.2",
+      "prompt_tokens": 15833,
+      "completion_tokens": 476,
+      "total_tokens": 16309,
+      "estimated_cost": 0.0443425,
+      "duration_ms": 10872,
+      "success": true,
+      "endpoint": "generate/unity-dialogue",
+      "k_variants": 1,
+      "error_message": null
+    },
+    {
+      "request_id": "5f204257-01c0-4f1b-9038-67ba2b2eaabf",
+      "timestamp": "2025-12-31T13:10:32.582983+00:00",
+      "model_name": "gpt-5-mini",
+      "prompt_tokens": 16451,
+      "completion_tokens": 1842,
+      "total_tokens": 18293,
+      "estimated_cost": 0.00357285,
+      "duration_ms": 19274,
+      "success": true,
+      "endpoint": "generate/unity-dialogue",
+      "k_variants": 1,
+      "error_message": null
+    }
+  ]
+}

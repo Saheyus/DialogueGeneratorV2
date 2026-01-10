@@ -121,6 +121,59 @@ def test_estimate_tokens_invalid_request(client):
     assert response.status_code == 422  # Validation error
 
 
+@pytest.mark.unit
+@pytest.mark.api
+def test_preview_prompt(client, mock_dialogue_service, monkeypatch):
+    """Test de prévisualisation du prompt."""
+    mock_dialogue_service.context_builder.build_context = MagicMock(return_value="context text")
+    
+    # Mock SkillCatalogService et TraitCatalogService pour preview_prompt
+    mock_skill_service = MagicMock()
+    mock_skill_service.load_skills = MagicMock(return_value=["Skill1", "Skill2"])
+    mock_trait_service = MagicMock()
+    mock_trait_service.load_traits = MagicMock(return_value=[])
+    mock_trait_service.get_trait_labels = MagicMock(return_value=["Trait1", "Trait2"])
+    
+    monkeypatch.setattr("api.routers.dialogues.SkillCatalogService", lambda: mock_skill_service)
+    monkeypatch.setattr("api.routers.dialogues.TraitCatalogService", lambda: mock_trait_service)
+    
+    response = client.post(
+        "/api/v1/dialogues/preview-prompt",
+        json={
+            "context_selections": {
+                "characters_full": ["Character1"],
+                "locations_full": [],
+                "items_full": [],
+                "species_full": [],
+                "communities_full": []
+            },
+            "user_instructions": "Test instructions",
+            "max_context_tokens": 1000
+        }
+    )
+    assert response.status_code == 200
+    data = response.json()
+    # PreviewPromptResponse contient raw_prompt, prompt_hash, structured_prompt (optionnel)
+    assert "raw_prompt" in data
+    assert "prompt_hash" in data
+    assert isinstance(data["raw_prompt"], str)
+    assert isinstance(data["prompt_hash"], str)
+    # Ne devrait PAS contenir context_tokens ni token_count (c'est pour estimate-tokens)
+    assert "context_tokens" not in data
+    assert "token_count" not in data
+
+
+@pytest.mark.unit
+@pytest.mark.api
+def test_preview_prompt_invalid_request(client):
+    """Test de prévisualisation avec requête invalide."""
+    response = client.post(
+        "/api/v1/dialogues/preview-prompt",
+        json={}
+    )
+    assert response.status_code == 422  # Validation error
+
+
 # test_generate_dialogue_variants et test_generate_dialogue_variants_invalid_request supprimés - système texte libre obsolète, utiliser Unity JSON à la place
 
 @pytest.mark.skip(reason="Endpoint /generate/interactions supprimé. Utiliser /generate/unity-dialogue à la place.")

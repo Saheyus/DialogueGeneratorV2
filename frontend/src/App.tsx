@@ -16,23 +16,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Initialiser la session au démarrage (vérifie le token dans localStorage)
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:17',message:'ProtectedRoute useEffect: calling initialize',data:{isLoading,isAuthenticated},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     if (import.meta.env.DEV) {
       console.log('[ProtectedRoute] Initialisation...')
     }
     initialize().then(() => {
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:21',message:'ProtectedRoute: initialize() resolved',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A,B'})}).catch(()=>{});
-      // #endregion
       if (import.meta.env.DEV) {
         console.log('[ProtectedRoute] Initialisation terminée')
       }
     }).catch((error) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:25',message:'ProtectedRoute: initialize() rejected',data:{error:error?.toString(),timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
       console.error('[ProtectedRoute] Erreur lors de l\'initialisation:', error)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -40,9 +31,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   // Log pour debug
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:31',message:'ProtectedRoute: state changed (render)',data:{isLoading,isAuthenticated},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
     if (import.meta.env.DEV) {
       console.log('[ProtectedRoute] State changé:', { isLoading, isAuthenticated })
     }

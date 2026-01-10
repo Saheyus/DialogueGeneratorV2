@@ -6,6 +6,7 @@
 export interface ItemSection {
   title: string
   content: string
+  raw_content?: Record<string, any> | any[] // Structure Python (dict/list) pour éviter conversion texte → re-parse. Si présent, utilisé en priorité.
   tokenCount?: number
 }
 

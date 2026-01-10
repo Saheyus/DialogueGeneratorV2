@@ -179,7 +179,7 @@ class ContextConstructionService:
             element_label: Label de l'élément (PNJ, LIEU, etc.).
             idx: Index de l'élément dans la catégorie.
             name: Nom réel de l'élément.
-            filtered_fields: Champs filtrés (None pour fallback).
+            filtered_fields: Champs filtrés (None pour extraire tous les champs).
             field_labels_map: Map des labels.
             organization_mode: Mode d'organisation.
             element_mode: Mode de l'élément.
@@ -193,42 +193,69 @@ class ContextConstructionService:
         if not formatted_content:
             return None
         
-        if filtered_fields:
-            # Utiliser l'organisateur pour créer le ContextItem
-            context_item = organizer.organize_context_json(
-                element_data=element_data,
-                element_type=element_type,
-                fields_to_include=filtered_fields,
-                organization_mode=organization_mode,
-                field_labels_map=field_labels_map,
-                element_mode=element_mode
-            )
+        # Si filtered_fields est None, extraire tous les champs disponibles depuis element_data
+        fields_to_use = filtered_fields
+        if not fields_to_use and element_data:
+            # Extraire récursivement tous les champs disponibles
+            def extract_all_fields(data: Dict, prefix: str = "") -> List[str]:
+                """Extrait récursivement tous les chemins de champs d'un dictionnaire.
+                
+                Ne retourne QUE les chemins vers des valeurs terminales (pas les dicts/lists intermédiaires)
+                pour éviter les doublons entre "Background" et "Background.Context".
+                """
+                fields = []
+                for key, value in data.items():
+                    # Ignorer les champs techniques ou vides
+                    if key.startswith("_") or value is None:
+                        continue
+                    
+                    field_path = f"{prefix}.{key}" if prefix else key
+                    
+                    # Si la valeur est un dict, extraire récursivement (sans ajouter field_path lui-même)
+                    if isinstance(value, dict):
+                        # Ne PAS ajouter le chemin du dict parent, seulement ses enfants
+                        fields.extend(extract_all_fields(value, field_path))
+                    # Si la valeur est une liste de dicts, extraire depuis chaque élément
+                    elif isinstance(value, list):
+                        # Vérifier si la liste contient des dicts
+                        has_dicts = any(isinstance(item, dict) for item in value)
+                        if has_dicts:
+                            # Ne PAS ajouter le chemin de la liste, seulement ses enfants
+                            for item in value:
+                                if isinstance(item, dict):
+                                    fields.extend(extract_all_fields(item, field_path))
+                        else:
+                            # Liste de valeurs simples : ajouter le chemin
+                            fields.append(field_path)
+                    else:
+                        # Valeur terminale (string, int, etc.) : ajouter le chemin
+                        fields.append(field_path)
+                return fields
             
-            if context_item:
-                # Définir l'ID et le nom
-                context_item.id = f"{element_label}_{idx}"
-                context_item.name = f"{element_label} {idx}"
-                # Ajouter le nom réel dans les métadonnées
-                if context_item.metadata:
-                    context_item.metadata["real_name"] = name
-                else:
-                    context_item.metadata = {"real_name": name}
-                context_item.tokenCount = token_count
-        else:
-            # Fallback: créer un ContextItem minimal
-            from models.prompt_structure import ItemSection, ContextItem
-            item_sections = [ItemSection(
-                title="INFORMATIONS",
-                content=formatted_content,
-                tokenCount=token_count
-            )]
-            context_item = ContextItem(
-                id=f"{element_label}_{idx}",
-                name=f"{element_label} {idx}",
-                sections=item_sections,
-                tokenCount=token_count,
-                metadata={"real_name": name}
-            )
+            fields_to_use = extract_all_fields(element_data)
+            logger.debug(f"Champs extraits automatiquement pour {element_type} '{name}': {len(fields_to_use)} champs")
+        
+        # Toujours créer des sections structurées via organize_context_json
+        # (plus de fallback INFORMATIONS)
+        context_item = organizer.organize_context_json(
+            element_data=element_data,
+            element_type=element_type,
+            fields_to_include=fields_to_use or [],
+            organization_mode=organization_mode,
+            field_labels_map=field_labels_map,
+            element_mode=element_mode
+        )
+        
+        if context_item:
+            # Définir l'ID et le nom
+            context_item.id = f"{element_label}_{idx}"
+            context_item.name = f"{element_label} {idx}"
+            # Ajouter le nom réel dans les métadonnées
+            if context_item.metadata:
+                context_item.metadata["real_name"] = name
+            else:
+                context_item.metadata = {"real_name": name}
+            context_item.tokenCount = token_count
         
         return context_item
     

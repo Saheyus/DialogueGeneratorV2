@@ -272,25 +272,6 @@ export const useContextConfigStore = create<ContextConfigState>()(
       // Ne réinitialiser les fieldConfigs que s'ils sont vides (première ouverture)
       // Vérifier si au moins un type d'élément a des champs sélectionnés
       const hasExistingConfigs = Object.values(state.fieldConfigs).some(fields => fields.length > 0)
-      
-      // #region agent log
-      const logData = {
-        hasExistingConfigs,
-        fieldConfigsCounts: Object.entries(state.fieldConfigs).reduce((acc, [k, v]) => {
-          acc[k] = v.length
-          return acc
-        }, {} as Record<string, number>),
-        essentialFieldsCounts: Object.entries(response.essential_fields).reduce((acc, [k, v]) => {
-          acc[k] = Array.isArray(v) ? v.length : 0
-          return acc
-        }, {} as Record<string, number>)
-      }
-      // Log via console car fetch peut échouer dans le store (uniquement en développement)
-      if (import.meta.env.DEV) {
-        console.log('[DEBUG] loadDefaultConfig', logData)
-      }
-      // #endregion
-      
       if (!hasExistingConfigs) {
         // Si aucun champ n'est sélectionné, initialiser avec "tous les champs" par défaut
         // Pour cela, on doit d'abord détecter les champs disponibles

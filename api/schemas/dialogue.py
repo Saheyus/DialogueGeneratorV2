@@ -127,6 +127,7 @@ class BasePromptRequest(BaseModel):
     vocabulary_config: Optional[Dict[str, str]] = Field(None, description="Configuration du vocabulaire par niveau")
     include_narrative_guides: bool = Field(default=True, description="Inclure les guides narratifs dans le prompt")
     previous_dialogue_preview: Optional[str] = Field(None, description="Texte formaté du dialogue précédent")
+    in_game_flags: Optional[List[Dict[str, Any]]] = Field(None, description="Flags in-game sélectionnés pour la génération réactive")
 
 class EstimateTokensRequest(BasePromptRequest):
     """Requête pour estimer le nombre de tokens.
@@ -151,6 +152,30 @@ class EstimateTokensResponse(BaseModel):
     raw_prompt: str = Field(..., description="Le prompt brut réel qui sera envoyé au LLM")
     prompt_hash: str = Field(..., description="Hash SHA-256 du prompt")
     structured_prompt: Optional[Dict[str, Any]] = Field(None, description="Structure JSON du prompt pour affichage structuré")
+
+
+class PreviewPromptRequest(BasePromptRequest):
+    """Requête pour prévisualiser le prompt brut construit.
+    
+    Hérite de BasePromptRequest pour utiliser les mêmes paramètres que la génération.
+    Utilisé pour visualiser le prompt avant génération, sans estimer les tokens.
+    """
+    field_configs: Optional[Dict[str, List[str]]] = Field(None, description="Configuration des champs de contexte par type d'élément")
+    organization_mode: Optional[str] = Field(None, description="Mode d'organisation du contexte (default, narrative, minimal)")
+
+
+class PreviewPromptResponse(BaseModel):
+    """Réponse pour la prévisualisation du prompt.
+    
+    Attributes:
+        raw_prompt: Le prompt brut réel qui sera envoyé au LLM (format XML).
+        prompt_hash: Hash SHA-256 du prompt pour validation.
+        structured_prompt: Structure JSON du prompt pour affichage structuré (optionnel).
+    """
+    raw_prompt: str = Field(..., description="Le prompt brut réel qui sera envoyé au LLM (format XML)")
+    prompt_hash: str = Field(..., description="Hash SHA-256 du prompt pour validation")
+    structured_prompt: Optional[Dict[str, Any]] = Field(None, description="Structure JSON du prompt pour affichage structuré")
+
 
 class GenerateUnityDialogueRequest(BasePromptRequest):
     """Requête pour générer un nœud de dialogue au format Unity JSON."""

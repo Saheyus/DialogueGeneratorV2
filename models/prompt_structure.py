@@ -8,6 +8,10 @@ class ItemSection(BaseModel):
     """Section d'une fiche individuelle (IDENTITÉ, CARACTÉRISATION, etc.)."""
     title: str = Field(..., description="Titre de la section (ex: 'IDENTITÉ', 'CARACTÉRISATION')")
     content: str = Field(..., description="Contenu textuel de la section")
+    raw_content: Optional[Dict[str, Any] | List[Any]] = Field(
+        None, 
+        description="Contenu structuré (dict/list) pour éviter conversion texte → re-parse. Si présent, utilisé en priorité."
+    )
     tokenCount: Optional[int] = Field(None, description="Nombre de tokens dans cette section")
 
 

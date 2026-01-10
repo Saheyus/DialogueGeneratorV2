@@ -407,24 +407,41 @@ export function parsePromptFromJson(promptJson: PromptStructure | null | undefin
           const hasSingleInfoSection = item.sections.length === 1 && 
             (item.sections[0].title === '' || item.sections[0].title === 'INFORMATIONS')
           
+          // PRIORITÉ: Utiliser raw_content si disponible, sinon content
+          const getSectionContent = (itemSection: any): string => {
+            if (itemSection.raw_content) {
+              // Sérialiser raw_content en JSON string pour affichage
+              try {
+                return JSON.stringify(itemSection.raw_content, null, 2)
+              } catch (e) {
+                return String(itemSection.raw_content)
+              }
+            }
+            return itemSection.content || ''
+          }
+          
           if (hasSingleInfoSection) {
             // Aplatir : afficher le contenu directement dans l'item
+            const sectionContent = getSectionContent(item.sections[0])
             categoryChildren.push({
               title: item.name,
-              content: item.sections[0].content,
-              hasJson: hasJsonContent(item.sections[0].content),
+              content: sectionContent,
+              hasJson: hasJsonContent(sectionContent),
               tokenCount: item.tokenCount
             })
           } else if (item.sections.length > 0) {
             // Plusieurs sections ou section avec titre : créer des children
             const itemChildren: PromptSection[] = item.sections
               .filter(itemSection => itemSection.title !== '') // Filtrer les sections sans titre
-              .map(itemSection => ({
-                title: itemSection.title,
-                content: itemSection.content,
-                hasJson: hasJsonContent(itemSection.content),
-                tokenCount: itemSection.tokenCount
-              }))
+              .map(itemSection => {
+                const sectionContent = getSectionContent(itemSection)
+                return {
+                  title: itemSection.title,
+                  content: sectionContent,
+                  hasJson: hasJsonContent(sectionContent),
+                  tokenCount: itemSection.tokenCount
+                }
+              })
             
             // Si après filtrage on n'a qu'une section, aplatir aussi
             if (itemChildren.length === 1) {
@@ -529,10 +546,7 @@ export function parsePromptSections(prompt: string): PromptSection[] {
       }
     }
   }
-  // #region agent log
-  fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'C',location:'frontend/src/hooks/usePromptPreview.ts:32',message:'Section regex matches',data:{total_matches:sectionMatches.length,matches:sectionMatches.map(m => ({index:m.index,title:m.title})),has_competences:sectionMatches.some(m => m.title.includes('COMPÉTENCES')),has_traits:sectionMatches.some(m => m.title.includes('TRAITS')),prompt_preview:prompt.substring(0,500)},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-  
+
   if (sectionMatches.length === 0) {
     // Pas de sections, tout le contenu est une seule section "System Prompt"
     const trimmedPrompt = prompt.trim()
@@ -547,9 +561,6 @@ export function parsePromptSections(prompt: string): PromptSection[] {
   // Extraire le contenu avant la première section (System Prompt)
   if (sectionMatches[0].index > 0) {
     const systemPromptContent = prompt.substring(0, sectionMatches[0].index).trim()
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'B',location:'frontend/src/hooks/usePromptPreview.ts:54',message:'Extracting System Prompt content',data:{section0_index:sectionMatches[0].index,systemPromptContentLength:systemPromptContent.length,systemPromptContentPreview:systemPromptContent.substring(0,200),hasVocabInSystemPrompt:systemPromptContent.includes('[VOCABULAIRE ALTEIR]')},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (systemPromptContent) {
       sections.push({
         title: 'System Prompt',
@@ -575,10 +586,7 @@ export function parsePromptSections(prompt: string): PromptSection[] {
       // sectionHeaderMatch[0] contient le header complet (titre + saut de ligne)
       const contentStart = sectionStart + sectionHeaderMatch[0].length
       const rawContent = prompt.substring(contentStart, sectionEnd).trim()
-      // #region agent log
-      const isCompetences = sectionMatches[i].title.includes('COMPÉTENCES'); const isTraits = sectionMatches[i].title.includes('TRAITS'); if (isCompetences || isTraits) { fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:isCompetences?'B':'B',location:'frontend/src/hooks/usePromptPreview.ts:69',message:isCompetences?'Competences content extracted':'Traits content extracted',data:{title:sectionMatches[i].title,contentLength:rawContent.length,contentIsEmpty:!rawContent,contentPreview:rawContent.substring(0,100),sectionStart,sectionEnd,contentStart},timestamp:Date.now()})}).catch(()=>{}); }
-      // #endregion
-      
+
       if (rawContent) {
         // Parser récursivement les sous-sections
         const { children, remainingContent } = parseSubSections(rawContent)
@@ -597,13 +605,6 @@ export function parsePromptSections(prompt: string): PromptSection[] {
           tokenCount: totalTokenCount,
           children: children.length > 0 ? children : undefined,
         })
-        // #region agent log
-        if (isCompetences || isTraits) { fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:isCompetences?'B':'B',location:'frontend/src/hooks/usePromptPreview.ts:78',message:isCompetences?'Competences section added':'Traits section added',data:{title:sectionMatches[i].title,totalSections:sections.length},timestamp:Date.now()})}).catch(()=>{}); }
-        // #endregion
-      } else {
-        // #region agent log
-        if (isCompetences || isTraits) { fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'B',location:'frontend/src/hooks/usePromptPreview.ts:81',message:isCompetences?'Competences section REJECTED (empty content)':'Traits section REJECTED (empty content)',data:{title:sectionMatches[i].title,rawContentLength:prompt.substring(contentStart,sectionEnd).length},timestamp:Date.now()})}).catch(()=>{}); }
-        // #endregion
       }
     }
   }

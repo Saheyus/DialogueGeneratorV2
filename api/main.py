@@ -145,13 +145,21 @@ async def lifespan(app: FastAPI):
         # Ne pas bloquer le démarrage si la validation échoue (mais logger l'erreur)
         logger.error(f"Erreur lors de la validation des champs GDD au démarrage: {e}", exc_info=True)
     
-    # Réinitialiser les singletons au démarrage (important pour uvicorn reload)
+    # Initialiser le container de services dans app.state
     try:
+        from api.container import ServiceContainer
+        container = ServiceContainer()
+        # Stocker dans app.state pour accès depuis les dépendances
+        app.state.container = container
+        logger.info("ServiceContainer initialisé dans app.state.")
+        
+        # Conserver la compatibilité avec l'ancien système de singletons (transition)
+        # Réinitialiser les singletons au démarrage (important pour uvicorn reload)
         from api.dependencies import reset_singletons
         reset_singletons()
-        logger.info("Singletons réinitialisés au démarrage.")
+        logger.info("Singletons réinitialisés au démarrage (mode compatibilité).")
     except Exception as e:
-        logger.warning(f"Erreur lors de la réinitialisation des singletons: {e}")
+        logger.warning(f"Erreur lors de l'initialisation du container: {e}")
     
     # Debug: Liste TOUTES les routes réelles au runtime (seulement si DEBUG_ROUTES=true)
     if os.getenv("DEBUG_ROUTES", "false").lower() in ("true", "1", "yes"):
@@ -458,7 +466,7 @@ async def health_check_detailed() -> JSONResponse:
 
 
 # Inclusion des routers
-from api.routers import auth, dialogues, context, config, llm_usage, unity_dialogues, logs
+from api.routers import auth, dialogues, context, config, llm_usage, unity_dialogues, logs, mechanics_flags
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(dialogues.router, prefix="/api/v1/dialogues", tags=["Dialogues"])
@@ -472,6 +480,9 @@ app.include_router(logs.router)
 from api.routers import vocabulary, narrative_guides
 app.include_router(vocabulary.router)
 app.include_router(narrative_guides.router)
+
+# Router pour les mechanics (flags in-game)
+app.include_router(mechanics_flags.router)
 
 # Debug endpoint (dev only): inspect PromptEngine code loaded by server
 @app.get("/debug/prompt-engine", tags=["Debug"])

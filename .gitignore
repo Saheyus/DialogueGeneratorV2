@@ -35,6 +35,7 @@ venv.bak/
 # Logs
 logs/
 *.log
+data/logs/*.json
 
 # Temporary files
 *.tmp
@@ -44,5 +45,5 @@ logs/
 # User interface settings file
 ui_settings.json
 
-# Données locales et générées
-/data/**/*.json 
+# Données locales et générées (fichiers JSON de logs uniquement, pas les configs)
+# Note: data/config/*.json peut être versionné selon besoin 

@@ -3,6 +3,8 @@
  */
 import { useState, useEffect } from 'react'
 import { useVocabularyStore, type PopularityLevel, type VocabularyMode, type VocabularyConfig } from '../../store/vocabularyStore'
+import { useNarrativeGuidesStore } from '../../store/narrativeGuidesStore'
+import { useSyncStore } from '../../store/syncStore'
 import { theme } from '../../theme'
 
 const POPULARITY_LEVELS: PopularityLevel[] = [
@@ -22,21 +24,35 @@ const VOCABULARY_MODES: { value: VocabularyMode; label: string }[] = [
 export function VocabularyGuidesTab() {
   const {
     vocabularyConfig,
-    includeNarrativeGuides,
     vocabularyTerms,
     totalTerms,
     vocabularyStats,
+    error: vocabularyError,
+    setLevelMode,
+    loadVocabulary,
+    loadStats,
+    clearError: clearVocabularyError,
+  } = useVocabularyStore()
+  
+  const {
+    includeNarrativeGuides,
+    narrativeGuides,
+    error: guidesError,
+    toggleGuides,
+    loadNarrativeGuides,
+    clearError: clearGuidesError,
+  } = useNarrativeGuidesStore()
+  
+  const {
     lastSyncTime,
     isSyncing,
-    error,
-    setLevelMode,
-    toggleGuides,
-    loadVocabulary,
-    loadNarrativeGuides,
+    error: syncError,
     syncFromNotion,
-    loadStats,
-    clearError,
-  } = useVocabularyStore()
+    clearError: clearSyncError,
+  } = useSyncStore()
+  
+  // Erreur combinée pour l'affichage
+  const error = vocabularyError || guidesError || syncError
 
   const [isLoading, setIsLoading] = useState(false)
   const [hasInitialized, setHasInitialized] = useState(false)
@@ -68,7 +84,7 @@ export function VocabularyGuidesTab() {
     }
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasInitialized])
+  }, [hasInitialized, loadVocabulary, loadNarrativeGuides, loadStats])
 
   // Calculer le nombre de termes selon le niveau et le mode
   const getFilteredCount = (level: PopularityLevel, mode: VocabularyMode): number => {
@@ -91,6 +107,21 @@ export function VocabularyGuidesTab() {
 
   const handleSync = async () => {
     await syncFromNotion()
+    // Recharger les données après synchronisation
+    await Promise.all([
+      loadVocabulary().catch((err) => {
+        console.error('Erreur lors du rechargement du vocabulaire:', err)
+      }),
+      loadNarrativeGuides().catch((err) => {
+        console.error('Erreur lors du rechargement des guides:', err)
+      }),
+    ])
+  }
+  
+  const clearError = () => {
+    clearVocabularyError()
+    clearGuidesError()
+    clearSyncError()
   }
 
   return (

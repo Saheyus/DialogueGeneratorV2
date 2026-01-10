@@ -3,12 +3,14 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import * as dialoguesAPI from '../../api/dialogues'
+import { estimateTokens as estimateTokensUtil } from '../../utils/tokenEstimation'
 import * as configAPI from '../../api/config'
 import { useContextStore } from '../../store/contextStore'
 import { useGenerationStore } from '../../store/generationStore'
 import { useGenerationActionsStore } from '../../store/generationActionsStore'
 import { useContextConfigStore } from '../../store/contextConfigStore'
 import { useVocabularyStore } from '../../store/vocabularyStore'
+import { useNarrativeGuidesStore } from '../../store/narrativeGuidesStore'
 import { useAuthorProfile } from '../../hooks/useAuthorProfile'
 import { getErrorMessage } from '../../types/errors'
 import { theme } from '../../theme'
@@ -21,10 +23,12 @@ import type {
 import { DialogueStructureWidget } from './DialogueStructureWidget'
 import { SystemPromptEditor } from './SystemPromptEditor'
 import { SceneSelectionWidget } from './SceneSelectionWidget'
+import { InGameFlagsSummary } from './InGameFlagsSummary'
 import { useToast, toastManager, SaveStatusIndicator, ConfirmDialog } from '../shared'
 import { CONTEXT_TOKENS_LIMITS, DEFAULT_MODEL } from '../../constants'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import type { SaveStatus } from '../shared/SaveStatusIndicator'
+import { useFlagsStore } from '../../store/flagsStore'
 
 
 export function GenerationPanel() {
@@ -56,8 +60,11 @@ export function GenerationPanel() {
   
   const {
     vocabularyConfig,
-    includeNarrativeGuides,
   } = useVocabularyStore()
+  
+  const {
+    includeNarrativeGuides,
+  } = useNarrativeGuidesStore()
   
   const {
     authorProfile,
@@ -325,7 +332,12 @@ export function GenerationPanel() {
         fieldConfigsWithEssential[elementType] = [...new Set([...essential, ...fields])]
       }
       
-      const response = await dialoguesAPI.estimateTokens({
+      // Récupérer les flags sélectionnés
+      const { getSelectedFlagsArray } = useFlagsStore.getState()
+      const inGameFlags = getSelectedFlagsArray()
+      
+      // Utiliser previewPrompt pour la prévisualisation (plus approprié que estimate-tokens)
+      const response = await dialoguesAPI.previewPrompt({
         user_instructions: userInstructions,
         context_selections: contextSelections,
         npc_speaker_id: sceneSelection.characterB || undefined,
@@ -340,9 +352,14 @@ export function GenerationPanel() {
         previous_dialogue_preview: previousDialoguePreview || undefined,
         field_configs: Object.keys(fieldConfigsWithEssential).length > 0 ? fieldConfigsWithEssential : undefined,
         organization_mode: organization,
+        in_game_flags: inGameFlags.length > 0 ? inGameFlags : undefined
       })
       
-      setRawPrompt(response.raw_prompt, response.token_count, response.prompt_hash, false, response.structured_prompt || null)
+      // Estimer approximativement les tokens côté frontend pour l'affichage
+      const estimatedTokenCount = estimateTokensUtil(response.raw_prompt)
+      
+      
+      setRawPrompt(response.raw_prompt, estimatedTokenCount, response.prompt_hash, false, response.structured_prompt || null)
     } catch (err: any) {
       // Ne logger que les erreurs non liées à la connexion (backend non accessible)
       if (err?.code !== 'ERR_NETWORK' && err?.code !== 'ECONNREFUSED' && err?.response?.status !== 401) {
@@ -469,6 +486,11 @@ export function GenerationPanel() {
           const essential = essentialFields[elementType] || []
           fieldConfigsWithEssential[elementType] = [...new Set([...essential, ...fields])]
         }
+        
+        // Récupérer les flags
+        const { getSelectedFlagsArray } = useFlagsStore.getState()
+        const inGameFlags = getSelectedFlagsArray()
+        
         const estimateResponse = await dialoguesAPI.estimateTokens({
           user_instructions: userInstructions,
           context_selections: contextSelections,
@@ -484,6 +506,7 @@ export function GenerationPanel() {
           previous_dialogue_preview: previousDialoguePreview || undefined,
           field_configs: Object.keys(fieldConfigsWithEssential).length > 0 ? fieldConfigsWithEssential : undefined,
           organization_mode: organizationForEstimate,
+          in_game_flags: inGameFlags.length > 0 ? inGameFlags : undefined
         })
         tokensSent = estimateResponse.token_count
         setTokensUsed(tokensSent)
@@ -535,6 +558,9 @@ export function GenerationPanel() {
         vocabulary_config: vocabularyConfig ? (vocabularyConfig as unknown as Record<string, string>) : undefined,
         include_narrative_guides: includeNarrativeGuides,
         previous_dialogue_preview: previousDialoguePreview || undefined,
+        in_game_flags: useFlagsStore.getState().getSelectedFlagsArray().length > 0 
+          ? useFlagsStore.getState().getSelectedFlagsArray() 
+          : undefined
       }
 
 
@@ -791,6 +817,8 @@ export function GenerationPanel() {
           setSaveStatus('unsaved')
         }}
       />
+
+      <InGameFlagsSummary />
 
       <div style={{ marginBottom: '1rem' }}>
         <label style={{ color: theme.text.primary }}>

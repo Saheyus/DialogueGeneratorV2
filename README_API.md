@@ -70,7 +70,8 @@ L'API sera accessible sur :
 
 - `POST /api/v1/dialogues/generate/variants` - Générer variantes texte
 - `POST /api/v1/dialogues/generate/interactions` - Générer interactions structurées (supporte `previous_interaction_id` pour la continuité)
-- `POST /api/v1/dialogues/estimate-tokens` - Estimer tokens
+- `POST /api/v1/dialogues/preview-prompt` - Prévisualiser le prompt brut construit (sans estimation de tokens)
+- `POST /api/v1/dialogues/estimate-tokens` - Estimer tokens et retourner le prompt brut (pour l'estimation avant génération)
 
 ### Interactions
 

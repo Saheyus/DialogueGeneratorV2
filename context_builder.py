@@ -134,25 +134,23 @@ class ContextBuilder:
         from services.context_formatter import ContextFormatter as CF
         self.context_config = CF.load_config(config_file_path)
         
-        # Configuration des chemins GDD via variables d'environnement ou paramètres
-        # Priorité : paramètre > variable d'environnement > valeur par défaut
+        # Configuration des chemins GDD via ConfigManager ou paramètres
+        # Priorité : paramètre > ConfigManager > valeur par défaut
         if gdd_categories_path is not None:
             self._gdd_categories_path = gdd_categories_path
         else:
-            env_categories_path = os.getenv("GDD_CATEGORIES_PATH")
-            if env_categories_path:
-                self._gdd_categories_path = Path(env_categories_path)
-            else:
-                self._gdd_categories_path = None  # Utilisera la valeur par défaut dans GDDLoader
+            from services.config_manager import get_config_manager
+            config_manager = get_config_manager()
+            self._gdd_categories_path = config_manager.get_gdd_categories_path()
+            # Si toujours None, utilisera la valeur par défaut dans GDDLoader
         
         if gdd_import_path is not None:
             self._gdd_import_path = gdd_import_path
         else:
-            env_import_path = os.getenv("GDD_IMPORT_PATH")
-            if env_import_path:
-                self._gdd_import_path = Path(env_import_path)
-            else:
-                self._gdd_import_path = None  # Utilisera la valeur par défaut dans GDDLoader
+            from services.config_manager import get_config_manager
+            config_manager = get_config_manager()
+            self._gdd_import_path = config_manager.get_gdd_import_path()
+            # Si toujours None, utilisera la valeur par défaut dans GDDLoader
 
         # GDDLoader
         if gdd_loader is None:
