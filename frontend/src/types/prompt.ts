@@ -6,7 +6,7 @@
 export interface ItemSection {
   title: string
   content: string
-  raw_content?: Record<string, any> | any[] // Structure Python (dict/list) pour éviter conversion texte → re-parse. Si présent, utilisé en priorité.
+  raw_content?: Record<string, unknown> | unknown[] // Structure Python (dict/list) pour éviter conversion texte → re-parse. Si présent, utilisé en priorité.
   tokenCount?: number
 }
 
@@ -18,7 +18,7 @@ export interface ContextItem {
   metadata?: {
     element_name?: string
     real_name?: string
-    [key: string]: any
+    [key: string]: unknown
   }
 }
 

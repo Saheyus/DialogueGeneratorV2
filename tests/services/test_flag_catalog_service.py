@@ -255,3 +255,83 @@ def test_reload(temp_flag_csv: Path):
     service.reload()
     flags3 = service.load_definitions()
     assert len(flags3) == 4
+
+
+def test_parse_default_value_bool():
+    """Test du parsing des valeurs par défaut pour type bool."""
+    service = FlagCatalogService()
+    
+    # Test bool true
+    assert service.parse_default_value("true", "bool") is True
+    assert service.parse_default_value("True", "bool") is True
+    assert service.parse_default_value("1", "bool") is True
+    assert service.parse_default_value("yes", "bool") is True
+    
+    # Test bool false
+    assert service.parse_default_value("false", "bool") is False
+    assert service.parse_default_value("False", "bool") is False
+    assert service.parse_default_value("0", "bool") is False
+    assert service.parse_default_value("no", "bool") is False
+    
+    # Test bool par défaut (vide)
+    assert service.parse_default_value("", "bool") is False
+
+
+def test_parse_default_value_int():
+    """Test du parsing des valeurs par défaut pour type int."""
+    service = FlagCatalogService()
+    
+    assert service.parse_default_value("5", "int") == 5
+    assert service.parse_default_value("0", "int") == 0
+    assert service.parse_default_value("-10", "int") == -10
+    
+    # Test int par défaut (vide)
+    assert service.parse_default_value("", "int") == 0
+    
+    # Test int invalide (devrait retourner 0 avec warning)
+    result = service.parse_default_value("invalid", "int")
+    assert result == 0
+
+
+def test_parse_default_value_float():
+    """Test du parsing des valeurs par défaut pour type float."""
+    service = FlagCatalogService()
+    
+    assert service.parse_default_value("2.5", "float") == 2.5
+    assert service.parse_default_value("0.0", "float") == 0.0
+    assert service.parse_default_value("-1.5", "float") == -1.5
+    
+    # Test float par défaut (vide)
+    assert service.parse_default_value("", "float") == 0.0
+    
+    # Test float invalide (devrait retourner 0.0 avec warning)
+    result = service.parse_default_value("invalid", "float")
+    assert result == 0.0
+
+
+def test_parse_default_value_string():
+    """Test du parsing des valeurs par défaut pour type string."""
+    service = FlagCatalogService()
+    
+    assert service.parse_default_value("test", "string") == "test"
+    assert service.parse_default_value("", "string") == ""
+    assert service.parse_default_value("123", "string") == "123"
+
+
+def test_load_definitions_includes_parsed_default_value(temp_flag_csv: Path):
+    """Test que load_definitions inclut defaultValueParsed."""
+    service = FlagCatalogService(csv_path=temp_flag_csv)
+    flags = service.load_definitions()
+    
+    # Vérifier que defaultValueParsed est présent et correct
+    flag_bool = flags[0]
+    assert "defaultValueParsed" in flag_bool
+    assert flag_bool["defaultValueParsed"] is False  # "false" -> False
+    
+    flag_int = flags[1]
+    assert "defaultValueParsed" in flag_int
+    assert flag_int["defaultValueParsed"] == 5  # "5" -> 5
+    
+    flag_float = flags[2]
+    assert "defaultValueParsed" in flag_float
+    assert flag_float["defaultValueParsed"] == 2.5  # "2.5" -> 2.5

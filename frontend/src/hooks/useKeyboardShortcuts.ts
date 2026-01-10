@@ -2,7 +2,7 @@
  * Hook centralisé pour gérer les raccourcis clavier de l'application.
  * Évite les conflits de raccourcis en utilisant un registre centralisé.
  */
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 
 export interface KeyboardShortcut {
   /** Combinaison de touches (ex: "ctrl+k", "alt+s", "/") */
@@ -51,6 +51,11 @@ function parseShortcut(shortcut: string): { ctrl?: boolean; alt?: boolean; shift
  * Vérifie si un événement correspond à un raccourci parsé.
  */
 function matchesShortcut(event: KeyboardEvent, parsed: ReturnType<typeof parseShortcut>): boolean {
+  // Défensif: certains événements peuvent ne pas fournir event.key
+  if (!event.key) return false
+  // Défensif: raccourci mal parsé (clé manquante)
+  if (!parsed.key) return false
+
   if (parsed.ctrl && !event.ctrlKey) return false
   if (parsed.alt && !event.altKey) return false
   if (parsed.shift && !event.shiftKey) return false
@@ -135,12 +140,6 @@ export function useKeyboardShortcuts(
       // Certains raccourcis doivent fonctionner même dans les inputs (ex: Ctrl+S, Ctrl+E)
       // Note: "/" n'est PAS autorisé dans les inputs car c'est un caractère normal de saisie
       const allowedInInputs = ['ctrl+s', 'ctrl+e', 'ctrl+k', 'escape', 'ctrl+/']
-      const shortcutKey = 
-        (event.ctrlKey ? 'ctrl+' : '') +
-        (event.altKey ? 'alt+' : '') +
-        (event.shiftKey ? 'shift+' : '') +
-        (event.metaKey ? 'meta+' : '') +
-        event.key.toLowerCase()
       
       const isAllowedInInput = allowedInInputs.some(allowed => {
         const parsed = parseShortcut(allowed)

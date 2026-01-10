@@ -58,12 +58,12 @@ export function ContextFieldSelector({
     // Exclure les champs uniques (is_unique=true) de la liste normale
     const filteredFields = showOnlyEssential
       ? Object.fromEntries(
-          Object.entries(fields).filter(([, fieldInfo]: [string, any]) => 
+          Object.entries(fields).filter(([, fieldInfo]: [string, FieldInfo]) => 
             fieldInfo.is_metadata === true && !fieldInfo.is_unique
           )
         )
       : Object.fromEntries(
-          Object.entries(fields).filter(([, fieldInfo]: [string, any]) => 
+          Object.entries(fields).filter(([, fieldInfo]: [string, FieldInfo]) => 
             fieldInfo.is_metadata !== true && !fieldInfo.is_unique
           )
         )
@@ -205,8 +205,8 @@ export function ContextFieldSelector({
     return fieldTree.map(filterNode).filter((n): n is FieldNode => n !== null)
   }, [fieldTree, searchQuery])
 
-  const selectedFields = fieldConfigs[elementType] || []
-  const suggestedFields = suggestions[elementType] || []
+  const selectedFields = useMemo(() => fieldConfigs[elementType] ?? [], [elementType, fieldConfigs])
+  const suggestedFields = useMemo(() => suggestions[elementType] ?? [], [elementType, suggestions])
 
   const handleToggleField = useCallback((fieldPath: string) => {
     // La logique de désélection des champs essentiels est gérée dans toggleField du store
@@ -215,7 +215,7 @@ export function ContextFieldSelector({
       ? selectedFields.filter(f => f !== fieldPath)
       : [...selectedFields, fieldPath]
     onFieldsChange?.(newSelection)
-  }, [elementType, selectedFields, availableFields, toggleField, onFieldsChange])
+  }, [elementType, selectedFields, toggleField, onFieldsChange])
 
   const toggleExpanded = useCallback((path: string) => {
     setExpandedPaths(prev => {
@@ -443,7 +443,7 @@ export function ContextFieldSelector({
   const totalFields = visibleFields.length
   
   // Récupérer les champs uniques regroupés par fiche
-  const uniqueFields = uniqueFieldsByItem[elementType] || {}
+  const uniqueFields = (uniqueFieldsByItem && uniqueFieldsByItem[elementType]) || {}
   
   // Compter uniquement les champs sélectionnés parmi ceux visibles dans l'onglet actuel
   // Note: dans l'onglet Contexte, les champs essentiels restent toujours cochés.

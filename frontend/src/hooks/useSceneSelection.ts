@@ -207,13 +207,18 @@ export function useSceneSelection() {
       
       return prevSelection
     })
-  }, [contextSelections, contextRegion, contextSubLocations])
+  }, [contextSelections, contextRegion, contextSubLocations, storeSceneSelection.characterA, storeSceneSelection.characterB, storeSceneSelection.sceneRegion])
 
   // Synchronisation inverse : mettre à jour contextStore quand sceneSelection change
   useEffect(() => {
     // Ignorer si c'est le montage initial (pas encore de sélection précédente)
     if (isInitialMount.current) {
-      prevSelection.current = { ...selection }
+      prevSelection.current = {
+        characterA: selection.characterA,
+        characterB: selection.characterB,
+        sceneRegion: selection.sceneRegion,
+        subLocation: selection.subLocation,
+      }
       return
     }
 
@@ -321,7 +326,12 @@ export function useSceneSelection() {
     }
     
     // Mettre à jour la référence pour la prochaine itération
-    prevSelection.current = { ...selection }
+    prevSelection.current = {
+      characterA: selection.characterA,
+      characterB: selection.characterB,
+      sceneRegion: selection.sceneRegion,
+      subLocation: selection.subLocation,
+    }
     isSwappingRef.current = false
   }, [selection.characterA, selection.characterB, selection.sceneRegion, selection.subLocation, contextSelections.characters_full, contextSelections.characters_excerpt, contextSelections.locations_full, contextSelections.locations_excerpt, contextRegion, contextSubLocations, toggleCharacter, setRegion, toggleSubLocation, toggleLocation, locations])
 

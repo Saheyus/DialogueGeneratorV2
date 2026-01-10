@@ -6,7 +6,7 @@ import { Select, type SelectOption } from '../shared/Select'
 import { FormField } from '../shared/FormField'
 import { useDialogueStructure } from '../../hooks/useDialogueStructure'
 import { theme } from '../../theme'
-import type { DialogueStructureElement } from '../../types/generation'
+import type { DialogueStructure, DialogueStructureElement } from '../../types/generation'
 
 const STRUCTURE_OPTIONS: SelectOption[] = [
   { value: '', label: '(Vide)' },
@@ -26,8 +26,8 @@ Exemple typique : PNJ → PJ → Stop
 Structure complexe : PNJ → PJ → PNJ → PJ → Stop`
 
 interface DialogueStructureWidgetProps {
-  value?: string[]
-  onChange?: (structure: string[]) => void
+  value?: DialogueStructure
+  onChange?: (structure: DialogueStructure) => void
 }
 
 export const DialogueStructureWidget = memo(function DialogueStructureWidget({
@@ -38,7 +38,7 @@ export const DialogueStructureWidget = memo(function DialogueStructureWidget({
     structure,
     updateElement,
     validate,
-  } = useDialogueStructure(value as any)
+  } = useDialogueStructure(value)
 
   const handleElementChange = useCallback(
     (index: number, newValue: string) => {
@@ -46,7 +46,7 @@ export const DialogueStructureWidget = memo(function DialogueStructureWidget({
       updateElement(index, elementValue)
       const newStructure = [...structure]
       newStructure[index] = elementValue
-      onChange?.(newStructure)
+      onChange?.(newStructure as DialogueStructure)
     },
     [structure, updateElement, onChange]
   )

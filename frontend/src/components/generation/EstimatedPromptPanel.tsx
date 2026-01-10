@@ -38,7 +38,7 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
   const structuredPromptFromStore = useGenerationStore((state) => state.structuredPrompt)
   const structuredPrompt = structuredPromptProp ?? structuredPromptFromStore
   
-  const { formattedPrompt, sections } = usePromptPreview(raw_prompt, structuredPrompt)
+  const { sections } = usePromptPreview(raw_prompt, structuredPrompt)
   
   const handleCopyPrompt = useCallback(() => {
     if (!raw_prompt) return

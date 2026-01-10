@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { theme } from '../../theme'
-import { useCommandPalette, filterCommandPaletteItems, type CommandPaletteItem } from '../../hooks/useCommandPalette'
+import { filterCommandPaletteItems, type CommandPaletteItem } from '../../hooks/useCommandPalette'
 import * as contextAPI from '../../api/context'
 import * as unityDialoguesAPI from '../../api/unityDialogues'
 import { useContextStore } from '../../store/contextStore'
@@ -188,7 +188,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     }
 
     loadData()
-  }, [isOpen, navigate, onClose, selections, toggleCharacter, toggleLocation, toggleItem, actions.handleGenerate])
+  }, [isOpen, navigate, onClose, selections, toggleCharacter, toggleLocation, toggleItem, actions])
 
   // Filtrer les items
   const filteredItems = useMemo(() => {
@@ -337,7 +337,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                 >
                   {CATEGORY_LABELS[category as CommandPaletteItem['category']]}
                 </div>
-                {categoryItems.map((item, index) => {
+                {categoryItems.map((item) => {
                   const globalIndex = filteredItems.indexOf(item)
                   const isHighlighted = globalIndex === highlightedIndex
                   return (

@@ -280,7 +280,7 @@ export function Dashboard() {
                             console.error('[Dashboard] dialogueListRef.current est null, impossible de rafraîchir')
                           }
                         }}
-                        onGenerateContinuation={(dialogueJson, dialogueTitle) => {
+                        onGenerateContinuation={() => {
                           // Basculer vers l'onglet Génération
                           setCenterPanelTab('generation')
                           // TODO: Pré-remplir le contexte avec le dialogue existant pour générer la suite

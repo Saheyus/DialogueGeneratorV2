@@ -274,3 +274,131 @@ def test_toggle_favorite_not_found(client, mock_flag_service):
     response = client.post("/api/v1/mechanics/flags/toggle-favorite", json=request_data)
     
     assert response.status_code == 404
+
+
+def test_import_snapshot_success(client, mock_flag_service):
+    """Test de l'import d'un snapshot Unity."""
+    import json
+    
+    # Configurer le mock pour retourner un catalogue
+    mock_flag_service.load_definitions = MagicMock(return_value=[
+        {
+            "id": "PLAYER_KILLED_BOSS",
+            "type": "bool",
+            "category": "Event",
+            "label": "Player killed boss",
+            "description": "Player has defeated the final boss",
+            "defaultValue": "false",
+            "tags": ["quest", "main"],
+            "isFavorite": True
+        },
+        {
+            "id": "CURRENT_EFFORT",
+            "type": "int",
+            "category": "Stat",
+            "label": "Current Effort",
+            "description": "Current Effort stat",
+            "defaultValue": "5",
+            "tags": ["stat"],
+            "isFavorite": True
+        }
+    ])
+    
+    # Créer un snapshot de test
+    snapshot = {
+        "version": "1.0",
+        "timestamp": "2026-01-10T12:00:00Z",
+        "flags": {
+            "PLAYER_KILLED_BOSS": True,
+            "CURRENT_EFFORT": 3,
+            "UNKNOWN_FLAG": False  # Flag inconnu (devrait générer un warning)
+        }
+    }
+    
+    request_data = {
+        "snapshot_json": json.dumps(snapshot)
+    }
+    
+    response = client.post("/api/v1/mechanics/flags/import-snapshot", json=request_data)
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["imported_count"] == 2  # 2 flags valides (pas UNKNOWN_FLAG)
+    assert len(data["warnings"]) == 1  # 1 warning pour UNKNOWN_FLAG
+    assert "Flag inconnu ignoré: UNKNOWN_FLAG" in data["warnings"][0]
+    assert "snapshot" in data
+
+
+def test_import_snapshot_invalid_json(client, mock_flag_service):
+    """Test de l'import avec JSON invalide."""
+    request_data = {
+        "snapshot_json": "invalid json {"
+    }
+    
+    response = client.post("/api/v1/mechanics/flags/import-snapshot", json=request_data)
+    
+    assert response.status_code == 422  # ValidationException (Pydantic retourne 422)
+
+
+def test_import_snapshot_invalid_format(client, mock_flag_service):
+    """Test de l'import avec format snapshot invalide."""
+    request_data = {
+        "snapshot_json": '{"invalid": "format"}'
+    }
+    
+    response = client.post("/api/v1/mechanics/flags/import-snapshot", json=request_data)
+    
+    assert response.status_code == 422  # ValidationException (Pydantic retourne 422)
+
+
+def test_export_snapshot_success(client, mock_flag_service):
+    """Test de l'export d'un snapshot."""
+    from datetime import datetime, timezone
+    
+    # Pas besoin de configurer le mock car export_snapshot utilise la sélection du frontend
+    # On teste juste que l'endpoint retourne un snapshot vide si pas de flags fournis
+    request_data = {
+        "flags": [
+            {
+                "id": "PLAYER_KILLED_BOSS",
+                "value": True,
+                "category": "Event",
+                "timestamp": "2026-01-10T12:00:00Z"
+            },
+            {
+                "id": "CURRENT_EFFORT",
+                "value": 5,
+                "category": "Stat",
+                "timestamp": "2026-01-10T12:00:00Z"
+            }
+        ]
+    }
+    
+    response = client.post("/api/v1/mechanics/flags/export-snapshot", json=request_data)
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert "snapshot" in data
+    snapshot = data["snapshot"]
+    assert snapshot["version"] == "1.0"
+    assert "timestamp" in snapshot
+    assert "flags" in snapshot
+    assert snapshot["flags"]["PLAYER_KILLED_BOSS"] is True
+    assert snapshot["flags"]["CURRENT_EFFORT"] == 5
+
+
+def test_export_snapshot_empty(client, mock_flag_service):
+    """Test de l'export d'un snapshot vide (sans flags fournis)."""
+    # Pas de flags dans la requête
+    response = client.post("/api/v1/mechanics/flags/export-snapshot", json={})
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert "snapshot" in data
+    snapshot = data["snapshot"]
+    assert snapshot["version"] == "1.0"
+    assert "timestamp" in snapshot
+    assert len(snapshot["flags"]) == 0  # Snapshot vide

@@ -106,10 +106,11 @@ async def lifespan(app: FastAPI):
     # Valider que context_config.json ne référence que des champs existants
     try:
         from services.context_field_validator import ContextFieldValidator
-        from api.dependencies import get_context_builder, get_config_service
+        from api.container import ServiceContainer
         
-        context_builder = get_context_builder()
-        config_service = get_config_service()
+        container_for_validation = ServiceContainer()
+        context_builder = container_for_validation.get_context_builder()
+        config_service = container_for_validation.get_config_service()
         context_config = config_service.get_context_config()
         
         if context_config:

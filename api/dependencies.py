@@ -5,8 +5,9 @@ import sys
 import threading
 import json
 from pathlib import Path
-from typing import Annotated, Optional
-from fastapi import Depends, Request
+from typing import Annotated
+from fastapi import Depends
+from starlette.requests import Request
 from context_builder import ContextBuilder
 from prompt_engine import PromptEngine
 from llm_client import ILLMClient
@@ -42,25 +43,8 @@ _skill_catalog_service: SkillCatalogService | None = None
 _trait_catalog_service: TraitCatalogService | None = None
 
 
-def get_config_service(request: Optional[Request] = None) -> ConfigurationService:
-    """Retourne le service de configuration.
-    
-    Essaie d'abord d'utiliser le container dans app.state (nouveau système),
-    puis fallback vers le singleton global (compatibilité).
-    
-    Args:
-        request: La requête HTTP (optionnel, pour accéder à app.state).
-        
-    Returns:
-        Instance de ConfigurationService.
-    """
-    # Nouveau système : utiliser le container depuis app.state si disponible
-    if request is not None:
-        container = getattr(request.app.state, "container", None)
-        if container is not None:
-            return container.get_config_service()
-    
-    # Fallback vers l'ancien système (compatibilité)
+def _get_config_service_singleton() -> ConfigurationService:
+    """Retourne le singleton global ConfigurationService (hors contexte request)."""
     global _config_service
     if _config_service is None:
         _config_service = ConfigurationService()
@@ -68,30 +52,29 @@ def get_config_service(request: Optional[Request] = None) -> ConfigurationServic
     return _config_service
 
 
-def get_context_builder(request: Optional[Request] = None) -> ContextBuilder:
-    """Retourne le ContextBuilder.
+def get_config_service(request: Request) -> ConfigurationService:
+    """Retourne le service de configuration.
     
     Essaie d'abord d'utiliser le container dans app.state (nouveau système),
-    puis fallback vers le singleton global avec verrou (compatibilité).
-    
-    Le ContextBuilder charge les fichiers GDD au premier accès.
-    Les chemins GDD peuvent être configurés via les variables d'environnement :
-    - GDD_CATEGORIES_PATH : Chemin vers le répertoire des catégories GDD
-    - GDD_IMPORT_PATH : Chemin vers le répertoire import (ou directement Bible_Narrative)
+    puis fallback vers le singleton global (compatibilité).
     
     Args:
-        request: La requête HTTP (optionnel, pour accéder à app.state).
+        request: La requête HTTP (injecté automatiquement par FastAPI).
         
     Returns:
-        Instance de ContextBuilder avec données GDD chargées.
+        Instance de ConfigurationService.
     """
     # Nouveau système : utiliser le container depuis app.state si disponible
-    if request is not None:
-        container = getattr(request.app.state, "container", None)
-        if container is not None:
-            return container.get_context_builder()
-    
-    # Fallback vers l'ancien système avec verrou (compatibilité)
+    container = getattr(request.app.state, "container", None)
+    if container is not None:
+        return container.get_config_service()
+
+    # Fallback vers l'ancien système (compatibilité)
+    return _get_config_service_singleton()
+
+
+def _get_context_builder_singleton() -> ContextBuilder:
+    """Retourne le singleton global ContextBuilder (hors contexte request)."""
     global _context_builder
     if _context_builder is None:
         with _context_builder_lock:
@@ -110,7 +93,33 @@ def get_context_builder(request: Optional[Request] = None) -> ContextBuilder:
     return _context_builder
 
 
-def get_prompt_engine(request: Optional[Request] = None) -> PromptEngine:
+def get_context_builder(request: Request) -> ContextBuilder:
+    """Retourne le ContextBuilder.
+    
+    Essaie d'abord d'utiliser le container dans app.state (nouveau système),
+    puis fallback vers le singleton global avec verrou (compatibilité).
+    
+    Le ContextBuilder charge les fichiers GDD au premier accès.
+    Les chemins GDD peuvent être configurés via les variables d'environnement :
+    - GDD_CATEGORIES_PATH : Chemin vers le répertoire des catégories GDD
+    - GDD_IMPORT_PATH : Chemin vers le répertoire import (ou directement Bible_Narrative)
+    
+    Args:
+        request: La requête HTTP (injecté automatiquement par FastAPI).
+        
+    Returns:
+        Instance de ContextBuilder avec données GDD chargées.
+    """
+    # Nouveau système : utiliser le container depuis app.state si disponible
+    container = getattr(request.app.state, "container", None)
+    if container is not None:
+        return container.get_context_builder()
+
+    # Fallback vers l'ancien système (compatibilité)
+    return _get_context_builder_singleton()
+
+
+def get_prompt_engine(request: Request) -> PromptEngine:
     """Retourne le PromptEngine.
     
     Essaie d'abord d'utiliser le container dans app.state (nouveau système),
@@ -209,7 +218,7 @@ def get_llm_client(
     Returns:
         Instance de ILLMClient (OpenAI ou Dummy).
     """
-    config_service = get_config_service()
+    config_service = _get_config_service_singleton()
     llm_config = config_service.get_llm_config()
     available_models = config_service.get_available_llm_models()
     
@@ -289,7 +298,7 @@ _vocab_service: VocabularyService | None = None
 _guides_service: NarrativeGuidesService | None = None
 
 
-def get_vocabulary_service(request: Optional[Request] = None) -> VocabularyService:
+def get_vocabulary_service(request: Request) -> VocabularyService:
     """Retourne le service de vocabulaire.
     
     Essaie d'abord d'utiliser le container dans app.state (nouveau système),
@@ -315,7 +324,7 @@ def get_vocabulary_service(request: Optional[Request] = None) -> VocabularyServi
     return _vocab_service
 
 
-def get_narrative_guides_service(request: Optional[Request] = None) -> NarrativeGuidesService:
+def get_narrative_guides_service(request: Request) -> NarrativeGuidesService:
     """Retourne le service des guides narratifs.
     
     Essaie d'abord d'utiliser le container dans app.state (nouveau système),
@@ -350,7 +359,7 @@ def get_notion_import_service() -> NotionImportService:
     return NotionImportService()
 
 
-def get_skill_catalog_service(request: Optional[Request] = None) -> SkillCatalogService:
+def get_skill_catalog_service(request: Request) -> SkillCatalogService:
     """Retourne le service de catalogue des compétences.
     
     Essaie d'abord d'utiliser le container dans app.state (nouveau système),
@@ -376,7 +385,7 @@ def get_skill_catalog_service(request: Optional[Request] = None) -> SkillCatalog
     return _skill_catalog_service
 
 
-def get_trait_catalog_service(request: Optional[Request] = None) -> TraitCatalogService:
+def get_trait_catalog_service(request: Request) -> TraitCatalogService:
     """Retourne le service de catalogue des traits.
     
     Essaie d'abord d'utiliser le container dans app.state (nouveau système),

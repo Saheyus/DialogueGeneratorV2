@@ -8,8 +8,8 @@ const SAVED_AUTHOR_PROFILE_KEY = 'dialogue_generator_saved_author_profile'
 export function useAuthorProfile() {
   const [authorProfile, setAuthorProfile] = useState<string>('')
   const [savedProfile, setSavedProfile] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [isLoading] = useState(false)
+  const [error] = useState<string | null>(null)
   const isInitialLoad = useRef(true)
 
   // Charger le profil sauvegardé depuis localStorage au montage

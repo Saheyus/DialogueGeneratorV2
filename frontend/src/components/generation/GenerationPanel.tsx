@@ -18,7 +18,6 @@ import type {
   LLMModelResponse,
   ContextSelection,
   GenerateUnityDialogueRequest,
-  GenerateUnityDialogueResponse,
 } from '../../types/api'
 import { DialogueStructureWidget } from './DialogueStructureWidget'
 import { SystemPromptEditor } from './SystemPromptEditor'
@@ -36,8 +35,6 @@ export function GenerationPanel() {
     selections, 
     selectedRegion, 
     selectedSubLocations,
-    setSelections,
-    setRegion,
     restoreState: restoreContextState,
     clearSelections,
   } = useContextStore()
@@ -45,7 +42,6 @@ export function GenerationPanel() {
     sceneSelection,
     dialogueStructure,
     systemPromptOverride,
-    rawPrompt,
     promptHash,
     tokenCount,
     setDialogueStructure,
@@ -79,7 +75,6 @@ export function GenerationPanel() {
   const [maxChoices, setMaxChoices] = useState<number | null>(null)
   const [choicesMode, setChoicesMode] = useState<'free' | 'capped'>('free')
   const [availableModels, setAvailableModels] = useState<LLMModelResponse[]>([])
-  const [unityDialogueResponse, setUnityDialogueResponse] = useState<GenerateUnityDialogueResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isEstimating, setIsEstimating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -87,10 +82,9 @@ export function GenerationPanel() {
   const [isDirty, setIsDirty] = useState(false)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved')
   const [narrativeTags, setNarrativeTags] = useState<string[]>([])
-  const [previousDialoguePreview, setPreviousDialoguePreview] = useState<string | null>(null)
+  const [previousDialoguePreview] = useState<string | null>(null)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
-  const [resetMenuOpen, setResetMenuOpen] = useState(false)
-  const resetMenuRef = useRef<HTMLDivElement>(null)
+  const [, setResetMenuOpen] = useState(false)
   const toast = useToast()
   const sliderRef = useRef<HTMLInputElement>(null)
 
@@ -128,7 +122,7 @@ export function GenerationPanel() {
       console.error('Erreur lors de la sauvegarde automatique:', err)
       setSaveStatus('error')
     }
-  }, [userInstructions, authorProfile, systemPromptOverride, dialogueStructure, sceneSelection, maxContextTokens, maxCompletionTokens, llmModel, reasoningEffort, maxChoices, narrativeTags, selections, selectedRegion, selectedSubLocations])
+  }, [userInstructions, authorProfile, systemPromptOverride, dialogueStructure, sceneSelection, maxContextTokens, maxCompletionTokens, llmModel, reasoningEffort, maxChoices, choicesMode, narrativeTags, selections, selectedRegion, selectedSubLocations])
 
   // Charger le brouillon au démarrage (AVANT loadModels pour préserver le modèle sauvegardé)
   useEffect(() => {
@@ -271,6 +265,9 @@ export function GenerationPanel() {
   const buildContextSelections = useCallback((): ContextSelection => {
     // Créer un nouvel objet sans scene_protagonists et scene_location pour éviter d'envoyer des valeurs vides
     const { scene_protagonists, scene_location, ...baseSelections } = selections
+    // Intentionnel: on extrait ces champs uniquement pour les exclure de baseSelections
+    void scene_protagonists
+    void scene_location
     const contextSelections: ContextSelection = {
       ...baseSelections,
     }
@@ -360,9 +357,10 @@ export function GenerationPanel() {
       
       
       setRawPrompt(response.raw_prompt, estimatedTokenCount, response.prompt_hash, false, response.structured_prompt || null)
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Ne logger que les erreurs non liées à la connexion (backend non accessible)
-      if (err?.code !== 'ERR_NETWORK' && err?.code !== 'ECONNREFUSED' && err?.response?.status !== 401) {
+      const e = err as { code?: string; response?: { status?: number } } | null
+      if (e?.code !== 'ERR_NETWORK' && e?.code !== 'ECONNREFUSED' && e?.response?.status !== 401) {
         console.error('Erreur lors de l\'estimation:', err)
         // Afficher un toast pour informer l'utilisateur de l'erreur
         const errorMessage = getErrorMessage(err)
@@ -571,8 +569,7 @@ export function GenerationPanel() {
         toast(response.warning, 'error', 10000)
       }
       
-      // Stocker directement la réponse Unity dans le store et l'état local
-      setUnityDialogueResponse(response)
+      // Stocker directement la réponse Unity dans le store
       setStoreUnityDialogueResponse(response)
       setIsDirty(false)
       
@@ -607,11 +604,16 @@ export function GenerationPanel() {
     sceneSelection,
     userInstructions,
     maxContextTokens,
+    maxCompletionTokens,
     systemPromptOverride,
     llmModel,
+    reasoningEffort,
     authorProfile,
     maxChoices,
+    choicesMode,
     narrativeTags,
+    promptHash,
+    availableModels,
     vocabularyConfig,
     includeNarrativeGuides,
     previousDialoguePreview,
@@ -619,30 +621,22 @@ export function GenerationPanel() {
     toast,
     setStoreUnityDialogueResponse,
     setTokensUsed,
+    setRawPrompt,
   ])
 
-  const handlePreview = () => {
+  const handlePreview = useCallback(() => {
     // TODO: Implémenter prévisualisation
     toast('Prévisualisation à implémenter', 'info')
-  }
+  }, [toast])
 
 
-  const handleExportUnity = () => {
+  const handleExportUnity = useCallback(() => {
     // TODO: Implémenter export Unity
     toast('Export Unity à implémenter', 'info')
-  }
-
-  const handleReset = useCallback(() => {
-    if (isDirty) {
-      setShowResetConfirm(true)
-      return
-    }
-    performReset()
-  }, [isDirty])
+  }, [toast])
 
   const performReset = useCallback(() => {
     setUserInstructions('')
-    setUnityDialogueResponse(null)
     setError(null)
     setIsDirty(false)
     setShowResetConfirm(false)
@@ -652,17 +646,16 @@ export function GenerationPanel() {
     toast('Formulaire réinitialisé', 'info')
   }, [toast, setStoreUnityDialogueResponse])
 
-  const handleResetAll = useCallback(() => {
+  const handleReset = useCallback(() => {
     if (isDirty) {
       setShowResetConfirm(true)
       return
     }
-    performResetAll()
-  }, [isDirty])
+    performReset()
+  }, [isDirty, performReset])
 
   const performResetAll = useCallback(() => {
     setUserInstructions('')
-    setUnityDialogueResponse(null)
     setError(null)
     setIsDirty(false)
     setShowResetConfirm(false)
@@ -678,7 +671,27 @@ export function GenerationPanel() {
     setStoreUnityDialogueResponse(null)
     clearSelections()
     toast('Tout a été réinitialisé', 'info')
-  }, [toast, setStoreUnityDialogueResponse, setSystemPromptOverride, setDialogueStructure, setSceneSelection, clearSelections])
+  }, [
+    clearSelections,
+    setChoicesMode,
+    setDialogueStructure,
+    setMaxChoices,
+    setMaxCompletionTokens,
+    setMaxContextTokens,
+    setNarrativeTags,
+    setSceneSelection,
+    setStoreUnityDialogueResponse,
+    setSystemPromptOverride,
+    toast,
+  ])
+
+  const handleResetAll = useCallback(() => {
+    if (isDirty) {
+      setShowResetConfirm(true)
+      return
+    }
+    performResetAll()
+  }, [isDirty, performResetAll])
 
   const handleResetInstructions = useCallback(() => {
     setUserInstructions('')

@@ -32,6 +32,42 @@ class FlagCatalogService:
         self._flags: Optional[List[Dict[str, Any]]] = None
         logger.info(f"FlagCatalogService initialisé avec le chemin: {self.csv_path}")
     
+    def parse_default_value(self, value_str: str, flag_type: str) -> Union[bool, int, float, str]:
+        """Parse une valeur par défaut selon le type du flag.
+        
+        Args:
+            value_str: Valeur en string depuis le CSV.
+            flag_type: Type du flag ("bool", "int", "float", "string").
+            
+        Returns:
+            Valeur parsée selon le type (bool, int, float, ou string).
+        """
+        if not value_str:
+            # Valeur par défaut selon le type
+            if flag_type == "bool":
+                return False
+            elif flag_type in ("int", "float"):
+                return 0
+            else:
+                return ""
+        
+        if flag_type == "bool":
+            return value_str.lower() in ("true", "1", "yes")
+        elif flag_type == "int":
+            try:
+                return int(value_str)
+            except ValueError:
+                logger.warning(f"Impossible de parser '{value_str}' en int, utilisation de 0")
+                return 0
+        elif flag_type == "float":
+            try:
+                return float(value_str)
+            except ValueError:
+                logger.warning(f"Impossible de parser '{value_str}' en float, utilisation de 0.0")
+                return 0.0
+        else:  # string
+            return value_str
+    
     def load_definitions(self) -> List[Dict[str, Any]]:
         """Charge la liste des définitions de flags depuis le CSV.
         
@@ -95,13 +131,17 @@ class FlagCatalogService:
                     # Parser isFavorite (bool)
                     is_favorite = is_favorite_raw.lower() in ("true", "1", "yes")
                     
+                    # Parser la valeur par défaut selon le type
+                    parsed_default_value = self.parse_default_value(default_value, flag_type)
+                    
                     flag_dict = {
                         "id": flag_id,
                         "type": flag_type,
                         "category": category,
                         "label": label,
                         "description": description,
-                        "defaultValue": default_value,
+                        "defaultValue": default_value,  # Garder en string pour compatibilité CSV
+                        "defaultValueParsed": parsed_default_value,  # Ajouter la valeur parsée
                         "tags": tags,
                         "isFavorite": is_favorite
                     }

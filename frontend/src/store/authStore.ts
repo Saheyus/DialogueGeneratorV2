@@ -59,10 +59,11 @@ export const useAuthStore = create<AuthState>()(
         try {
           const user = await authAPI.getCurrentUser()
           set({ user, isAuthenticated: true, isLoading: false })
-        } catch (error: any) {
+        } catch (error: unknown) {
           // Si le token est invalide ou utilisateur non connecté, nettoyer la session
           // Ne pas logger les erreurs 401 normales (utilisateur non connecté)
-          if (error?.response?.status !== 401) {
+          const status = (error as { response?: { status?: number } } | null)?.response?.status
+          if (status !== 401) {
             // Logger seulement les erreurs non-401
             console.error('Erreur lors de la récupération de l\'utilisateur:', error)
           }
@@ -82,7 +83,6 @@ export const useAuthStore = create<AuthState>()(
         }
         
         isInitializing = true
-        const stateBefore = useAuthStore.getState()
         set({ isLoading: true })
         try {
           const token = localStorage.getItem('access_token')
@@ -92,10 +92,11 @@ export const useAuthStore = create<AuthState>()(
               const user = await authAPI.getCurrentUser()
               set({ user, isAuthenticated: true, isLoading: false })
               return // Sortir immédiatement, isLoading déjà à false
-            } catch (error: any) {
+            } catch (error: unknown) {
               // Erreur 401 attendue si token invalide, nettoyer et continuer
               // Ne pas logger les erreurs 401 normales (utilisateur non connecté)
-              if (error?.response?.status !== 401) {
+              const status = (error as { response?: { status?: number } } | null)?.response?.status
+              if (status !== 401) {
                 console.error('Erreur lors de la récupération de l\'utilisateur:', error)
               }
               localStorage.removeItem('access_token')

@@ -43,6 +43,7 @@ describe('ContextFieldSelector', () => {
           },
         },
       },
+      uniqueFieldsByItem: {},
       fieldConfigs: {
         character: ['Nom'],
       },
@@ -53,12 +54,13 @@ describe('ContextFieldSelector', () => {
       detectFields: mockDetectFields,
       isLoading: false,
       error: null,
-    } as any)
+    } as ReturnType<typeof useContextConfigStore>)
   })
 
   it('devrait afficher un message de chargement quand isLoading est true', () => {
     const defaultReturn = {
       availableFields: { character: {} },
+      uniqueFieldsByItem: {},
       fieldConfigs: { character: [] },
       suggestions: { character: [] },
       toggleField: mockToggleField,
@@ -69,7 +71,7 @@ describe('ContextFieldSelector', () => {
     mockUseContextConfigStore.mockReturnValue({
       ...defaultReturn,
       isLoading: true,
-    } as any)
+    } as ReturnType<typeof useContextConfigStore>)
 
     render(<ContextFieldSelector elementType="character" />)
     
@@ -79,6 +81,7 @@ describe('ContextFieldSelector', () => {
   it('devrait afficher une erreur quand error est défini', () => {
     const defaultReturn = {
       availableFields: { character: {} },
+      uniqueFieldsByItem: {},
       fieldConfigs: { character: [] },
       suggestions: { character: [] },
       toggleField: mockToggleField,
@@ -89,7 +92,7 @@ describe('ContextFieldSelector', () => {
     mockUseContextConfigStore.mockReturnValue({
       ...defaultReturn,
       error: 'Erreur de test',
-    } as any)
+    } as ReturnType<typeof useContextConfigStore>)
 
     render(<ContextFieldSelector elementType="character" />)
     
@@ -101,6 +104,7 @@ describe('ContextFieldSelector', () => {
 
     const defaultReturn = {
       availableFields: { character: {} },
+      uniqueFieldsByItem: {},
       fieldConfigs: { character: [] },
       suggestions: { character: [] },
       toggleField: mockToggleField,
@@ -114,7 +118,7 @@ describe('ContextFieldSelector', () => {
         character: {},
       },
       detectFields: mockDetectFieldsWithPromise,
-    } as any)
+    } as ReturnType<typeof useContextConfigStore>)
 
     render(<ContextFieldSelector elementType="character" />)
     

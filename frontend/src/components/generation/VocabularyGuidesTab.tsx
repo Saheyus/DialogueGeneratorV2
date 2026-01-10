@@ -2,7 +2,7 @@
  * Onglet pour configurer le vocabulaire Alteir et les guides narratifs.
  */
 import { useState, useEffect } from 'react'
-import { useVocabularyStore, type PopularityLevel, type VocabularyMode, type VocabularyConfig } from '../../store/vocabularyStore'
+import { useVocabularyStore, type PopularityLevel, type VocabularyMode } from '../../store/vocabularyStore'
 import { useNarrativeGuidesStore } from '../../store/narrativeGuidesStore'
 import { useSyncStore } from '../../store/syncStore'
 import { theme } from '../../theme'
@@ -24,7 +24,6 @@ const VOCABULARY_MODES: { value: VocabularyMode; label: string }[] = [
 export function VocabularyGuidesTab() {
   const {
     vocabularyConfig,
-    vocabularyTerms,
     totalTerms,
     vocabularyStats,
     error: vocabularyError,
@@ -36,7 +35,6 @@ export function VocabularyGuidesTab() {
   
   const {
     includeNarrativeGuides,
-    narrativeGuides,
     error: guidesError,
     toggleGuides,
     loadNarrativeGuides,
@@ -83,7 +81,6 @@ export function VocabularyGuidesTab() {
       }
     }
     loadData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasInitialized, loadVocabulary, loadNarrativeGuides, loadStats])
 
   // Calculer le nombre de termes selon le niveau et le mode

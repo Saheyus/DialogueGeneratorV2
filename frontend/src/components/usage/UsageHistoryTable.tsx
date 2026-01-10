@@ -1,8 +1,9 @@
 /**
  * Tableau d'historique d'utilisation LLM.
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { getUsageHistory, type LLMUsageRecord } from '../../api/llmUsage'
+import { getErrorMessage } from '../../types/errors'
 import './UsageHistoryTable.css'
 
 interface UsageHistoryTableProps {
@@ -24,11 +25,7 @@ export function UsageHistoryTable({
   const [totalPages, setTotalPages] = useState(0)
   const pageSize = 50
 
-  useEffect(() => {
-    loadHistory()
-  }, [startDate, endDate, model, page])
-
-  const loadHistory = async () => {
+  const loadHistory = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -36,12 +33,16 @@ export function UsageHistoryTable({
       setRecords(response.records)
       setTotal(response.total)
       setTotalPages(response.total_pages)
-    } catch (err: any) {
-      setError(err.message || 'Erreur lors du chargement de l\'historique')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setLoading(false)
     }
-  }
+  }, [startDate, endDate, model, page])
+
+  useEffect(() => {
+    void loadHistory()
+  }, [loadHistory])
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('fr-FR', {

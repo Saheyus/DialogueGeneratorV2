@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Annotated, Dict, Any
 from fastapi import APIRouter, Depends, Request, status
+from starlette.requests import Request
 from api.schemas.dialogue import (
     EstimateTokensRequest,
     EstimateTokensResponse,
@@ -220,7 +221,8 @@ async def preview_prompt(
             include_narrative_guides=request_data.include_narrative_guides,
             previous_dialogue_preview=request_data.previous_dialogue_preview,
             field_configs=request_data.field_configs,
-            organization_mode=request_data.organization_mode
+            organization_mode=request_data.organization_mode,
+            in_game_flags=request_data.in_game_flags  # Ajouter les flags
         )
         
         try:
@@ -286,6 +288,7 @@ async def estimate_tokens(
     request_data: EstimateTokensRequest,
     request: Request,
     dialogue_service: Annotated[DialogueGenerationService, Depends(get_dialogue_generation_service)],
+    prompt_engine: Annotated[PromptEngine, Depends(get_prompt_engine)],
     skill_service: Annotated[SkillCatalogService, Depends(get_skill_catalog_service)],
     trait_service: Annotated[TraitCatalogService, Depends(get_trait_catalog_service)],
     request_id: Annotated[str, Depends(get_request_id)]
@@ -301,8 +304,6 @@ async def estimate_tokens(
     Returns:
         Estimation du nombre de tokens et prompt brut réel.
     """
-    prompt_engine = get_prompt_engine()
-    
     try:
         # Construire le prompt en réutilisant la fonction helper
         try:
@@ -465,7 +466,7 @@ async def generate_unity_dialogue(
         
         # 6. Créer le client LLM
         from api.dependencies import get_config_service, create_llm_usage_service
-        config_service = get_config_service()
+        config_service = get_config_service(request)
         usage_service = create_llm_usage_service()
         from factories.llm_factory import LLMClientFactory
         

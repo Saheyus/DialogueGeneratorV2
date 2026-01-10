@@ -2,7 +2,6 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath } from 'url'
-// @ts-ignore - Node.js built-in module, types available via @types/node
 import { dirname, resolve } from 'path'
 
 const __filename = fileURLToPath(import.meta.url)

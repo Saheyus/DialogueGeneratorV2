@@ -54,7 +54,7 @@ export default defineConfig({
             console.error(`=== VITE PROXY CONFIGURED: target=${_options.target}, changeOrigin=${_options.changeOrigin} ===`);
           }
           
-          proxy.on('proxyReq', (proxyReq, req, _res) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
             if (debugProxy) {
               const url = req.url || '';
               const method = req.method || 'UNKNOWN';
@@ -70,7 +70,7 @@ export default defineConfig({
             }
           });
           
-          proxy.on('proxyRes', (proxyRes, req, _res) => {
+          proxy.on('proxyRes', (proxyRes, req) => {
             if (debugProxy) {
               const url = req.url || '';
               const status = proxyRes.statusCode || 0;
@@ -78,9 +78,9 @@ export default defineConfig({
               
               // Capturer le body complet de la réponse pour les requêtes estimate-tokens
               if (url.includes('estimate-tokens')) {
-                let bodyChunks: Buffer[] = [];
+                const bodyChunks: Buffer[] = [];
                 const originalPipe = proxyRes.pipe.bind(proxyRes);
-                proxyRes.pipe = function(dest: any) {
+                proxyRes.pipe = function(dest: NodeJS.WritableStream) {
                   proxyRes.on('data', (chunk: Buffer) => {
                     bodyChunks.push(chunk);
                   });
@@ -94,8 +94,9 @@ export default defineConfig({
                         const startsWithVocab = rawPrompt.trim().startsWith('[VOCABULAIRE ALTEIR]');
                         console.error(`=== VITE PROXY RESPONSE BODY FULL: starts_with_section0=${startsWithSection0} starts_with_vocab=${startsWithVocab} prompt_len=${rawPrompt.length} ===`);
                         console.error(`=== VITE PROXY RESPONSE BODY PREVIEW (first 500): ${rawPrompt.substring(0, 500)} ===`);
-                      } catch (e) {
-                        console.error(`=== VITE PROXY RESPONSE BODY PARSE ERROR: ${e.message} ===`);
+                      } catch (e: unknown) {
+                        const msg = e instanceof Error ? e.message : String(e)
+                        console.error(`=== VITE PROXY RESPONSE BODY PARSE ERROR: ${msg} ===`);
                       }
                     }
                   });
@@ -105,7 +106,7 @@ export default defineConfig({
             }
           });
           
-          proxy.on('error', (err, req, res) => {
+          proxy.on('error', (err, req) => {
             // Toujours logger les erreurs de proxy
             console.error(`=== VITE PROXY ERROR: ${err.message} ${req.url} ===`);
             if (debugProxy) {

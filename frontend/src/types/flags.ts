@@ -12,6 +12,7 @@ export interface FlagDefinition {
   label: string
   description?: string
   defaultValue: string
+  defaultValueParsed?: boolean | number | string  // Valeur parsée selon le type
   tags: string[]
   isFavorite: boolean
 }
@@ -53,4 +54,30 @@ export interface ToggleFavoriteResponse {
   success: boolean
   flag_id: string
   is_favorite: boolean
+}
+
+export interface FlagSnapshot {
+  version: string
+  timestamp?: string
+  flags: Record<string, FlagValue>
+}
+
+export interface ImportSnapshotRequest {
+  snapshot_json: string
+}
+
+export interface ImportSnapshotResponse {
+  success: boolean
+  imported_count: number
+  warnings: string[]
+  snapshot: FlagSnapshot
+}
+
+export interface ExportSnapshotRequest {
+  flags?: InGameFlag[]
+}
+
+export interface ExportSnapshotResponse {
+  success: boolean
+  snapshot: FlagSnapshot
 }

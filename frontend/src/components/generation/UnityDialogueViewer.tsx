@@ -8,6 +8,7 @@ import type { GenerateUnityDialogueResponse } from '../../types/api'
 import * as dialoguesAPI from '../../api/dialogues'
 import { getErrorMessage } from '../../types/errors'
 import { useToast } from '../shared'
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 
 interface UnityNode {
   id: string
@@ -184,7 +185,7 @@ export const UnityDialogueViewer = memo(function UnityDialogueViewer({
           padding: '1rem',
         }}
       >
-        {nodes.map((node, index) => {
+        {nodes.map((node) => {
           const isExpanded = expandedNodes.has(node.id)
           const hasAdvancedOptions =
             node.test ||

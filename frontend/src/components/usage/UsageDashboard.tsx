@@ -1,36 +1,47 @@
 /**
  * Dashboard de suivi d'utilisation LLM.
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { getUsageStatistics, type LLMUsageStatistics } from '../../api/llmUsage'
 import { UsageStatsCard } from './UsageStatsCard'
 import { UsageHistoryTable } from './UsageHistoryTable'
+import { getErrorMessage } from '../../types/errors'
 import './UsageDashboard.css'
 
 export function UsageDashboard() {
+  const defaultDates = useMemo(() => {
+    const today = new Date()
+    const thirtyDaysAgo = new Date(today)
+    thirtyDaysAgo.setDate(today.getDate() - 30)
+    return {
+      start: thirtyDaysAgo.toISOString().split('T')[0],
+      end: today.toISOString().split('T')[0],
+    }
+  }, [])
+
   const [statistics, setStatistics] = useState<LLMUsageStatistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [startDate, setStartDate] = useState<string | null>(null)
-  const [endDate, setEndDate] = useState<string | null>(null)
+  const [startDate, setStartDate] = useState<string | null>(() => defaultDates.start)
+  const [endDate, setEndDate] = useState<string | null>(() => defaultDates.end)
   const [model, setModel] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadStatistics()
-  }, [startDate, endDate, model])
-
-  const loadStatistics = async () => {
+  const loadStatistics = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const stats = await getUsageStatistics(startDate, endDate, model)
       setStatistics(stats)
-    } catch (err: any) {
-      setError(err.message || 'Erreur lors du chargement des statistiques')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setLoading(false)
     }
-  }
+  }, [startDate, endDate, model])
+
+  useEffect(() => {
+    void loadStatistics()
+  }, [loadStatistics])
 
   const formatCost = (cost: number) => {
     if (cost < 0.01) return `$${cost.toFixed(6)}`
@@ -41,20 +52,6 @@ export function UsageDashboard() {
     if (ms < 1000) return `${Math.round(ms)}ms`
     return `${(ms / 1000).toFixed(1)}s`
   }
-
-  // Définir les dates par défaut (30 derniers jours)
-  useEffect(() => {
-    const today = new Date()
-    const thirtyDaysAgo = new Date(today)
-    thirtyDaysAgo.setDate(today.getDate() - 30)
-    
-    if (!endDate) {
-      setEndDate(today.toISOString().split('T')[0])
-    }
-    if (!startDate) {
-      setStartDate(thirtyDaysAgo.toISOString().split('T')[0])
-    }
-  }, [])
 
   return (
     <div className="usage-dashboard">

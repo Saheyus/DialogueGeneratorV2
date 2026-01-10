@@ -19,13 +19,21 @@ describe('ContextSelector', () => {
   const mockToggleSpecies = vi.fn()
   const mockToggleCommunity = vi.fn()
   const mockClearSelections = vi.fn()
+  const mockSetElementLists = vi.fn()
+  const mockGetElementMode = vi.fn(() => null)
+  const mockSetElementMode = vi.fn()
 
   const mockSelections = {
-    characters: [],
-    locations: [],
-    items: [],
-    species: [],
-    communities: [],
+    characters_full: [],
+    characters_excerpt: [],
+    locations_full: [],
+    locations_excerpt: [],
+    items_full: [],
+    items_excerpt: [],
+    species_full: [],
+    species_excerpt: [],
+    communities_full: [],
+    communities_excerpt: [],
     dialogues_examples: [],
   }
 
@@ -55,6 +63,9 @@ describe('ContextSelector', () => {
       toggleSpecies: mockToggleSpecies,
       toggleCommunity: mockToggleCommunity,
       clearSelections: mockClearSelections,
+      setElementLists: mockSetElementLists,
+      getElementMode: mockGetElementMode,
+      setElementMode: mockSetElementMode,
     } as ReturnType<typeof useContextStore>)
 
     // Mock des appels API par défaut
@@ -180,11 +191,16 @@ describe('ContextSelector', () => {
   it('affiche le résumé des sélections', async () => {
     mockUseContextStore.mockReturnValue({
       selections: {
-        characters: ['Test Character'],
-        locations: ['Test Location'],
-        items: [],
-        species: [],
-        communities: [],
+        characters_full: ['Test Character'],
+        characters_excerpt: [],
+        locations_full: ['Test Location'],
+        locations_excerpt: [],
+        items_full: [],
+        items_excerpt: [],
+        species_full: [],
+        species_excerpt: [],
+        communities_full: [],
+        communities_excerpt: [],
         dialogues_examples: [],
       },
       toggleCharacter: mockToggleCharacter,
@@ -193,13 +209,16 @@ describe('ContextSelector', () => {
       toggleSpecies: mockToggleSpecies,
       toggleCommunity: mockToggleCommunity,
       clearSelections: mockClearSelections,
+      setElementLists: mockSetElementLists,
+      getElementMode: mockGetElementMode,
+      setElementMode: mockSetElementMode,
     } as ReturnType<typeof useContextStore>)
 
     render(<ContextSelector />)
 
     await waitFor(() => {
-      // Le composant SelectedContextSummary devrait être présent
-      expect(mockClearSelections).toBeDefined()
+      // Le résumé doit afficher le personnage sélectionné
+      expect(screen.getByText(/test character/i)).toBeInTheDocument()
     })
   })
 

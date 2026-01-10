@@ -26,10 +26,6 @@ export function UnityDialogueDetails({
   const [error, setError] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  useEffect(() => {
-    loadDialogue()
-  }, [filename])
-
   const formatFilename = (filename: string): string => {
     // Enlever l'extension .json et remplacer les underscores par des espaces
     const formatted = filename.replace(/\.json$/, '').replace(/_/g, ' ')
@@ -37,7 +33,7 @@ export function UnityDialogueDetails({
     return formatted.charAt(0).toUpperCase() + formatted.slice(1)
   }
 
-  const loadDialogue = async () => {
+  const loadDialogue = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     try {
@@ -49,14 +45,18 @@ export function UnityDialogueDetails({
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [filename])
+
+  useEffect(() => {
+    void loadDialogue()
+  }, [loadDialogue])
 
   const handleSave = useCallback(
-    async (savedFilename: string) => {
+    async () => {
       // Recharger le dialogue après sauvegarde
       await loadDialogue()
     },
-    [filename]
+    [loadDialogue]
   )
 
   const handleDelete = async () => {

@@ -15,7 +15,7 @@ interface SyncState {
   clearError: () => void
 }
 
-export const useSyncStore = create<SyncState>()((set, get) => ({
+export const useSyncStore = create<SyncState>()((set) => ({
   lastSyncTime: null,
   isSyncing: false,
   error: null,

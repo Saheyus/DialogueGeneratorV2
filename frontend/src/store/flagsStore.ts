@@ -2,8 +2,11 @@
  * Store Zustand pour la gestion des flags in-game.
  */
 import { create } from 'zustand'
-import type { FlagDefinition, InGameFlag, FlagValue } from '../types/flags'
+import type { FlagDefinition, InGameFlag, FlagSnapshot } from '../types/flags'
 import * as flagsAPI from '../api/flags'
+import { getErrorMessage } from '../types/errors'
+
+const FLAGS_SELECTION_STORAGE_KEY = 'flags_selection'
 
 interface FlagsState {
   // Catalogue des définitions disponibles
@@ -32,12 +35,21 @@ interface FlagsState {
   toggleBoolFlag: (flagId: string) => void
   setNumericFlag: (flagId: string, value: number) => void
   setStringFlag: (flagId: string, value: string) => void
+  removeFlag: (flagId: string) => void
   clearFlags: () => void
   getSelectedFlagsArray: () => InGameFlag[]
   
   // Gestion du catalogue
   upsertDefinition: (def: FlagDefinition) => Promise<void>
   toggleFavoriteInCatalog: (flagId: string) => Promise<void>
+  
+  // Import/Export snapshots
+  importFromSnapshot: (snapshot: FlagSnapshot) => void
+  exportToSnapshot: () => FlagSnapshot
+  
+  // Persistance localStorage
+  saveSelection: () => void
+  loadSelection: () => void
 }
 
 export const useFlagsStore = create<FlagsState>((set, get) => ({
@@ -54,8 +66,10 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
     try {
       const response = await flagsAPI.listFlags()
       set({ catalog: response.flags, isLoading: false })
-    } catch (err: any) {
-      set({ error: err?.message || 'Erreur lors du chargement du catalogue', isLoading: false })
+      // Charger la sélection sauvegardée après le chargement du catalogue
+      get().loadSelection()
+    } catch (err: unknown) {
+      set({ error: getErrorMessage(err), isLoading: false })
     }
   },
   
@@ -94,9 +108,18 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
         // Déselectionner
         newSelectedFlags.delete(flagId)
       } else {
-        // Sélectionner avec valeur par défaut (toggle entre true/false)
+        // Sélectionner avec valeur par défaut (utiliser defaultValueParsed si disponible)
         const currentValue = newSelectedFlags.get(flagId)?.value
-        const newValue = typeof currentValue === 'boolean' ? !currentValue : true
+        let newValue: boolean
+        if (typeof currentValue === 'boolean') {
+          // Toggle si déjà sélectionné
+          newValue = !currentValue
+        } else {
+          // Utiliser la valeur par défaut parsée ou true par défaut
+          newValue = typeof flagDef.defaultValueParsed === 'boolean' 
+            ? flagDef.defaultValueParsed 
+            : true
+        }
         
         newSelectedFlags.set(flagId, {
           id: flagId,
@@ -106,7 +129,10 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
         })
       }
       
-      return { selectedFlags: newSelectedFlags }
+      const newState = { selectedFlags: newSelectedFlags }
+      // Sauvegarder dans localStorage
+      get().saveSelection()
+      return newState
     })
   },
   
@@ -117,6 +143,7 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
       
       if (!flagDef) return state
       
+      // Sélectionner le flag automatiquement si modifié
       newSelectedFlags.set(flagId, {
         id: flagId,
         value,
@@ -124,7 +151,10 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
         timestamp: new Date().toISOString()
       })
       
-      return { selectedFlags: newSelectedFlags }
+      const newState = { selectedFlags: newSelectedFlags }
+      // Sauvegarder dans localStorage
+      get().saveSelection()
+      return newState
     })
   },
   
@@ -135,6 +165,7 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
       
       if (!flagDef) return state
       
+      // Sélectionner le flag si pas déjà sélectionné
       newSelectedFlags.set(flagId, {
         id: flagId,
         value,
@@ -142,19 +173,26 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
         timestamp: new Date().toISOString()
       })
       
-      return { selectedFlags: newSelectedFlags }
+      const newState = { selectedFlags: newSelectedFlags }
+      // Sauvegarder dans localStorage
+      get().saveSelection()
+      return newState
     })
   },
   
   clearFlags: () => {
     set({ selectedFlags: new Map() })
+    get().saveSelection()
   },
   
   removeFlag: (flagId: string) => {
     set(state => {
       const newSelectedFlags = new Map(state.selectedFlags)
       newSelectedFlags.delete(flagId)
-      return { selectedFlags: newSelectedFlags }
+      const newState = { selectedFlags: newSelectedFlags }
+      // Sauvegarder dans localStorage
+      get().saveSelection()
+      return newState
     })
   },
   
@@ -178,8 +216,8 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
       
       // Recharger le catalogue
       await get().loadCatalog()
-    } catch (err: any) {
-      set({ error: err?.message || 'Erreur lors de la sauvegarde', isLoading: false })
+    } catch (err: unknown) {
+      set({ error: getErrorMessage(err), isLoading: false })
       throw err
     }
   },
@@ -197,9 +235,76 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
       
       // Recharger le catalogue
       await get().loadCatalog()
-    } catch (err: any) {
-      set({ error: err?.message || 'Erreur lors du toggle favori', isLoading: false })
+    } catch (err: unknown) {
+      set({ error: getErrorMessage(err), isLoading: false })
       throw err
+    }
+  },
+  
+  importFromSnapshot: (snapshot: FlagSnapshot) => {
+    set(state => {
+      const newSelectedFlags = new Map<string, InGameFlag>()
+      
+      // Charger le catalogue pour obtenir les catégories
+      for (const [flagId, value] of Object.entries(snapshot.flags)) {
+        const flagDef = state.catalog.find(f => f.id === flagId)
+        if (flagDef) {
+          newSelectedFlags.set(flagId, {
+            id: flagId,
+            value,
+            category: flagDef.category,
+            timestamp: new Date().toISOString()
+          })
+        }
+      }
+      
+      const newState = { selectedFlags: newSelectedFlags }
+      // Sauvegarder dans localStorage
+      get().saveSelection()
+      return newState
+    })
+  },
+  
+  exportToSnapshot: () => {
+    const state = get()
+    const flags: Record<string, boolean | number | string> = {}
+    
+    for (const flag of state.selectedFlags.values()) {
+      flags[flag.id] = flag.value
+    }
+    
+    return {
+      version: '1.0',
+      timestamp: new Date().toISOString(),
+      flags
+    } as FlagSnapshot
+  },
+  
+  saveSelection: () => {
+    try {
+      const state = get()
+      const selectionArray = Array.from(state.selectedFlags.values())
+      localStorage.setItem(FLAGS_SELECTION_STORAGE_KEY, JSON.stringify(selectionArray))
+    } catch (err) {
+      console.error('Erreur lors de la sauvegarde de la sélection de flags:', err)
+    }
+  },
+  
+  loadSelection: () => {
+    try {
+      const saved = localStorage.getItem(FLAGS_SELECTION_STORAGE_KEY)
+      if (saved) {
+        const selectionArray = JSON.parse(saved) as InGameFlag[]
+        const newSelectedFlags = new Map<string, InGameFlag>()
+        
+        for (const flag of selectionArray) {
+          newSelectedFlags.set(flag.id, flag)
+        }
+        
+        set({ selectedFlags: newSelectedFlags })
+      }
+    } catch (err) {
+      console.error('Erreur lors du chargement de la sélection de flags:', err)
     }
   }
 }))

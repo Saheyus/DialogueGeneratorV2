@@ -13,7 +13,7 @@ interface NarrativeGuidesState {
   
   // Actions
   toggleGuides: () => void
-  loadNarrativeGuides: (skipLastSyncUpdate?: boolean) => Promise<void>
+  loadNarrativeGuides: () => Promise<void>
   clearError: () => void
   error: string | null
 }
@@ -33,7 +33,7 @@ export const useNarrativeGuidesStore = create<NarrativeGuidesState>()(
         }))
       },
 
-      loadNarrativeGuides: async (skipLastSyncUpdate: boolean = false) => {
+      loadNarrativeGuides: async () => {
         try {
           set({ error: null })
           const response = await vocabularyAPI.getNarrativeGuides()

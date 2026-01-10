@@ -4,7 +4,7 @@
 import { useMemo } from 'react'
 import { hasJsonContent } from '../utils/jsonPrettifier'
 import { estimateTokens } from '../utils/tokenEstimation'
-import type { PromptStructure, PromptSection as BackendPromptSection, ContextCategory, ContextItem } from '../types/prompt'
+import type { PromptStructure, ItemSection } from '../types/prompt'
 
 export interface PromptSection {
   title: string
@@ -50,33 +50,11 @@ const CATEGORY_TO_ITEM_NAME: Record<string, string> = {
 }
 
 /**
- * Sections de niveau 3 (sections d'éléments) : IDENTITÉ, CARACTÉRISATION, etc.
- * Ces sections sont regroupées sous les éléments individuels
- */
-const LEVEL_3_SECTIONS = [
-  'IDENTITÉ', 'IDENTITE',
-  'CARACTÉRISATION', 'CARACTERISATION',
-  'VOIX ET STYLE',
-  'HISTOIRE ET RELATIONS',
-  'MÉCANIQUES', 'MECANIQUES',
-  'AUTRES INFORMATIONS',
-  'INTRODUCTION',
-]
-
-/**
  * Vérifie si une section est une catégorie de niveau 2
  */
 function isLevel2Category(title: string): boolean {
   const upperTitle = title.toUpperCase()
   return LEVEL_2_CATEGORIES.some(cat => upperTitle === cat.toUpperCase())
-}
-
-/**
- * Vérifie si une section est une section de niveau 3
- */
-function isLevel3Section(title: string): boolean {
-  const upperTitle = title.toUpperCase()
-  return LEVEL_3_SECTIONS.some(sec => upperTitle === sec.toUpperCase())
 }
 
 /**
@@ -156,6 +134,58 @@ function parseSubSections(content: string): { children: PromptSection[], remaini
       
       const categoryContentStart = categoryStart + categoryHeaderMatch[0].length
       const categoryContent = content.substring(categoryContentStart, categoryEnd).trim()
+
+      // -------------------------------------------------------------------
+      // Format "marqueurs explicites" : --- PNJ 1 --- / --- LIEU 2 --- / etc.
+      // Dans ce format, on garde une hiérarchie explicite : CATEGORY -> ITEMS
+      // -------------------------------------------------------------------
+      const elementMarkerPattern = new RegExp(
+        `^--- (${itemName}|PNJ|LIEU|OBJET|ESPÈCE|ESPECE|COMMUNAUTÉ|COMMUNAUTE|QUÊTE|QUETE) (\\d+) ---$`,
+        'gm'
+      )
+
+      const elementMarkers: Array<{ index: number; label: string; number: number; markerLength: number }> = []
+      let markerMatch: RegExpExecArray | null
+      while ((markerMatch = elementMarkerPattern.exec(categoryContent)) !== null) {
+        elementMarkers.push({
+          index: markerMatch.index,
+          label: markerMatch[1],
+          number: parseInt(markerMatch[2], 10),
+          markerLength: markerMatch[0].length,
+        })
+      }
+
+      if (elementMarkers.length > 0) {
+        const categoryChildren: PromptSection[] = []
+
+        for (let idx = 0; idx < elementMarkers.length; idx++) {
+          const marker = elementMarkers[idx]
+          const start = marker.index + marker.markerLength
+          const end = idx < elementMarkers.length - 1 ? elementMarkers[idx + 1].index : categoryContent.length
+          const itemContent = categoryContent.substring(start, end).trim()
+          if (itemContent.length === 0) continue
+
+          categoryChildren.push({
+            title: `${marker.label} ${marker.number}`,
+            content: itemContent,
+            hasJson: hasJsonContent(itemContent),
+            tokenCount: estimateTokens(itemContent),
+          })
+        }
+
+        const categoryTokenCount = categoryChildren.reduce((sum, c) => sum + (c.tokenCount || 0), 0)
+        children.push({
+          title: categoryTitle,
+          content: '',
+          hasJson: false,
+          tokenCount: categoryTokenCount,
+          children: categoryChildren,
+        })
+
+        // Passer à la prochaine catégorie
+        i = j
+        continue
+      }
       
       // Extraire toutes les sections de niveau 3 dans cette catégorie
       const level3Matches: Array<{ index: number; title: string }> = []
@@ -172,90 +202,50 @@ function parseSubSections(content: string): { children: PromptSection[], remaini
       }
       
       if (level3Matches.length === 0) {
-        // Pas de sections de niveau 3 : détecter les marqueurs explicites d'éléments
-        // Format attendu : --- PNJ 1 ---, --- LIEU 2 ---, etc.
-        const itemName = getItemNameForCategory(categoryTitle)
+        // Pas de sections de niveau 3 : fallback rétrocompatible (détection via "Nom:" / "Nom (extrait):")
+        const categoryChildren: PromptSection[] = []
         
-        // Pattern pour détecter les marqueurs d'éléments : --- PNJ 1 ---, --- LIEU 2 ---, etc.
-        // Supporte les variantes avec/sans accents (ESPÈCE/ESPECE, COMMUNAUTÉ/COMMUNAUTE)
-        const elementMarkerPattern = new RegExp(
-          `^--- (${itemName}|PNJ|LIEU|OBJET|ESPÈCE|ESPECE|COMMUNAUTÉ|COMMUNAUTE|QUÊTE|QUETE) (\\d+) ---$`,
-          'gm'
-        )
-        
-        const elementMarkers: Array<{ index: number; number: number; markerLength: number }> = []
-        let match
-        while ((match = elementMarkerPattern.exec(categoryContent)) !== null) {
-          elementMarkers.push({
-            index: match.index,
-            number: parseInt(match[2], 10),
-            markerLength: match[0].length,
-          })
+        const elementStartPattern = /^Nom(?:\s*\(extrait\))?:/gm
+        const elementStarts: number[] = []
+        let fallbackMatch
+        while ((fallbackMatch = elementStartPattern.exec(categoryContent)) !== null) {
+          elementStarts.push(fallbackMatch.index)
         }
-        
-        if (elementMarkers.length > 0) {
-          // Format nouveau : marqueurs explicites détectés
-          // Extraire le contenu de chaque élément entre les marqueurs
-          for (let idx = 0; idx < elementMarkers.length; idx++) {
-            const marker = elementMarkers[idx]
-            // Le contenu commence après le marqueur (incluant le saut de ligne)
-            const start = marker.index + marker.markerLength
-            const end = idx < elementMarkers.length - 1 
-              ? elementMarkers[idx + 1].index 
-              : categoryContent.length
-            
+
+        if (elementStarts.length > 0) {
+          // Plusieurs éléments détectés par pattern "Nom:"
+          for (let idx = 0; idx < elementStarts.length; idx++) {
+            const start = elementStarts[idx]
+            const end = idx < elementStarts.length - 1 ? elementStarts[idx + 1] : categoryContent.length
             const itemContent = categoryContent.substring(start, end).trim()
-            
+
             if (itemContent.length > 0) {
-              const itemTokenCount = estimateTokens(itemContent)
-              children.push({
-                title: `${itemName} ${marker.number}`, // Utiliser le numéro du marqueur
+              categoryChildren.push({
+                title: `${itemName} ${idx + 1}`,
                 content: itemContent,
                 hasJson: hasJsonContent(itemContent),
-                tokenCount: itemTokenCount,
+                tokenCount: estimateTokens(itemContent),
               })
             }
           }
-        } else {
-          // Fallback : aucun marqueur trouvé, utiliser l'ancienne méthode de détection
-          // (rétrocompatibilité avec anciens prompts sans marqueurs explicites)
-          const elementStartPattern = /^Nom(?:\s*\(extrait\))?:/gm
-          const elementStarts: number[] = []
-          let fallbackMatch
-          while ((fallbackMatch = elementStartPattern.exec(categoryContent)) !== null) {
-            elementStarts.push(fallbackMatch.index)
-          }
-          
-          if (elementStarts.length > 0) {
-            // Plusieurs éléments détectés par pattern "Nom:"
-            for (let idx = 0; idx < elementStarts.length; idx++) {
-              const start = elementStarts[idx]
-              const end = idx < elementStarts.length - 1 ? elementStarts[idx + 1] : categoryContent.length
-              const itemContent = categoryContent.substring(start, end).trim()
-              
-              if (itemContent.length > 0) {
-                const itemTokenCount = estimateTokens(itemContent)
-                children.push({
-                  title: `${itemName} ${idx + 1}`,
-                  content: itemContent,
-                  hasJson: hasJsonContent(itemContent),
-                  tokenCount: itemTokenCount,
-                })
-              }
-            }
-          } else {
-            // Aucun pattern trouvé, traiter comme un seul élément
-            if (categoryContent.trim().length > 0) {
-              const categoryTokenCount = estimateTokens(categoryContent)
-              children.push({
-                title: `${itemName} 1`,
-                content: categoryContent,
-                hasJson: hasJsonContent(categoryContent),
-                tokenCount: categoryTokenCount,
-              })
-            }
-          }
+        } else if (categoryContent.trim().length > 0) {
+          // Aucun pattern trouvé, traiter comme un seul élément
+          categoryChildren.push({
+            title: `${itemName} 1`,
+            content: categoryContent,
+            hasJson: hasJsonContent(categoryContent),
+            tokenCount: estimateTokens(categoryContent),
+          })
         }
+
+        const categoryTokenCount = categoryChildren.reduce((sum, c) => sum + (c.tokenCount || 0), 0)
+        children.push({
+          title: categoryTitle,
+          content: '',
+          hasJson: false,
+          tokenCount: categoryTokenCount,
+          children: categoryChildren,
+        })
         
         // Passer à la prochaine catégorie
         i = j
@@ -408,7 +398,7 @@ export function parsePromptFromJson(promptJson: PromptStructure | null | undefin
             (item.sections[0].title === '' || item.sections[0].title === 'INFORMATIONS')
           
           // PRIORITÉ: Utiliser raw_content si disponible, sinon content
-          const getSectionContent = (itemSection: any): string => {
+          const getSectionContent = (itemSection: ItemSection): string => {
             if (itemSection.raw_content) {
               // Sérialiser raw_content en JSON string pour affichage
               try {
@@ -490,9 +480,6 @@ export function parsePromptFromJson(promptJson: PromptStructure | null | undefin
         }
       }
     }
-    
-    // Si la section a du contenu direct (pas seulement des catégories)
-    const hasDirectContent = backendSection.content && backendSection.content.trim().length > 0
     
     sections.push({
       title: backendSection.title,

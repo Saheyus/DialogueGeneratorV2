@@ -51,7 +51,7 @@ describe('GenerationOptionsModal', () => {
       error: null,
       toggleField: vi.fn(),
       clearError: vi.fn(),
-    } as any)
+    } as ReturnType<typeof useContextConfigStore>)
 
     mockConfigAPI.getUnityDialoguesPath.mockResolvedValue({ path: '/test/path' })
   })

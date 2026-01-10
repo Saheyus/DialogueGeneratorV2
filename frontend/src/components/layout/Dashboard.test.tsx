@@ -2,11 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
-import { Dashboard } from './Dashboard'
 import { useGenerationStore } from '../../store/generationStore'
 import { useGenerationActionsStore } from '../../store/generationActionsStore'
 import { useContextStore } from '../../store/contextStore'
-import type { CharacterResponse } from '../../types/api'
 
 // Mock des stores
 vi.mock('../../store/generationStore')
@@ -27,8 +25,11 @@ const mockUseGenerationActionsStore = vi.mocked(useGenerationActionsStore)
 const mockUseContextStore = vi.mocked(useContextStore)
 
 describe('Dashboard', () => {
-  beforeEach(() => {
+  let Dashboard: typeof import('./Dashboard').Dashboard
+
+  beforeEach(async () => {
     vi.clearAllMocks()
+    Dashboard = (await import('./Dashboard')).Dashboard
     
     mockUseGenerationStore.mockReturnValue({
       rawPrompt: '',
@@ -96,8 +97,9 @@ describe('Dashboard', () => {
     expect(screen.getByTestId('context-selector')).toBeInTheDocument()
     expect(screen.getByTestId('generation-panel')).toBeInTheDocument()
     // Les onglets devraient être présents
-    expect(screen.getAllByText(/prompt estimé/i).length).toBeGreaterThan(0)
-    expect(screen.getByText(/détails/i)).toBeInTheDocument()
+    expect(screen.getByText(/^prompt$/i)).toBeInTheDocument()
+    expect(screen.getByText(/dialogue unity/i)).toBeInTheDocument()
+    expect(screen.getByText(/^détails$/i)).toBeInTheDocument()
   })
 
   it('affiche le panneau de sélection de contexte à gauche', () => {
@@ -129,10 +131,9 @@ describe('Dashboard', () => {
       </BrowserRouter>
     )
 
-    // Il y a plusieurs éléments avec "prompt estimé" (bouton et contenu)
-    expect(screen.getAllByText(/prompt estimé/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/^prompt$/i)).toBeInTheDocument()
     expect(screen.getByText(/dialogue unity/i)).toBeInTheDocument()
-    expect(screen.getByText(/détails/i)).toBeInTheDocument()
+    expect(screen.getByText(/^détails$/i)).toBeInTheDocument()
   })
 
   it('affiche le message par défaut dans l\'onglet Détails', async () => {
@@ -149,7 +150,7 @@ describe('Dashboard', () => {
 
     // Maintenant le message devrait être visible
     await waitFor(() => {
-      expect(screen.getByText(/sélectionnez un élément de contexte ou une interaction pour voir ses détails/i)).toBeInTheDocument()
+      expect(screen.getByText(/sélectionnez un élément de contexte pour voir ses détails/i)).toBeInTheDocument()
     })
   })
 
@@ -253,7 +254,17 @@ describe('Dashboard', () => {
       </BrowserRouter>
     )
 
-    // Le EstimatedPromptPanel devrait afficher le prompt
+    // Aller explicitement sur l'onglet "Prompt" (pas forcément actif par défaut)
+    const promptTab = screen.getByText(/^prompt$/i)
+    await userEvent.setup().click(promptTab)
+
+    // Basculer en vue brute pour afficher le texte tel quel
+    const viewToggle = screen.getByRole('checkbox')
+    if (viewToggle instanceof HTMLInputElement && viewToggle.checked) {
+      await userEvent.setup().click(viewToggle)
+    }
+
+    // Le EstimatedPromptPanel devrait afficher le prompt (vue brute)
     await waitFor(() => {
       expect(screen.getByText(testPrompt)).toBeInTheDocument()
     })

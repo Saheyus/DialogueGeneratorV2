@@ -15,7 +15,6 @@ export function prettifyJsonInText(text: string): string {
   const jsonArrayPattern = /\[[\s\S]*?\]/g
   
   let result = text
-  let hasChanges = false
   
   // Fonction pour prettifier un match JSON
   const prettifyMatch = (match: string): string => {
@@ -24,7 +23,6 @@ export function prettifyJsonInText(text: string): string {
       const prettified = JSON.stringify(parsed, null, 2)
       // Ne remplacer que si le JSON prettifié est différent (évite les faux positifs)
       if (prettified !== match.trim()) {
-        hasChanges = true
         return prettified
       }
     } catch {
@@ -37,21 +35,13 @@ export function prettifyJsonInText(text: string): string {
   result = result.replace(jsonObjectPattern, (match) => {
     // Ignorer les matches trop courts (probablement pas du JSON)
     if (match.trim().length < 10) return match
-    const prettified = prettifyMatch(match)
-    if (prettified !== match) {
-      hasChanges = true
-    }
-    return prettified
+    return prettifyMatch(match)
   })
   
   // Ensuite les tableaux JSON
   result = result.replace(jsonArrayPattern, (match) => {
     if (match.trim().length < 10) return match
-    const prettified = prettifyMatch(match)
-    if (prettified !== match) {
-      hasChanges = true
-    }
-    return prettified
+    return prettifyMatch(match)
   })
   
   return result

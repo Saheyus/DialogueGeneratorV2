@@ -1,6 +1,8 @@
 """Router pour la gestion des flags in-game (mécaniques RPG)."""
+import json
 import logging
-from typing import Annotated, Optional
+from datetime import datetime, timezone
+from typing import Annotated, Optional, Dict, Any
 from fastapi import APIRouter, Depends, Query, status
 from api.schemas.flags import (
     FlagsCatalogResponse,
@@ -8,7 +10,14 @@ from api.schemas.flags import (
     UpsertFlagRequest,
     UpsertFlagResponse,
     ToggleFavoriteRequest,
-    ToggleFavoriteResponse
+    ToggleFavoriteResponse,
+    FlagSnapshot,
+    ImportSnapshotRequest,
+    ImportSnapshotResponse,
+    ExportSnapshotRequest,
+    ExportSnapshotResponse,
+    InGameFlag,
+    FlagValue
 )
 from api.exceptions import InternalServerException, ValidationException, NotFoundException
 from api.dependencies import get_request_id
@@ -59,8 +68,21 @@ async def list_flags(
             favorites_only=favorites_only
         )
         
-        # Convertir en modèles Pydantic
-        flag_definitions = [FlagDefinition(**flag) for flag in flags]
+        # Convertir en modèles Pydantic (inclure defaultValueParsed si présent)
+        flag_definitions = []
+        for flag in flags:
+            flag_def = FlagDefinition(
+                id=flag.get("id", ""),
+                type=flag.get("type", "bool"),
+                category=flag.get("category", ""),
+                label=flag.get("label", ""),
+                description=flag.get("description"),
+                defaultValue=flag.get("defaultValue", ""),
+                defaultValueParsed=flag.get("defaultValueParsed"),  # Inclure la valeur parsée
+                tags=flag.get("tags", []),
+                isFavorite=flag.get("isFavorite", False)
+            )
+            flag_definitions.append(flag_def)
         
         return FlagsCatalogResponse(
             flags=flag_definitions,
@@ -187,6 +209,137 @@ async def toggle_favorite(
         logger.exception(f"Erreur lors du toggle favorite (request_id: {request_id})")
         raise InternalServerException(
             message="Erreur lors du toggle favorite",
+            details={"error": str(e)},
+            request_id=request_id
+        )
+
+
+@router.post(
+    "/import-snapshot",
+    response_model=ImportSnapshotResponse,
+    status_code=status.HTTP_200_OK
+)
+async def import_snapshot(
+    request_data: ImportSnapshotRequest,
+    flag_service: Annotated[FlagCatalogService, Depends(get_flag_catalog_service)] = None,
+    request_id: Annotated[str, Depends(get_request_id)] = None
+) -> ImportSnapshotResponse:
+    """Importe un snapshot Unity (état réel des flags du jeu).
+    
+    Args:
+        request_data: Données de la requête (snapshot_json).
+        flag_service: Service de catalogue injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        Réponse contenant le snapshot importé et les warnings (flags inconnus).
+        
+    Raises:
+        ValidationException: Si le JSON est invalide.
+        InternalServerException: Si l'import échoue.
+    """
+    try:
+        # Parser le JSON du snapshot
+        try:
+            snapshot_dict = json.loads(request_data.snapshot_json)
+        except json.JSONDecodeError as e:
+            raise ValidationException(
+                message=f"JSON invalide dans snapshot_json: {e}",
+                request_id=request_id
+            )
+        
+        # Valider et convertir en FlagSnapshot
+        try:
+            snapshot = FlagSnapshot(**snapshot_dict)
+        except Exception as e:
+            raise ValidationException(
+                message=f"Format snapshot invalide: {e}",
+                request_id=request_id
+            )
+        
+        # Charger le catalogue pour valider les flags
+        catalog = flag_service.load_definitions()
+        catalog_ids = {flag["id"] for flag in catalog}
+        
+        # Valider les flags du snapshot
+        warnings = []
+        imported_count = 0
+        
+        for flag_id, flag_value in snapshot.flags.items():
+            if flag_id not in catalog_ids:
+                warnings.append(f"Flag inconnu ignoré: {flag_id} (non présent dans le catalogue)")
+            else:
+                imported_count += 1
+        
+        logger.info(f"Snapshot importé: {imported_count} flags valides, {len(warnings)} warnings (request_id: {request_id})")
+        
+        return ImportSnapshotResponse(
+            success=True,
+            imported_count=imported_count,
+            warnings=warnings,
+            snapshot=snapshot
+        )
+        
+    except ValidationException:
+        raise
+    except Exception as e:
+        logger.exception(f"Erreur lors de l'import du snapshot (request_id: {request_id})")
+        raise InternalServerException(
+            message="Erreur lors de l'import du snapshot",
+            details={"error": str(e)},
+            request_id=request_id
+        )
+
+
+@router.post(
+    "/export-snapshot",
+    response_model=ExportSnapshotResponse,
+    status_code=status.HTTP_200_OK
+)
+async def export_snapshot(
+    request_data: Optional[ExportSnapshotRequest] = None,
+    flag_service: Annotated[FlagCatalogService, Depends(get_flag_catalog_service)] = None,
+    request_id: Annotated[str, Depends(get_request_id)] = None
+) -> ExportSnapshotResponse:
+    """Exporte un snapshot (sélection actuelle des flags).
+    
+    Si request_data.flags est fourni, exporte ces flags spécifiques.
+    Sinon, retourne un snapshot vide (le frontend fournira les flags sélectionnés).
+    
+    Args:
+        request_data: Données de la requête (flags optionnels à exporter).
+        flag_service: Service de catalogue injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        Réponse contenant le snapshot exporté.
+    """
+    try:
+        # Construire le dictionnaire de flags
+        flags_dict: Dict[str, FlagValue] = {}
+        
+        if request_data and request_data.flags:
+            # Utiliser les flags fournis dans la requête
+            for flag in request_data.flags:
+                flags_dict[flag.id] = flag.value
+        # Sinon, retourner un snapshot vide (le frontend gère la sélection)
+        
+        # Créer le snapshot
+        snapshot = FlagSnapshot(
+            version="1.0",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            flags=flags_dict
+        )
+        
+        return ExportSnapshotResponse(
+            success=True,
+            snapshot=snapshot
+        )
+        
+    except Exception as e:
+        logger.exception(f"Erreur lors de l'export du snapshot (request_id: {request_id})")
+        raise InternalServerException(
+            message="Erreur lors de l'export du snapshot",
             details={"error": str(e)},
             request_id=request_id
         )

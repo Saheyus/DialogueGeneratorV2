@@ -7,7 +7,13 @@ import type {
   UpsertFlagRequest,
   UpsertFlagResponse,
   ToggleFavoriteRequest,
-  ToggleFavoriteResponse
+  ToggleFavoriteResponse,
+  ImportSnapshotRequest,
+  ImportSnapshotResponse,
+  ExportSnapshotRequest,
+  ExportSnapshotResponse,
+  FlagSnapshot,
+  InGameFlag
 } from '../types/flags'
 
 /**
@@ -47,6 +53,32 @@ export async function toggleFavorite(
   const response = await apiClient.post<ToggleFavoriteResponse>(
     '/api/v1/mechanics/flags/toggle-favorite',
     request
+  )
+  return response.data
+}
+
+/**
+ * Importe un snapshot Unity (état réel des flags du jeu).
+ */
+export async function importSnapshot(
+  snapshotJson: string
+): Promise<ImportSnapshotResponse> {
+  const response = await apiClient.post<ImportSnapshotResponse>(
+    '/api/v1/mechanics/flags/import-snapshot',
+    { snapshot_json: snapshotJson } as ImportSnapshotRequest
+  )
+  return response.data
+}
+
+/**
+ * Exporte la sélection actuelle en snapshot.
+ */
+export async function exportSnapshot(
+  flags?: InGameFlag[]
+): Promise<ExportSnapshotResponse> {
+  const response = await apiClient.post<ExportSnapshotResponse>(
+    '/api/v1/mechanics/flags/export-snapshot',
+    flags ? { flags } as ExportSnapshotRequest : undefined
   )
   return response.data
 }

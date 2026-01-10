@@ -160,7 +160,7 @@ export const useContextConfigStore = create<ContextConfigState>()(
       // (is_essential=true && is_metadata=false)
       const availableFieldsForType = state.availableFields[elementType] || {}
       const essentialFieldsFromDetection = Object.entries(availableFieldsForType)
-        .filter(([_path, fieldInfo]: [string, any]) => {
+        .filter(([, fieldInfo]: [string, FieldInfo]) => {
           const isEssential = fieldInfo.is_essential === true || fieldInfo.is_essential === 'true'
           const isMetadata = fieldInfo.is_metadata === true || fieldInfo.is_metadata === 'true'
           return isEssential && !isMetadata
@@ -187,7 +187,7 @@ export const useContextConfigStore = create<ContextConfigState>()(
       // (is_essential=true && is_metadata=true)
       const availableFieldsForType = state.availableFields[elementType] || {}
       const essentialMetadataFields = Object.entries(availableFieldsForType)
-        .filter(([_path, fieldInfo]: [string, any]) => {
+        .filter(([, fieldInfo]: [string, FieldInfo]) => {
           const isEssential = fieldInfo.is_essential === true || fieldInfo.is_essential === 'true'
           const isMetadata = fieldInfo.is_metadata === true || fieldInfo.is_metadata === 'true'
           return isEssential && isMetadata
@@ -341,15 +341,14 @@ export const useContextConfigStore = create<ContextConfigState>()(
 
   resetToDefault: () => {
     const state = get()
-    // Réinitialiser avec les champs par défaut (incluant les essentiels)
-    const defaultFieldConfigs: Record<string, string[]> = {}
+    // Réinitialiser avec les champs par défaut (incluant les essentiels si connus)
+    const resetFieldConfigs: Record<string, string[]> = { ...defaultFieldConfigs }
     for (const [elementType, fields] of Object.entries(state.essentialFields)) {
-      // Commencer avec les champs essentiels
-      defaultFieldConfigs[elementType] = [...fields]
+      resetFieldConfigs[elementType] = [...fields]
     }
     
     set({
-      fieldConfigs: defaultFieldConfigs,
+      fieldConfigs: resetFieldConfigs,
       organization: 'default',
     })
   },
@@ -392,6 +391,16 @@ export const useContextConfigStore = create<ContextConfigState>()(
         fieldConfigs: state.fieldConfigs,
         organization: state.organization,
       }),
+      // Toujours reconstituer les clés attendues (même si le localStorage ne les contient pas)
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<ContextConfigState> | undefined
+        const persistedFieldConfigs = persisted?.fieldConfigs ?? {}
+        return {
+          ...currentState,
+          ...persisted,
+          fieldConfigs: { ...defaultFieldConfigs, ...persistedFieldConfigs },
+        }
+      },
     }
   )
 )

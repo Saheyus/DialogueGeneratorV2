@@ -7,9 +7,9 @@ import type { DialogueStructure, DialogueStructureElement } from '../types/gener
 const DEFAULT_STRUCTURE: DialogueStructure = ['PNJ', 'PJ', 'Stop', '', '', '']
 
 export function useDialogueStructure(
-  initialStructure: DialogueStructure = DEFAULT_STRUCTURE
+  initialStructure?: DialogueStructure
 ) {
-  const [structure, setStructure] = useState<DialogueStructure>(initialStructure)
+  const [structure, setStructure] = useState<DialogueStructure>(initialStructure ?? DEFAULT_STRUCTURE)
 
   const updateElement = useCallback(
     (index: number, value: DialogueStructureElement) => {

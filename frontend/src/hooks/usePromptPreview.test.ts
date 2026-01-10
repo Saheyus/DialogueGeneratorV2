@@ -394,8 +394,11 @@ Contenu...
     expect(section2A?.children).toBeDefined()
     expect(section2A?.children?.length).toBeGreaterThan(0)
     // Vérifier que les sections imbriquées contiennent bien le contenu
-    const hasIdentity = section2A?.children?.some(
-      child => child.title === 'IDENTITÉ' && child.content.includes('Personnage Test')
+    // Dans le format legacy, les sections IDENTITÉ/CARACTÉRISATION sont imbriquées sous un wrapper PNJ
+    const hasIdentity = section2A?.children?.some((wrapper) =>
+      wrapper.children?.some(
+        (child) => child.title === 'IDENTITÉ' && child.content.includes('Personnage Test')
+      )
     )
     expect(hasIdentity).toBe(true)
   })
@@ -421,25 +424,15 @@ Contenu...
 
     expect(section2A).toBeDefined()
     
-    // Le contenu de CHARACTERS devrait être affiché avec un wrapper "PNJ 1" même sans sections IDENTITÉ
-    const hasPnjWrapper = section2A?.children?.some(
-      child => child.title === 'PNJ 1' || child.title.includes('PNJ')
+    // En mode "default", on obtient un wrapper de catégorie (CHARACTERS) puis des items (PNJ 1, ...)
+    const charactersSection = section2A?.children?.find((c) => c.title === 'CHARACTERS')
+    expect(charactersSection).toBeDefined()
+
+    const pnjSection = charactersSection?.children?.find(
+      (c) => c.title === 'PNJ 1' || c.title.includes('PNJ')
     )
-    const hasCharacterContent = section2A?.content?.includes('Akthar-Neth') || 
-                                 section2A?.children?.some(child => child.content?.includes('Akthar-Neth'))
-    
-    // Le contenu doit être présent quelque part
-    expect(hasPnjWrapper || hasCharacterContent).toBe(true)
-    
-    // Si PNJ 1 est dans children, vérifier qu'il a du contenu
-    if (hasPnjWrapper) {
-      const pnjSection = section2A?.children?.find(
-        child => child.title === 'PNJ 1' || child.title.includes('PNJ')
-      )
-      expect(pnjSection?.content).toBeDefined()
-      expect(pnjSection?.content.length).toBeGreaterThan(0)
-      expect(pnjSection?.content).toContain('Akthar-Neth')
-    }
+    expect(pnjSection).toBeDefined()
+    expect(pnjSection?.content).toContain('Akthar-Neth')
   })
 })
 

@@ -1,7 +1,7 @@
 /**
  * Composant principal de sélection de contexte avec onglets pour personnages, lieux et objets.
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import * as contextAPI from '../../api/context'
 import type { 
   CharacterResponse, 
@@ -48,11 +48,7 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
     setElementMode,
   } = useContextStore()
 
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     try {
@@ -82,7 +78,11 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [setElementLists])
+
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
 
   const handleItemClick = async (name: string) => {
     try {

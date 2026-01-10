@@ -215,6 +215,7 @@ class OpenAIClient(ILLMClient):
         logger.debug(f"Messages envoyés au LLM (avant tool): {messages}")
 
         tool_definition = None
+        tool_definition_responses = None
         tool_choice_option = NOT_GIVEN
 
         if response_model:
@@ -238,6 +239,13 @@ class OpenAIClient(ILLMClient):
                     "parameters": model_schema_for_tool
                 }
             }
+            # Responses API attend un format "tools" différent (name au top-level, pas sous "function")
+            tool_definition_responses = {
+                "type": "function",
+                "name": "generate_interaction",
+                "description": "Génère une interaction de dialogue structurée.",
+                "parameters": model_schema_for_tool,
+            }
             tool_choice_option = {"type": "function", "function": {"name": "generate_interaction"}}
             logger.info(f"Utilisation du structured output avec le modèle: {response_model.__name__}")
             # Note: Tous les modèles GPT-5 supportent le structured output selon la documentation OpenAI
@@ -245,6 +253,26 @@ class OpenAIClient(ILLMClient):
             logger.info(f"Configuration structured output pour {self.model_name}: tool_definition présent, tool_choice forcé")
             logger.debug(f"Schéma de la fonction 'generate_interaction' envoyé à OpenAI: \n{json.dumps(model_schema_for_tool, indent=2, ensure_ascii=False)}")
             logger.debug(f"Messages complets envoyés à OpenAI (avec tool): \n{json.dumps(messages, indent=2, ensure_ascii=False)}")
+            # #region agent log - tool_definition structure
+            try:
+                with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                    log_file.write(json.dumps({
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "A",
+                        "location": "llm_client.py:240",
+                        "message": "tool_definition structure après construction",
+                        "data": {
+                            "tool_definition": tool_definition,
+                            "tool_definition_json": json.dumps(tool_definition, ensure_ascii=False),
+                            "has_name_in_function": "name" in tool_definition.get("function", {}),
+                            "tool_definition_is_none": tool_definition is None,
+                            "tool_definition_type": type(tool_definition).__name__
+                        },
+                        "timestamp": int(time.time() * 1000)
+                    }) + "\n")
+            except: pass
+            # #endregion
 
 
         for i in range(k):
@@ -293,11 +321,71 @@ class OpenAIClient(ILLMClient):
                 }
 
                 # Paramètres pour Responses API (nouvelle norme)
+                # #region agent log - tool_definition avant responses_params
+                try:
+                    with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                        tool_serialized = json.dumps(tool_definition, ensure_ascii=False) if tool_definition else None
+                        log_file.write(json.dumps({
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "C",
+                            "location": "llm_client.py:296",
+                            "message": "tool_definition avant inclusion dans responses_params",
+                            "data": {
+                                "tool_definition_is_none": tool_definition is None,
+                                "tool_definition_type": type(tool_definition).__name__ if tool_definition else None,
+                                "tool_definition_json": tool_serialized,
+                                "use_responses_api": use_responses_api
+                            },
+                            "timestamp": int(time.time() * 1000)
+                        }) + "\n")
+                except: pass
+                # #endregion
                 responses_params: Dict[str, Any] = {
                     "model": self.model_name,
                     "input": messages,
-                    "tools": [tool_definition] if tool_definition else NOT_GIVEN,
+                    "tools": [tool_definition_responses] if tool_definition_responses else NOT_GIVEN,
                 }
+                # #region agent log - tools dans responses_params
+                try:
+                    with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                        tools_value = responses_params.get("tools")
+                        tools_is_not_given = tools_value is not NOT_GIVEN
+                        tools_list = list(tools_value) if tools_is_not_given and tools_value else None
+                        first_tool = tools_list[0] if tools_list and len(tools_list) > 0 else None
+                        first_tool_json = json.dumps(first_tool, ensure_ascii=False) if first_tool else None
+                        log_file.write(json.dumps({
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "D",
+                            "location": "llm_client.py:299",
+                            "message": "tools dans responses_params avant appel API",
+                            "data": {
+                                "tools_is_not_given": tools_is_not_given,
+                                "tools_type": type(tools_value).__name__,
+                                "tools_length": len(tools_list) if tools_list else 0,
+                                "first_tool": first_tool,
+                                "first_tool_json": first_tool_json,
+                                "first_tool_has_name": "name" in first_tool if first_tool else False,
+                                "first_tool_has_function": "function" in first_tool if first_tool else False,
+                                "first_tool_function_has_name": "name" in first_tool.get("function", {}) if first_tool and "function" in first_tool else False
+                            },
+                            "timestamp": int(time.time() * 1000)
+                        }) + "\n")
+                except Exception as e:
+                    try:
+                        with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                            log_file.write(json.dumps({
+                                "sessionId": "debug-session",
+                                "runId": "run1",
+                                "hypothesisId": "D",
+                                "location": "llm_client.py:299",
+                                "message": "ERREUR lors du log tools dans responses_params",
+                                "data": {"error": str(e)},
+                                "timestamp": int(time.time() * 1000)
+                            }) + "\n")
+                    except: pass
+                # #endregion
                 if tool_definition:
                     # Forcer l'appel du tool de structured output côté Responses
                     responses_params["tool_choice"] = {
@@ -397,6 +485,29 @@ class OpenAIClient(ILLMClient):
                     try:
                         with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
                             log_file.write(json.dumps(log_data) + "\n")
+                    except: pass
+                    # #endregion
+                    # #region agent log - paramètres exacts avant appel API
+                    try:
+                        with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                            params_to_log = responses_params if use_responses_api else chat_params
+                            tools_in_params = params_to_log.get("tools")
+                            tools_serialized = json.dumps(tools_in_params, ensure_ascii=False, default=str) if tools_in_params is not NOT_GIVEN else "NOT_GIVEN"
+                            log_file.write(json.dumps({
+                                "sessionId": "debug-session",
+                                "runId": "run1",
+                                "hypothesisId": "E",
+                                "location": "llm_client.py:404",
+                                "message": "paramètres exacts avant appel API OpenAI",
+                                "data": {
+                                    "api_type": "responses" if use_responses_api else "chat_completions",
+                                    "model": params_to_log.get("model"),
+                                    "tools_serialized": tools_serialized,
+                                    "tools_type": type(tools_in_params).__name__ if tools_in_params is not NOT_GIVEN else "NOT_GIVEN",
+                                    "has_tool_choice": "tool_choice" in params_to_log
+                                },
+                                "timestamp": int(time.time() * 1000)
+                            }) + "\n")
                     except: pass
                     # #endregion
                     try:

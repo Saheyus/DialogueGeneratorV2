@@ -1,6 +1,7 @@
 /**
  * Système de toast notifications.
  */
+/* eslint-disable react-refresh/only-export-components */
 import { useState, useCallback, useEffect } from 'react'
 import { theme } from '../../theme'
 

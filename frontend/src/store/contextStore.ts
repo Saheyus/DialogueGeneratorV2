@@ -59,6 +59,24 @@ const defaultSelections: ContextSelection = {
   dialogues_examples: [],
 }
 
+function normalizeSelections(selections: ContextSelection): ContextSelection {
+  return {
+    ...defaultSelections,
+    ...selections,
+    characters_full: Array.isArray(selections.characters_full) ? selections.characters_full : [],
+    characters_excerpt: Array.isArray(selections.characters_excerpt) ? selections.characters_excerpt : [],
+    locations_full: Array.isArray(selections.locations_full) ? selections.locations_full : [],
+    locations_excerpt: Array.isArray(selections.locations_excerpt) ? selections.locations_excerpt : [],
+    items_full: Array.isArray(selections.items_full) ? selections.items_full : [],
+    items_excerpt: Array.isArray(selections.items_excerpt) ? selections.items_excerpt : [],
+    species_full: Array.isArray(selections.species_full) ? selections.species_full : [],
+    species_excerpt: Array.isArray(selections.species_excerpt) ? selections.species_excerpt : [],
+    communities_full: Array.isArray(selections.communities_full) ? selections.communities_full : [],
+    communities_excerpt: Array.isArray(selections.communities_excerpt) ? selections.communities_excerpt : [],
+    dialogues_examples: Array.isArray(selections.dialogues_examples) ? selections.dialogues_examples : [],
+  }
+}
+
 export const useContextStore = create<ContextState>((set, get) => ({
   selections: defaultSelections,
   selectedRegion: null,
@@ -70,7 +88,7 @@ export const useContextStore = create<ContextState>((set, get) => ({
   communities: [],
 
   setSelections: (selections: ContextSelection) => {
-    set({ selections })
+    set({ selections: normalizeSelections(selections) })
   },
 
   setElementLists: (lists) => {
@@ -409,7 +427,7 @@ export const useContextStore = create<ContextState>((set, get) => ({
 
   restoreState: (selections: ContextSelection, region: string | null, subLocations: string[]) => {
     set({
-      selections,
+      selections: normalizeSelections(selections),
       selectedRegion: region,
       selectedSubLocations: subLocations,
     })

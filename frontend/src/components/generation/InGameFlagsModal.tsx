@@ -1,11 +1,13 @@
 /**
  * Modal pour la sélection des flags in-game.
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { useFlagsStore } from '../../store/flagsStore'
 import { theme } from '../../theme'
 import { useToast } from '../shared'
 import type { FlagDefinition } from '../../types/flags'
+import * as flagsAPI from '../../api/flags'
+import { getErrorMessage } from '../../types/errors'
 
 export interface InGameFlagsModalProps {
   isOpen: boolean
@@ -28,12 +30,16 @@ export function InGameFlagsModal({ isOpen, onClose }: InGameFlagsModalProps) {
     clearFilters,
     toggleBoolFlag,
     setNumericFlag,
+    setStringFlag,
+    removeFlag,
     clearFlags,
-    toggleFavoriteInCatalog
+    toggleFavoriteInCatalog,
+    importFromSnapshot,
+    exportToSnapshot
   } = useFlagsStore()
   
-  const [showCreateForm, setShowCreateForm] = useState(false)
   const toast = useToast()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   
   // Charger le catalogue au montage
   useEffect(() => {
@@ -109,6 +115,61 @@ export function InGameFlagsModal({ isOpen, onClose }: InGameFlagsModalProps) {
     }
   }
   
+  const handleImportSnapshot = async () => {
+    if (!fileInputRef.current) return
+    
+    fileInputRef.current.click()
+  }
+  
+  const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    
+    try {
+      const text = await file.text()
+      const response = await flagsAPI.importSnapshot(text)
+      
+      // Charger les flags depuis le snapshot
+      importFromSnapshot(response.snapshot)
+      
+      // Afficher les warnings s'il y en a
+      if (response.warnings.length > 0) {
+        toast(`Snapshot importé avec ${response.warnings.length} avertissement(s)`, 'warning')
+      } else {
+        toast(`Snapshot importé: ${response.imported_count} flag(s)`, 'success')
+      }
+    } catch (err) {
+      toast(`Erreur lors de l'import du snapshot: ${getErrorMessage(err)}`, 'error')
+    }
+    
+    // Réinitialiser l'input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+  
+  const handleExportSnapshot = async () => {
+    try {
+      const snapshot = exportToSnapshot()
+      const snapshotJson = JSON.stringify(snapshot, null, 2)
+      
+      // Créer un blob et télécharger
+      const blob = new Blob([snapshotJson], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `flags-snapshot-${new Date().toISOString().split('T')[0]}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      
+      toast('Snapshot exporté avec succès', 'success')
+    } catch (err) {
+      toast(`Erreur lors de l'export du snapshot: ${getErrorMessage(err)}`, 'error')
+    }
+  }
+  
   const renderFlagControl = (flag: FlagDefinition) => {
     const isSelected = selectedFlags.has(flag.id)
     const currentValue = selectedFlags.get(flag.id)?.value
@@ -173,6 +234,11 @@ export function InGameFlagsModal({ isOpen, onClose }: InGameFlagsModalProps) {
     }
     
     if (flag.type === 'int' || flag.type === 'float') {
+      // Utiliser defaultValueParsed si disponible, sinon parser defaultValue
+      const defaultValue = typeof flag.defaultValueParsed === 'number' 
+        ? flag.defaultValueParsed 
+        : (typeof currentValue === 'number' ? currentValue : parseFloat(flag.defaultValue) || 0)
+      
       return (
         <div
           key={flag.id}
@@ -216,8 +282,13 @@ export function InGameFlagsModal({ isOpen, onClose }: InGameFlagsModalProps) {
           )}
           <input
             type="number"
-            value={typeof currentValue === 'number' ? currentValue : flag.defaultValue}
-            onChange={(e) => setNumericFlag(flag.id, parseFloat(e.target.value))}
+            value={typeof currentValue === 'number' ? currentValue : defaultValue}
+            onChange={(e) => {
+              const numValue = parseFloat(e.target.value)
+              if (!isNaN(numValue)) {
+                setNumericFlag(flag.id, numValue)
+              }
+            }}
             step={flag.type === 'float' ? '0.1' : '1'}
             style={{
               width: '100%',
@@ -227,6 +298,95 @@ export function InGameFlagsModal({ isOpen, onClose }: InGameFlagsModalProps) {
               color: theme.input.color,
               borderRadius: '4px'
             }}
+          />
+        </div>
+      )
+    }
+    
+    if (flag.type === 'string') {
+      // Utiliser defaultValueParsed si disponible
+      const defaultValue = typeof flag.defaultValueParsed === 'string'
+        ? flag.defaultValueParsed
+        : (typeof currentValue === 'string' ? currentValue : flag.defaultValue || '')
+      
+      return (
+        <div
+          key={flag.id}
+          style={{
+            padding: '0.75rem',
+            backgroundColor: isSelected ? theme.button.primary.background : theme.background.secondary,
+            border: `1px solid ${isSelected ? theme.border.focus : theme.border.primary}`,
+            borderRadius: '4px'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 'bold', color: theme.text.primary }}>
+                {flag.label}
+                {flag.isFavorite && <span style={{ marginLeft: '0.5rem', color: theme.state.warning.color }}>★</span>}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: theme.text.secondary, marginTop: '0.25rem', fontFamily: 'monospace' }}>
+                {flag.id}
+              </div>
+            </div>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                marginLeft: '0.75rem',
+                cursor: 'pointer'
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => {
+                  if (isSelected) {
+                    removeFlag(flag.id)
+                  } else {
+                    setStringFlag(flag.id, defaultValue)
+                  }
+                }}
+                style={{ marginRight: '0.5rem' }}
+              />
+              <span style={{ fontSize: '0.85rem', color: theme.text.secondary }}>Sélectionner</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => handleToggleFavorite(flag.id)}
+              style={{
+                padding: '0.25rem 0.5rem',
+                backgroundColor: 'transparent',
+                border: 'none',
+                color: flag.isFavorite ? theme.state.warning.color : theme.text.secondary,
+                cursor: 'pointer',
+                fontSize: '1.2rem'
+              }}
+              title={flag.isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+            >
+              {flag.isFavorite ? '★' : '☆'}
+            </button>
+          </div>
+          {flag.description && (
+            <div style={{ fontSize: '0.85rem', color: theme.text.secondary, marginBottom: '0.5rem' }}>
+              {flag.description}
+            </div>
+          )}
+          <input
+            type="text"
+            value={typeof currentValue === 'string' ? currentValue : defaultValue}
+            onChange={(e) => setStringFlag(flag.id, e.target.value)}
+            disabled={!isSelected}
+            style={{
+              width: '100%',
+              padding: '0.5rem',
+              backgroundColor: isSelected ? theme.input.background : theme.background.tertiary,
+              border: `1px solid ${theme.input.border}`,
+              color: isSelected ? theme.input.color : theme.text.secondary,
+              borderRadius: '4px',
+              opacity: isSelected ? 1 : 0.6
+            }}
+            placeholder={defaultValue || 'Entrez une valeur...'}
           />
         </div>
       )
@@ -445,6 +605,7 @@ export function InGameFlagsModal({ isOpen, onClose }: InGameFlagsModalProps) {
             justifyContent: 'space-between',
             alignItems: 'center',
             flexShrink: 0,
+            gap: '0.5rem'
           }}
         >
           <div style={{ fontSize: '0.85rem', color: theme.text.secondary }}>
@@ -453,21 +614,64 @@ export function InGameFlagsModal({ isOpen, onClose }: InGameFlagsModalProps) {
               : 'Aucun flag sélectionné'
             }
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              padding: '0.5rem 1.5rem',
-              backgroundColor: theme.button.primary.background,
-              color: theme.button.primary.color,
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontWeight: 'bold'
-            }}
-          >
-            Fermer
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <button
+              onClick={handleImportSnapshot}
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: theme.button.default.background,
+                color: theme.button.default.color,
+                border: `1px solid ${theme.border.primary}`,
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '0.9rem'
+              }}
+              title="Importer un snapshot Unity (JSON)"
+            >
+              📥 Importer snapshot
+            </button>
+            {selectedFlags.size > 0 && (
+              <button
+                onClick={handleExportSnapshot}
+                style={{
+                  padding: '0.5rem 1rem',
+                  backgroundColor: theme.button.default.background,
+                  color: theme.button.default.color,
+                  border: `1px solid ${theme.border.primary}`,
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem'
+                }}
+                title="Exporter la sélection actuelle en snapshot JSON"
+              >
+                📤 Exporter sélection
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              style={{
+                padding: '0.5rem 1.5rem',
+                backgroundColor: theme.button.primary.background,
+                color: theme.button.primary.color,
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: 'bold'
+              }}
+            >
+              Fermer
+            </button>
+          </div>
         </div>
+        
+        {/* Input file caché pour l'import */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json"
+          style={{ display: 'none' }}
+          onChange={handleFileSelected}
+        />
       </div>
     </div>
   )
