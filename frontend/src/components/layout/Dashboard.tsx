@@ -1,7 +1,7 @@
 /**
  * Composant Dashboard avec layout 3 panneaux redimensionnables.
  */
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { ContextSelector } from '../context/ContextSelector'
 import { GenerationPanel } from '../generation/GenerationPanel'
 import { GenerationOptionsModal } from '../generation/GenerationOptionsModal'
@@ -9,14 +9,17 @@ import { EstimatedPromptPanel } from '../generation/EstimatedPromptPanel'
 import { UnityDialogueEditor } from '../generation/UnityDialogueEditor'
 import { ContextDetail } from '../context/ContextDetail'
 import { UsageStatsModal } from '../usage/UsageStatsModal'
-import { ResizablePanels } from '../shared/ResizablePanels'
+import { ResizablePanels, type ResizablePanelsRef } from '../shared/ResizablePanels'
 import { Tabs, type Tab } from '../shared/Tabs'
 import { UnityDialogueList, type UnityDialogueListRef } from '../unityDialogues/UnityDialogueList'
 import { UnityDialogueDetails } from '../unityDialogues/UnityDialogueDetails'
+import { GraphEditor } from '../graph/GraphEditor'
+import { NodeEditorPanel } from '../graph/NodeEditorPanel'
 import { KeyboardShortcutsHelp } from '../shared/KeyboardShortcutsHelp'
 import { useGenerationStore } from '../../store/generationStore'
 import { useGenerationActionsStore } from '../../store/generationActionsStore'
 import { useContextConfigStore } from '../../store/contextConfigStore'
+import { useGraphStore } from '../../store/graphStore'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { useCommandPalette } from '../../hooks/useCommandPalette'
 import type { CharacterResponse, LocationResponse, ItemResponse, SpeciesResponse, CommunityResponse, UnityDialogueMetadata } from '../../types/api'
@@ -29,8 +32,8 @@ export function Dashboard() {
   const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false)
   const [isUsageModalOpen, setIsUsageModalOpen] = useState(false)
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false)
-  const [rightPanelTab, setRightPanelTab] = useState<'prompt' | 'dialogue' | 'details'>('prompt')
-  const [centerPanelTab, setCenterPanelTab] = useState<'generation' | 'edition'>('generation')
+  const [rightPanelTab, setRightPanelTab] = useState<'prompt' | 'dialogue' | 'node' | 'details'>('prompt')
+  const [centerPanelTab, setCenterPanelTab] = useState<'generation' | 'edition' | 'graph'>('generation')
   const [selectedDialogue, setSelectedDialogue] = useState<UnityDialogueMetadata | null>(null)
   const dialogueListRef = useRef<UnityDialogueListRef>(null)
   const { rawPrompt, tokenCount, promptHash, isEstimating, unityDialogueResponse } = useGenerationStore()
@@ -42,6 +45,15 @@ export function Dashboard() {
 
   const { loadDefaultConfig } = useContextConfigStore()
   const commandPalette = useCommandPalette()
+  
+  // État du graphe pour détecter si un nœud est sélectionné
+  const { selectedNodeId } = useGraphStore()
+
+  // Boutons replier/déplier panneaux gauche & droite (layout 3 panneaux)
+  const panelsRef = useRef<ResizablePanelsRef>(null)
+  const expandedSizesRef = useRef<number[] | null>(null)
+  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false)
+  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false)
   
   // Charger la configuration par défaut au démarrage pour initialiser les fieldConfigs
   // Cela garantit que tous les navigateurs ont la même configuration initiale
@@ -137,7 +149,7 @@ export function Dashboard() {
 
     {
       id: 'dialogue',
-      label: 'Dialogue Unity',
+      label: 'Dialogue généré',
       content: (
         <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%' }}>
           {unityDialogueResponse ? (
@@ -166,6 +178,25 @@ export function Dashboard() {
       ),
     },
     {
+      id: 'node',
+      label: selectedNodeId ? `Édition de nœud (${selectedNodeId})` : 'Édition de nœud',
+      content: (
+        <div style={{ 
+          flex: 1, 
+          minHeight: 0, 
+          maxHeight: '100%', 
+          overflow: 'hidden', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          height: '100%',
+          padding: '1rem',
+          overflowY: 'auto',
+        }}>
+          <NodeEditorPanel />
+        </div>
+      ),
+    },
+    {
       id: 'details',
       label: 'Détails',
       content: (
@@ -188,11 +219,53 @@ export function Dashboard() {
         </div>
       ),
     },
-  ], [unityDialogueResponse, rawPrompt, isEstimating, tokenCount, promptHash, selectedContextItem])
+  ], [unityDialogueResponse, rawPrompt, isEstimating, tokenCount, promptHash, selectedContextItem, selectedNodeId])
+  
+  // Basculer automatiquement vers l'onglet "Édition de nœud" quand un nœud est sélectionné dans le graphe
+  useEffect(() => {
+    if (selectedNodeId && centerPanelTab === 'graph' && rightPanelTab !== 'node') {
+      setRightPanelTab('node')
+    }
+  }, [selectedNodeId, centerPanelTab, rightPanelTab])
+
+  const applyCollapsedLayout = useCallback(
+    (nextLeftCollapsed: boolean, nextRightCollapsed: boolean) => {
+      const base = expandedSizesRef.current ?? panelsRef.current?.getSizes()
+      if (!base || base.length < 3 || !panelsRef.current) return
+
+      // 3% ~ 40-60px selon largeur, assez pour garder le bouton accessible
+      const COLLAPSED_PCT = 3
+      const leftSize = nextLeftCollapsed ? COLLAPSED_PCT : base[0]
+      const rightSize = nextRightCollapsed ? COLLAPSED_PCT : base[2]
+      const centerSize = Math.max(0, 100 - leftSize - rightSize)
+
+      panelsRef.current.setSizes([leftSize, centerSize, rightSize], { persist: false })
+    },
+    []
+  )
+
+  const toggleLeftPanel = useCallback(() => {
+    const next = !isLeftPanelCollapsed
+    if (!expandedSizesRef.current && panelsRef.current) {
+      expandedSizesRef.current = panelsRef.current.getSizes()
+    }
+    setIsLeftPanelCollapsed(next)
+    applyCollapsedLayout(next, isRightPanelCollapsed)
+  }, [applyCollapsedLayout, isLeftPanelCollapsed, isRightPanelCollapsed])
+
+  const toggleRightPanel = useCallback(() => {
+    const next = !isRightPanelCollapsed
+    if (!expandedSizesRef.current && panelsRef.current) {
+      expandedSizesRef.current = panelsRef.current.getSizes()
+    }
+    setIsRightPanelCollapsed(next)
+    applyCollapsedLayout(isLeftPanelCollapsed, next)
+  }, [applyCollapsedLayout, isLeftPanelCollapsed, isRightPanelCollapsed])
 
 
   return (
     <ResizablePanels
+      ref={panelsRef}
       storageKey="dashboard_panels"
       defaultSizes={[20, 50, 30]}
       minSizes={[200, 400, 250]}
@@ -200,6 +273,12 @@ export function Dashboard() {
       style={{
         height: '100%',
         backgroundColor: theme.background.primary,
+      }}
+      onSizesChange={(sizes) => {
+        // On mémorise uniquement quand les deux panneaux sont dépliés
+        if (!isLeftPanelCollapsed && !isRightPanelCollapsed) {
+          expandedSizesRef.current = sizes
+        }
       }}
     >
       {/* Panneau gauche: Sélection du contexte */}
@@ -213,14 +292,50 @@ export function Dashboard() {
           position: 'relative',
         }}
       >
-        <ContextSelector 
-          onItemSelected={(item) => {
-            setSelectedContextItem(item)
-            if (item) {
-              setRightPanelTab('details')
-            }
+        <button
+          onClick={toggleLeftPanel}
+          title={isLeftPanelCollapsed ? 'Déplier le panneau gauche' : 'Replier le panneau gauche'}
+          style={{
+            position: 'absolute',
+            top: '50%',
+            right: -14,
+            transform: 'translateY(-50%)',
+            zIndex: 25,
+            width: 28,
+            height: 56,
+            border: `1px solid ${theme.border.primary}`,
+            borderRadius: 999,
+            backgroundColor: theme.background.secondary,
+            color: theme.text.primary,
+            cursor: 'pointer',
+            display: 'grid',
+            placeItems: 'center',
+            fontSize: '1.1rem',
+            boxShadow: '0 6px 18px rgba(0, 0, 0, 0.35)',
+            transition: 'transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease',
           }}
-        />
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = theme.background.panelHeader
+            e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.45)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = theme.background.secondary
+            e.currentTarget.style.boxShadow = '0 6px 18px rgba(0, 0, 0, 0.35)'
+          }}
+        >
+          {isLeftPanelCollapsed ? '›' : '‹'}
+        </button>
+
+        {!isLeftPanelCollapsed && (
+          <ContextSelector 
+            onItemSelected={(item) => {
+              setSelectedContextItem(item)
+              if (item) {
+                setRightPanelTab('details')
+              }
+            }}
+          />
+        )}
       </div>
 
       {/* Panneau central: Génération / Édition avec onglets */}
@@ -296,10 +411,18 @@ export function Dashboard() {
                 </div>
               ),
             },
+            {
+              id: 'graph',
+              label: '📊 Éditeur de Graphe',
+              content: (
+                <GraphEditor />
+              ),
+            },
           ]}
           activeTabId={centerPanelTab}
-          onTabChange={(tabId) => setCenterPanelTab(tabId as 'generation' | 'edition')}
+          onTabChange={(tabId) => setCenterPanelTab(tabId as 'generation' | 'edition' | 'graph')}
           style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}
+          contentStyle={centerPanelTab === 'graph' ? { overflow: 'hidden', height: '100%', display: 'flex', flexDirection: 'column' } : undefined}
         />
       </div>
 
@@ -313,8 +436,47 @@ export function Dashboard() {
           minHeight: 0,
           maxHeight: '100%',
           overflow: 'hidden',
+          position: 'relative',
         }}
       >
+        <button
+          onClick={toggleRightPanel}
+          title={isRightPanelCollapsed ? 'Déplier le panneau droit' : 'Replier le panneau droit'}
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: -14,
+            transform: 'translateY(-50%)',
+            zIndex: 35,
+            width: 28,
+            height: 56,
+            border: `1px solid ${theme.border.primary}`,
+            borderRadius: 999,
+            backgroundColor: theme.background.secondary,
+            color: theme.text.primary,
+            cursor: 'pointer',
+            display: 'grid',
+            placeItems: 'center',
+            fontSize: '1.1rem',
+            boxShadow: '0 6px 18px rgba(0, 0, 0, 0.35)',
+            transition: 'transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = theme.background.panelHeader
+            e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.45)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = theme.background.secondary
+            e.currentTarget.style.boxShadow = '0 6px 18px rgba(0, 0, 0, 0.35)'
+          }}
+        >
+          {isRightPanelCollapsed ? '‹' : '›'}
+        </button>
+
+        {isRightPanelCollapsed ? (
+          <div style={{ flex: 1, minHeight: 0 }} />
+        ) : (
+          <>
         {/* Barre d'options en haut (toujours visible) */}
         {actions.handleGenerate && (
           <div
@@ -435,14 +597,14 @@ export function Dashboard() {
           <Tabs
             tabs={rightPanelTabs}
             activeTabId={rightPanelTab}
-            onTabChange={(tabId) => setRightPanelTab(tabId as 'prompt' | 'dialogue' | 'details')}
+            onTabChange={(tabId) => setRightPanelTab(tabId as 'prompt' | 'dialogue' | 'node' | 'details')}
             style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}
             // Important: overflow: 'hidden' pour éviter le double scroll, mais scrollbar-gutter réserve l'espace
             // Le contenu enfant gère son propre scroll avec scrollbar-gutter: stable
             contentStyle={{ overflow: 'hidden', scrollbarGutter: 'stable' }}
           />
         </div>
-        {/* Gros bouton Générer en bas (visible sur Prompt et Dialogue Unity) */}
+        {/* Gros bouton Générer en bas (visible sur Prompt et Dialogue généré) */}
         {actions.handleGenerate && (rightPanelTab === 'prompt' || rightPanelTab === 'dialogue') && (
           <div
             style={{
@@ -545,6 +707,8 @@ export function Dashboard() {
               </span>
             </button>
           </div>
+        )}
+          </>
         )}
       </div>
 

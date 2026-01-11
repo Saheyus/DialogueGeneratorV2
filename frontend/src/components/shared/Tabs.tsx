@@ -88,8 +88,10 @@ export function Tabs({ tabs, activeTabId, onTabChange, style, contentStyle }: Ta
         style={{
           flex: 1,
           minHeight: 0,
+          height: contentStyle?.height !== undefined ? contentStyle.height : '100%',
           overflow: contentStyle?.overflow !== undefined ? contentStyle.overflow : 'auto',
           backgroundColor: theme.background.panel,
+          display: contentStyle?.display !== undefined ? contentStyle.display : 'block',
           ...contentStyle,
         }}
       >

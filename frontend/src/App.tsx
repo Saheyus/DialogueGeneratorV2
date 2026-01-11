@@ -5,6 +5,7 @@ import { LoginForm } from './components/auth/LoginForm'
 import { Dashboard } from './components/layout/Dashboard'
 import { UnityDialoguesPage } from './components/unityDialogues/UnityDialoguesPage'
 import { UsageDashboard } from './components/usage/UsageDashboard'
+import { GraphEditorPage } from './pages/GraphEditorPage'
 import { useAuthStore } from './store/authStore'
 import { ToastContainer } from './components/shared'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
@@ -90,6 +91,15 @@ function NavigationShortcuts() {
         },
         description: 'Naviguer vers Usage/Statistiques',
       },
+      {
+        key: 'ctrl+4',
+        handler: () => {
+          if (location.pathname !== '/graph-editor') {
+            navigate('/graph-editor')
+          }
+        },
+        description: 'Naviguer vers Éditeur de Graphe',
+      },
     ],
     [navigate, location.pathname]
   )
@@ -137,6 +147,22 @@ function AppRoutes() {
               <MainLayout>
                 <UsageDashboard />
               </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/graph-editor"
+          element={
+            <ProtectedRoute>
+              <GraphEditorPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/graph-editor/:dialogueId"
+          element={
+            <ProtectedRoute>
+              <GraphEditorPage />
             </ProtectedRoute>
           }
         />

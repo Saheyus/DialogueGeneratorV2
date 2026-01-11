@@ -467,7 +467,7 @@ async def health_check_detailed() -> JSONResponse:
 
 
 # Inclusion des routers
-from api.routers import auth, dialogues, context, config, llm_usage, unity_dialogues, logs, mechanics_flags
+from api.routers import auth, dialogues, context, config, llm_usage, unity_dialogues, logs, mechanics_flags, graph
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(dialogues.router, prefix="/api/v1/dialogues", tags=["Dialogues"])
@@ -484,6 +484,9 @@ app.include_router(narrative_guides.router)
 
 # Router pour les mechanics (flags in-game)
 app.include_router(mechanics_flags.router)
+
+# Router pour l'éditeur de graphe
+app.include_router(graph.router)
 
 # Debug endpoint (dev only): inspect PromptEngine code loaded by server
 @app.get("/debug/prompt-engine", tags=["Debug"])
