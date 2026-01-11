@@ -5,6 +5,7 @@
 import { memo, useState, useCallback } from 'react'
 import { usePromptPreview } from '../../hooks/usePromptPreview'
 import { StructuredPromptView } from './StructuredPromptView'
+import { TokenBudgetBar } from './TokenBudgetBar'
 import { theme } from '../../theme'
 import { useToast } from '../shared'
 import { useGenerationStore } from '../../store/generationStore'
@@ -33,6 +34,10 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
 }: EstimatedPromptPanelProps) {
   const [viewMode, setViewMode] = useState<'raw' | 'structured'>('structured')
   const toast = useToast()
+  
+  // État pour le bouton "Tout déplier" (uniquement en mode structuré)
+  const [allExpanded, setAllExpanded] = useState(false)
+  const [toggleAllFn, setToggleAllFn] = useState<(() => void) | null>(null)
   
   // Récupérer structuredPrompt depuis le store si non fourni en prop
   const structuredPromptFromStore = useGenerationStore((state) => state.structuredPrompt)
@@ -78,30 +83,22 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
         borderBottom: `1px solid ${theme.border.primary}`,
         flexShrink: 0,
         display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+        flexDirection: 'column',
+        gap: '0.75rem',
       }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-          {isEstimating ? (
-            <div style={{ color: theme.text.secondary }}>Estimation en cours...</div>
-          ) : displayTotal !== null && displayTotal !== undefined ? (
-            <>
-              <div style={{ color: theme.text.primary }}>
-                <strong>Tokens:</strong> {displayTotal.toLocaleString()}
-              </div>
-              {promptHash && (
-                <div style={{ color: theme.text.tertiary, fontSize: '0.7rem', fontFamily: 'monospace' }}>
-                  HASH: {promptHash.slice(0, 16)}...
-                </div>
-              )}
-            </>
-          ) : null}
-        </div>
+        {/* Barre de budget de tokens */}
+        <TokenBudgetBar
+          structuredPrompt={structuredPrompt}
+          tokenCount={displayTotal}
+          isEstimating={isEstimating}
+          maxTokens={null}
+        />
         {raw_prompt && !isEstimating && (
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'flex-end',
               gap: '0.75rem',
               color: theme.text.secondary,
               fontSize: '0.85rem',
@@ -134,8 +131,33 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
                 📋 Copier
               </button>
             )}
+            {viewMode === 'structured' && toggleAllFn && (
+              <button
+                type="button"
+                onClick={toggleAllFn}
+                style={{
+                  padding: '0.5rem 1rem',
+                  border: `1px solid ${theme.border.primary}`,
+                  borderRadius: '4px',
+                  backgroundColor: theme.background.secondary,
+                  color: theme.text.primary,
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  transition: 'background-color 0.2s',
+                  marginRight: '0.75rem',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = theme.background.panel
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = theme.background.secondary
+                }}
+              >
+                {allExpanded ? 'Tout replier' : 'Tout déplier'}
+              </button>
+            )}
             <span style={{ color: viewMode === 'raw' ? theme.text.primary : theme.text.secondary }}>
-              Brut (Réel)
+              Brut
             </span>
             <label
               style={{
@@ -220,7 +242,14 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
               {raw_prompt}
             </pre>
           ) : (
-            <StructuredPromptView prompt={raw_prompt} structuredPrompt={structuredPrompt} />
+            <StructuredPromptView 
+              prompt={raw_prompt} 
+              structuredPrompt={structuredPrompt}
+              onToggleStateChange={(expanded, toggleFn) => {
+                setAllExpanded(expanded)
+                setToggleAllFn(() => toggleFn)
+              }}
+            />
           )
         ) : (
           <div

@@ -4,7 +4,7 @@
 import { useMemo } from 'react'
 import { hasJsonContent } from '../utils/jsonPrettifier'
 import { estimateTokens } from '../utils/tokenEstimation'
-import type { PromptStructure, ItemSection } from '../types/prompt'
+import type { PromptStructure, ItemSection, ContextCategory } from '../types/prompt'
 
 export interface PromptSection {
   title: string
@@ -382,95 +382,105 @@ export function parsePromptFromJson(promptJson: PromptStructure | null | undefin
   
   const sections: PromptSection[] = []
   
-  for (const backendSection of promptJson.sections) {
-    // Convertir les catégories et items en children
-    const children: PromptSection[] = []
+  // Fonction helper pour créer les children d'une catégorie
+  const createCategoryChildren = (category: ContextCategory): PromptSection[] => {
+    const categoryChildren: PromptSection[] = []
     
-    if (backendSection.categories) {
-      for (const category of backendSection.categories) {
-        // Créer une section pour chaque catégorie
-        const categoryChildren: PromptSection[] = []
-        
-        for (const item of category.items) {
-          // Si l'item a une seule section avec titre vide ou "INFORMATIONS", afficher le contenu directement
-          // Sinon, créer des sections pour chaque section de l'item
-          const hasSingleInfoSection = item.sections.length === 1 && 
-            (item.sections[0].title === '' || item.sections[0].title === 'INFORMATIONS')
-          
-          // PRIORITÉ: Utiliser raw_content si disponible, sinon content
-          const getSectionContent = (itemSection: ItemSection): string => {
-            if (itemSection.raw_content) {
-              // Sérialiser raw_content en JSON string pour affichage
-              try {
-                return JSON.stringify(itemSection.raw_content, null, 2)
-              } catch (e) {
-                return String(itemSection.raw_content)
-              }
-            }
-            return itemSection.content || ''
-          }
-          
-          if (hasSingleInfoSection) {
-            // Aplatir : afficher le contenu directement dans l'item
-            const sectionContent = getSectionContent(item.sections[0])
-            categoryChildren.push({
-              title: item.name,
-              content: sectionContent,
-              hasJson: hasJsonContent(sectionContent),
-              tokenCount: item.tokenCount
-            })
-          } else if (item.sections.length > 0) {
-            // Plusieurs sections ou section avec titre : créer des children
-            const itemChildren: PromptSection[] = item.sections
-              .filter(itemSection => itemSection.title !== '') // Filtrer les sections sans titre
-              .map(itemSection => {
-                const sectionContent = getSectionContent(itemSection)
-                return {
-                  title: itemSection.title,
-                  content: sectionContent,
-                  hasJson: hasJsonContent(sectionContent),
-                  tokenCount: itemSection.tokenCount
-                }
-              })
-            
-            // Si après filtrage on n'a qu'une section, aplatir aussi
-            if (itemChildren.length === 1) {
-              categoryChildren.push({
-                title: item.name,
-                content: itemChildren[0].content,
-                hasJson: itemChildren[0].hasJson,
-                tokenCount: item.tokenCount
-              })
-            } else if (itemChildren.length > 1) {
-              categoryChildren.push({
-                title: item.name,
-                content: '', // Le contenu est dans les children
-                hasJson: false,
-                tokenCount: item.tokenCount,
-                children: itemChildren
-              })
-            } else {
-              // Aucune section valide, créer quand même l'item avec contenu vide
-              categoryChildren.push({
-                title: item.name,
-                content: '',
-                hasJson: false,
-                tokenCount: item.tokenCount
-              })
-            }
-          } else {
-            // Aucune section, créer l'item vide
-            categoryChildren.push({
-              title: item.name,
-              content: '',
-              hasJson: false,
-              tokenCount: item.tokenCount
-            })
+    for (const item of category.items) {
+      // Si l'item a une seule section avec titre vide ou "INFORMATIONS", afficher le contenu directement
+      // Sinon, créer des sections pour chaque section de l'item
+      const hasSingleInfoSection = item.sections.length === 1 && 
+        (item.sections[0].title === '' || item.sections[0].title === 'INFORMATIONS')
+      
+      // PRIORITÉ: Utiliser raw_content si disponible, sinon content
+      const getSectionContent = (itemSection: ItemSection): string => {
+        if (itemSection.raw_content) {
+          // Sérialiser raw_content en JSON string pour affichage
+          try {
+            return JSON.stringify(itemSection.raw_content, null, 2)
+          } catch (e) {
+            return String(itemSection.raw_content)
           }
         }
+        return itemSection.content || ''
+      }
+      
+      if (hasSingleInfoSection) {
+        // Aplatir : afficher le contenu directement dans l'item
+        const sectionContent = getSectionContent(item.sections[0])
+        categoryChildren.push({
+          title: item.name,
+          content: sectionContent,
+          hasJson: hasJsonContent(sectionContent),
+          tokenCount: item.tokenCount
+        })
+      } else if (item.sections.length > 0) {
+        // Plusieurs sections ou section avec titre : créer des children
+        const itemChildren: PromptSection[] = item.sections
+          .filter(itemSection => itemSection.title !== '') // Filtrer les sections sans titre
+          .map(itemSection => {
+            const sectionContent = getSectionContent(itemSection)
+            return {
+              title: itemSection.title,
+              content: sectionContent,
+              hasJson: hasJsonContent(sectionContent),
+              tokenCount: itemSection.tokenCount
+            }
+          })
+        
+        // Si après filtrage on n'a qu'une section, aplatir aussi
+        if (itemChildren.length === 1) {
+          categoryChildren.push({
+            title: item.name,
+            content: itemChildren[0].content,
+            hasJson: itemChildren[0].hasJson,
+            tokenCount: item.tokenCount
+          })
+        } else if (itemChildren.length > 1) {
+          categoryChildren.push({
+            title: item.name,
+            content: '', // Le contenu est dans les children
+            hasJson: false,
+            tokenCount: item.tokenCount,
+            children: itemChildren
+          })
+        } else {
+          // Aucune section valide, créer quand même l'item avec contenu vide
+          categoryChildren.push({
+            title: item.name,
+            content: '',
+            hasJson: false,
+            tokenCount: item.tokenCount
+          })
+        }
+      } else {
+        // Aucune section, créer l'item vide
+        categoryChildren.push({
+          title: item.name,
+          content: '',
+          hasJson: false,
+          tokenCount: item.tokenCount
+        })
+      }
+    }
+    
+    return categoryChildren
+  }
+  
+  for (const backendSection of promptJson.sections) {
+    // Vérifier si c'est une section de contexte qui doit être aplatie
+    const isContextSection = backendSection.categories && backendSection.categories.length > 0 &&
+      (backendSection.title.toUpperCase().includes('CONTEXTE GÉNÉRAL') ||
+       backendSection.title.toUpperCase().includes('CONTEXTE GENERAL') ||
+       backendSection.title.toUpperCase().includes('SECTION') && backendSection.title.toUpperCase().includes('CONTEXTE'))
+    
+    if (isContextSection) {
+      // Aplatir : ajouter directement les catégories comme sections de premier niveau
+      for (const category of backendSection.categories!) {
+        const categoryChildren = createCategoryChildren(category)
         
         if (categoryChildren.length > 0) {
-          children.push({
+          sections.push({
             title: category.title,
             content: '', // Le contenu est dans les children
             hasJson: false,
@@ -479,15 +489,34 @@ export function parsePromptFromJson(promptJson: PromptStructure | null | undefin
           })
         }
       }
+    } else {
+      // Section normale : créer la section avec children
+      const children: PromptSection[] = []
+      
+      if (backendSection.categories) {
+        for (const category of backendSection.categories) {
+          const categoryChildren = createCategoryChildren(category)
+          
+          if (categoryChildren.length > 0) {
+            children.push({
+              title: category.title,
+              content: '', // Le contenu est dans les children
+              hasJson: false,
+              tokenCount: category.tokenCount,
+              children: categoryChildren
+            })
+          }
+        }
+      }
+      
+      sections.push({
+        title: backendSection.title,
+        content: backendSection.content || '',
+        hasJson: hasJsonContent(backendSection.content || ''),
+        tokenCount: backendSection.tokenCount,
+        children: children.length > 0 ? children : undefined
+      })
     }
-    
-    sections.push({
-      title: backendSection.title,
-      content: backendSection.content || '',
-      hasJson: hasJsonContent(backendSection.content || ''),
-      tokenCount: backendSection.tokenCount,
-      children: children.length > 0 ? children : undefined
-    })
   }
   
   return sections

@@ -4,10 +4,10 @@
  */
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { ReactFlowProvider } from 'reactflow'
+import type { ReactFlowInstance } from 'reactflow'
 import { UnityDialogueList, type UnityDialogueListRef } from '../unityDialogues/UnityDialogueList'
 import { GraphCanvas } from './GraphCanvas'
 import { AIGenerationPanel } from './AIGenerationPanel'
-import { GraphSearchBar } from './GraphSearchBar'
 import { useGraphStore } from '../../store/graphStore'
 import { exportGraphToPNG, exportGraphToSVG, exportFullGraphToPNG } from '../../utils/graphExport'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
@@ -23,7 +23,7 @@ export function GraphEditor() {
   const [isLoadingDialogue, setIsLoadingDialogue] = useState(false)
   const [layoutDirection, setLayoutDirection] = useState<'TB' | 'LR' | 'BT' | 'RL'>('TB')
   const [showAIGenerationPanel, setShowAIGenerationPanel] = useState(false)
-  const [reactFlowInstance, setReactFlowInstance] = useState<any>(null)
+  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null)
   const dialogueListRef = useRef<UnityDialogueListRef>(null)
   const toast = useToast()
   
@@ -44,13 +44,26 @@ export function GraphEditor() {
     exportToUnity,
     validateGraph,
     applyAutoLayout,
-    saveDialogue,
     setSelectedNode,
     selectedNodeId,
     isLoading: isGraphLoading,
     validationErrors: graphValidationErrors,
     isSaving: isGraphSaving,
   } = useGraphStore()
+  
+  // Écouter l'événement pour ouvrir le panel de génération depuis un nœud
+  useEffect(() => {
+    const handleOpenGenerationPanel = (event: CustomEvent<{ nodeId: string }>) => {
+      const nodeId = event.detail.nodeId
+      setSelectedNode(nodeId)
+      setShowAIGenerationPanel(true)
+    }
+    
+    window.addEventListener('open-ai-generation-panel', handleOpenGenerationPanel as EventListener)
+    return () => {
+      window.removeEventListener('open-ai-generation-panel', handleOpenGenerationPanel as EventListener)
+    }
+  }, [setSelectedNode])
   
   // Charger le dialogue sélectionné dans le graphe
   useEffect(() => {
@@ -78,15 +91,22 @@ export function GraphEditor() {
   const handleValidate = useCallback(async () => {
     try {
       await validateGraph()
-      if (graphValidationErrors.length === 0) {
+      // Récupérer les erreurs après validation (mise à jour du store)
+      const state = useGraphStore.getState()
+      const errors = state.validationErrors.filter((e) => e.severity === 'error')
+      const warnings = state.validationErrors.filter((e) => e.severity === 'warning')
+      
+      if (errors.length === 0 && warnings.length === 0) {
         toast('Graphe valide', 'success', 2000)
+      } else if (errors.length > 0) {
+        toast(`${errors.length} erreur(s) et ${warnings.length} avertissement(s) trouvés`, 'error', 3000)
       } else {
-        toast(`${graphValidationErrors.length} erreur(s) trouvée(s)`, 'warning', 3000)
+        toast(`${warnings.length} avertissement(s) trouvé(s)`, 'warning', 3000)
       }
     } catch (err) {
       toast(`Erreur lors de la validation: ${getErrorMessage(err)}`, 'error')
     }
-  }, [validateGraph, graphValidationErrors, toast])
+  }, [validateGraph, toast])
   
   // Handler pour auto-layout
   const handleAutoLayout = useCallback(async () => {
@@ -125,21 +145,6 @@ export function GraphEditor() {
       toast('Export SVG réussi', 'success', 2000)
     } catch (err) {
       toast(`Erreur lors de l'export SVG: ${getErrorMessage(err)}`, 'error')
-    }
-  }, [reactFlowInstance, selectedDialogue, toast])
-  
-  // Handler pour exporter tout le graphe en PNG
-  const handleExportFullPNG = useCallback(async () => {
-    if (!reactFlowInstance || !selectedDialogue) {
-      toast('Aucun dialogue sélectionné', 'warning')
-      return
-    }
-    try {
-      const filename = `${selectedDialogue.filename.replace('.json', '')}-full`
-      await exportFullGraphToPNG(reactFlowInstance, filename, 1.0)
-      toast('Export PNG (graphe complet) réussi', 'success', 2000)
-    } catch (err) {
-      toast(`Erreur lors de l'export PNG complet: ${getErrorMessage(err)}`, 'error')
     }
   }, [reactFlowInstance, selectedDialogue, toast])
   
@@ -200,8 +205,19 @@ export function GraphEditor() {
         description: 'Sauvegarder',
         enabled: !!selectedDialogue && !isGraphSaving,
       },
+      {
+        key: 'ctrl+g',
+        handler: (e) => {
+          e.preventDefault()
+          if (selectedNodeId && !isGraphLoading && !isLoadingDialogue && selectedDialogue) {
+            setShowAIGenerationPanel(true)
+          }
+        },
+        description: 'Générer un nœud avec l\'IA',
+        enabled: !!selectedNodeId && !isGraphLoading && !isLoadingDialogue && !!selectedDialogue,
+      },
     ],
-    [selectedDialogue, isGraphSaving, handleSave]
+    [selectedDialogue, isGraphSaving, handleSave, selectedNodeId, isGraphLoading, isLoadingDialogue]
   )
   
   return (
@@ -280,6 +296,63 @@ export function GraphEditor() {
           </div>
           
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            {/* Badge de santé global du graphe */}
+            {(() => {
+              const errors = graphValidationErrors.filter((e) => e.severity === 'error')
+              const warnings = graphValidationErrors.filter((e) => e.severity === 'warning')
+              const hasErrors = errors.length > 0
+              const hasWarnings = warnings.length > 0 && !hasErrors
+              const isValid = !hasErrors && !hasWarnings
+              
+              return (
+                <div
+                  onClick={() => {
+                    if (graphValidationErrors.length > 0) {
+                      handleValidate()
+                    }
+                  }}
+                  style={{
+                    padding: '0.4rem 0.75rem',
+                    borderRadius: '6px',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    cursor: graphValidationErrors.length > 0 ? 'pointer' : 'default',
+                    backgroundColor: isValid 
+                      ? theme.state.success.background 
+                      : hasErrors 
+                      ? theme.state.error.background 
+                      : theme.state.warning.background,
+                    color: isValid 
+                      ? theme.state.success.color 
+                      : hasErrors 
+                      ? theme.state.error.color 
+                      : theme.state.warning.color,
+                    border: `1px solid ${isValid 
+                      ? theme.state.success.color 
+                      : hasErrors 
+                      ? theme.state.error.border 
+                      : theme.state.warning.color}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                  }}
+                  title={isValid 
+                    ? 'Graphe valide' 
+                    : hasErrors 
+                    ? `${errors.length} erreur(s) - Cliquer pour valider` 
+                    : `${warnings.length} avertissement(s) - Cliquer pour valider`}
+                >
+                  <span>{isValid ? '✓' : hasErrors ? '✗' : '⚠'}</span>
+                  <span>
+                    {isValid 
+                      ? 'Graphe valide' 
+                      : hasErrors 
+                      ? `${errors.length} erreur${errors.length > 1 ? 's' : ''}` 
+                      : `${warnings.length} avertissement${warnings.length > 1 ? 's' : ''}`}
+                  </span>
+                </div>
+              )
+            })()}
             <button
               onClick={handleValidate}
               disabled={isGraphLoading || isLoadingDialogue || !selectedDialogue}
@@ -454,79 +527,194 @@ export function GraphEditor() {
                 Chargement du graphe...
               </div>
             ) : (
-              <>
-                <GraphSearchBar 
-                  onNodeSelect={(nodeId) => {
-                    // Le GraphCanvas gérera le scroll via fitView
-                  }}
-                />
-                <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                  <ReactFlowProvider>
-                    <GraphCanvas />
-                  </ReactFlowProvider>
-                </div>
-              </>
+              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                <ReactFlowProvider>
+                  <GraphCanvas />
+                </ReactFlowProvider>
+              </div>
             )}
             {/* Panel d'erreurs de validation (overlay) */}
-            {graphValidationErrors.length > 0 && (
-              <div
-                style={{
-                  position: 'absolute',
-                  bottom: 16,
-                  left: 16,
-                  right: 16,
-                  maxHeight: '300px',
-                  overflowY: 'auto',
-                  backgroundColor: theme.state.error.background,
-                  border: `1px solid ${theme.state.error.border}`,
-                  borderRadius: '6px',
-                  padding: '0.75rem',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                  zIndex: 1000,
-                }}
-              >
-                <div style={{ 
-                  fontSize: '0.85rem', 
-                  fontWeight: 'bold', 
-                  color: theme.state.error.color,
-                  marginBottom: '0.5rem',
-                }}>
-                  ⚠️ {graphValidationErrors.length} erreur(s) de validation
-                </div>
-                <div style={{ fontSize: '0.8rem', color: theme.state.error.color }}>
-                  {graphValidationErrors.map((err, idx) => (
-                    <div
-                      key={idx}
-                      onClick={() => {
-                        if (err.node_id) {
-                          setSelectedNode(err.node_id)
-                        }
-                      }}
-                      style={{
+            {graphValidationErrors.length > 0 && (() => {
+              const errors = graphValidationErrors.filter((e) => e.severity === 'error')
+              const warnings = graphValidationErrors.filter((e) => e.severity === 'warning')
+              
+              // Grouper les erreurs par type
+              const errorsByType = errors.reduce((acc, err) => {
+                const type = err.type || 'other'
+                if (!acc[type]) acc[type] = []
+                acc[type].push(err)
+                return acc
+              }, {} as Record<string, typeof errors>)
+              
+              const warningsByType = warnings.reduce((acc, warn) => {
+                const type = warn.type || 'other'
+                if (!acc[type]) acc[type] = []
+                acc[type].push(warn)
+                return acc
+              }, {} as Record<string, typeof warnings>)
+              
+              const getIconForType = (type: string) => {
+                switch (type) {
+                  case 'orphan_node': return '🔗'
+                  case 'broken_reference': return '🔴'
+                  case 'empty_node': return '⚪'
+                  case 'missing_test': return '❓'
+                  case 'unreachable_node': return '📍'
+                  case 'cycle_detected': return '🔄'
+                  default: return '⚠️'
+                }
+              }
+              
+              const getLabelForType = (type: string) => {
+                switch (type) {
+                  case 'orphan_node': return 'Nœuds orphelins'
+                  case 'broken_reference': return 'Références cassées'
+                  case 'empty_node': return 'Nœuds vides'
+                  case 'missing_test': return 'Tests manquants'
+                  case 'unreachable_node': return 'Nœuds inaccessibles'
+                  case 'cycle_detected': return 'Cycles détectés'
+                  default: return 'Autres'
+                }
+              }
+              
+              return (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 16,
+                    left: 16,
+                    right: 16,
+                    maxHeight: '350px',
+                    overflowY: 'auto',
+                    backgroundColor: errors.length > 0 ? theme.state.error.background : theme.state.warning.background,
+                    border: `1px solid ${errors.length > 0 ? theme.state.error.border : theme.state.warning.color}`,
+                    borderRadius: '6px',
+                    padding: '0.75rem',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+                    zIndex: 1000,
+                  }}
+                >
+                  <div style={{ 
+                    fontSize: '0.85rem', 
+                    fontWeight: 'bold', 
+                    color: errors.length > 0 ? theme.state.error.color : theme.state.warning.color,
+                    marginBottom: '0.75rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                  }}>
+                    <span>{errors.length > 0 ? '✗' : '⚠'}</span>
+                    <span>
+                      {errors.length > 0 
+                        ? `${errors.length} erreur${errors.length > 1 ? 's' : ''}`
+                        : `${warnings.length} avertissement${warnings.length > 1 ? 's' : ''}`}
+                    </span>
+                  </div>
+                  
+                  {/* Erreurs groupées par type */}
+                  {errors.length > 0 && Object.entries(errorsByType).map(([type, typeErrors]) => (
+                    <div key={`error-${type}`} style={{ marginBottom: '0.75rem' }}>
+                      <div style={{
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        color: theme.state.error.color,
                         marginBottom: '0.25rem',
-                        padding: '0.25rem 0.5rem',
-                        borderRadius: '4px',
-                        cursor: err.node_id ? 'pointer' : 'default',
-                        backgroundColor: err.node_id ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-                        transition: 'background-color 0.2s',
-                      }}
-                      onMouseEnter={(e) => {
-                        if (err.node_id) {
-                          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)'
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (err.node_id) {
-                          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'
-                        }
-                      }}
-                    >
-                      {err.node_id ? `[${err.node_id}] ` : ''}{err.message}
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                      }}>
+                        <span>{getIconForType(type)}</span>
+                        <span>{getLabelForType(type)} ({typeErrors.length})</span>
+                      </div>
+                      {typeErrors.map((err, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            if (err.node_id) {
+                              setSelectedNode(err.node_id)
+                            }
+                          }}
+                          style={{
+                            fontSize: '0.75rem',
+                            color: theme.state.error.color,
+                            marginBottom: '0.2rem',
+                            padding: '0.3rem 0.5rem',
+                            borderRadius: '4px',
+                            cursor: err.node_id ? 'pointer' : 'default',
+                            backgroundColor: err.node_id ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                            transition: 'background-color 0.2s',
+                            marginLeft: '1.5rem',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (err.node_id) {
+                              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)'
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (err.node_id) {
+                              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'
+                            }
+                          }}
+                        >
+                          {err.node_id ? `[${err.node_id}] ` : ''}{err.message}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  
+                  {/* Avertissements groupés par type */}
+                  {warnings.length > 0 && Object.entries(warningsByType).map(([type, typeWarnings]) => (
+                    <div key={`warning-${type}`} style={{ marginBottom: '0.75rem' }}>
+                      <div style={{
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        color: theme.state.warning.color,
+                        marginBottom: '0.25rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                      }}>
+                        <span>{getIconForType(type)}</span>
+                        <span>{getLabelForType(type)} ({typeWarnings.length})</span>
+                      </div>
+                      {typeWarnings.map((warn, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            if (warn.node_id) {
+                              setSelectedNode(warn.node_id)
+                            }
+                          }}
+                          style={{
+                            fontSize: '0.75rem',
+                            color: theme.state.warning.color,
+                            marginBottom: '0.2rem',
+                            padding: '0.3rem 0.5rem',
+                            borderRadius: '4px',
+                            cursor: warn.node_id ? 'pointer' : 'default',
+                            backgroundColor: warn.node_id ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                            transition: 'background-color 0.2s',
+                            marginLeft: '1.5rem',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (warn.node_id) {
+                              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)'
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (warn.node_id) {
+                              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'
+                            }
+                          }}
+                        >
+                          {warn.node_id ? `[${warn.node_id}] ` : ''}{warn.message}
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              )
+            })()}
             
             {/* Panel de génération IA (modal overlay) */}
             {showAIGenerationPanel && (

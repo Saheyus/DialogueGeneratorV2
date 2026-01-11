@@ -18,7 +18,7 @@ interface EndNodeData {
   validationErrors?: ValidationError[]
   validationWarnings?: ValidationError[]
   isHighlighted?: boolean
-  [key: string]: any
+  [key: string]: unknown
 }
 
 export const EndNode = memo(function EndNode({
@@ -82,7 +82,10 @@ export const EndNode = memo(function EndNode({
             zIndex: 10,
             boxShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
           }}
-          title={`${errors.length} erreur(s): ${errors.map((e) => e.message).join(', ')}`}
+          title={errors.map((e, idx) => {
+            const icon = e.type === 'orphan_node' ? '🔗' : e.type === 'broken_reference' ? '🔴' : e.type === 'empty_node' ? '⚪' : '⚠️'
+            return `${icon} ${e.message}${idx < errors.length - 1 ? '\n' : ''}`
+          }).join('')}
         >
           {errors.length}
         </div>
@@ -108,7 +111,10 @@ export const EndNode = memo(function EndNode({
             zIndex: 10,
             boxShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
           }}
-          title={`${warnings.length} avertissement(s): ${warnings.map((w) => w.message).join(', ')}`}
+          title={warnings.map((w, idx) => {
+            const icon = w.type === 'unreachable_node' ? '📍' : w.type === 'cycle_detected' ? '🔄' : '⚠️'
+            return `${icon} ${w.message}${idx < warnings.length - 1 ? '\n' : ''}`
+          }).join('')}
         >
           {warnings.length}
         </div>

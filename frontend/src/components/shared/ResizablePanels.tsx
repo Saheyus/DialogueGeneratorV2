@@ -26,6 +26,7 @@ interface ResizablePanelsProps {
   direction?: 'horizontal' | 'vertical'
   style?: React.CSSProperties
   onSizesChange?: (sizes: number[]) => void
+  renderResizer?: (index: number) => React.ReactNode
 }
 
 export const ResizablePanels = forwardRef<ResizablePanelsRef, ResizablePanelsProps>(function ResizablePanels(
@@ -37,6 +38,7 @@ export const ResizablePanels = forwardRef<ResizablePanelsRef, ResizablePanelsPro
     direction = 'horizontal',
     style,
     onSizesChange,
+    renderResizer,
   }: ResizablePanelsProps,
   ref
 ) {
@@ -236,7 +238,23 @@ export const ResizablePanels = forwardRef<ResizablePanelsRef, ResizablePanelsPro
               e.currentTarget.style.backgroundColor = theme.border.primary
             }
           }}
-        />
+        >
+          {renderResizer && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'grid',
+                placeItems: 'center',
+                pointerEvents: 'none',
+              }}
+            >
+              <div style={{ pointerEvents: 'auto' }}>
+                {renderResizer(index)}
+              </div>
+            </div>
+          )}
+        </div>
       )
     }
   })

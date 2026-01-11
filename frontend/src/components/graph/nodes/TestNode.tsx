@@ -1,7 +1,7 @@
 /**
  * Nœud personnalisé pour afficher un nœud de test d'attribut dans le graphe.
  */
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import { theme } from '../../../theme'
 
@@ -22,7 +22,7 @@ interface TestNodeData {
   validationErrors?: ValidationError[]
   validationWarnings?: ValidationError[]
   isHighlighted?: boolean
-  [key: string]: any
+  [key: string]: unknown
 }
 
 export const TestNode = memo(function TestNode({
@@ -36,9 +36,19 @@ export const TestNode = memo(function TestNode({
   const hasErrors = errors.length > 0
   const hasWarnings = warnings.length > 0
   const isHighlighted = data.isHighlighted || false
+  const [isHovered, setIsHovered] = useState(false)
   
   // Tronquer le dialogue si présent
   const truncatedLine = line.length > 80 ? `${line.substring(0, 80)}...` : line
+  
+  const handleGenerateClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    // Déclencher un événement custom pour ouvrir le panel de génération
+    const event = new CustomEvent('open-ai-generation-panel', { 
+      detail: { nodeId: data.id } 
+    })
+    window.dispatchEvent(event)
+  }
   
   // Déterminer la couleur de la bordure selon les erreurs
   let borderColor = selected ? '#27AE60' : '#F5A623'
@@ -65,6 +75,8 @@ export const TestNode = memo(function TestNode({
         position: 'relative',
         transition: 'all 0.2s ease',
       }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
       {/* Badge d'erreur */}
       {hasErrors && (
@@ -86,7 +98,10 @@ export const TestNode = memo(function TestNode({
             zIndex: 10,
             boxShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
           }}
-          title={`${errors.length} erreur(s): ${errors.map((e) => e.message).join(', ')}`}
+          title={errors.map((e, idx) => {
+            const icon = e.type === 'orphan_node' ? '🔗' : e.type === 'broken_reference' ? '🔴' : e.type === 'empty_node' ? '⚪' : e.type === 'missing_test' ? '❓' : '⚠️'
+            return `${icon} ${e.message}${idx < errors.length - 1 ? '\n' : ''}`
+          }).join('')}
         >
           {errors.length}
         </div>
@@ -112,7 +127,10 @@ export const TestNode = memo(function TestNode({
             zIndex: 10,
             boxShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
           }}
-          title={`${warnings.length} avertissement(s): ${warnings.map((w) => w.message).join(', ')}`}
+          title={warnings.map((w, idx) => {
+            const icon = w.type === 'unreachable_node' ? '📍' : w.type === 'cycle_detected' ? '🔄' : '⚠️'
+            return `${icon} ${w.message}${idx < warnings.length - 1 ? '\n' : ''}`
+          }).join('')}
         >
           {warnings.length}
         </div>
@@ -239,6 +257,44 @@ export const TestNode = memo(function TestNode({
           left: '75%',
         }}
       />
+      
+      {/* Bouton "Générer" visible au hover */}
+      {(isHovered || selected) && (
+        <button
+          onClick={handleGenerateClick}
+          style={{
+            position: 'absolute',
+            bottom: 8,
+            right: 8,
+            padding: '0.4rem 0.6rem',
+            border: 'none',
+            borderRadius: '6px',
+            backgroundColor: theme.button.primary.background,
+            color: theme.button.primary.color,
+            cursor: 'pointer',
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.3rem',
+            boxShadow: '0 2px 6px rgba(0, 0, 0, 0.3)',
+            zIndex: 15,
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'scale(1.05)'
+            e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.4)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'scale(1)'
+            e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.3)'
+          }}
+          title="Générer la suite avec l'IA"
+        >
+          <span>✨</span>
+          <span>Générer</span>
+        </button>
+      )}
     </div>
   )
 })

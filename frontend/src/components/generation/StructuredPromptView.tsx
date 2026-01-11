@@ -1,18 +1,29 @@
 /**
  * Composant pour afficher le prompt structuré avec sections dépliables.
  */
-import { useState, useMemo } from 'react'
+import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import { parsePromptSections, parsePromptFromJson, type PromptSection } from '../../hooks/usePromptPreview'
 import { renderMarkdown } from '../../utils/markdownRenderer'
 import { prettifyJsonInText } from '../../utils/jsonPrettifier'
 import { theme } from '../../theme'
 import type { PromptStructure } from '../../types/prompt'
 
+/**
+ * Nettoie le titre pour l'affichage en retirant les préfixes "SECTION X".
+ * Ne modifie pas le titre original, uniquement utilisé pour l'affichage.
+ */
+function cleanSectionTitle(title: string): string {
+  // Retirer les préfixes "SECTION X." ou "SECTION XA." etc.
+  return title.replace(/^SECTION \d+[A-Z]?\.\s*/i, '').trim()
+}
+
 export interface StructuredPromptViewProps {
   /** Le prompt complet à afficher (texte brut, fallback si structuredPrompt absent) */
   prompt: string
   /** Structure JSON du prompt (prioritaire si disponible) */
   structuredPrompt?: PromptStructure | null
+  /** Callback pour exposer l'état allExpanded et la fonction toggleAll (pour le bouton externe) */
+  onToggleStateChange?: (allExpanded: boolean, toggleAll: () => void) => void
 }
 
 /**
@@ -42,14 +53,6 @@ function AccordionSection({
   const [internalExpanded, setInternalExpanded] = useState(defaultExpanded)
   const isExpanded = isControlled ? (sectionKey ? expandedKeys.has(sectionKey) : controlledExpanded) : internalExpanded
   
-  // Prettifier le JSON si présent
-  const processedContent = useMemo(() => {
-    if (section.hasJson) {
-      return prettifyJsonInText(section.content)
-    }
-    return section.content
-  }, [section.content, section.hasJson])
-  
   // Détecter si le contenu est principalement du JSON
   const isMainlyJson = useMemo(() => {
     try {
@@ -59,6 +62,25 @@ function AccordionSection({
       return false
     }
   }, [section.content])
+  
+  // Prettifier le JSON si présent
+  const processedContent = useMemo(() => {
+    // Si le contenu est entièrement du JSON, formater directement
+    if (isMainlyJson) {
+      try {
+        const parsed = JSON.parse(section.content.trim())
+        return JSON.stringify(parsed, null, 2)
+      } catch {
+        // En cas d'erreur, retourner le contenu original
+        return section.content
+      }
+    }
+    // Sinon, utiliser prettifyJsonInText pour les blocs JSON dans le texte
+    if (section.hasJson) {
+      return prettifyJsonInText(section.content)
+    }
+    return section.content
+  }, [section.content, section.hasJson, isMainlyJson])
   
   const handleToggle = () => {
     if (isControlled) {
@@ -116,7 +138,7 @@ function AccordionSection({
         }}
       >
         <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span>{section.title}</span>
+          <span>{cleanSectionTitle(section.title)}</span>
           {section.tokenCount !== undefined && (
             <span
               style={{
@@ -216,7 +238,7 @@ function collectAllKeys(sections: PromptSection[], prefix: string = ''): string[
   return keys
 }
 
-export function StructuredPromptView({ prompt, structuredPrompt }: StructuredPromptViewProps) {
+export function StructuredPromptView({ prompt, structuredPrompt, onToggleStateChange }: StructuredPromptViewProps) {
   const sections = useMemo(() => {
     // Priorité au JSON structuré si disponible
     if (structuredPrompt) {
@@ -234,15 +256,25 @@ export function StructuredPromptView({ prompt, structuredPrompt }: StructuredPro
     return collectAllKeys(sections)
   }, [sections])
   
-  const toggleAll = () => {
-    const newExpanded = !allExpanded
-    setAllExpanded(newExpanded)
-    if (newExpanded) {
-      setExpandedKeys(new Set(allKeys))
-    } else {
-      setExpandedKeys(new Set())
+  const toggleAll = useCallback(() => {
+    setAllExpanded((prev) => {
+      const newExpanded = !prev
+      // Mettre à jour expandedKeys en fonction du nouvel état
+      if (newExpanded) {
+        setExpandedKeys(new Set(allKeys))
+      } else {
+        setExpandedKeys(new Set())
+      }
+      return newExpanded
+    })
+  }, [allKeys])
+  
+  // Exposer l'état et la fonction toggleAll au parent via callback
+  useEffect(() => {
+    if (onToggleStateChange) {
+      onToggleStateChange(allExpanded, toggleAll)
     }
-  }
+  }, [allExpanded, toggleAll, onToggleStateChange])
   
   const toggleKey = (key: string) => {
     setExpandedKeys((prev) => {
@@ -282,36 +314,6 @@ export function StructuredPromptView({ prompt, structuredPrompt }: StructuredPro
   
   return (
     <div style={{ padding: '0.5rem 0' }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          marginBottom: '0.5rem',
-        }}
-      >
-        <button
-          type="button"
-          onClick={toggleAll}
-          style={{
-            padding: '0.5rem 1rem',
-            border: `1px solid ${theme.border.primary}`,
-            borderRadius: '4px',
-            backgroundColor: theme.background.secondary,
-            color: theme.text.primary,
-            cursor: 'pointer',
-            fontSize: '0.85rem',
-            transition: 'background-color 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = theme.background.panel
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = theme.background.secondary
-          }}
-        >
-          {allExpanded ? 'Tout replier' : 'Tout déplier'}
-        </button>
-      </div>
       {sections.map((section, index) => (
         <AccordionSection
           key={`${section.title}-${index}`}

@@ -38,9 +38,9 @@ export function AIGenerationPanel({
   
   // Charger les modèles disponibles
   useEffect(() => {
-    configAPI.getAvailableLLMModels()
-      .then((models) => {
-        setAvailableModels(models)
+    configAPI.listLLMModels()
+      .then((response) => {
+        setAvailableModels(response.models)
       })
       .catch((err) => {
         console.error('Erreur lors du chargement des modèles:', err)
@@ -68,7 +68,7 @@ export function AIGenerationPanel({
       ]
       const npcSpeakerId = allCharacters.length > 0 ? allCharacters[0] : undefined
       
-      await generateFromNode(
+      const newNodeId = await generateFromNode(
         parentNodeId,
         userInstructions,
         {
@@ -81,6 +81,13 @@ export function AIGenerationPanel({
       )
       
       toast('Nœud généré avec succès', 'success', 2000)
+      
+      // Déclencher un événement pour sélectionner et zoomer vers le nouveau nœud
+      const event = new CustomEvent('focus-generated-node', {
+        detail: { nodeId: newNodeId }
+      })
+      window.dispatchEvent(event)
+      
       onGenerated?.()
       onClose()
     } catch (err) {
@@ -116,34 +123,59 @@ export function AIGenerationPanel({
       padding: '1rem',
       gap: '1rem',
     }}>
-      {/* En-tête */}
+      {/* En-tête avec aperçu du nœud parent */}
       <div>
         <h3 style={{ 
           margin: 0, 
-          marginBottom: '0.5rem',
+          marginBottom: '0.75rem',
           color: theme.text.primary,
           fontSize: '1.1rem',
+          fontWeight: 600,
         }}>
-          Générer un nœud depuis {parentNodeId}
+          Générer la suite avec l'IA
         </h3>
-        <div style={{ 
-          fontSize: '0.85rem', 
-          color: theme.text.secondary,
+        <div style={{
+          padding: '0.75rem',
+          backgroundColor: theme.background.secondary,
+          borderRadius: '6px',
+          border: `1px solid ${theme.border.primary}`,
           marginBottom: '0.5rem',
         }}>
+          <div style={{
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            color: theme.text.secondary,
+            marginBottom: '0.5rem',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+          }}>
+            Contexte parent
+          </div>
           {parentNode.data?.speaker && (
-            <div>Speaker: <strong>{parentNode.data.speaker}</strong></div>
+            <div style={{
+              fontSize: '0.9rem',
+              color: theme.text.primary,
+              marginBottom: '0.25rem',
+            }}>
+              <span style={{ fontWeight: 600 }}>Speaker:</span> <span style={{ color: theme.button.primary.background }}>{parentNode.data.speaker}</span>
+            </div>
           )}
           {parentNode.data?.line && (
             <div style={{ 
-              marginTop: '0.25rem',
+              marginTop: '0.5rem',
+              fontSize: '0.85rem',
+              color: theme.text.secondary,
               fontStyle: 'italic',
-              maxHeight: '60px',
+              lineHeight: 1.5,
+              padding: '0.5rem',
+              backgroundColor: theme.background.panel,
+              borderRadius: '4px',
+              maxHeight: '80px',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
             }}>
-              {parentNode.data.line.substring(0, 100)}
-              {parentNode.data.line.length > 100 ? '...' : ''}
+              "{parentNode.data.line.substring(0, 150)}
+              {parentNode.data.line.length > 150 ? '...' : ''}"
             </div>
           )}
         </div>
@@ -248,9 +280,9 @@ export function AIGenerationPanel({
             fontSize: '0.9rem',
           }}
         >
-          {availableModels.map((model) => (
-            <option key={model.id} value={model.id}>
-              {model.name} {model.provider && `(${model.provider})`}
+          {availableModels.map((model, index) => (
+            <option key={`${model.model_identifier}-${index}-${model.display_name || ''}`} value={model.model_identifier}>
+              {model.display_name || model.model_identifier}
             </option>
           ))}
         </select>

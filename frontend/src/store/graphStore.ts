@@ -59,7 +59,7 @@ export interface GraphState {
     parentNodeId: string,
     instructions: string,
     options: any
-  ) => Promise<void>
+  ) => Promise<string> // Retourne le nodeId du nouveau nœud généré
   
   // Validation
   validateGraph: () => Promise<void>
@@ -300,7 +300,7 @@ export const useGraphStore = create<GraphState>()(
           }
           
           get().addNode(newNode)
-          
+
           // Créer les connexions suggérées
           for (const conn of response.suggested_connections) {
             get().connectNodes(
@@ -310,8 +310,11 @@ export const useGraphStore = create<GraphState>()(
               conn.connection_type
             )
           }
-          
+
           set({ isGenerating: false })
+          
+          // Retourner le nodeId du nouveau nœud pour feedback visuel
+          return generatedNode.id
         } catch (error) {
           console.error('Erreur lors de la génération de nœud:', error)
           set({ isGenerating: false })

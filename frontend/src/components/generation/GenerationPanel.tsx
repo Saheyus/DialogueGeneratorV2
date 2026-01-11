@@ -44,6 +44,7 @@ export function GenerationPanel() {
     systemPromptOverride,
     promptHash,
     tokenCount,
+    structuredPrompt,
     setDialogueStructure,
 
     setSystemPromptOverride,
@@ -1238,26 +1239,17 @@ export function GenerationPanel() {
         </div>
       </div>
 
-      {tokenCount !== null && (
-        <div style={{ 
-          marginBottom: '1rem', 
-          padding: '0.5rem', 
-          backgroundColor: validationErrors.tokenCount ? theme.state.error.background : theme.state.info.background, 
-          color: validationErrors.tokenCount ? theme.state.error.color : theme.state.info.color,
-          borderRadius: '4px' 
-        }}>
-          {isEstimating ? (
-            <span>Estimation en cours...</span>
-          ) : (
-            <span>
-              <strong>Tokens estimés:</strong> {tokenCount.toLocaleString()}
-              {validationErrors.tokenCount && (
-                <div style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>
-                  {validationErrors.tokenCount}
-                </div>
-              )}
-            </span>
-          )}
+      {tokenCount !== null && validationErrors.tokenCount && (
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ 
+            padding: '0.5rem',
+            backgroundColor: theme.state.error.background,
+            color: theme.state.error.color,
+            borderRadius: '4px',
+            fontSize: '0.9rem' 
+          }}>
+            {validationErrors.tokenCount}
+          </div>
         </div>
       )}
 

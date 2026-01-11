@@ -27,6 +27,29 @@ import { theme } from '../../theme'
 
 type ContextItem = CharacterResponse | LocationResponse | ItemResponse | SpeciesResponse | CommunityResponse
 
+function ChevronIcon({ direction }: { direction: 'left' | 'right' }) {
+  const isLeft = direction === 'left'
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+      style={{ display: 'block', transition: 'transform 0.2s ease' }}
+    >
+      <path
+        d={isLeft ? 'M15 18l-6-6 6-6' : 'M9 18l6-6-6-6'}
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 export function Dashboard() {
   const [selectedContextItem, setSelectedContextItem] = useState<ContextItem | null>(null)
   const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false)
@@ -52,6 +75,7 @@ export function Dashboard() {
   // Boutons replier/déplier panneaux gauche & droite (layout 3 panneaux)
   const panelsRef = useRef<ResizablePanelsRef>(null)
   const expandedSizesRef = useRef<number[] | null>(null)
+  const suppressSizesSyncRef = useRef(false)
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false)
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false)
   
@@ -233,13 +257,18 @@ export function Dashboard() {
       const base = expandedSizesRef.current ?? panelsRef.current?.getSizes()
       if (!base || base.length < 3 || !panelsRef.current) return
 
-      // 3% ~ 40-60px selon largeur, assez pour garder le bouton accessible
-      const COLLAPSED_PCT = 3
+      // 0% = panneau réellement replié (bouton sur la barre de séparation)
+      const COLLAPSED_PCT = 0
       const leftSize = nextLeftCollapsed ? COLLAPSED_PCT : base[0]
       const rightSize = nextRightCollapsed ? COLLAPSED_PCT : base[2]
       const centerSize = Math.max(0, 100 - leftSize - rightSize)
 
+      suppressSizesSyncRef.current = true
       panelsRef.current.setSizes([leftSize, centerSize, rightSize], { persist: false })
+      // libère le verrou après le tick pour éviter d'écraser expandedSizesRef
+      setTimeout(() => {
+        suppressSizesSyncRef.current = false
+      }, 0)
     },
     []
   )
@@ -262,6 +291,29 @@ export function Dashboard() {
     applyCollapsedLayout(isLeftPanelCollapsed, next)
   }, [applyCollapsedLayout, isLeftPanelCollapsed, isRightPanelCollapsed])
 
+  const applyToggleHover = useCallback(
+    (el: HTMLButtonElement, isHover: boolean) => {
+      el.style.backgroundColor = isHover ? 'rgba(60, 60, 60, 0.95)' : 'rgba(45, 45, 45, 0.85)'
+      el.style.borderColor = isHover ? theme.button.primary.background : 'rgba(255, 255, 255, 0.1)'
+      el.style.transform = isHover ? 'translateY(-50%) scale(1.1)' : 'translateY(-50%) scale(1)'
+      el.style.boxShadow = isHover 
+        ? `0 0 20px ${theme.button.primary.background}44, 0 8px 16px rgba(0, 0, 0, 0.5)` 
+        : '0 4px 12px rgba(0, 0, 0, 0.4)'
+      el.style.color = isHover ? '#fff' : theme.text.primary
+    },
+    []
+  )
+
+  const applyHeaderToggleHover = useCallback(
+    (el: HTMLButtonElement, isHover: boolean) => {
+      el.style.backgroundColor = isHover ? 'rgba(255, 255, 255, 0.08)' : 'transparent'
+      el.style.borderColor = isHover ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)'
+      el.style.transform = isHover ? 'scale(1.05)' : 'scale(1)'
+      el.style.color = isHover ? '#fff' : theme.text.secondary
+    },
+    []
+  )
+
 
   return (
     <ResizablePanels
@@ -275,6 +327,7 @@ export function Dashboard() {
         backgroundColor: theme.background.primary,
       }}
       onSizesChange={(sizes) => {
+        if (suppressSizesSyncRef.current) return
         // On mémorise uniquement quand les deux panneaux sont dépliés
         if (!isLeftPanelCollapsed && !isRightPanelCollapsed) {
           expandedSizesRef.current = sizes
@@ -292,49 +345,60 @@ export function Dashboard() {
           position: 'relative',
         }}
       >
-        <button
-          onClick={toggleLeftPanel}
-          title={isLeftPanelCollapsed ? 'Déplier le panneau gauche' : 'Replier le panneau gauche'}
-          style={{
-            position: 'absolute',
-            top: '50%',
-            right: -14,
-            transform: 'translateY(-50%)',
-            zIndex: 25,
-            width: 28,
-            height: 56,
-            border: `1px solid ${theme.border.primary}`,
-            borderRadius: 999,
-            backgroundColor: theme.background.secondary,
-            color: theme.text.primary,
-            cursor: 'pointer',
-            display: 'grid',
-            placeItems: 'center',
-            fontSize: '1.1rem',
-            boxShadow: '0 6px 18px rgba(0, 0, 0, 0.35)',
-            transition: 'transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = theme.background.panelHeader
-            e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.45)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = theme.background.secondary
-            e.currentTarget.style.boxShadow = '0 6px 18px rgba(0, 0, 0, 0.35)'
-          }}
-        >
-          {isLeftPanelCollapsed ? '›' : '‹'}
-        </button>
-
         {!isLeftPanelCollapsed && (
-          <ContextSelector 
-            onItemSelected={(item) => {
-              setSelectedContextItem(item)
-              if (item) {
-                setRightPanelTab('details')
-              }
-            }}
-          />
+          <>
+            <div
+              style={{
+                padding: '0.5rem 0.75rem',
+                borderBottom: `1px solid ${theme.border.primary}`,
+                backgroundColor: theme.background.panelHeader,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.5rem',
+                flexShrink: 0,
+              }}
+            >
+              <div style={{ fontSize: '0.9rem', fontWeight: 700, color: theme.text.primary }}>
+                Contexte
+              </div>
+              <button
+                onClick={toggleLeftPanel}
+                onMouseDown={(e) => {
+                  e.currentTarget.style.transform = 'scale(0.92)'
+                }}
+                onMouseUp={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.05)'
+                }}
+                title="Replier le panneau gauche"
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 6,
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  backgroundColor: 'transparent',
+                  color: theme.text.secondary,
+                  cursor: 'pointer',
+                  display: 'grid',
+                  placeItems: 'center',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                }}
+                onMouseEnter={(e) => applyHeaderToggleHover(e.currentTarget, true)}
+                onMouseLeave={(e) => applyHeaderToggleHover(e.currentTarget, false)}
+                aria-label="Replier le panneau gauche"
+              >
+                <ChevronIcon direction="left" />
+              </button>
+            </div>
+            <ContextSelector 
+              onItemSelected={(item) => {
+                setSelectedContextItem(item)
+                if (item) {
+                  setRightPanelTab('details')
+                }
+              }}
+            />
+          </>
         )}
       </div>
 
@@ -346,8 +410,84 @@ export function Dashboard() {
           flexDirection: 'column',
           backgroundColor: theme.background.panel,
           height: '100%',
+          position: 'relative',
         }}
       >
+        {/* Rails (boutons) visibles quand un panneau latéral est replié */}
+        {isLeftPanelCollapsed && (
+          <button
+            onClick={toggleLeftPanel}
+            onMouseDown={(e) => {
+              e.currentTarget.style.transform = 'translateY(-50%) scale(0.95)'
+            }}
+            onMouseUp={(e) => {
+              e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)'
+            }}
+            title="Déplier le panneau gauche"
+            style={{
+              position: 'absolute',
+              left: 8,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              zIndex: 50,
+              width: 24,
+              height: 48,
+              borderRadius: 12,
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              backgroundColor: 'rgba(45, 45, 45, 0.85)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              color: theme.text.primary,
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              display: 'grid',
+              placeItems: 'center',
+            }}
+            onMouseEnter={(e) => applyToggleHover(e.currentTarget, true)}
+            onMouseLeave={(e) => applyToggleHover(e.currentTarget, false)}
+            aria-label="Déplier le panneau gauche"
+          >
+            <ChevronIcon direction="right" />
+          </button>
+        )}
+        {isRightPanelCollapsed && (
+          <button
+            onClick={toggleRightPanel}
+            onMouseDown={(e) => {
+              e.currentTarget.style.transform = 'translateY(-50%) scale(0.95)'
+            }}
+            onMouseUp={(e) => {
+              e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)'
+            }}
+            title="Déplier le panneau droit"
+            style={{
+              position: 'absolute',
+              right: 8,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              zIndex: 50,
+              width: 24,
+              height: 48,
+              borderRadius: 12,
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              backgroundColor: 'rgba(45, 45, 45, 0.85)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              color: theme.text.primary,
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              display: 'grid',
+              placeItems: 'center',
+            }}
+            onMouseEnter={(e) => applyToggleHover(e.currentTarget, true)}
+            onMouseLeave={(e) => applyToggleHover(e.currentTarget, false)}
+            aria-label="Déplier le panneau droit"
+          >
+            <ChevronIcon direction="left" />
+          </button>
+        )}
         <Tabs
           tabs={[
             {
@@ -439,44 +579,53 @@ export function Dashboard() {
           position: 'relative',
         }}
       >
-        <button
-          onClick={toggleRightPanel}
-          title={isRightPanelCollapsed ? 'Déplier le panneau droit' : 'Replier le panneau droit'}
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: -14,
-            transform: 'translateY(-50%)',
-            zIndex: 35,
-            width: 28,
-            height: 56,
-            border: `1px solid ${theme.border.primary}`,
-            borderRadius: 999,
-            backgroundColor: theme.background.secondary,
-            color: theme.text.primary,
-            cursor: 'pointer',
-            display: 'grid',
-            placeItems: 'center',
-            fontSize: '1.1rem',
-            boxShadow: '0 6px 18px rgba(0, 0, 0, 0.35)',
-            transition: 'transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = theme.background.panelHeader
-            e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.45)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = theme.background.secondary
-            e.currentTarget.style.boxShadow = '0 6px 18px rgba(0, 0, 0, 0.35)'
-          }}
-        >
-          {isRightPanelCollapsed ? '‹' : '›'}
-        </button>
-
         {isRightPanelCollapsed ? (
           <div style={{ flex: 1, minHeight: 0 }} />
         ) : (
           <>
+        <div
+          style={{
+            padding: '0.5rem 0.75rem',
+            borderBottom: `1px solid ${theme.border.primary}`,
+            backgroundColor: theme.background.panelHeader,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.5rem',
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ fontSize: '0.9rem', fontWeight: 700, color: theme.text.primary }}>
+            Détails
+          </div>
+          <button
+            onClick={toggleRightPanel}
+            onMouseDown={(e) => {
+              e.currentTarget.style.transform = 'scale(0.92)'
+            }}
+            onMouseUp={(e) => {
+              e.currentTarget.style.transform = 'scale(1.05)'
+            }}
+            title="Replier le panneau droit"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              backgroundColor: 'transparent',
+              color: theme.text.secondary,
+              cursor: 'pointer',
+              display: 'grid',
+              placeItems: 'center',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            }}
+            onMouseEnter={(e) => applyHeaderToggleHover(e.currentTarget, true)}
+            onMouseLeave={(e) => applyHeaderToggleHover(e.currentTarget, false)}
+            aria-label="Replier le panneau droit"
+          >
+            <ChevronIcon direction="right" />
+          </button>
+        </div>
         {/* Barre d'options en haut (toujours visible) */}
         {actions.handleGenerate && (
           <div

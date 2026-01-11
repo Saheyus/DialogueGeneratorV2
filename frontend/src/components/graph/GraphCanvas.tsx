@@ -80,9 +80,38 @@ export const GraphCanvas = memo(function GraphCanvas() {
     setNodes(enrichedNodes)
   }, [enrichedNodes, setNodes])
   
+  // Enrichir les edges avec des styles d'erreur pour les connexions cassées
+  const enrichedEdges = useMemo(() => {
+    // Identifier les erreurs de type broken_reference
+    const brokenReferences = validationErrors.filter(
+      (err) => err.type === 'broken_reference' && err.target
+    )
+    const brokenTargets = new Set(brokenReferences.map((err) => err.target!))
+    
+    return storeEdges.map((edge) => {
+      // Vérifier si cette edge pointe vers un nœud inexistant
+      const isBroken = brokenTargets.has(edge.target)
+      
+      if (isBroken) {
+        return {
+          ...edge,
+          style: {
+            ...edge.style,
+            stroke: theme.state.error.border,
+            strokeDasharray: '8,4',
+            opacity: 0.5,
+          },
+          animated: false,
+        }
+      }
+      return edge
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeEdges, validationErrors])
+  
   useMemo(() => {
-    setEdges(storeEdges)
-  }, [storeEdges, setEdges])
+    setEdges(enrichedEdges)
+  }, [enrichedEdges, setEdges])
   
   // Types de nœuds personnalisés
   const nodeTypes: NodeTypes = useMemo(
@@ -147,6 +176,7 @@ export const GraphCanvas = memo(function GraphCanvas() {
   const GraphCanvasInner = memo(function GraphCanvasInner() {
     const reactFlowInstance = useReactFlow()
     const { fitView, getNode } = reactFlowInstance
+    const { setSelectedNode, selectedNodeId: storeSelectedNodeId } = useGraphStore()
     const prevSelectedNodeIdRef = useRef<string | null>(null)
     
     // Exposer l'instance ReactFlow pour l'export (via un custom event ou ref)
@@ -160,8 +190,8 @@ export const GraphCanvas = memo(function GraphCanvas() {
     
     // Scroll vers le nœud sélectionné si changé depuis l'extérieur (ex: panel d'erreurs)
     useEffect(() => {
-      if (selectedNodeId && selectedNodeId !== prevSelectedNodeIdRef.current) {
-        const node = getNode(selectedNodeId)
+      if (storeSelectedNodeId && storeSelectedNodeId !== prevSelectedNodeIdRef.current) {
+        const node = getNode(storeSelectedNodeId)
         if (node) {
           // Utiliser fitView avec les options pour centrer le nœud
           fitView({
@@ -170,9 +200,35 @@ export const GraphCanvas = memo(function GraphCanvas() {
             padding: 0.2,
           })
         }
-        prevSelectedNodeIdRef.current = selectedNodeId
+        prevSelectedNodeIdRef.current = storeSelectedNodeId
       }
-    }, [selectedNodeId, getNode, fitView])
+    }, [storeSelectedNodeId, getNode, fitView])
+    
+    // Écouter l'événement pour focus un nœud généré (avec animation flash)
+    useEffect(() => {
+      const handleFocusNode = (event: CustomEvent<{ nodeId: string }>) => {
+        const nodeId = event.detail.nodeId
+        const node = getNode(nodeId)
+        if (node) {
+          // Sélectionner le nœud
+          setSelectedNode(nodeId)
+          
+          // Zoom vers le nœud après un court délai pour que le nœud soit bien rendu
+          setTimeout(() => {
+            fitView({
+              nodes: [node],
+              duration: 400,
+              padding: 0.3,
+            })
+          }, 100)
+        }
+      }
+      
+      window.addEventListener('focus-generated-node', handleFocusNode as EventListener)
+      return () => {
+        window.removeEventListener('focus-generated-node', handleFocusNode as EventListener)
+      }
+    }, [getNode, fitView, setSelectedNode])
     
     return null
   })

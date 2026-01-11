@@ -1,7 +1,7 @@
 /**
  * Nœud personnalisé pour afficher un nœud de dialogue dans le graphe.
  */
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { Handle, Position, type NodeProps } from 'reactflow'
 import { theme } from '../../../theme'
 
@@ -25,13 +25,15 @@ interface DialogueNodeData {
   validationErrors?: ValidationError[]
   validationWarnings?: ValidationError[]
   isHighlighted?: boolean
-  [key: string]: any
+  [key: string]: unknown
 }
 
 export const DialogueNode = memo(function DialogueNode({
   data,
   selected,
 }: NodeProps<DialogueNodeData>) {
+  const NODE_WIDTH = 280
+
   const speaker = data.speaker || 'PNJ'
   const line = data.line || ''
   const choices = data.choices || []
@@ -41,9 +43,20 @@ export const DialogueNode = memo(function DialogueNode({
   const hasErrors = errors.length > 0
   const hasWarnings = warnings.length > 0
   const isHighlighted = data.isHighlighted || false
+  const [isHovered, setIsHovered] = useState(false)
+  const [hoveredChoiceIndex, setHoveredChoiceIndex] = useState<number | null>(null)
   
   // Tronquer le texte pour l'aperçu
   const truncatedLine = line.length > 100 ? `${line.substring(0, 100)}...` : line
+  
+  const handleGenerateClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    // Déclencher un événement custom pour ouvrir le panel de génération
+    const event = new CustomEvent('open-ai-generation-panel', { 
+      detail: { nodeId: data.id } 
+    })
+    window.dispatchEvent(event)
+  }
   
   // Couleur du speaker (hash du nom pour consistance)
   const speakerColor = getSpeakerColor(speaker)
@@ -55,11 +68,16 @@ export const DialogueNode = memo(function DialogueNode({
   } else if (hasWarnings) {
     borderColor = theme.state.warning.color
   }
+
+  const getChoiceHandleLeftPercent = (index: number): number => {
+    // Répartition uniforme sur la largeur du node, sans coller aux bords
+    return ((index + 1) / (choices.length + 1)) * 100
+  }
   
   return (
     <div
       style={{
-        width: 280,
+        width: NODE_WIDTH,
         minHeight: 100,
         maxHeight: 500,
         border: `2px solid ${borderColor}`,
@@ -70,12 +88,14 @@ export const DialogueNode = memo(function DialogueNode({
           : isHighlighted
           ? '0 0 0 3px rgba(116, 192, 252, 0.5)'
           : '0 2px 6px rgba(0, 0, 0, 0.2)',
-        overflow: 'hidden',
+        overflow: 'visible',
         position: 'relative',
         transition: 'all 0.2s ease',
         display: 'flex',
         flexDirection: 'column',
       }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
       {/* Badge d'erreur */}
       {hasErrors && (
@@ -97,7 +117,10 @@ export const DialogueNode = memo(function DialogueNode({
             zIndex: 10,
             boxShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
           }}
-          title={`${errors.length} erreur(s): ${errors.map((e) => e.message).join(', ')}`}
+          title={errors.map((e, idx) => {
+            const icon = e.type === 'orphan_node' ? '🔗' : e.type === 'broken_reference' ? '🔴' : e.type === 'empty_node' ? '⚪' : '⚠️'
+            return `${icon} ${e.message}${idx < errors.length - 1 ? '\n' : ''}`
+          }).join('')}
         >
           {errors.length}
         </div>
@@ -123,7 +146,10 @@ export const DialogueNode = memo(function DialogueNode({
             zIndex: 10,
             boxShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
           }}
-          title={`${warnings.length} avertissement(s): ${warnings.map((w) => w.message).join(', ')}`}
+          title={warnings.map((w, idx) => {
+            const icon = w.type === 'unreachable_node' ? '📍' : w.type === 'cycle_detected' ? '🔄' : '⚠️'
+            return `${icon} ${w.message}${idx < warnings.length - 1 ? '\n' : ''}`
+          }).join('')}
         >
           {warnings.length}
         </div>
@@ -187,103 +213,62 @@ export const DialogueNode = memo(function DialogueNode({
         </div>
       )}
       
-      {/* Aperçu des choix */}
-      {hasChoices && (
+      {/* Tooltip au survol d'un rond orange (réponse associée) */}
+      {hasChoices && hoveredChoiceIndex !== null && choices[hoveredChoiceIndex] && (
         <div
           style={{
-            padding: '8px 12px',
-            borderTop: `1px solid ${theme.border.primary}`,
+            position: 'absolute',
+            left: `${getChoiceHandleLeftPercent(hoveredChoiceIndex)}%`,
+            bottom: 34,
+            transform: 'translateX(-50%)',
             backgroundColor: theme.background.secondary,
+            border: '1px solid #F5A623',
+            color: theme.text.primary,
+            padding: '6px 8px',
+            borderRadius: 8,
+            boxShadow: '0 6px 16px rgba(0, 0, 0, 0.35)',
+            fontSize: '0.75rem',
+            maxWidth: 260,
+            lineHeight: 1.25,
+            zIndex: 50,
+            pointerEvents: 'none',
+            whiteSpace: 'normal',
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              marginBottom: choices.length > 0 ? '6px' : 0,
-              fontSize: '0.75rem',
-              fontWeight: 'bold',
-              color: theme.text.secondary,
-            }}
-          >
-            <span>⚡</span>
-            <span>{choices.length} choix</span>
-          </div>
-          {/* Liste des choix (max 4, puis "... et X autres") */}
-          {choices.slice(0, 4).map((choice, index) => {
-            const truncatedText = (choice.text || '').length > 40 
-              ? `${(choice.text || '').substring(0, 40)}...` 
-              : (choice.text || '')
-            
-            return (
-              <div
-                key={index}
-                style={{
-                  padding: '4px 8px',
-                  marginBottom: index < Math.min(choices.length, 4) - 1 ? '4px' : 0,
-                  backgroundColor: theme.background.panel,
-                  borderRadius: 4,
-                  border: `1px solid ${theme.border.primary}`,
-                  fontSize: '0.75rem',
-                  color: theme.text.primary,
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 6,
-                }}
-              >
-                <span
-                  style={{
-                    color: '#F5A623',
-                    fontWeight: 'bold',
-                    fontSize: '0.7rem',
-                    flexShrink: 0,
-                  }}
-                >
-                  {index + 1}.
-                </span>
-                <span style={{ flex: 1, lineHeight: 1.3 }}>
-                  {truncatedText || '(choix vide)'}
-                </span>
-              </div>
-            )
-          })}
-          {choices.length > 4 && (
-            <div
-              style={{
-                marginTop: '4px',
-                padding: '4px 8px',
-                fontSize: '0.75rem',
-                color: theme.text.secondary,
-                fontStyle: 'italic',
-              }}
-            >
-              ... et {choices.length - 4} autre{choices.length - 4 > 1 ? 's' : ''}
-            </div>
-          )}
+          {choices[hoveredChoiceIndex].text || `Choix ${hoveredChoiceIndex + 1}`}
         </div>
       )}
+
+      {/* Ronds oranges (handles) uniquement, dans la carte du nœud */}
+      {hasChoices &&
+        choices.map((choice, index) => {
+          const leftPercent = getChoiceHandleLeftPercent(index)
+          const label = choice.text || `Choix ${index + 1}`
+          return (
+            <Handle
+              key={index}
+              type="source"
+              position={Position.Bottom}
+              id={`choice-${index}`}
+              title={label}
+              onMouseEnter={() => setHoveredChoiceIndex(index)}
+              onMouseLeave={() => setHoveredChoiceIndex((prev) => (prev === index ? null : prev))}
+              style={{
+                background: '#F5A623',
+                width: 10,
+                height: 10,
+                border: '2px solid white',
+                borderRadius: '50%',
+                left: `${leftPercent}%`,
+                bottom: 10,
+                transform: 'translateX(-50%)',
+              }}
+            />
+          )
+        })}
       
-      {/* Output Handles (bas) */}
-      {hasChoices ? (
-        // Plusieurs handles pour les choix
-        choices.map((_, index) => (
-          <Handle
-            key={index}
-            type="source"
-            position={Position.Bottom}
-            id={`choice-${index}`}
-            style={{
-              background: '#F5A623',
-              width: 12,
-              height: 12,
-              border: '2px solid white',
-              left: `${((index + 1) / (choices.length + 1)) * 100}%`,
-            }}
-          />
-        ))
-      ) : (
-        // Un seul handle pour nextNode
+      {/* Output Handle pour nextNode (si pas de choix) */}
+      {!hasChoices && (
         <Handle
           type="source"
           position={Position.Bottom}
@@ -294,6 +279,44 @@ export const DialogueNode = memo(function DialogueNode({
             border: '2px solid white',
           }}
         />
+      )}
+      
+      {/* Bouton "Générer" visible au hover */}
+      {(isHovered || selected) && (
+        <button
+          onClick={handleGenerateClick}
+          style={{
+            position: 'absolute',
+            top: 34,
+            right: 8,
+            padding: '0.4rem 0.6rem',
+            border: 'none',
+            borderRadius: '6px',
+            backgroundColor: theme.button.primary.background,
+            color: theme.button.primary.color,
+            cursor: 'pointer',
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.3rem',
+            boxShadow: '0 2px 6px rgba(0, 0, 0, 0.3)',
+            zIndex: 15,
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'scale(1.05)'
+            e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.4)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'scale(1)'
+            e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.3)'
+          }}
+          title="Générer la suite avec l'IA"
+        >
+          <span>✨</span>
+          <span>Générer</span>
+        </button>
       )}
     </div>
   )
