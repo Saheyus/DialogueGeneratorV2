@@ -1,0 +1,610 @@
+import logging
+from typing import Tuple, Optional, Dict, Any, List, Literal
+from pathlib import Path
+import time
+import json
+import hashlib
+from dataclasses import dataclass, asdict
+import xml.etree.ElementTree as ET
+from utils.xml_utils import (
+    escape_xml_text,
+    parse_xml_element,
+    validate_xml_content,
+    indent_xml_element,
+    create_xml_document,
+    extract_text_from_element
+)
+from services.prompt_xml_parsers import build_narrative_guides_xml, build_vocabulary_xml
+
+# Essayer d'importer tiktoken, mais continuer si non disponible
+try:
+    import tiktoken
+    tiktoken_available = True
+except ImportError:
+    tiktoken_available = False
+    tiktoken = None # Pour que les références ultérieures ne lèvent pas de NameError
+
+logger = logging.getLogger(__name__)
+
+@dataclass
+class PromptInput:
+    """Input unifié pour la construction de prompt.
+    Contient TOUS les paramètres nécessaires, y compris ceux optionnels.
+    """
+    user_instructions: str
+    npc_speaker_id: str
+    player_character_id: str = "URESAIR"
+    context_summary: Optional[str] = None
+    structured_context: Optional[Any] = None  # PromptStructure optionnel
+    scene_location: Optional[Dict[str, str]] = None
+    author_profile: Optional[str] = None
+    narrative_tags: Optional[List[str]] = None
+    choices_mode: Literal["free", "capped"] = "free"
+    max_choices: Optional[int] = None
+    skills_list: Optional[List[str]] = None
+    traits_list: Optional[List[str]] = None
+    vocabulary_config: Optional[Dict[str, str]] = None
+    include_narrative_guides: bool = True
+    in_game_flags: Optional[List[Dict[str, Any]]] = None  # Flags in-game sélectionnés
+
+@dataclass
+class BuiltPrompt:
+    """Résultat de la construction de prompt."""
+    raw_prompt: str
+    token_count: int
+    sections: Dict[str, str]
+    prompt_hash: str  # Hash SHA-256 pour validation
+    structured_prompt: Optional[Any] = None  # PromptStructure optionnel
+
+class PromptEngine:
+    """
+    Gère la construction de prompts pour les modèles de langage.
+
+    Cette classe combine un system prompt, un contexte de scène, et une instruction
+    utilisateur pour créer un prompt final optimisé pour la génération de dialogue.
+    """
+    _last_info_log_time = {}
+    _info_log_interval = 5.0
+    _tiktoken_warned_models = set()  # Cache des modèles pour lesquels on a déjà warné
+    
+    # Mapping des modèles personnalisés vers les encodages tiktoken connus
+    # Les modèles GPT récents (GPT-4, GPT-4-turbo, etc.) utilisent cl100k_base
+    _MODEL_ENCODING_MAP = {
+        "gpt-5.2": "cl100k_base",
+        "gpt-5.2-pro": "cl100k_base",
+        "gpt-5.2-thinking": "cl100k_base",  # Alias pour compatibilité
+        "gpt-5-mini": "cl100k_base",
+        "gpt-5-nano": "cl100k_base",
+    }
+    def _throttled_info_log(self, log_key: str, message: str):
+        now = time.time()
+        last_time = PromptEngine._last_info_log_time.get(log_key, 0)
+        if now - last_time > PromptEngine._info_log_interval:
+            logger.info(message)
+            PromptEngine._last_info_log_time[log_key] = now
+
+    def __init__(
+        self, 
+        system_prompt_template: Optional[str] = None,
+        context_builder: Optional[Any] = None,
+        vocab_service: Optional[Any] = None,
+        guides_service: Optional[Any] = None,
+        enricher: Optional[Any] = None,
+        prompt_builder: Optional[Any] = None
+    ) -> None:
+        """
+        Initialise le PromptEngine.
+
+        Args:
+            system_prompt_template (Optional[str]): Un template de system prompt personnalisé.
+                                                    Si None, un prompt par défaut sera chargé depuis la configuration.
+            context_builder (Optional[ContextBuilder]): Instance de ContextBuilder à utiliser.
+                                                       Si None, une instance sera créée quand nécessaire.
+            vocab_service (Optional[VocabularyService]): Instance de VocabularyService à utiliser.
+                                                        Si None, une instance sera créée quand nécessaire.
+            guides_service (Optional[NarrativeGuidesService]): Instance de NarrativeGuidesService à utiliser.
+                                                              Si None, une instance sera créée quand nécessaire.
+            enricher (Optional[PromptEnricher]): Instance de PromptEnricher à utiliser.
+                                                Si None, une instance sera créée avec les services fournis.
+        """
+        if system_prompt_template is None:
+            self.system_prompt_template: str = self._load_default_system_prompt()
+        else:
+            self.system_prompt_template: str = system_prompt_template
+        
+        # Stocker le ContextBuilder pour réutilisation (évite les instanciations redondantes)
+        self._context_builder: Optional[Any] = context_builder
+        
+        # Stocker les services pour réutilisation (évite les instanciations redondantes)
+        self._vocab_service: Optional[Any] = vocab_service
+        self._guides_service: Optional[Any] = guides_service
+        
+        # Créer PromptEnricher si non fourni
+        if enricher is None:
+            from services.prompt_enricher import PromptEnricher
+            enricher = PromptEnricher(
+                vocab_service=self._vocab_service,
+                guides_service=self._guides_service
+            )
+        self._enricher: Optional[Any] = enricher
+        
+        # Créer PromptBuilder si non fourni
+        if prompt_builder is None:
+            from services.prompt_builder import PromptBuilder
+            prompt_builder = PromptBuilder(
+                context_builder=self._context_builder,
+                enricher=self._enricher
+            )
+        self._prompt_builder: Optional[Any] = prompt_builder
+
+    def _load_default_system_prompt(self) -> str:
+        """
+        Charge le system prompt par défaut depuis la configuration.
+        
+        Returns:
+            str: Le system prompt par défaut.
+        """
+        try:
+            from services.configuration_service import ConfigurationService
+            config_service = ConfigurationService()
+            prompt = config_service.get_default_system_prompt()
+            if prompt:
+                return prompt
+        except Exception as e:
+            logger.warning(f"Impossible de charger le system prompt depuis la configuration: {e}")
+        
+        # Fallback: prompt minimal si le chargement échoue
+        return "Tu es un dialoguiste expert en jeux de rôle narratifs."
+
+    def _count_tokens(self, text: str, model_name: str = "gpt-5.2") -> int:
+        """
+        Compte le nombre de tokens dans un texte en utilisant tiktoken si disponible.
+
+        Si tiktoken n'est pas disponible ou si une erreur se produit,
+        un décompte approximatif basé sur les mots (séparés par des espaces) est utilisé.
+
+        Args:
+            text (str): Le texte pour lequel compter les tokens.
+            model_name (str): Le nom du modèle à utiliser pour l'encodage (par défaut "gpt-5.2").
+                              Cela influence la manière dont tiktoken compte les tokens.
+                              Les modèles personnalisés (gpt-5.2, etc.) sont mappés vers cl100k_base.
+
+        Returns:
+            int: Le nombre estimé de tokens.
+        """
+        if tiktoken_available and tiktoken is not None:
+            try:
+                # Essayer d'abord avec le mapping personnalisé
+                encoding_name = self._MODEL_ENCODING_MAP.get(model_name)
+                if encoding_name:
+                    encoding = tiktoken.get_encoding(encoding_name)
+                else:
+                    # Essayer avec encoding_for_model pour les modèles standards
+                    encoding = tiktoken.encoding_for_model(model_name)
+                return len(encoding.encode(text))
+            except Exception as e:
+                # Warn seulement une fois par modèle pour éviter le spam
+                if model_name not in PromptEngine._tiktoken_warned_models:
+                    logger.warning(
+                        f"Erreur lors du comptage des tokens avec tiktoken pour le modèle {model_name}: {e}. "
+                        f"Repli sur le comptage de mots. (Ce warning ne s'affichera qu'une fois par modèle)"
+                    )
+                    PromptEngine._tiktoken_warned_models.add(model_name)
+                pass # Tomber vers le comptage de mots
+        
+        # Fallback si tiktoken n'est pas disponible ou a échoué
+        return len(text.split())
+
+
+    def _escape_xml(self, text: str) -> str:
+        """Échappe les caractères spéciaux XML dans un texte.
+        
+        DEPRECATED: Utiliser utils.xml_utils.escape_xml_text() directement.
+        Cette méthode est conservée pour compatibilité mais délègue à xml_utils.
+        
+        Args:
+            text: Texte à échapper.
+            
+        Returns:
+            Texte échappé pour inclusion dans XML.
+        """
+        return escape_xml_text(text)
+
+    def _text_to_xml_content(self, text: str) -> str:
+        """Convertit un texte en contenu XML, en préservant les sauts de ligne.
+        
+        DEPRECATED: Utiliser utils.xml_utils.escape_xml_text() directement.
+        
+        Args:
+            text: Texte à convertir.
+            
+        Returns:
+            Texte échappé avec sauts de ligne préservés.
+        """
+        return escape_xml_text(text) if text else ""
+
+
+    def _format_tone_section(self, generation_params: Dict[str, Any]) -> Optional[str]:
+        """Formate la section ton et style en combinant tone et narrative_tags.
+        
+        Args:
+            generation_params: Dictionnaire contenant les paramètres de génération.
+            
+        Returns:
+            Chaîne formatée pour la section ton et style, ou None si aucun ton n'est défini.
+        """
+        tone = generation_params.get("tone")
+        narrative_tags = generation_params.get("narrative_tags", [])
+        
+        if not tone and not narrative_tags:
+            return None
+        
+        parts = []
+        if tone:
+            parts.append(f"Ton général : {tone}")
+        if narrative_tags:
+            tags_text = ", ".join([f"#{tag}" for tag in narrative_tags])
+            parts.append(f"Tags narratifs : {tags_text}")
+            parts.append("Adapte le style, le rythme et l'intensité émotionnelle en fonction de ces tags.")
+        
+        return "\n".join(parts)
+
+    # build_prompt() supprimé - système texte libre obsolète, utiliser build_unity_dialogue_prompt() à la place
+    
+    # Les méthodes _build_*_section() ont été déplacées vers PromptBuilder
+    # Elles sont conservées ici pour compatibilité mais déléguent à PromptBuilder
+    def _build_contract_section(self, input: PromptInput) -> Optional[ET.Element]:
+        """Construit la section <contract> (délègue à PromptBuilder).
+        
+        DEPRECATED: Utiliser PromptBuilder directement.
+        
+        Args:
+            input: Objet PromptInput contenant les paramètres.
+            
+        Returns:
+            Élément XML <contract> ou None si la section est vide.
+        """
+        return self._prompt_builder._build_contract_section(input)
+    
+    def _build_technical_section(self, input: PromptInput) -> Optional[ET.Element]:
+        """Construit la section <technical> (délègue à PromptBuilder).
+        
+        DEPRECATED: Utiliser PromptBuilder directement.
+        
+        Args:
+            input: Objet PromptInput contenant les paramètres.
+            
+        Returns:
+            Élément XML <technical> ou None si la section est vide.
+        """
+        return self._prompt_builder._build_technical_section(input)
+    
+    def _build_context_section(self, input: PromptInput) -> Optional[ET.Element]:
+        """Construit la section <context> (délègue à PromptBuilder).
+        
+        DEPRECATED: Utiliser PromptBuilder directement.
+        
+        Args:
+            input: Objet PromptInput contenant les paramètres.
+            
+        Returns:
+            Élément XML <context> ou None si la section est vide.
+        """
+        return self._prompt_builder._build_context_section(input)
+    
+    def _build_narrative_guides_xml(self, guides_text: str) -> ET.Element:
+        """Parse le texte des guides narratifs et crée une structure XML.
+        
+        DEPRECATED: Utiliser build_narrative_guides_xml() du module prompt_xml_parsers directement.
+        Cette méthode est conservée pour compatibilité mais délègue au module.
+        
+        Args:
+            guides_text: Texte formaté des guides (format Markdown simplifié).
+            
+        Returns:
+            Élément XML <narrative_guides> avec structure hiérarchique.
+        """
+        return build_narrative_guides_xml(guides_text)
+    
+    def _build_narrative_guides_section(self, input: PromptInput) -> Optional[ET.Element]:
+        """Construit la section <narrative_guides> (délègue à PromptBuilder).
+        
+        DEPRECATED: Utiliser PromptBuilder directement.
+        
+        Args:
+            input: Objet PromptInput contenant les paramètres.
+            
+        Returns:
+            Élément XML <narrative_guides> ou None si la section est vide.
+        """
+        return self._prompt_builder._build_narrative_guides_section(input)
+    
+    def _build_vocabulary_xml(self, vocab_text: str) -> ET.Element:
+        """Parse le texte du vocabulaire et crée une structure XML.
+        
+        DEPRECATED: Utiliser build_vocabulary_xml() du module prompt_xml_parsers directement.
+        Cette méthode est conservée pour compatibilité mais délègue au module.
+        
+        Args:
+            vocab_text: Texte formaté du vocabulaire (format "Terme: Définition").
+            
+        Returns:
+            Élément XML <vocabulary> avec structure hiérarchique par niveau de popularité.
+        """
+        return build_vocabulary_xml(vocab_text)
+    
+    def _build_vocabulary_section(self, input: PromptInput) -> Optional[ET.Element]:
+        """Construit la section <vocabulary> (délègue à PromptBuilder).
+        
+        DEPRECATED: Utiliser PromptBuilder directement.
+        
+        Args:
+            input: Objet PromptInput contenant les paramètres.
+            
+        Returns:
+            Élément XML <vocabulary> ou None si la section est vide.
+        """
+        return self._prompt_builder._build_vocabulary_section(input)
+    
+    def _build_scene_instructions_section(self, input: PromptInput) -> Optional[ET.Element]:
+        """Construit la section <scene_instructions> (délègue à PromptBuilder).
+        
+        DEPRECATED: Utiliser PromptBuilder directement.
+        
+        Args:
+            input: Objet PromptInput contenant les paramètres.
+            
+        Returns:
+            Élément XML <scene_instructions> ou None si la section est vide.
+        """
+        return self._prompt_builder._build_scene_instructions_section(input)
+    
+    def _parse_xml_to_prompt_structure(
+        self, 
+        xml_root: ET.Element, 
+        structured_context: Optional[Any],
+        total_tokens: int
+    ) -> Optional[Any]:
+        """Parse un élément XML <prompt> et le convertit en PromptStructure (JSON).
+        
+        Args:
+            xml_root: Élément XML racine <prompt>.
+            structured_context: Contexte structuré existant (PromptStructure) pour la section context.
+            total_tokens: Nombre total de tokens du prompt.
+            
+        Returns:
+            PromptStructure complet ou None si le parsing échoue.
+        """
+        from models.prompt_structure import PromptStructure, PromptSection, PromptMetadata
+        from datetime import datetime
+        
+        try:
+            sections = []
+            
+            # Mapping des balises XML vers les sections
+            section_mapping = {
+                "contract": ("other", "SECTION 0. CONTRAT GLOBAL"),
+                "technical": ("other", "SECTION 1. INSTRUCTIONS TECHNIQUES (NORMATIVES)"),
+                "narrative_guides": ("other", "SECTION 2B. GUIDES NARRATIFS"),
+                "vocabulary": ("other", "SECTION 2C. VOCABULAIRE ALTEIR"),
+                "scene_instructions": ("instruction", "SECTION 3. INSTRUCTIONS DE SCÈNE (PRIORITÉ EFFECTIVE)"),
+            }
+            
+            # Parser chaque section XML
+            for child in xml_root:
+                tag = child.tag
+                
+                # Section context : utiliser structured_context si disponible
+                if tag == "context":
+                    if structured_context:
+                        # Chercher la section context dans structured_context
+                        context_section = None
+                        for section in structured_context.sections:
+                            if section.type == "context" and section.categories:
+                                context_section = section
+                                break
+                        
+                        if context_section:
+                            sections.append(context_section)
+                        else:
+                            # Fallback : créer une section basique depuis le XML
+                            content = extract_text_from_element(child)
+                            if content:
+                                sections.append(PromptSection(
+                                    type="context",
+                                    title="SECTION 2A. CONTEXTE GDD",
+                                    content=content,
+                                    tokenCount=self._count_tokens(content)
+                                ))
+                    else:
+                        # Pas de structured_context : parser le XML
+                        content = extract_text_from_element(child)
+                        if content:
+                            sections.append(PromptSection(
+                                type="context",
+                                title="SECTION 2A. CONTEXTE GDD",
+                                content=content,
+                                tokenCount=self._count_tokens(content)
+                            ))
+                
+                # Autres sections : utiliser le mapping
+                elif tag in section_mapping:
+                    section_type, section_title = section_mapping[tag]
+                    content = extract_text_from_element(child)
+                    if content:
+                        sections.append(PromptSection(
+                            type=section_type,
+                            title=section_title,
+                            content=content,
+                            tokenCount=self._count_tokens(content)
+                        ))
+            
+            # Extraire organizationMode de manière sécurisée
+            organization_mode = None
+            if structured_context and structured_context.metadata:
+                org_mode = structured_context.metadata.organizationMode
+                if isinstance(org_mode, str):
+                    organization_mode = org_mode
+            
+            # Créer la structure finale
+            return PromptStructure(
+                sections=sections,
+                metadata=PromptMetadata(
+                    totalTokens=total_tokens,
+                    generatedAt=datetime.now().isoformat(),
+                    organizationMode=organization_mode
+                )
+            )
+        except Exception as e:
+            logger.warning(f"Erreur lors du parsing XML vers PromptStructure: {e}")
+            return None
+    
+    def build_prompt(self, input: PromptInput) -> BuiltPrompt:
+        """Builder unique et pur pour tous les prompts.
+        
+        Aucune dépendance à OpenAI, aucun side-effect.
+        Toutes les injections (vocabulaire, guides, contraintes) sont ici.
+        
+        Args:
+            input: Objet PromptInput contenant tous les paramètres.
+            
+        Returns:
+            BuiltPrompt avec raw_prompt (exact), token_count, sections, prompt_hash.
+        """
+        # Gérer le contexte structuré ou texte (nécessaire pour _build_context_section)
+        structured_context = None
+        if input.structured_context:
+            structured_context = input.structured_context
+        
+        # ASSEMBLAGE FINAL EN XML (construction via PromptBuilder)
+        root = self._prompt_builder.build_structure(input)
+        
+        # Créer le document XML complet avec déclaration
+        full_prompt = create_xml_document(root)
+        
+        num_tokens = self._count_tokens(full_prompt)
+        prompt_hash = hashlib.sha256(full_prompt.encode('utf-8')).hexdigest()
+        
+        # Parser le XML pour générer structured_prompt (JSON)
+        final_structured_prompt = None
+        if structured_context:
+            try:
+                final_structured_prompt = self._parse_xml_to_prompt_structure(root, structured_context, num_tokens)
+            except Exception as e:
+                logger.warning(f"Erreur lors du parsing XML vers PromptStructure: {e}")
+        
+        # Valider le XML final
+        if not validate_xml_content(full_prompt):
+            logger.error("XML invalide généré dans build_prompt()")
+            # Capturer les détails précis de l'erreur XML
+            xml_error_details = {}
+            try:
+                xml_content = full_prompt.split('?>', 1)[-1].strip()
+                ET.fromstring(xml_content)
+            except ET.ParseError as parse_err:
+                # Extraire ligne et colonne depuis le message d'erreur (format: "line X, column Y")
+                import re
+                lineno = None
+                offset = None
+                msg = str(parse_err)
+                logger.error(f"Message d'erreur complet: {repr(msg)}")
+                match = re.search(r'line (\d+), column (\d+)', msg)
+                if match:
+                    lineno = int(match.group(1))
+                    offset = int(match.group(2))
+                    logger.error(f"Regex match réussi: ligne {lineno}, colonne {offset}")
+                elif hasattr(parse_err, 'position') and parse_err.position:
+                    lineno, offset = parse_err.position
+                elif hasattr(parse_err, 'lineno'):
+                    lineno = parse_err.lineno
+                    offset = getattr(parse_err, 'offset', None) or getattr(parse_err, 'colno', None)
+                else:
+                    logger.error(f"Regex match échoué pour: {msg}")
+                
+                error_line = None
+                problematic_char = None
+                
+                if lineno and offset:
+                    lines = xml_content.split('\n')
+                    if lineno <= len(lines):
+                        error_line = lines[lineno - 1]
+                        if offset <= len(error_line):
+                            start = max(0, offset - 10)
+                            end = min(len(error_line), offset + 10)
+                            problematic_char = error_line[start:end]
+                
+                xml_error_details = {
+                    "line": lineno,
+                    "column": offset,
+                    "error_line": error_line,
+                    "problematic_char": problematic_char,
+                    "raw_xml_preview": full_prompt[:2000] if len(full_prompt) > 2000 else full_prompt,
+                    "raw_xml_length": len(full_prompt)
+                }
+                
+                logger.error(f"Détails de l'erreur XML: {parse_err}")
+                logger.error(f"Position: ligne {lineno}, colonne {offset}")
+                if error_line:
+                    logger.error(f"Ligne problématique: {repr(error_line)}")
+                if problematic_char:
+                    logger.error(f"Caractère problématique (colonne {offset}): {repr(problematic_char)}")
+            except Exception as e:
+                logger.error(f"Erreur lors de la validation XML: {e}")
+            
+            # Créer une exception personnalisée avec les détails XML
+            error = ValueError("XML invalide dans le prompt final")
+            error.xml_error_details = xml_error_details
+            error.raw_xml = full_prompt
+            raise error
+        
+        # sections_content est déprécié mais conservé pour compatibilité (dict vide)
+        # Le structured_prompt (JSON) est maintenant la source de vérité
+        sections_content = {}
+        
+        return BuiltPrompt(
+            raw_prompt=full_prompt,
+            token_count=num_tokens,
+            sections=sections_content,
+            prompt_hash=prompt_hash,
+            structured_prompt=final_structured_prompt
+        )
+
+    def build_unity_dialogue_prompt(
+        self,
+        user_instructions: str,
+        npc_speaker_id: str,
+        player_character_id: str = "URESAIR",
+        skills_list: Optional[List[str]] = None,
+        traits_list: Optional[List[str]] = None,
+        context_summary: Optional[str] = None,
+        scene_location: Optional[Dict[str, str]] = None,
+        max_choices: Optional[int] = None,
+        narrative_tags: Optional[List[str]] = None,
+        author_profile: Optional[str] = None,
+        vocabulary_config: Optional[Dict[str, str]] = None,
+        include_narrative_guides: bool = True
+    ) -> Tuple[str, int]:
+        """DEPRECATED: Utiliser build_prompt(PromptInput) à la place.
+        """
+        # Mapper vers PromptInput
+        prompt_input = PromptInput(
+            user_instructions=user_instructions,
+            npc_speaker_id=npc_speaker_id,
+            player_character_id=player_character_id,
+            skills_list=skills_list,
+            traits_list=traits_list,
+            context_summary=context_summary,
+            scene_location=scene_location,
+            max_choices=max_choices,
+            choices_mode="capped" if max_choices is not None else "free",
+            narrative_tags=narrative_tags,
+            author_profile=author_profile,
+            vocabulary_config=vocabulary_config,
+            include_narrative_guides=include_narrative_guides
+        )
+        
+        built = self.build_prompt(prompt_input)
+        return built.raw_prompt, built.token_count
+
+# Tests build_prompt() supprimés - système texte libre obsolète
+# Utiliser build_unity_dialogue_prompt() pour les tests à la place 

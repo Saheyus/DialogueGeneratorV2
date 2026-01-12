@@ -27,6 +27,26 @@ def disable_rate_limiting():
         del os.environ["AUTH_RATE_LIMIT_ENABLED"]
 
 
+@pytest.fixture(scope="function", autouse=True)
+def setup_service_container():
+    """Initialise le ServiceContainer dans app.state pour chaque test.
+    
+    Cette fixture s'exécute automatiquement avant chaque test pour s'assurer
+    que le ServiceContainer est initialisé, ce qui est requis par les fonctions
+    get_* dans api/dependencies.py.
+    """
+    from api.container import ServiceContainer
+    
+    # Initialiser le container dans app.state
+    if not hasattr(app.state, "container") or app.state.container is None:
+        app.state.container = ServiceContainer()
+    
+    yield
+    
+    # Nettoyer après le test (optionnel, mais bon pour l'isolation)
+    # On peut laisser le container en place pour les tests suivants
+
+
 @pytest.fixture
 def client():
     """Fixture pour créer un client de test FastAPI.

@@ -17,9 +17,9 @@ except ImportError:
     current_dir = Path(__file__).resolve().parent.parent
     if str(current_dir) not in sys.path:
         sys.path.insert(0, str(current_dir))
-    from context_builder import ContextBuilder
-    from prompt_engine import PromptEngine
-    from llm_client import ILLMClient
+from core.context.context_builder import ContextBuilder
+from core.prompt.prompt_engine import PromptEngine
+from core.llm.llm_client import ILLMClient
 
 logger = logging.getLogger(__name__)
 

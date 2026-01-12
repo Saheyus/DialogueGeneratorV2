@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from services.context_field_detector import ContextFieldDetector, FieldInfo
-from context_builder import ContextBuilder
+from core.context.context_builder import ContextBuilder
 
 logger = logging.getLogger(__name__)
 

@@ -129,17 +129,9 @@ export default defineConfig({
         drop_console: true, // Supprimer les console.log en production
       },
     },
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          // Séparer les dépendances en chunks pour optimiser le chargement
-          vendor: ['react', 'react-dom'],
-          router: ['react-router-dom'],
-          api: ['axios'],
-          store: ['zustand'],
-        },
-      },
-    },
+    // Code-splitting automatique par Vite (plus fiable que manualChunks)
+    // Laisser Vite gérer automatiquement pour éviter les problèmes d'ordre de chargement
+    // Le warning sur la taille des chunks est acceptable (< 500 KB après minification)
   },
   // Optimisation pour le développement
   optimizeDeps: {

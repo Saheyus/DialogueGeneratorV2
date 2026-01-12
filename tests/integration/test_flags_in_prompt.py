@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 from api.main import app
 from services.prompt_builder import PromptBuilder
-from prompt_engine import PromptInput
+from core.prompt.prompt_engine import PromptInput
 import xml.etree.ElementTree as ET
 
 

@@ -40,7 +40,7 @@ def mock_config_service():
 @pytest.fixture
 def mock_context_builder():
     """Mock du ContextBuilder."""
-    from context_builder import ContextBuilder
+    from core.context.context_builder import ContextBuilder
     mock_builder = MagicMock(spec=ContextBuilder)
     mock_builder.characters = [{"Nom": "Test Character"}]
     mock_builder._count_tokens = MagicMock(return_value=100)
@@ -209,18 +209,32 @@ class TestContextFields:
     
     def test_preview_context(self, client, mock_context_builder):
         """Test de prévisualisation du contexte."""
+        # Configurer le mock pour retourner des données valides
+        from unittest.mock import MagicMock
+        mock_context_builder.build_context_json = MagicMock(return_value={
+            "sections": [
+                {
+                    "title": "Test Character",
+                    "content": "Test content for preview"
+                }
+            ]
+        })
+        mock_context_builder._context_serializer = MagicMock()
+        mock_context_builder._context_serializer.serialize_to_text = MagicMock(return_value="Test Character\nTest content for preview")
+        mock_context_builder._count_tokens = MagicMock(return_value=10)
+        
         request_data = {
             "selected_elements": {
-                "characters_full": ["Test Character"]
+                "characters": ["Test Character"]
             },
             "field_configs": {
-                "character": {
-                    "1": [{"path": "Nom", "label": "Nom"}]
-                }
+                "character": ["Nom"]
             },
+            "organization_mode": "default",
+            "scene_instruction": "Test scene",
             "max_tokens": 1000
         }
-        response = client.post("/api/v1/config/context-preview", json=request_data)
+        response = client.post("/api/v1/config/context-fields/preview", json=request_data)
         
         # L'endpoint peut ne pas exister (405) ou exister (200)
         assert response.status_code in [200, 405, 500]
@@ -303,8 +317,9 @@ class TestTemplates:
         assert response.status_code in [200, 405, 500]
         if response.status_code == 200:
             data = response.json()
-            assert "scene_instruction_templates_path" in data
-            assert "author_profile_templates_path" in data
+            # L'API retourne scene_instructions_dir et author_profiles_dir, pas _path
+            assert "scene_instructions_dir" in data or "scene_instruction_templates_path" in data
+            assert "author_profiles_dir" in data or "author_profile_templates_path" in data
 
 
 class TestDefaultSystemPrompt:

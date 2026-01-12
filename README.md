@@ -56,24 +56,35 @@ Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux m
     *   `routers/`: Routes API pour dialogues, contexte, configuration, etc.
     *   `schemas/`: Schémas Pydantic pour validation des requêtes/réponses.
     *   `services/`: Services API (authentification, etc.).
+    *   `container.py`: ServiceContainer pour la gestion du cycle de vie des services.
+    *   `dependencies.py`: Helpers d'injection de dépendances FastAPI.
 *   `frontend/`: Interface web React (frontend).
     *   `src/`: Code source React/TypeScript.
 *   `config/`: Contient les fichiers de configuration (ex: `llm_config.json`, `context_config.json`, `app_config.json`).
-*   `core/`: Logique métier principale, indépendante de l'interface utilisateur ou des frameworks externes.
-    *   `dialogue_system/`: Classes et fonctions liées au système de dialogue.
+*   `core/`: Modules métier principaux (logique métier indépendante de l'interface).
+    *   `context/`: Construction et gestion du contexte GDD (`context_builder.py`).
+    *   `prompt/`: Construction et gestion des prompts LLM (`prompt_engine.py`).
+    *   `llm/`: Clients et interfaces pour les modèles de langage (`llm_client.py`).
 *   `data/`: Données persistantes de l'application.
     *   `interactions/`: Stockage des dialogues générés (fichiers JSON).
-*   `domain/`: Modèles de données et services du domaine de l'application.
-*   `llm_client/`: Clients pour interagir avec les modèles de langage (OpenAI, Dummy).
 *   `models/`: Structures de données Pydantic utilisées dans l'application.
     *   `dialogue_structure/`: Modèles pour les éléments de dialogue et les interactions.
-*   `services/`: Services applicatifs (ex: gestion des interactions, rendu JSON Unity, configuration).
-    *   `repositories/`: Abstractions pour l'accès aux données (ex: `FileInteractionRepository`).
+*   `services/`: Services applicatifs réutilisables (ex: gestion des interactions, rendu JSON Unity, configuration).
+    *   `repositories/`: Abstractions pour l'accès aux données (ex: `FileLLMUsageRepository`).
     *   `json_renderer/`: Logique pour convertir les interactions en format JSON Unity.
+    *   `configuration_service.py`: Gestionnaire principal de configuration (fichiers JSON).
 *   `tests/`: Tests unitaires et d'intégration.
-*   `context_builder.py`: Responsable du chargement, du stockage et de l'accès aux données du GDD.
-*   `prompt_engine.py`: Construit les prompts à envoyer aux LLMs.
-*   `config_manager.py`: Gère le chargement et la sauvegarde des configurations.
+    *   `manual/`: Scripts de test manuels et de debug.
+
+### Architecture
+
+#### Injection de Dépendances
+
+L'application utilise `api/container.py` (ServiceContainer) pour gérer le cycle de vie des services.
+Le container est initialisé dans `app.state` au démarrage de l'API (voir `api/main.py`).
+Toutes les dépendances FastAPI utilisent `api/dependencies.py` qui accède au container via `request.app.state.container`.
+
+**Note**: Les modules `context_builder.py`, `prompt_engine.py`, et `llm_client.py` à la racine sont des wrappers de compatibilité qui redirigent vers `core/`. Ils seront supprimés dans la version 2.0.
 
 ## Prérequis et Installation
 

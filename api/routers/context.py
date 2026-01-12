@@ -27,7 +27,7 @@ from api.dependencies import (
     get_request_id
 )
 from api.exceptions import NotFoundException, InternalServerException
-from context_builder import ContextBuilder
+from core.context.context_builder import ContextBuilder
 from services.linked_selector import LinkedSelectorService
 
 logger = logging.getLogger(__name__)

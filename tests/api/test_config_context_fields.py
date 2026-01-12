@@ -1,8 +1,9 @@
 """Tests pour les endpoints API de configuration des champs de contexte."""
 import pytest
+from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
 from api.main import app
-from context_builder import ContextBuilder
+from core.context.context_builder import ContextBuilder
 
 
 @pytest.fixture
@@ -14,9 +15,10 @@ def client():
 @pytest.fixture
 def mock_context_builder(monkeypatch):
     """Mock du ContextBuilder avec des données de test."""
-    builder = ContextBuilder()
+    from unittest.mock import MagicMock
+    builder = MagicMock(spec=ContextBuilder)
     
-    # Ajouter des données de test
+    # Configurer des données de test
     builder.characters = [
         {
             "Nom": "Test Character",
@@ -107,31 +109,50 @@ class TestContextFieldsEndpoints:
         """Test de prévisualisation du contexte."""
         from api.dependencies import get_context_builder
         
+        # Configurer le mock pour retourner des données valides
+        mock_context_builder.build_context_json = MagicMock(return_value={
+            "sections": [
+                {
+                    "title": "Test Character",
+                    "content": "Test content for preview"
+                }
+            ]
+        })
+        mock_context_builder._context_serializer = MagicMock()
+        mock_context_builder._context_serializer.serialize_to_text = MagicMock(return_value="Test Character\nTest content for preview")
+        mock_context_builder._count_tokens = MagicMock(return_value=10)
+        
         def mock_get_context_builder():
             return mock_context_builder
         
-        monkeypatch.setattr("api.dependencies.get_context_builder", mock_get_context_builder)
+        # Utiliser app.dependency_overrides pour s'assurer que le mock est utilisé
+        from api.main import app
+        app.dependency_overrides[get_context_builder] = mock_get_context_builder
         
-        response = client.post(
-            "/api/v1/config/context-fields/preview",
-            json={
-                "selected_elements": {
-                    "characters": ["Test Character"]
-                },
-                "field_configs": {
-                    "character": ["Nom", "Dialogue Type"]
-                },
-                "organization_mode": "default",
-                "scene_instruction": "Test scene",
-                "max_tokens": 1000
-            }
-        )
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert "preview" in data
-        assert "tokens" in data
-        assert isinstance(data["preview"], str)
-        assert isinstance(data["tokens"], int)
-        assert data["tokens"] > 0
+        try:
+            response = client.post(
+                "/api/v1/config/context-fields/preview",
+                json={
+                    "selected_elements": {
+                        "characters": ["Test Character"]
+                    },
+                    "field_configs": {
+                        "character": ["Nom", "Dialogue Type"]
+                    },
+                    "organization_mode": "default",
+                    "scene_instruction": "Test scene",
+                    "max_tokens": 1000
+                }
+            )
+            
+            assert response.status_code == 200
+            data = response.json()
+            assert "preview" in data
+            assert "tokens" in data
+            assert isinstance(data["preview"], str)
+            assert isinstance(data["tokens"], int)
+            assert data["tokens"] > 0
+        finally:
+            # Nettoyer les overrides
+            app.dependency_overrides.clear()
 

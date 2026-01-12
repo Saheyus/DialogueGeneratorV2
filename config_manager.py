@@ -1,18 +1,24 @@
+"""Module de gestion de configuration (DEPRECATED - Wrapper de compatibilité).
+
+DEPRECATED: Ce module est maintenu uniquement pour rétrocompatibilité.
+Utiliser `services.configuration_service.ConfigurationService` pour la gestion de configuration.
+
+Ce module fournit :
+- Fonctions utilitaires pour les fichiers JSON (conservées)
+- Wrapper de compatibilité pour load_llm_config (redirige vers ConfigurationService)
+"""
+import warnings
 import json
 import os
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 import logging
+
 from constants import UIText, FilePaths, Defaults
 
 logger = logging.getLogger(__name__)
 
-# MODIFIÉ: Constantes UI_SETTINGS_FILE et DEFAULT_UNITY_DIALOGUES_PATH supprimées.
-# Elles sont maintenant dans ConfigurationService.
-
-# MODIFIÉ: Fonctions load_ui_settings, save_ui_settings, get_unity_dialogues_path, set_unity_dialogues_path supprimées.
-# Leur logique est maintenant dans ConfigurationService.
-
+# Fonctions utilitaires conservées (non liées à la configuration)
 def list_json_files(dialogues_base_path: Path, recursive: bool = False) -> List[Path]:
     """
     Lists .json files in the specified Unity dialogues path.
@@ -61,14 +67,22 @@ def read_json_file_content(file_path: Path) -> Optional[str]:
         logger.error(f"Error reading file {file_path}: {e}")
         return None
 
-if __name__ == "__main__":
-    # Le bloc __main__ pourrait être utilisé pour tester list_json_files/read_json_file_content si besoin.
-    pass 
-
+# Constantes conservées pour compatibilité
 DEFAULT_LLM_CONFIG_PATH = FilePaths.CONFIG_DIR / FilePaths.LLM_CONFIG
-DEFAULT_UI_SETTINGS_PATH = FilePaths.CONFIG_DIR / "ui_settings.json" # Maintenu ici si spécifique
+DEFAULT_UI_SETTINGS_PATH = FilePaths.CONFIG_DIR / "ui_settings.json"
 
 def create_default_config_files():
+    """DEPRECATED: Cette fonction est maintenue pour compatibilité uniquement.
+    
+    Pour créer des fichiers de configuration par défaut, utiliser ConfigurationService.
+    """
+    warnings.warn(
+        "create_default_config_files() is deprecated. "
+        "Use services.configuration_service.ConfigurationService instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
     if not os.path.exists(FilePaths.CONFIG_DIR):
         os.makedirs(FilePaths.CONFIG_DIR)
     
@@ -88,16 +102,16 @@ def create_default_config_files():
             "checked_items": {}
         },
         "generation_params": {
-            "llm_model_identifier": Defaults.MODEL_ID, # Utilisation de Defaults
-            "max_context_tokens": Defaults.CONTEXT_TOKENS, # Utilisation de Defaults
-            "variants_count": Defaults.VARIANTS_COUNT, # Utilisation de Defaults
-            "temperature": Defaults.TEMPERATURE, # Utilisation de Defaults
-            "max_response_tokens": 1000, # Potentiellement une Default aussi
+            "llm_model_identifier": Defaults.MODEL_ID,
+            "max_context_tokens": Defaults.CONTEXT_TOKENS,
+            "variants_count": Defaults.VARIANTS_COUNT,
+            "temperature": Defaults.TEMPERATURE,
+            "max_response_tokens": 1000,
             "scene_instruction_template": "",
             "auto_save_context": False
         },
         "last_opened_interaction_path": "",
-        "unity_dialogues_path": str(Path.cwd() / "Assets" / "Dialogues" / "generated"), # TODO: Rendre configurable explicitement
+        "unity_dialogues_path": str(Path.cwd() / "Assets" / "Dialogues" / "generated"),
         "context_config_path": str(Path.cwd() / "context_config.json")
     }
 
@@ -105,14 +119,14 @@ def create_default_config_files():
     default_llm_config = {
         "available_llm_models": [
             {
-                "model_identifier": Defaults.MODEL_ID, # Utilisation de Defaults
+                "model_identifier": Defaults.MODEL_ID,
                 "display_name": f"OpenAI - {Defaults.MODEL_ID}",
                 "api_key_env_var": "OPENAI_API_KEY",
                 "client_type": "openai",
                 "parameters": {
-                    "max_tokens": Defaults.MAX_TOKENS_MODEL, # Utilisation de Defaults (nouvelle constante à ajouter)
+                    "max_tokens": Defaults.MAX_TOKENS_MODEL,
                     "temperature_range": [0.0, 2.0],
-                    "default_temperature": Defaults.TEMPERATURE # Utilisation de Defaults
+                    "default_temperature": Defaults.TEMPERATURE
                 }
             },
             {
@@ -122,7 +136,7 @@ def create_default_config_files():
                 "parameters": {}
             }
         ],
-        "default_model_identifier": Defaults.MODEL_ID # Utilisation de Defaults
+        "default_model_identifier": Defaults.MODEL_ID
     }
 
     try:
@@ -142,6 +156,25 @@ def create_default_config_files():
         logger.error(f"Error creating default LLM config: {e}")
 
 def load_llm_config(config_path: Path = DEFAULT_LLM_CONFIG_PATH) -> Dict[str, Any]:
-    # ... existing code ...
-    pass
-    # ... existing code ... 
+    """DEPRECATED: Charge la configuration LLM depuis un fichier JSON.
+    
+    Cette fonction redirige vers ConfigurationService.get_llm_config().
+    Utiliser directement ConfigurationService pour les nouveaux code.
+    
+    Args:
+        config_path: Chemin vers le fichier de configuration LLM (ignoré, utilise ConfigurationService).
+        
+    Returns:
+        Dict contenant la configuration LLM.
+    """
+    warnings.warn(
+        "load_llm_config() is deprecated. "
+        "Use services.configuration_service.ConfigurationService.get_llm_config() instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
+    # Rediriger vers ConfigurationService
+    from services.configuration_service import ConfigurationService
+    config_service = ConfigurationService()
+    return config_service.get_llm_config()

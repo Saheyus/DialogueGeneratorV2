@@ -11,6 +11,10 @@ Composants principaux:
 - XmlElementBuilder: Construction d'éléments XML
 - InformationsSectionParser: Parsing des sections INFORMATIONS
 - TextSerializer: Sérialisation en format texte
+
+Note: Le fichier `services/context_serializer.py` (racine du package) est un wrapper
+de compatibilité qui réexporte ContextSerializer. Il est maintenu pour rétrocompatibilité
+avec le code existant. Les nouveaux imports devraient utiliser directement ce package.
 """
 
 from services.context_serializer.context_serializer import ContextSerializer

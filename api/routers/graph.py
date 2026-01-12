@@ -23,9 +23,9 @@ from api.dependencies import get_request_id
 from services.graph_conversion_service import GraphConversionService
 from services.graph_validation_service import GraphValidationService
 from services.unity_dialogue_generation_service import UnityDialogueGenerationService
-from llm_client import ILLMClient
-from prompt_engine import PromptEngine
-from context_builder import ContextBuilder
+from core.llm.llm_client import ILLMClient
+from core.prompt.prompt_engine import PromptEngine
+from core.context.context_builder import ContextBuilder
 from api.container import ServiceContainer
 
 logger = logging.getLogger(__name__)

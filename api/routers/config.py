@@ -29,7 +29,7 @@ from services.context_field_detector import ContextFieldDetector, FieldInfo as D
 from services.field_suggestion_service import FieldSuggestionService
 from services.context_organizer import ContextOrganizer
 from api.utils.context_field_cache import get_context_field_cache
-from context_builder import ContextBuilder
+from core.context.context_builder import ContextBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -1008,8 +1008,8 @@ async def get_author_profile_templates(
 async def debug_prompt_engine_loaded_code() -> JSONResponse:
     """Expose des infos de debug sur le PromptEngine chargé côté serveur (dev)."""
     import inspect
-    import prompt_engine as pe_module
-    from prompt_engine import PromptEngine
+    import core.prompt.prompt_engine as pe_module
+    from core.prompt.prompt_engine import PromptEngine
 
     try:
         src = inspect.getsource(PromptEngine.build_unity_dialogue_prompt)

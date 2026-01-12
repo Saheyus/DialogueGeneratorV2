@@ -1,16 +1,19 @@
-"""Injection de dépendances pour l'API FastAPI."""
+"""Injection de dépendances pour l'API FastAPI.
+
+Toutes les dépendances utilisent maintenant ServiceContainer depuis app.state.
+Les singletons globaux ont été supprimés pour unifier le système d'injection.
+"""
 import logging
 import os
 import sys
-import threading
 import json
 from pathlib import Path
 from typing import Annotated
 from fastapi import Depends
 from starlette.requests import Request
-from context_builder import ContextBuilder
-from prompt_engine import PromptEngine
-from llm_client import ILLMClient
+from core.context.context_builder import ContextBuilder
+from core.prompt.prompt_engine import PromptEngine
+from core.llm.llm_client import ILLMClient
 from services.configuration_service import ConfigurationService
 # InteractionService supprimé - système obsolète
 from services.dialogue_generation_service import DialogueGenerationService
@@ -34,70 +37,37 @@ logger = logging.getLogger(__name__)
 DIALOGUE_GENERATOR_DIR = Path(__file__).resolve().parent.parent
 # DEFAULT_INTERACTIONS_STORAGE_DIR supprimé - système obsolète
 
-# Instances globales (singletons) pour les services qui peuvent être partagés
-_context_builder: ContextBuilder | None = None
-_context_builder_lock = threading.Lock()  # Verrou pour éviter les race conditions
-_config_service: ConfigurationService | None = None
-_prompt_engine: PromptEngine | None = None
-_skill_catalog_service: SkillCatalogService | None = None
-_trait_catalog_service: TraitCatalogService | None = None
-
-
-def _get_config_service_singleton() -> ConfigurationService:
-    """Retourne le singleton global ConfigurationService (hors contexte request)."""
-    global _config_service
-    if _config_service is None:
-        _config_service = ConfigurationService()
-        logger.info("ConfigurationService initialisé (singleton global - mode compatibilité).")
-    return _config_service
+# Les singletons globaux ont été supprimés.
+# Tous les services sont maintenant gérés par ServiceContainer dans app.state.
 
 
 def get_config_service(request: Request) -> ConfigurationService:
     """Retourne le service de configuration.
     
-    Essaie d'abord d'utiliser le container dans app.state (nouveau système),
-    puis fallback vers le singleton global (compatibilité).
+    Utilise le ServiceContainer depuis app.state (système unifié).
     
     Args:
         request: La requête HTTP (injecté automatiquement par FastAPI).
         
     Returns:
         Instance de ConfigurationService.
+        
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
     """
-    # Nouveau système : utiliser le container depuis app.state si disponible
     container = getattr(request.app.state, "container", None)
-    if container is not None:
-        return container.get_config_service()
-
-    # Fallback vers l'ancien système (compatibilité)
-    return _get_config_service_singleton()
+    if container is None:
+        raise RuntimeError("ServiceContainer not initialized in app.state. Ensure app.state.container is set in lifespan.")
+    return container.get_config_service()
 
 
-def _get_context_builder_singleton() -> ContextBuilder:
-    """Retourne le singleton global ContextBuilder (hors contexte request)."""
-    global _context_builder
-    if _context_builder is None:
-        with _context_builder_lock:
-            # Double-check après avoir acquis le lock pour éviter les initialisations multiples
-            if _context_builder is None:
-                # Utiliser ContextBuilderFactory pour simplifier l'initialisation
-                from services.context_builder_factory import ContextBuilderFactory
-                from context_builder import CONTEXT_BUILDER_DIR, PROJECT_ROOT_DIR
-                _context_builder = ContextBuilderFactory.create(
-                    context_builder_dir=CONTEXT_BUILDER_DIR,
-                    project_root_dir=PROJECT_ROOT_DIR
-                )
-                logger.info("Chargement des fichiers GDD...")
-                _context_builder.load_gdd_files()
-                logger.info("ContextBuilder initialisé avec données GDD chargées (singleton global - mode compatibilité).")
-    return _context_builder
+# _get_context_builder_singleton() supprimé - utilisez ServiceContainer via get_context_builder()
 
 
 def get_context_builder(request: Request) -> ContextBuilder:
     """Retourne le ContextBuilder.
     
-    Essaie d'abord d'utiliser le container dans app.state (nouveau système),
-    puis fallback vers le singleton global avec verrou (compatibilité).
+    Utilise le ServiceContainer depuis app.state (système unifié).
     
     Le ContextBuilder charge les fichiers GDD au premier accès.
     Les chemins GDD peuvent être configurés via les variables d'environnement :
@@ -109,83 +79,40 @@ def get_context_builder(request: Request) -> ContextBuilder:
         
     Returns:
         Instance de ContextBuilder avec données GDD chargées.
+        
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
     """
-    # Nouveau système : utiliser le container depuis app.state si disponible
     container = getattr(request.app.state, "container", None)
-    if container is not None:
-        return container.get_context_builder()
-
-    # Fallback vers l'ancien système (compatibilité)
-    return _get_context_builder_singleton()
+    if container is None:
+        raise RuntimeError("ServiceContainer not initialized in app.state. Ensure app.state.container is set in lifespan.")
+    return container.get_context_builder()
 
 
 def get_prompt_engine(request: Request) -> PromptEngine:
     """Retourne le PromptEngine.
     
-    Essaie d'abord d'utiliser le container dans app.state (nouveau système),
-    puis fallback vers le singleton global (compatibilité).
+    Utilise le ServiceContainer depuis app.state (système unifié).
     
     Args:
-        request: La requête HTTP (optionnel, pour accéder à app.state).
+        request: La requête HTTP (injecté automatiquement par FastAPI).
         
     Returns:
         Instance de PromptEngine.
-    """
-    # Nouveau système : utiliser le container depuis app.state si disponible
-    if request is not None:
-        container = getattr(request.app.state, "container", None)
-        if container is not None:
-            return container.get_prompt_engine()
-    
-    # Fallback vers l'ancien système (compatibilité)
-    global _prompt_engine
-    if _prompt_engine is None:
-        # Injecter ContextBuilder et services pour éviter les instanciations redondantes
-        context_builder = get_context_builder(request)
-        vocab_service = get_vocabulary_service(request)
-        guides_service = get_narrative_guides_service(request)
-        # Créer PromptEnricher avec les services injectés
-        enricher = PromptEnricher(
-            vocab_service=vocab_service,
-            guides_service=guides_service
-        )
-        # Créer PromptBuilder avec les dépendances
-        from services.prompt_builder import PromptBuilder
-        prompt_builder = PromptBuilder(
-            context_builder=context_builder,
-            enricher=enricher
-        )
         
-        _prompt_engine = PromptEngine(
-            context_builder=context_builder,
-            vocab_service=vocab_service,
-            guides_service=guides_service,
-            enricher=enricher,
-            prompt_builder=prompt_builder
-        )
-        logger.info("PromptEngine initialisé (singleton global - mode compatibilité) avec toutes les dépendances injectées.")
-    return _prompt_engine
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
+    """
+    container = getattr(request.app.state, "container", None)
+    if container is None:
+        raise RuntimeError("ServiceContainer not initialized in app.state. Ensure app.state.container is set in lifespan.")
+    return container.get_prompt_engine()
 
 
 # get_interaction_repository supprimé - système obsolète
 # get_interaction_service supprimé - système obsolète
 
-def reset_singletons() -> None:
-    """Réinitialise tous les singletons (utile lors d'un reload uvicorn).
-    
-    Cette fonction doit être appelée au startup du lifespan pour garantir
-    que les singletons sont réinitialisés après un reload d'uvicorn.
-    """
-    global _context_builder, _config_service, _prompt_engine, _vocab_service, _guides_service
-    global _skill_catalog_service, _trait_catalog_service
-    _context_builder = None
-    _config_service = None
-    _prompt_engine = None
-    _vocab_service = None
-    _guides_service = None
-    _skill_catalog_service = None
-    _trait_catalog_service = None
-    logger.info("Singletons réinitialisés (reload détecté).")
+# reset_singletons() supprimé - le ServiceContainer gère déjà le reset via container.reset()
 
 
 def get_dialogue_generation_service(
@@ -208,17 +135,22 @@ def get_dialogue_generation_service(
 
 
 def get_llm_client(
-    model_identifier: str
+    model_identifier: str,
+    request: Request
 ) -> ILLMClient:
     """Crée un client LLM basé sur l'identifiant du modèle.
     
     Args:
         model_identifier: Identifiant du modèle LLM à utiliser.
+        request: La requête HTTP (pour accéder au container).
         
     Returns:
         Instance de ILLMClient (OpenAI ou Dummy).
+        
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
     """
-    config_service = _get_config_service_singleton()
+    config_service = get_config_service(request)
     llm_config = config_service.get_llm_config()
     available_models = config_service.get_available_llm_models()
     
@@ -294,60 +226,47 @@ def get_request_id(request: Request) -> str:
     return getattr(request.state, "request_id", "unknown")
 
 
-_vocab_service: VocabularyService | None = None
-_guides_service: NarrativeGuidesService | None = None
+# Variables globales _vocab_service et _guides_service supprimées - utilisez ServiceContainer
 
 
 def get_vocabulary_service(request: Request) -> VocabularyService:
     """Retourne le service de vocabulaire.
     
-    Essaie d'abord d'utiliser le container dans app.state (nouveau système),
-    puis fallback vers le singleton global (compatibilité).
+    Utilise le ServiceContainer depuis app.state (système unifié).
     
     Args:
-        request: La requête HTTP (optionnel, pour accéder à app.state).
+        request: La requête HTTP (injecté automatiquement par FastAPI).
         
     Returns:
         Instance de VocabularyService.
+        
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
     """
-    # Nouveau système : utiliser le container depuis app.state si disponible
-    if request is not None:
-        container = getattr(request.app.state, "container", None)
-        if container is not None:
-            return container.get_vocabulary_service()
-    
-    # Fallback vers l'ancien système (compatibilité)
-    global _vocab_service
-    if _vocab_service is None:
-        _vocab_service = VocabularyService()
-        logger.info("VocabularyService initialisé (singleton global - mode compatibilité).")
-    return _vocab_service
+    container = getattr(request.app.state, "container", None)
+    if container is None:
+        raise RuntimeError("ServiceContainer not initialized in app.state. Ensure app.state.container is set in lifespan.")
+    return container.get_vocabulary_service()
 
 
 def get_narrative_guides_service(request: Request) -> NarrativeGuidesService:
     """Retourne le service des guides narratifs.
     
-    Essaie d'abord d'utiliser le container dans app.state (nouveau système),
-    puis fallback vers le singleton global (compatibilité).
+    Utilise le ServiceContainer depuis app.state (système unifié).
     
     Args:
-        request: La requête HTTP (optionnel, pour accéder à app.state).
+        request: La requête HTTP (injecté automatiquement par FastAPI).
         
     Returns:
         Instance de NarrativeGuidesService.
+        
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
     """
-    # Nouveau système : utiliser le container depuis app.state si disponible
-    if request is not None:
-        container = getattr(request.app.state, "container", None)
-        if container is not None:
-            return container.get_narrative_guides_service()
-    
-    # Fallback vers l'ancien système (compatibilité)
-    global _guides_service
-    if _guides_service is None:
-        _guides_service = NarrativeGuidesService()
-        logger.info("NarrativeGuidesService initialisé (singleton global - mode compatibilité).")
-    return _guides_service
+    container = getattr(request.app.state, "container", None)
+    if container is None:
+        raise RuntimeError("ServiceContainer not initialized in app.state. Ensure app.state.container is set in lifespan.")
+    return container.get_narrative_guides_service()
 
 
 def get_notion_import_service() -> NotionImportService:
@@ -362,51 +281,39 @@ def get_notion_import_service() -> NotionImportService:
 def get_skill_catalog_service(request: Request) -> SkillCatalogService:
     """Retourne le service de catalogue des compétences.
     
-    Essaie d'abord d'utiliser le container dans app.state (nouveau système),
-    puis fallback vers le singleton global (compatibilité).
+    Utilise le ServiceContainer depuis app.state (système unifié).
     
     Args:
-        request: La requête HTTP (optionnel, pour accéder à app.state).
+        request: La requête HTTP (injecté automatiquement par FastAPI).
         
     Returns:
         Instance de SkillCatalogService.
+        
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
     """
-    # Nouveau système : utiliser le container depuis app.state si disponible
-    if request is not None:
-        container = getattr(request.app.state, "container", None)
-        if container is not None:
-            return container.get_skill_catalog_service()
-    
-    # Fallback vers l'ancien système (compatibilité)
-    global _skill_catalog_service
-    if _skill_catalog_service is None:
-        _skill_catalog_service = SkillCatalogService()
-        logger.info("SkillCatalogService initialisé (singleton global - mode compatibilité).")
-    return _skill_catalog_service
+    container = getattr(request.app.state, "container", None)
+    if container is None:
+        raise RuntimeError("ServiceContainer not initialized in app.state. Ensure app.state.container is set in lifespan.")
+    return container.get_skill_catalog_service()
 
 
 def get_trait_catalog_service(request: Request) -> TraitCatalogService:
     """Retourne le service de catalogue des traits.
     
-    Essaie d'abord d'utiliser le container dans app.state (nouveau système),
-    puis fallback vers le singleton global (compatibilité).
+    Utilise le ServiceContainer depuis app.state (système unifié).
     
     Args:
-        request: La requête HTTP (optionnel, pour accéder à app.state).
+        request: La requête HTTP (injecté automatiquement par FastAPI).
         
     Returns:
         Instance de TraitCatalogService.
+        
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
     """
-    # Nouveau système : utiliser le container depuis app.state si disponible
-    if request is not None:
-        container = getattr(request.app.state, "container", None)
-        if container is not None:
-            return container.get_trait_catalog_service()
-    
-    # Fallback vers l'ancien système (compatibilité)
-    global _trait_catalog_service
-    if _trait_catalog_service is None:
-        _trait_catalog_service = TraitCatalogService()
-        logger.info("TraitCatalogService initialisé (singleton global - mode compatibilité).")
-    return _trait_catalog_service
+    container = getattr(request.app.state, "container", None)
+    if container is None:
+        raise RuntimeError("ServiceContainer not initialized in app.state. Ensure app.state.container is set in lifespan.")
+    return container.get_trait_catalog_service()
 

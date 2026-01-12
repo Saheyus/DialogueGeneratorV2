@@ -1,20 +1,21 @@
 """Tests pour le service ContextFieldValidator."""
 import pytest
+from unittest.mock import MagicMock
 from services.context_field_validator import (
     ContextFieldValidator,
     ValidationIssue,
     ValidationResult
 )
 from services.context_field_detector import FieldInfo
-from context_builder import ContextBuilder
+from core.context.context_builder import ContextBuilder
 
 
 @pytest.fixture
 def mock_context_builder():
     """Mock du ContextBuilder avec des données de test."""
-    builder = ContextBuilder()
+    builder = MagicMock(spec=ContextBuilder)
     
-    # Ajouter des données de test pour les personnages
+    # Configurer les données de test pour les personnages
     builder.characters = [
         {
             "Nom": "Test Character 1",
@@ -41,6 +42,15 @@ def mock_context_builder():
             }
         }
     ]
+    
+    # Configurer get_character_details_by_name pour retourner les personnages
+    def get_character_details(name):
+        for char in builder.characters:
+            if char.get("Nom") == name:
+                return char
+        return None
+    
+    builder.get_character_details_by_name = MagicMock(side_effect=get_character_details)
     
     return builder
 

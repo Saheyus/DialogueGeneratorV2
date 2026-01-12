@@ -3,7 +3,7 @@ import json
 import time
 import logging
 from typing import Optional, Any
-from llm_client import ILLMClient, OpenAIClient, DummyLLMClient
+from core.llm.llm_client import ILLMClient, OpenAIClient, DummyLLMClient
 
 logger = logging.getLogger(__name__)
 

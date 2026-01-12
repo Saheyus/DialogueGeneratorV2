@@ -5,8 +5,8 @@ permettant une meilleure gestion du cycle de vie et facilitant les tests.
 """
 import logging
 from typing import Optional
-from context_builder import ContextBuilder
-from prompt_engine import PromptEngine
+from core.context.context_builder import ContextBuilder
+from core.prompt.prompt_engine import PromptEngine
 from services.configuration_service import ConfigurationService
 from services.vocabulary_service import VocabularyService
 from services.narrative_guides_service import NarrativeGuidesService
@@ -60,7 +60,7 @@ class ServiceContainer:
         """
         if self._context_builder is None:
             from services.context_builder_factory import ContextBuilderFactory
-            from context_builder import CONTEXT_BUILDER_DIR, PROJECT_ROOT_DIR
+            from core.context.context_builder import CONTEXT_BUILDER_DIR, PROJECT_ROOT_DIR
             
             self._context_builder = ContextBuilderFactory.create(
                 context_builder_dir=CONTEXT_BUILDER_DIR,

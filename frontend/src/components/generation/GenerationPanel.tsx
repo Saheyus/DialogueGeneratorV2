@@ -335,8 +335,10 @@ export function GenerationPanel() {
       const inGameFlags = getSelectedFlagsArray()
       
       // Utiliser previewPrompt pour la prévisualisation (plus approprié que estimate-tokens)
+      // Utiliser une valeur par défaut si userInstructions est vide (backend exige min_length=1)
+      const userInstructionsValue = userInstructions.trim() || ' '
       const response = await dialoguesAPI.previewPrompt({
-        user_instructions: userInstructions,
+        user_instructions: userInstructionsValue,
         context_selections: contextSelections,
         npc_speaker_id: sceneSelection.characterB || undefined,
         max_context_tokens: maxContextTokens,
@@ -490,8 +492,10 @@ export function GenerationPanel() {
         const { getSelectedFlagsArray } = useFlagsStore.getState()
         const inGameFlags = getSelectedFlagsArray()
         
+        // Utiliser une valeur par défaut si userInstructions est vide (backend exige min_length=1)
+        const userInstructionsValue = userInstructions.trim() || ' '
         const estimateResponse = await dialoguesAPI.estimateTokens({
-          user_instructions: userInstructions,
+          user_instructions: userInstructionsValue,
           context_selections: contextSelections,
           npc_speaker_id: sceneSelection.characterB || undefined,
           max_context_tokens: maxContextTokens,
@@ -541,8 +545,10 @@ export function GenerationPanel() {
         }
       }
       
+      // Utiliser une valeur par défaut si userInstructions est vide (backend exige min_length=1)
+      const userInstructionsValue = userInstructions.trim() || ' '
       const request: GenerateUnityDialogueRequest = {
-        user_instructions: userInstructions,
+        user_instructions: userInstructionsValue,
         context_selections: contextSelections,
         npc_speaker_id: sceneSelection.characterB || undefined,
         max_context_tokens: maxContextTokens,

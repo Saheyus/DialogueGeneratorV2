@@ -52,11 +52,20 @@ export async function estimateTokens(
  * 
  * Utilisé pour la prévisualisation du prompt avant génération.
  * Pour estimer les tokens, utiliser estimateTokens à la place.
+ * 
+ * Utilise un timeout étendu (60 secondes) car la construction du prompt peut être lente,
+ * notamment via ngrok qui ajoute de la latence réseau.
  */
 export async function previewPrompt(
   request: PreviewPromptRequest
 ): Promise<PreviewPromptResponse> {
-  const response = await apiClient.post<PreviewPromptResponse>('/api/v1/dialogues/preview-prompt', request)
+  const response = await apiClient.post<PreviewPromptResponse>(
+    '/api/v1/dialogues/preview-prompt',
+    request,
+    {
+      timeout: 60000, // 60 secondes pour la construction du prompt (plus long en production via ngrok)
+    }
+  )
   return response.data
 }
 

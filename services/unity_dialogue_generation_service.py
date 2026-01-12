@@ -7,7 +7,7 @@ from models.dialogue_structure.unity_dialogue_node import (
     UnityDialogueNodeContent,
     UnityDialogueChoiceContent
 )
-from llm_client import ILLMClient
+from core.llm.llm_client import ILLMClient
 
 logger = logging.getLogger(__name__)
 

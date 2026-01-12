@@ -3,6 +3,10 @@ description: Python (global) — conventions, qualité, Windows-first, migration
 globs: []
 alwaysApply: true
 ---
+- Architecture : modules core dans `core/` (context, prompt, llm), services réutilisables dans `services/`, API dans `api/`
+- Imports : Préférer `from core.context.context_builder import ContextBuilder` aux anciens imports racine (dépréciés)
+- Configuration : Utiliser `services.configuration_service.ConfigurationService` uniquement (pas `config_manager.py` racine)
+- Injection de dépendances : Via `api/container.py` (ServiceContainer), pas de singletons globaux
 - Conserver l’architecture existante (répertoires `core/`, `domain/`, `services/`, `ui/`, `models/`) et réutiliser les services plutôt que dupliquer la logique.
 - Windows-first: utiliser `pathlib.Path`, encodage `utf-8`, éviter les hypothèses POSIX (chemins, commandes, signaux).
 - Pour tout code Python modifié/ajouté: annotations de types complètes + docstrings PEP257 (fonctions, méthodes, classes). Ne pas supprimer les commentaires existants.

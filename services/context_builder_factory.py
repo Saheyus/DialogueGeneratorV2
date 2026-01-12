@@ -54,26 +54,26 @@ class ContextBuilderFactory:
         Returns:
             Instance de ContextBuilder configurée et prête à l'emploi.
         """
-        from context_builder import ContextBuilder
+        from core.context.context_builder import ContextBuilder
         
         # Déterminer les chemins par défaut si non fournis
         if context_builder_dir is None:
-            # Essayer d'importer depuis context_builder pour compatibilité
+            # Essayer d'importer depuis core.context.context_builder pour compatibilité
             try:
-                from context_builder import CONTEXT_BUILDER_DIR
+                from core.context.context_builder import CONTEXT_BUILDER_DIR
                 context_builder_dir = CONTEXT_BUILDER_DIR
             except ImportError:
                 context_builder_dir = Path(__file__).resolve().parent.parent
         if project_root_dir is None:
             try:
-                from context_builder import PROJECT_ROOT_DIR
+                from core.context.context_builder import PROJECT_ROOT_DIR
                 project_root_dir = PROJECT_ROOT_DIR
             except ImportError:
                 project_root_dir = context_builder_dir.parent
         
         # Déterminer le chemin de configuration
         if config_file_path is None:
-            from context_builder import DEFAULT_CONFIG_FILE
+            from core.context.context_builder import DEFAULT_CONFIG_FILE
             config_file_path = DEFAULT_CONFIG_FILE
         
         # Gérer les chemins GDD (priorité : paramètre > ConfigManager > valeur par défaut)

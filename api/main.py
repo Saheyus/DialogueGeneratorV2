@@ -154,11 +154,8 @@ async def lifespan(app: FastAPI):
         app.state.container = container
         logger.info("ServiceContainer initialisé dans app.state.")
         
-        # Conserver la compatibilité avec l'ancien système de singletons (transition)
-        # Réinitialiser les singletons au démarrage (important pour uvicorn reload)
-        from api.dependencies import reset_singletons
-        reset_singletons()
-        logger.info("Singletons réinitialisés au démarrage (mode compatibilité).")
+        # Le ServiceContainer gère déjà le cycle de vie des services.
+        # Pas besoin de réinitialiser des singletons (système unifié).
     except Exception as e:
         logger.warning(f"Erreur lors de l'initialisation du container: {e}")
     
@@ -253,18 +250,37 @@ if limiter is not None:
 cors_origins_env = os.getenv("CORS_ORIGINS", "")
 is_production_env = os.getenv("ENVIRONMENT", "development") == "production"
 
-# En production, lire depuis CORS_ORIGINS (format CSV), sinon permettre tout en dev
+# En production, lire depuis CORS_ORIGINS (format CSV)
+# IMPORTANT: Quand allow_credentials=True, on ne peut pas utiliser "*" - il faut spécifier les origines
 if is_production_env and cors_origins_env:
     cors_origins = [origin.strip() for origin in cors_origins_env.split(",")]
+    cors_origin_regex = None
 else:
-    cors_origins = ["*"]  # Dev par défaut
+    # En développement, accepter localhost et toutes les origines ngrok via regex
+    # ngrok utilise des domaines *.ngrok-free.app et *.ngrok.io
+    cors_origins = [
+        "http://localhost:3000",
+        "http://localhost:4242",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:4242",
+    ]
+    # Regex pour accepter toutes les URLs ngrok
+    cors_origin_regex = r"https://.*\.ngrok-free\.app|https://.*\.ngrok\.io"
+
+# Configuration du middleware CORS
+cors_middleware_kwargs = {
+    "allow_credentials": True,
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
+}
+if cors_origin_regex:
+    cors_middleware_kwargs["allow_origin_regex"] = cors_origin_regex
+else:
+    cors_middleware_kwargs["allow_origins"] = cors_origins
 
 app.add_middleware(
     FastAPICORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    **cors_middleware_kwargs
 )
 
 # Middleware personnalisés
@@ -314,16 +330,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     """
     request_id = getattr(request.state, "request_id", "unknown")
     
-    # #region agent log
-    try:
-        import json
-        from datetime import datetime
-        from pathlib import Path
-        with open(Path(__file__).parent.parent / ".cursor" / "debug.log", "a", encoding="utf-8") as f:
-            f.write(json.dumps({"id": f"log_{int(datetime.now().timestamp()*1000)}", "timestamp": int(datetime.now().timestamp()*1000), "location": "api/main.py:129", "message": "RequestValidationError caught", "data": {"request_id": request_id, "errors": exc.errors(), "path": str(request.url.path)}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "A"}) + "\n")
-    except: pass
-    # #endregion
-    
     # Transformer les erreurs Pydantic en format simple : {champ: message}
     errors = exc.errors()
     details = {}
@@ -334,6 +340,24 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         if not field_path:
             field_path = ".".join(str(loc) for loc in err["loc"])
         details[field_path] = err["msg"]
+    
+    # #region agent log
+    # Instrumentation pour debug : logger les détails de validation
+    error_details_full = []
+    for err in errors:
+        error_details_full.append({
+            "loc": list(err.get("loc", [])),
+            "msg": err.get("msg", ""),
+            "type": err.get("type", ""),
+            "ctx": err.get("ctx", {})
+        })
+    
+    logger.error(
+        f"Erreur de validation Pydantic (request_id: {request_id}): "
+        f"errors={error_details_full}, "
+        f"path={request.url.path}"
+    )
+    # #endregion agent log
     
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -493,8 +517,8 @@ app.include_router(graph.router)
 async def debug_prompt_engine() -> JSONResponse:
     """Expose basic PromptEngine debug info (development only)."""
     import inspect
-    import prompt_engine as pe_module
-    from prompt_engine import PromptEngine
+    import core.prompt.prompt_engine as pe_module
+    from core.prompt.prompt_engine import PromptEngine
 
     try:
         src = inspect.getsource(PromptEngine.build_unity_dialogue_prompt)

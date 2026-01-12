@@ -25,7 +25,7 @@ from api.dependencies import (
     get_skill_catalog_service,
     get_trait_catalog_service
 )
-from prompt_engine import PromptEngine, PromptInput, BuiltPrompt
+from core.prompt.prompt_engine import PromptEngine, PromptInput, BuiltPrompt
 from api.exceptions import InternalServerException, ValidationException, NotFoundException, OpenAIException
 from services.dialogue_generation_service import DialogueGenerationService
 from services.unity_dialogue_generation_service import UnityDialogueGenerationService
@@ -33,7 +33,7 @@ from services.json_renderer.unity_json_renderer import UnityJsonRenderer
 from services.configuration_service import ConfigurationService
 from services.skill_catalog_service import SkillCatalogService
 from services.trait_catalog_service import TraitCatalogService
-from llm_client import ILLMClient
+from core.llm.llm_client import ILLMClient
 
 logger = logging.getLogger(__name__)
 

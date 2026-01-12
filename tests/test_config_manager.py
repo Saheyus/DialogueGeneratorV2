@@ -10,10 +10,18 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+import warnings
+# DEPRECATED: config_manager est un wrapper de compatibilité
+# Les nouveaux tests devraient utiliser services.configuration_service.ConfigurationService
 import config_manager
 # from config_manager import UI_SETTINGS_FILE, load_ui_settings, save_ui_settings # MODIFIED: Commenté
 
 class TestConfigManager(unittest.TestCase):
+    """Tests pour config_manager (wrapper de compatibilité).
+    
+    NOTE: Ce module est déprécié. Les nouveaux tests devraient utiliser
+    services.configuration_service.ConfigurationService directement.
+    """
     pass # MODIFIED: Contenu de la classe commenté pour l'instant
 #
 #    def setUp(self):

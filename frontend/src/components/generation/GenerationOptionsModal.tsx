@@ -3,6 +3,7 @@
  */
 import { useState, useCallback, useEffect } from 'react'
 import { useContextConfigStore } from '../../store/contextConfigStore'
+import { useContextStore } from '../../store/contextStore'
 import { ContextFieldSelector } from './ContextFieldSelector'
 import { VocabularyGuidesTab } from './VocabularyGuidesTab'
 import { PromptsTab } from './PromptsTab'
@@ -88,7 +89,7 @@ export function GenerationOptionsModal({
     setIsLoadingPreview(true)
     try {
       // Utiliser les sélections du store de contexte
-      const { selections } = await import('../../store/contextStore').then(m => m.useContextStore.getState())
+      const { selections } = useContextStore.getState()
       
       // Fusionner les listes full et excerpt pour chaque type
       const selectedElements: Record<string, string[]> = {
