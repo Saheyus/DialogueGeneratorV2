@@ -511,6 +511,28 @@ async def generate_unity_dialogue(
             except Exception as e:
                 logger.warning(f"Erreur lors de la conversion du structured_prompt en dict: {e}")
         
+        # Extraire le reasoning trace du client LLM si disponible
+        reasoning_trace = getattr(llm_client, 'reasoning_trace', None)
+        
+        # #region agent log
+        try:
+            import time as time_module
+            with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                log_file.write(json.dumps({
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "B",
+                    "location": "api/routers/dialogues.py:514",
+                    "message": "Sending GenerateUnityDialogueResponse",
+                    "data": {
+                        "has_reasoning_trace": reasoning_trace is not None,
+                        "reasoning_trace_keys": list(reasoning_trace.keys()) if reasoning_trace else None
+                    },
+                    "timestamp": int(time_module.time() * 1000)
+                }) + "\n")
+        except: pass
+        # #endregion
+
         return GenerateUnityDialogueResponse(
             json_content=json_content,
             title=dialogue_title,
@@ -518,7 +540,8 @@ async def generate_unity_dialogue(
             prompt_hash=prompt_hash,
             estimated_tokens=estimated_tokens,
             warning=getattr(llm_client, 'warning', None),
-            structured_prompt=structured_prompt_dict
+            structured_prompt=structured_prompt_dict,
+            reasoning_trace=reasoning_trace
         )
         
     except Exception as e:

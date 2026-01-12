@@ -194,6 +194,7 @@ class GenerateUnityDialogueResponse(BaseModel):
         estimated_tokens: Nombre estimé de tokens utilisés.
         warning: Avertissement éventuel.
         structured_prompt: Structure JSON du prompt (optionnel).
+        reasoning_trace: Trace de raisonnement du modèle (optionnel, uniquement pour GPT-5.2 avec reasoning effort).
     """
     json_content: str = Field(..., description="Contenu JSON du dialogue au format Unity")
     title: Optional[str] = Field(None, description="Titre descriptif du dialogue généré par l'IA")
@@ -202,6 +203,7 @@ class GenerateUnityDialogueResponse(BaseModel):
     estimated_tokens: int = Field(..., description="Nombre estimé de tokens")
     warning: Optional[str] = Field(None, description="Avertissement (ex: DummyLLMClient utilisé)")
     structured_prompt: Optional[Dict[str, Any]] = Field(None, description="Structure JSON du prompt pour affichage structuré")
+    reasoning_trace: Optional[Dict[str, Any]] = Field(None, description="Trace de raisonnement du modèle (effort, summary, items)")
 
 
 

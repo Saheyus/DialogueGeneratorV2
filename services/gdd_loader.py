@@ -161,16 +161,23 @@ class GDDLoader:
             return default_value
         
         config = self.CATEGORIES_CONFIG[category_name]
+        # Privilégier les fichiers avec "_full" dans le nom
+        file_path_full = self._categories_path / f"{category_name}_full.json"
         file_path = self._categories_path / f"{category_name}.json"
-        json_main_key = config["key"]
-        expected_type = config["type"]
-        default_value = [] if expected_type == list else {}
         
-        if not file_path.exists() or not file_path.is_file():
+        # Sélectionner le fichier à utiliser : "_full" en priorité, sinon le fichier standard
+        if file_path_full.exists() and file_path_full.is_file():
+            file_path = file_path_full
+            logger.debug(f"Fichier {file_path.name} trouvé (version _full).")
+        elif not file_path.exists() or not file_path.is_file():
             # Les fichiers GDD sont optionnels (sauf personnages.json et lieux.json qui sont recommandés)
             # Utiliser DEBUG pour éviter les warnings inutiles au démarrage
             logger.debug(f"Fichier {file_path.name} non trouvé dans {self._categories_path}. Utilisation de la valeur par défaut.")
-            return default_value
+            return [] if config["type"] == list else {}
+        
+        json_main_key = config["key"]
+        expected_type = config["type"]
+        default_value = [] if expected_type == list else {}
         
         gdd_cache = self._get_gdd_cache()
         

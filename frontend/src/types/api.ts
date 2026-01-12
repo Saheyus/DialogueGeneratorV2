@@ -204,9 +204,17 @@ export interface GenerateUnityDialogueRequest extends BasePromptRequest {
   reasoning_effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null
 }
 
+export interface ReasoningTrace {
+  effort?: string
+  summary?: string
+  items?: Array<Record<string, unknown> | string>
+  items_count?: number
+}
+
 export interface GenerateUnityDialogueResponse {
   json_content: string
   title?: string
+  reasoning_trace?: ReasoningTrace | null
   raw_prompt: RawPrompt
   prompt_hash: string
   estimated_tokens: number

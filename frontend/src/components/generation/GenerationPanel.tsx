@@ -1033,9 +1033,6 @@ export function GenerationPanel() {
               {maxCompletionTokens ? (maxCompletionTokens >= 1000 ? `${Math.round(maxCompletionTokens / 1000)}K` : maxCompletionTokens) : 'Auto (10K)'}
             </span>
           </div>
-          <div style={{ fontSize: '0.85rem', color: theme.text.secondary, marginTop: '0.25rem' }}>
-            {maxCompletionTokens ? `Limite fixée à ${maxCompletionTokens >= 1000 ? `${Math.round(maxCompletionTokens / 1000)}K` : maxCompletionTokens} tokens` : 'Valeur automatique selon le modèle (10K pour thinking, 1.5K pour autres)'}
-          </div>
           <style>{`
             input[type="range"][value="${maxCompletionTokens ?? 10000}"]::-webkit-slider-runnable-track {
               height: 6px;

@@ -102,8 +102,8 @@ function AccordionSection({
       style={{
         border: `1px solid ${theme.border.primary}`,
         borderRadius: '4px',
-        marginBottom: '0.5rem',
-        marginLeft: level > 0 ? `${level}rem` : '0',
+        marginBottom: level > 0 ? '0.75rem' : '0.5rem',
+        marginLeft: level > 0 ? `${level * 0.75}rem` : '0',
         overflow: 'hidden',
       }}
     >
@@ -171,12 +171,18 @@ function AccordionSection({
             backgroundColor: theme.background.secondary,
             color: theme.text.primary,
             fontSize: '0.85rem',
-            lineHeight: '1.6',
+            lineHeight: '1.7',
           }}
         >
           {/* Afficher le contenu (remainingContent) AVANT les enfants pour respecter l'ordre du prompt */}
           {hasContent && (
-            <div style={{ marginBottom: hasChildren ? '1rem' : '0' }}>
+            <div 
+              style={{ 
+                marginBottom: hasChildren ? '1.25rem' : '0',
+                wordWrap: 'break-word',
+                overflowWrap: 'break-word',
+              }}
+            >
               {isMainlyJson ? (
                 <pre
                   style={{
@@ -188,12 +194,22 @@ function AccordionSection({
                     fontFamily: 'monospace',
                     fontSize: '0.85rem',
                     color: theme.text.primary,
+                    whiteSpace: 'pre-wrap',
+                    wordWrap: 'break-word',
+                    lineHeight: '1.6',
                   }}
                 >
                   {processedContent}
                 </pre>
               ) : (
-                <div style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
+                <div 
+                  style={{ 
+                    whiteSpace: 'pre-wrap', 
+                    wordWrap: 'break-word',
+                    overflowWrap: 'break-word',
+                    lineHeight: '1.7',
+                  }}
+                >
                   {renderMarkdown(processedContent)}
                 </div>
               )}
@@ -202,7 +218,7 @@ function AccordionSection({
           
           {/* Afficher les enfants comme accordéons imbriqués après le contenu */}
           {hasChildren && (
-            <div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {section.children!.map((child, index) => (
                 <AccordionSection
                   key={`${child.title}-${index}`}

@@ -239,7 +239,7 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
             <textarea
               {...register('line')}
               placeholder="Texte du dialogue..."
-              rows={6}
+              rows={9}
               style={{
                 width: '100%',
                 padding: '0.5rem',

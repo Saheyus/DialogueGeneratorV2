@@ -19,6 +19,12 @@ interface UnityNode {
     targetNode?: string
     test?: string
     condition?: string
+    traitRequirements?: Array<{
+      trait: string
+      minValue: number
+    }>
+    influenceDelta?: number
+    respectDelta?: number
     [key: string]: unknown
   }>
   nextNode?: string
@@ -191,7 +197,7 @@ export const UnityDialogueViewer = memo(function UnityDialogueViewer({
             node.test ||
             node.successNode ||
             node.failureNode ||
-            node.choices?.some((c) => c.test || c.condition)
+            node.choices?.some((c) => c.test || c.condition || c.traitRequirements || c.influenceDelta !== undefined || c.respectDelta !== undefined)
 
           return (
             <div
@@ -310,7 +316,7 @@ export const UnityDialogueViewer = memo(function UnityDialogueViewer({
                             padding: '0.75rem 1rem',
                             backgroundColor: theme.background.panel,
                             border: `1px solid ${theme.border.primary}`,
-                            borderRadius: '4px',
+                            borderRadius: '6px',
                             borderLeft: `4px solid ${theme.accent?.primary || theme.button.primary.background}`,
                           }}
                         >
@@ -318,27 +324,95 @@ export const UnityDialogueViewer = memo(function UnityDialogueViewer({
                             style={{
                               fontSize: '0.95rem',
                               color: theme.text.primary,
-                              marginBottom: choice.targetNode || choice.test || choice.condition ? '0.5rem' : '0',
+                              marginBottom: (choice.targetNode || choice.test || choice.condition || choice.traitRequirements || choice.influenceDelta !== undefined || choice.respectDelta !== undefined) ? '0.75rem' : '0',
+                              lineHeight: '1.5',
                             }}
                           >
                             {choice.text}
                           </div>
-                          {(choice.targetNode || choice.test || choice.condition) && (
+                          {(choice.targetNode || choice.test || choice.condition || choice.traitRequirements || choice.influenceDelta !== undefined || choice.respectDelta !== undefined) && (
                             <div
                               style={{
-                                fontSize: '0.75rem',
-                                color: theme.text.secondary,
-                                fontFamily: 'monospace',
-                                marginTop: '0.5rem',
-                                paddingTop: '0.5rem',
-                                borderTop: `1px solid ${theme.border.primary}`,
+                                marginTop: '0.75rem',
+                                padding: '0.75rem',
+                                backgroundColor: theme.background.secondary,
+                                borderRadius: '4px',
+                                border: `1px solid ${theme.border.primary}`,
                               }}
                             >
-                              {choice.targetNode && (
-                                <div>→ {choice.targetNode}</div>
-                              )}
-                              {choice.test && <div>Test: {choice.test}</div>}
-                              {choice.condition && <div>Condition: {choice.condition}</div>}
+                              <div style={{ 
+                                fontSize: '0.7rem', 
+                                fontWeight: 'bold', 
+                                color: theme.text.secondary, 
+                                marginBottom: '0.5rem',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.5px',
+                              }}>
+                                Propriétés mécaniques
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem' }}>
+                                {choice.test && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <span style={{ color: theme.text.secondary, minWidth: '80px' }}>Test:</span>
+                                    <span style={{ fontFamily: 'monospace', color: theme.text.primary, fontWeight: 500 }}>
+                                      {choice.test}
+                                    </span>
+                                  </div>
+                                )}
+                                {choice.condition && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <span style={{ color: theme.text.secondary, minWidth: '80px' }}>Condition:</span>
+                                    <span style={{ fontFamily: 'monospace', color: theme.text.primary, fontWeight: 500 }}>
+                                      {choice.condition}
+                                    </span>
+                                  </div>
+                                )}
+                                {choice.traitRequirements && choice.traitRequirements.length > 0 && (
+                                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                                    <span style={{ color: theme.text.secondary, minWidth: '80px' }}>Traits requis:</span>
+                                    <span style={{ color: theme.text.primary }}>
+                                      {choice.traitRequirements.map((tr, i) => (
+                                        <span key={i} style={{ fontFamily: 'monospace' }}>
+                                          {tr.trait} ≥ {tr.minValue}
+                                          {i < choice.traitRequirements!.length - 1 ? ', ' : ''}
+                                        </span>
+                                      ))}
+                                    </span>
+                                  </div>
+                                )}
+                                {choice.influenceDelta !== undefined && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <span style={{ color: theme.text.secondary, minWidth: '80px' }}>Influence:</span>
+                                    <span style={{ 
+                                      fontFamily: 'monospace', 
+                                      color: choice.influenceDelta >= 0 ? '#4CAF50' : '#F44336',
+                                      fontWeight: 'bold',
+                                    }}>
+                                      {choice.influenceDelta >= 0 ? '+' : ''}{choice.influenceDelta}
+                                    </span>
+                                  </div>
+                                )}
+                                {choice.respectDelta !== undefined && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <span style={{ color: theme.text.secondary, minWidth: '80px' }}>Respect:</span>
+                                    <span style={{ 
+                                      fontFamily: 'monospace', 
+                                      color: choice.respectDelta >= 0 ? '#4CAF50' : '#F44336',
+                                      fontWeight: 'bold',
+                                    }}>
+                                      {choice.respectDelta >= 0 ? '+' : ''}{choice.respectDelta}
+                                    </span>
+                                  </div>
+                                )}
+                                {choice.targetNode && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem', paddingTop: '0.5rem', borderTop: `1px solid ${theme.border.primary}` }}>
+                                    <span style={{ color: theme.text.secondary, minWidth: '80px' }}>Cible:</span>
+                                    <span style={{ fontFamily: 'monospace', color: theme.text.primary, fontWeight: 500 }}>
+                                      → {choice.targetNode}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>

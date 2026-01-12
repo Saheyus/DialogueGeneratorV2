@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from openai import AsyncOpenAI, APIError, NOT_GIVEN
 import json # Ajout pour charger la config
 from pathlib import Path # Ajout pour le chemin de la config
-from typing import List, Optional, Type, TypeVar, Union, Dict, Any # Ajout de Dict, Any
+from typing import List, Optional, Type, TypeVar, Union, Dict, Any, Callable, Coroutine # Ajout de Dict, Any, Callable, Coroutine
 from pydantic import BaseModel, ValidationError # Ajout de ValidationError
 import pydantic
 import inspect # Ajout pour l'inspection de la signature
@@ -133,7 +133,7 @@ class DummyLLMClient(ILLMClient):
         return 16000
 
 class OpenAIClient(ILLMClient):
-    def __init__(self, api_key: Optional[str] = None, config: Optional[Dict[str, Any]] = None, usage_service: Optional[Any] = None, request_id: Optional[str] = None, endpoint: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, config: Optional[Dict[str, Any]] = None, usage_service: Optional[Any] = None, request_id: Optional[str] = None, endpoint: Optional[str] = None, reasoning_callback: Optional[Callable[[Dict[str, Any]], Coroutine[Any, Any, None]]] = None):
         if api_key is None:
             api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
@@ -146,6 +146,7 @@ class OpenAIClient(ILLMClient):
         self.temperature = self.llm_config.get("temperature", 0.7)
         self.max_tokens = self.llm_config.get("max_tokens", 1500)
         self.reasoning_effort = self.llm_config.get("reasoning_effort", None)  # none, low, medium, high, xhigh
+        self.reasoning_summary = self.llm_config.get("reasoning_summary", None)  # None, "auto", "detailed"
         
         self.system_prompt_template = self.llm_config.get(
             "system_prompt_template", 
@@ -156,6 +157,10 @@ class OpenAIClient(ILLMClient):
         self.usage_service = usage_service
         self.request_id = request_id or "unknown"
         self.endpoint = endpoint or "unknown"
+        
+        # Callback pour streaming du reasoning trace (optionnel)
+        self.reasoning_callback = reasoning_callback
+        self.reasoning_trace: Optional[Dict[str, Any]] = None
         
         # Initialiser retry et circuit breaker (optionnel, peut ne pas être disponible dans tous les contextes)
         self._retry_with_backoff = None
@@ -414,10 +419,26 @@ class OpenAIClient(ILLMClient):
                     chat_params["max_tokens"] = self.max_tokens
                     responses_params["max_output_tokens"] = self.max_tokens
 
-                # Reasoning effort: uniquement via Responses API
-                if use_responses_api and self.reasoning_effort is not None:
-                    responses_params["reasoning"] = {"effort": self.reasoning_effort}
-                    logger.info(f"Utilisation de reasoning effort '{self.reasoning_effort}' pour {self.model_name} (Responses API)")
+                # Reasoning effort et summary: uniquement via Responses API
+                if use_responses_api:
+                    reasoning_config = {}
+                    if self.reasoning_effort is not None:
+                        reasoning_config["effort"] = self.reasoning_effort
+                        # Activer automatiquement summary="auto" si un effort est défini et que summary n'est pas explicitement désactivé
+                        if self.reasoning_summary is None:
+                            reasoning_config["summary"] = "auto"
+                        elif self.reasoning_summary is not None:
+                            reasoning_config["summary"] = self.reasoning_summary
+                    elif self.reasoning_summary is not None:
+                        # Si seulement summary est défini (sans effort)
+                        reasoning_config["summary"] = self.reasoning_summary
+                    
+                    if reasoning_config:
+                        responses_params["reasoning"] = reasoning_config
+                        logger.info(
+                            f"Utilisation de reasoning pour {self.model_name} (Responses API): "
+                            f"effort={self.reasoning_effort}, summary={reasoning_config.get('summary', 'None')}"
+                        )
 
                 # Temperature: Chat Completions OK; Responses API uniquement si reasoning.effort == "none" (ou non spécifié)
                 if self.model_name and self.model_name not in ModelNames.MODELS_WITHOUT_CUSTOM_TEMPERATURE:
@@ -604,6 +625,131 @@ class OpenAIClient(ILLMClient):
                         f"(modèle: {self.model_name}, api={'responses' if use_responses_api else 'chat_completions'})."
                     )
 
+                # --- Extraction et affichage de la phase réflexive (reasoning trace) ---
+                if use_responses_api:
+                    # #region agent log
+                    try:
+                        with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                            log_file.write(json.dumps({
+                                "sessionId": "debug-session",
+                                "runId": "run1",
+                                "hypothesisId": "A",
+                                "location": "llm_client.py:624",
+                                "message": "Raw reasoning data detection",
+                                "data": {
+                                    "has_reasoning": hasattr(response, "reasoning"),
+                                    "reasoning_attr": str(getattr(response, "reasoning", "ATTR_MISSING"))[:500],
+                                    "response_keys": dir(response)
+                                },
+                                "timestamp": int(time.time() * 1000)
+                            }) + "\n")
+                    except: pass
+                    # #endregion
+                    reasoning_data = getattr(response, "reasoning", None)
+                    if reasoning_data:
+                        try:
+                            # #region agent log - structure complète du reasoning
+                            try:
+                                reasoning_dict = reasoning_data.model_dump() if hasattr(reasoning_data, 'model_dump') else {}
+                                reasoning_dict_str = json.dumps(reasoning_dict, indent=2, ensure_ascii=False, default=str)
+                                with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                                    log_file.write(json.dumps({
+                                        "sessionId": "debug-session",
+                                        "runId": "run1",
+                                        "hypothesisId": "A",
+                                        "location": "llm_client.py:645",
+                                        "message": "Reasoning object full structure",
+                                        "data": {
+                                            "reasoning_dict": reasoning_dict,
+                                            "reasoning_dict_str": reasoning_dict_str[:2000]
+                                        },
+                                        "timestamp": int(time.time() * 1000)
+                                    }) + "\n")
+                            except Exception as e:
+                                with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                                    log_file.write(json.dumps({
+                                        "sessionId": "debug-session",
+                                        "runId": "run1",
+                                        "hypothesisId": "A",
+                                        "location": "llm_client.py:645",
+                                        "message": "Error dumping reasoning structure",
+                                        "data": {"error": str(e)},
+                                        "timestamp": int(time.time() * 1000)
+                                    }) + "\n")
+                            # #endregion
+                            
+                            # Essayer d'accéder aux différents champs du reasoning
+                            reasoning_effort = getattr(reasoning_data, "effort", None)
+                            reasoning_summary = getattr(reasoning_data, "summary", None)
+                            reasoning_items = getattr(reasoning_data, "items", None)
+                            
+                            # Construire un dictionnaire avec le reasoning trace
+                            reasoning_trace_dict = {
+                                "effort": reasoning_effort,
+                                "summary": reasoning_summary,
+                                "items": None,
+                                "items_count": len(reasoning_items) if reasoning_items else 0
+                            }
+                            
+                            # Convertir les items en dict si disponibles
+                            if reasoning_items:
+                                try:
+                                    reasoning_trace_dict["items"] = [
+                                        item.model_dump() if hasattr(item, 'model_dump') else str(item)
+                                        for item in reasoning_items
+                                    ]
+                                except Exception:
+                                    reasoning_trace_dict["items"] = [str(item) for item in reasoning_items]
+                            
+                            # Stocker le reasoning trace dans l'instance
+                            self.reasoning_trace = reasoning_trace_dict
+                            
+                            # Appeler le callback si fourni pour streaming
+                            if self.reasoning_callback:
+                                try:
+                                    await self.reasoning_callback(reasoning_trace_dict)
+                                except Exception as callback_error:
+                                    logger.warning(f"Erreur lors de l'appel du callback reasoning: {callback_error}")
+                            
+                            logger.info(
+                                f"\n{'='*80}\n"
+                                f"PHASE RÉFLEXIVE (Reasoning Trace) - Variante {i+1}\n"
+                                f"{'='*80}\n"
+                                f"Effort: {reasoning_effort}\n"
+                                f"Summary: {reasoning_summary}\n"
+                            )
+                            
+                            if reasoning_items:
+                                logger.info(f"Nombre d'étapes de raisonnement: {len(reasoning_items)}")
+                                for idx, item in enumerate(reasoning_items[:10], 1):  # Limiter à 10 pour éviter les logs trop longs
+                                    try:
+                                        item_str = json.dumps(item.model_dump() if hasattr(item, 'model_dump') else str(item), indent=2, ensure_ascii=False)
+                                        logger.info(f"Étape {idx}:\n{item_str}")
+                                    except Exception:
+                                        logger.info(f"Étape {idx}: {str(item)[:500]}")
+                                
+                                if len(reasoning_items) > 10:
+                                    logger.info(f"... ({len(reasoning_items) - 10} étapes supplémentaires)")
+                            
+                            # Afficher le reasoning complet en JSON si disponible
+                            try:
+                                reasoning_json = reasoning_data.model_dump_json(indent=2) if hasattr(reasoning_data, 'model_dump_json') else json.dumps(reasoning_data, indent=2, ensure_ascii=False, default=str)
+                                logger.debug(f"Reasoning trace complet (JSON):\n{reasoning_json}")
+                            except Exception:
+                                pass
+                            
+                            logger.info(f"{'='*80}\n")
+                        except Exception as reasoning_error:
+                            logger.warning(f"Erreur lors de l'extraction du reasoning trace: {reasoning_error}")
+                            # Fallback: essayer d'afficher le reasoning brut
+                            try:
+                                logger.info(f"Reasoning trace (brut): {str(reasoning_data)[:1000]}")
+                            except Exception:
+                                pass
+                    else:
+                        logger.debug(f"Aucun reasoning trace disponible pour la variante {i+1} (reasoning_effort={self.reasoning_effort})")
+                        self.reasoning_trace = None
+
                 # --- Parsing: Responses API ---
                 if use_responses_api:
                     # Debug: types d'items output
@@ -629,6 +775,80 @@ class OpenAIClient(ILLMClient):
                     except:  # noqa: E722
                         pass
                     # #endregion
+
+                    # Extraire le reasoning trace depuis output (le vrai contenu, pas response.reasoning qui est juste la config)
+                    reasoning_content_item = None
+                    for item in output_items:
+                        if getattr(item, "type", None) == "reasoning":
+                            reasoning_content_item = item
+                            break
+                    
+                    if reasoning_content_item:
+                        # #region agent log - contenu de l'item reasoning
+                        try:
+                            item_data = reasoning_content_item.model_dump() if hasattr(reasoning_content_item, 'model_dump') else str(reasoning_content_item)
+                            with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
+                                log_file.write(json.dumps({
+                                    "sessionId": "debug-session",
+                                    "runId": "run1",
+                                    "hypothesisId": "F",
+                                    "location": "llm_client.py:720",
+                                    "message": "Reasoning item content from output",
+                                    "data": {"item_data": item_data},
+                                    "timestamp": int(time.time() * 1000)
+                                }) + "\n")
+                        except: pass
+                        # #endregion
+                        try:
+                            # Extraire le contenu du reasoning depuis l'item
+                            # Le résumé peut être une liste d'objets ou une chaîne
+                            summary_raw = getattr(reasoning_content_item, "summary", None)
+                            reasoning_summary_text = None
+                            
+                            if isinstance(summary_raw, list):
+                                # Selon la doc OpenAI, summary est un tableau de chaînes de caractères
+                                # Joindre avec des retours à la ligne pour une meilleure lisibilité
+                                parts = []
+                                for part in summary_raw:
+                                    if isinstance(part, str):
+                                        parts.append(part)
+                                    elif hasattr(part, "text"):
+                                        parts.append(str(part.text))
+                                    elif isinstance(part, dict) and "text" in part:
+                                        parts.append(str(part["text"]))
+                                    else:
+                                        # Fallback: convertir en string
+                                        parts.append(str(part))
+                                reasoning_summary_text = "\n".join(parts) if parts else None
+                            elif isinstance(summary_raw, str):
+                                reasoning_summary_text = summary_raw
+                            
+                            # Fallback sur content ou text si summary est toujours vide
+                            if not reasoning_summary_text:
+                                reasoning_summary_text = getattr(reasoning_content_item, "text", None) or getattr(reasoning_content_item, "content", None)
+                            
+                            # Mettre à jour le reasoning_trace avec le vrai contenu
+                            if self.reasoning_trace:
+                                # Remplacer le summary par le vrai texte si disponible
+                                if reasoning_summary_text and reasoning_summary_text != "detailed":
+                                    self.reasoning_trace["summary"] = reasoning_summary_text
+                                
+                                # Essayer d'extraire des items structurés si disponibles
+                                reasoning_items_content = getattr(reasoning_content_item, "items", None)
+                                if reasoning_items_content:
+                                    try:
+                                        self.reasoning_trace["items"] = [
+                                            item.model_dump() if hasattr(item, 'model_dump') else str(item)
+                                            for item in reasoning_items_content
+                                        ]
+                                        self.reasoning_trace["items_count"] = len(reasoning_items_content)
+                                    except Exception:
+                                        self.reasoning_trace["items"] = [str(item) for item in reasoning_items_content]
+                                        self.reasoning_trace["items_count"] = len(reasoning_items_content)
+                                
+                                logger.info(f"Reasoning trace extrait depuis output: summary présent={bool(self.reasoning_trace.get('summary'))}, items présents={bool(self.reasoning_trace.get('items'))}")
+                        except Exception as e:
+                            logger.warning(f"Erreur lors de l'extraction du reasoning depuis output: {e}")
 
                     function_args_raw: Optional[str] = None
                     function_name: Optional[str] = None

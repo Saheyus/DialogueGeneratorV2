@@ -122,7 +122,7 @@ export function renderMarkdown(text: string): React.ReactNode {
     // Paragraphe normal
     flushList()
     elements.push(
-      React.createElement('p', { key: i, style: { margin: '0.5rem 0' } }, renderInlineMarkdown(line))
+      React.createElement('p', { key: i, style: { margin: '0.4rem 0', lineHeight: '1.6' } }, renderInlineMarkdown(line))
     )
   }
   

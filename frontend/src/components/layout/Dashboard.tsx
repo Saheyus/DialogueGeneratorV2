@@ -7,6 +7,7 @@ import { GenerationPanel } from '../generation/GenerationPanel'
 import { GenerationOptionsModal } from '../generation/GenerationOptionsModal'
 import { EstimatedPromptPanel } from '../generation/EstimatedPromptPanel'
 import { UnityDialogueEditor } from '../generation/UnityDialogueEditor'
+import { ReasoningTraceViewer } from '../generation/ReasoningTraceViewer'
 import { ContextDetail } from '../context/ContextDetail'
 import { UsageStatsModal } from '../usage/UsageStatsModal'
 import { ResizablePanels, type ResizablePanelsRef } from '../shared/ResizablePanels'
@@ -132,6 +133,13 @@ export function Dashboard() {
   // Ref pour suivre l'ID du dernier dialogue pour lequel on a fait le basculement automatique
   const lastAutoSwitchedDialogueRef = useRef<string | null>(null)
   
+  // Basculer automatiquement vers l'onglet Dialogue quand la génération commence
+  useEffect(() => {
+    if (actions.isLoading && rightPanelTab !== 'dialogue') {
+      setRightPanelTab('dialogue')
+    }
+  }, [actions.isLoading, rightPanelTab])
+
   // Basculer automatiquement vers l'onglet Dialogue quand un NOUVEAU dialogue Unity est généré
   // (seulement lors de la création, pas à chaque changement d'onglet manuel)
   useEffect(() => {
@@ -176,28 +184,55 @@ export function Dashboard() {
       label: 'Dialogue généré',
       content: (
         <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%' }}>
-          {unityDialogueResponse ? (
-            <UnityDialogueEditor
-              json_content={unityDialogueResponse.json_content}
-              title={unityDialogueResponse.title}
-              onSave={() => {
-                // Rafraîchir la liste des dialogues après sauvegarde
-                dialogueListRef.current?.refresh()
+          {/* #region agent log */}
+          {(() => {
+            fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:185',message:'Dashboard dialogue tab rendering',data:{hasUnityResponse: !!unityDialogueResponse, hasReasoningTrace: !!unityDialogueResponse?.reasoning_trace, isLoading: actions.isLoading},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+            return null;
+          })()}
+          {/* #endregion */}
+          {/* Encadré Reasoning Trace en haut */}
+          {(actions.isLoading || generationState.isEstimating || unityDialogueResponse?.reasoning_trace) && (
+            <div
+              style={{
+                borderBottom: `1px solid ${theme.border.primary}`,
+                backgroundColor: theme.background.secondary,
+                flexShrink: 0,
               }}
-            />
-          ) : (
-            <div style={{ 
-              padding: '2rem', 
-              textAlign: 'center', 
-              color: theme.text.secondary,
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              Aucun dialogue Unity généré
+            >
+              <ReasoningTraceViewer
+                reasoningTrace={unityDialogueResponse?.reasoning_trace || null}
+                isGenerating={actions.isLoading || generationState.isEstimating}
+              />
             </div>
           )}
+          
+          {/* Contenu du dialogue */}
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            {unityDialogueResponse ? (
+              <UnityDialogueEditor
+                json_content={unityDialogueResponse.json_content}
+                title={unityDialogueResponse.title}
+                onSave={() => {
+                  // Rafraîchir la liste des dialogues après sauvegarde
+                  dialogueListRef.current?.refresh()
+                }}
+              />
+            ) : (
+              <div style={{ 
+                padding: '2rem', 
+                textAlign: 'center', 
+                color: theme.text.secondary,
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                {actions.isLoading || generationState.isEstimating
+                  ? 'Génération en cours...'
+                  : 'Aucun dialogue Unity généré'}
+              </div>
+            )}
+          </div>
         </div>
       ),
     },
@@ -243,7 +278,7 @@ export function Dashboard() {
         </div>
       ),
     },
-  ], [unityDialogueResponse, rawPrompt, isEstimating, tokenCount, promptHash, selectedContextItem, selectedNodeId])
+  ], [unityDialogueResponse, rawPrompt, isEstimating, tokenCount, promptHash, selectedContextItem, selectedNodeId, actions.isLoading, generationState.isEstimating])
   
   // Basculer automatiquement vers l'onglet "Édition de nœud" quand un nœud est sélectionné dans le graphe
   useEffect(() => {

@@ -570,7 +570,7 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
                   value={node.line || ''}
                   onChange={(e) => updateNodeLine(node.id, e.target.value)}
                   placeholder="Texte du dialogue..."
-                  rows={3}
+                  rows={5}
                   style={{
                     width: '100%',
                     padding: '0.5rem',
@@ -629,7 +629,7 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
                                 updateChoice(node.id, choiceIndex, { text: e.target.value })
                               }
                               placeholder="Texte du choix..."
-                              rows={2}
+                              rows={3}
                               style={{
                                 width: '100%',
                                 padding: '0.5rem',
@@ -647,6 +647,232 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
                               }}
                             />
                           </div>
+
+                          {/* Propriétés mécaniques - ÉDITABLES */}
+                          <div
+                            style={{
+                              marginBottom: '0.75rem',
+                              padding: '0.75rem',
+                              backgroundColor: theme.background.panel,
+                              borderRadius: '6px',
+                              border: `1px solid ${theme.border.primary}`,
+                            }}
+                          >
+                            <div style={{ 
+                              fontSize: '0.8rem', 
+                              fontWeight: 'bold', 
+                              color: theme.text.secondary, 
+                              marginBottom: '0.75rem',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.5px',
+                            }}>
+                              Propriétés mécaniques
+                            </div>
+                            
+                            {/* Test et Condition sur une ligne */}
+                            <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                              <div style={{ flex: 1 }}>
+                                <label
+                                  style={{
+                                    display: 'block',
+                                    marginBottom: '0.25rem',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 500,
+                                    color: theme.text.primary,
+                                  }}
+                                >
+                                  Test d'attribut
+                                </label>
+                                <input
+                                  type="text"
+                                  value={choice.test || ''}
+                                  onChange={(e) =>
+                                    updateChoice(node.id, choiceIndex, {
+                                      test: e.target.value.trim() || undefined,
+                                    })
+                                  }
+                                  placeholder="Raison+Diplomatie:8"
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.5rem',
+                                    boxSizing: 'border-box',
+                                    backgroundColor: theme.input.background,
+                                    border: `1px solid ${theme.input.border}`,
+                                    color: theme.input.color,
+                                    borderRadius: '4px',
+                                    fontSize: '0.85rem',
+                                    fontFamily: 'monospace',
+                                  }}
+                                />
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <label
+                                  style={{
+                                    display: 'block',
+                                    marginBottom: '0.25rem',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 500,
+                                    color: theme.text.primary,
+                                  }}
+                                >
+                                  Condition
+                                </label>
+                                <input
+                                  type="text"
+                                  value={choice.condition || ''}
+                                  onChange={(e) =>
+                                    updateChoice(node.id, choiceIndex, {
+                                      condition: e.target.value.trim() || undefined,
+                                    })
+                                  }
+                                  placeholder="FLAG_NAME"
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.5rem',
+                                    boxSizing: 'border-box',
+                                    backgroundColor: theme.input.background,
+                                    border: `1px solid ${theme.input.border}`,
+                                    color: theme.input.color,
+                                    borderRadius: '4px',
+                                    fontSize: '0.85rem',
+                                    fontFamily: 'monospace',
+                                  }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Modificateurs d'influence et respect */}
+                            <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                              <div style={{ flex: 1 }}>
+                                <label
+                                  style={{
+                                    display: 'block',
+                                    marginBottom: '0.25rem',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 500,
+                                    color: theme.text.primary,
+                                  }}
+                                >
+                                  Influence
+                                </label>
+                                <input
+                                  type="number"
+                                  value={choice.influenceDelta ?? ''}
+                                  onChange={(e) => {
+                                    const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10)
+                                    updateChoice(node.id, choiceIndex, {
+                                      influenceDelta: isNaN(value as number) ? undefined : value,
+                                    })
+                                  }}
+                                  placeholder="+1, -1, 0"
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.5rem',
+                                    boxSizing: 'border-box',
+                                    backgroundColor: theme.input.background,
+                                    border: `1px solid ${theme.input.border}`,
+                                    color: choice.influenceDelta !== undefined && choice.influenceDelta >= 0 ? '#4CAF50' : choice.influenceDelta !== undefined ? '#F44336' : theme.input.color,
+                                    borderRadius: '4px',
+                                    fontSize: '0.85rem',
+                                    fontFamily: 'monospace',
+                                    fontWeight: choice.influenceDelta !== undefined ? 'bold' : 'normal',
+                                  }}
+                                />
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <label
+                                  style={{
+                                    display: 'block',
+                                    marginBottom: '0.25rem',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 500,
+                                    color: theme.text.primary,
+                                  }}
+                                >
+                                  Respect
+                                </label>
+                                <input
+                                  type="number"
+                                  value={choice.respectDelta ?? ''}
+                                  onChange={(e) => {
+                                    const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10)
+                                    updateChoice(node.id, choiceIndex, {
+                                      respectDelta: isNaN(value as number) ? undefined : value,
+                                    })
+                                  }}
+                                  placeholder="+1, -1, 0"
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.5rem',
+                                    boxSizing: 'border-box',
+                                    backgroundColor: theme.input.background,
+                                    border: `1px solid ${theme.input.border}`,
+                                    color: choice.respectDelta !== undefined && choice.respectDelta >= 0 ? '#4CAF50' : choice.respectDelta !== undefined ? '#F44336' : theme.input.color,
+                                    borderRadius: '4px',
+                                    fontSize: '0.85rem',
+                                    fontFamily: 'monospace',
+                                    fontWeight: choice.respectDelta !== undefined ? 'bold' : 'normal',
+                                  }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Traits requis */}
+                            <div>
+                              <label
+                                style={{
+                                  display: 'block',
+                                  marginBottom: '0.25rem',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 500,
+                                  color: theme.text.primary,
+                                }}
+                              >
+                                Traits requis
+                              </label>
+                              <textarea
+                                value={
+                                  choice.traitRequirements && choice.traitRequirements.length > 0
+                                    ? JSON.stringify(choice.traitRequirements, null, 2)
+                                    : ''
+                                }
+                                onChange={(e) => {
+                                  const value = e.target.value.trim()
+                                  if (!value) {
+                                    updateChoice(node.id, choiceIndex, { traitRequirements: undefined })
+                                    return
+                                  }
+                                  try {
+                                    const parsed = JSON.parse(value)
+                                    if (Array.isArray(parsed)) {
+                                      updateChoice(node.id, choiceIndex, { traitRequirements: parsed })
+                                    }
+                                  } catch {
+                                    // Garder la valeur pour permettre la saisie progressive
+                                  }
+                                }}
+                                placeholder='[{"trait": "Autoritaire", "minValue": 5}]'
+                                rows={2}
+                                style={{
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  boxSizing: 'border-box',
+                                  backgroundColor: theme.input.background,
+                                  border: `1px solid ${theme.input.border}`,
+                                  color: theme.input.color,
+                                  borderRadius: '4px',
+                                  fontSize: '0.8rem',
+                                  fontFamily: 'monospace',
+                                  resize: 'vertical',
+                                }}
+                              />
+                              <div style={{ marginTop: '0.25rem', fontSize: '0.7rem', color: theme.text.secondary, fontStyle: 'italic' }}>
+                                Format JSON: {'[{"trait": "NomTrait", "minValue": 5}]'}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Target Node */}
                           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
                             <div style={{ flex: 1 }}>
                               <label
@@ -706,6 +932,7 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
                               🗑️
                             </button>
                           </div>
+                          
                           {choiceErrors.length > 0 && (
                             <div
                               style={{

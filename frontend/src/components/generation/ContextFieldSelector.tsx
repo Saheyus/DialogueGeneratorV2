@@ -277,7 +277,9 @@ export function ContextFieldSelector({
     const isEssential = node.fieldInfo.is_essential === true
     const isLocked = isContextTab && isEssential
     const isSelected = (isLocked) || selectedFields.includes(node.path)
-    const isLeaf = node.fieldInfo.type !== 'dict'
+    // Un champ est une feuille s'il n'a pas d'enfants dans l'arbre affiché
+    // (même si son type est 'dict', il peut être une feuille après aplatissement)
+    const isLeaf = !hasChildren
     const indicator = getFieldIndicator(node.fieldInfo)
 
     return (

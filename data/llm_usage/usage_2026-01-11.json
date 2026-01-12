@@ -14,6 +14,76 @@
       "endpoint": "generate/unity-dialogue",
       "k_variants": 1,
       "error_message": null
+    },
+    {
+      "request_id": "8f8bf584-fcfc-4dd5-a056-2c1cc1f6f956",
+      "timestamp": "2026-01-11T22:09:43.344898+00:00",
+      "model_name": "gpt-5.2",
+      "prompt_tokens": 26003,
+      "completion_tokens": 632,
+      "total_tokens": 26635,
+      "estimated_cost": 0.07132749999999999,
+      "duration_ms": 17168,
+      "success": true,
+      "endpoint": "generate/unity-dialogue",
+      "k_variants": 1,
+      "error_message": null
+    },
+    {
+      "request_id": "ffee2b90-4dfa-4ee4-ba85-730fcd8029e6",
+      "timestamp": "2026-01-11T22:12:12.320136+00:00",
+      "model_name": "gpt-5.2",
+      "prompt_tokens": 26378,
+      "completion_tokens": 463,
+      "total_tokens": 26841,
+      "estimated_cost": 0.070575,
+      "duration_ms": 12168,
+      "success": true,
+      "endpoint": "generate/unity-dialogue",
+      "k_variants": 1,
+      "error_message": null
+    },
+    {
+      "request_id": "1f75bf2f-c08d-4ba4-bfc0-33902ffe3f63",
+      "timestamp": "2026-01-11T22:16:29.216653+00:00",
+      "model_name": "gpt-5.2",
+      "prompt_tokens": 26354,
+      "completion_tokens": 750,
+      "total_tokens": 27104,
+      "estimated_cost": 0.073385,
+      "duration_ms": 18546,
+      "success": true,
+      "endpoint": "generate/unity-dialogue",
+      "k_variants": 1,
+      "error_message": null
+    },
+    {
+      "request_id": "f21e73e5-b868-4653-b6fc-003c590ec3b0",
+      "timestamp": "2026-01-11T22:23:28.209759+00:00",
+      "model_name": "gpt-5.2",
+      "prompt_tokens": 26099,
+      "completion_tokens": 771,
+      "total_tokens": 26870,
+      "estimated_cost": 0.0729575,
+      "duration_ms": 19647,
+      "success": true,
+      "endpoint": "generate/unity-dialogue",
+      "k_variants": 1,
+      "error_message": null
+    },
+    {
+      "request_id": "6729fce5-d1e5-4d33-8465-db5b2b7c4d9e",
+      "timestamp": "2026-01-11T22:26:08.022726+00:00",
+      "model_name": "gpt-5.2",
+      "prompt_tokens": 26051,
+      "completion_tokens": 704,
+      "total_tokens": 26755,
+      "estimated_cost": 0.07216750000000001,
+      "duration_ms": 16058,
+      "success": true,
+      "endpoint": "generate/unity-dialogue",
+      "k_variants": 1,
+      "error_message": null
     }
   ]
 }
