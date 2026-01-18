@@ -54,6 +54,7 @@ export function useSceneSelection() {
     subLocation: null,
   })
   const isSwappingRef = useRef(false)
+  const lastStoreSceneSelectionRef = useRef<SceneSelection | null>(null)
 
   const loadCharacters = useCallback(async () => {
     try {
@@ -117,6 +118,8 @@ export function useSceneSelection() {
   // Cela permet de restaurer les valeurs sauvegardées depuis le draft
   useEffect(() => {
     const hasStoreSelection = storeSceneSelection.characterA || storeSceneSelection.characterB || storeSceneSelection.sceneRegion
+    const prevStoreSelection = lastStoreSceneSelectionRef.current
+    lastStoreSceneSelectionRef.current = storeSceneSelection
     
     // Au montage initial, utiliser la valeur du store si elle existe
     if (isInitialMount.current) {
@@ -127,13 +130,24 @@ export function useSceneSelection() {
       return
     }
     
-    // Après le montage, synchroniser seulement si :
-    // - Le store a des valeurs ET
-    // - L'état local est vide (pour restaurer un draft chargé après le montage)
-    // Cela permet de restaurer les valeurs sauvegardées même si elles sont chargées après le montage
+    // Après le montage:
+    // - Toujours refléter les changements venant du store (ex: chargement preset),
+    //   sinon l'UI reste "bloquée" sur l'état local.
     setSelection((prevSelection) => {
       const hasLocalSelection = prevSelection.characterA || prevSelection.characterB || prevSelection.sceneRegion
-      if (hasStoreSelection && !hasLocalSelection) {
+      const storeChanged =
+        !prevStoreSelection ||
+        prevStoreSelection.characterA !== storeSceneSelection.characterA ||
+        prevStoreSelection.characterB !== storeSceneSelection.characterB ||
+        prevStoreSelection.sceneRegion !== storeSceneSelection.sceneRegion ||
+        prevStoreSelection.subLocation !== storeSceneSelection.subLocation
+
+      const differsFromLocal =
+        prevSelection.characterA !== storeSceneSelection.characterA ||
+        prevSelection.characterB !== storeSceneSelection.characterB ||
+        prevSelection.sceneRegion !== storeSceneSelection.sceneRegion ||
+        prevSelection.subLocation !== storeSceneSelection.subLocation
+      if (hasStoreSelection && storeChanged && differsFromLocal) {
         return storeSceneSelection
       }
       return prevSelection

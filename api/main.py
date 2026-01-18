@@ -1,6 +1,7 @@
 """Point d'entrée principal de l'API REST FastAPI."""
 import os
 import logging
+import sys
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
@@ -13,6 +14,14 @@ from api.exceptions import APIException, ValidationException
 from api.dependencies import get_request_id
 from api.config.security_config import get_security_config
 from api.middleware.rate_limiter import get_limiter, rate_limit_exception_handler
+
+# Charger le fichier .env en dev (éviter sous pytest pour des tests déterministes)
+if "pytest" not in sys.modules:
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except Exception as exc:
+        logging.getLogger(__name__).warning(f"Impossible de charger .env: {exc}")
 
 # Configuration du logging structuré
 from api.utils.logging_config import setup_logging
@@ -204,9 +213,25 @@ async def lifespan(app: FastAPI):
             print("AUCUNE ROUTE estimate-tokens trouvée!", file=sys.stderr, flush=True)
         log_routes.warning("=== FIN LISTE ROUTES ===")
     
+    # Démarrer la tâche de cleanup des jobs de génération (Story 0.2)
+    try:
+        from api.services.generation_job_manager import get_job_manager
+        job_manager = get_job_manager()
+        await job_manager.start_cleanup_task()
+        logger.info("Cleanup task des jobs de génération démarrée")
+    except Exception as e:
+        logger.warning(f"Erreur lors du démarrage de la cleanup task: {e}")
+    
     yield
     # Shutdown
     logger.info("Arrêt de l'API DialogueGenerator...")
+    
+    # Arrêter la tâche de cleanup des jobs (Story 0.2)
+    try:
+        await job_manager.stop_cleanup_task()
+        logger.info("Cleanup task des jobs de génération arrêtée")
+    except Exception as e:
+        logger.warning(f"Erreur lors de l'arrêt de la cleanup task: {e}")
     if os.getenv("CURSOR_DEBUG_LOG", "false").lower() in ("true", "1", "yes"):
         # #region cursor debug log
         try:
@@ -357,6 +382,25 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         f"errors={error_details_full}, "
         f"path={request.url.path}"
     )
+    try:
+        import time as time_module
+        from pathlib import Path
+        log_path = Path(__file__).parent.parent / ".cursor" / "debug.log"
+        with open(log_path, "a", encoding="utf-8") as log_file:
+            log_file.write(json.dumps({
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "C",
+                "location": "api/main.py:validation_exception_handler",
+                "message": "Pydantic validation error",
+                "data": {
+                    "path": request.url.path,
+                    "details": error_details_full
+                },
+                "timestamp": int(time_module.time() * 1000)
+            }) + "\n")
+    except Exception:
+        pass
     # #endregion agent log
     
     return JSONResponse(
@@ -491,10 +535,11 @@ async def health_check_detailed() -> JSONResponse:
 
 
 # Inclusion des routers
-from api.routers import auth, dialogues, context, config, llm_usage, unity_dialogues, logs, mechanics_flags, graph
+from api.routers import auth, dialogues, context, config, llm_usage, unity_dialogues, logs, mechanics_flags, graph, streaming, presets
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(dialogues.router, prefix="/api/v1/dialogues", tags=["Dialogues"])
+app.include_router(streaming.router, prefix="/api/v1/dialogues", tags=["Dialogues"])  # SSE streaming (Story 0.2)
 app.include_router(unity_dialogues.router, prefix="/api/v1/unity-dialogues", tags=["Unity Dialogues"])
 app.include_router(context.router, prefix="/api/v1/context", tags=["Context"])
 app.include_router(config.router, prefix="/api/v1/config", tags=["Configuration"])
@@ -511,6 +556,9 @@ app.include_router(mechanics_flags.router)
 
 # Router pour l'éditeur de graphe
 app.include_router(graph.router)
+
+# Router pour les presets de génération
+app.include_router(presets.router, prefix="/api/v1/presets", tags=["Presets"])
 
 # Debug endpoint (dev only): inspect PromptEngine code loaded by server
 @app.get("/debug/prompt-engine", tags=["Debug"])

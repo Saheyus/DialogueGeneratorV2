@@ -11,6 +11,8 @@ import { useGenerationActionsStore } from '../../store/generationActionsStore'
 import { useContextConfigStore } from '../../store/contextConfigStore'
 import { useVocabularyStore } from '../../store/vocabularyStore'
 import { useNarrativeGuidesStore } from '../../store/narrativeGuidesStore'
+import { useGraphStore } from '../../store/graphStore'
+import { useLLMStore } from '../../store/llmStore'
 import { useAuthorProfile } from '../../hooks/useAuthorProfile'
 import { getErrorMessage } from '../../types/errors'
 import { theme } from '../../theme'
@@ -23,6 +25,10 @@ import { DialogueStructureWidget } from './DialogueStructureWidget'
 import { SystemPromptEditor } from './SystemPromptEditor'
 import { SceneSelectionWidget } from './SceneSelectionWidget'
 import { InGameFlagsSummary } from './InGameFlagsSummary'
+import { GenerationProgressModal } from './GenerationProgressModal'
+import { ModelSelector } from './ModelSelector'
+import { PresetSelector } from './PresetSelector'
+import { PresetValidationModal } from './PresetValidationModal'
 import { useToast, toastManager, SaveStatusIndicator, ConfirmDialog } from '../shared'
 import { CONTEXT_TOKENS_LIMITS, DEFAULT_MODEL } from '../../constants'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
@@ -53,6 +59,18 @@ export function GenerationPanel() {
 
     setUnityDialogueResponse: setStoreUnityDialogueResponse,
     setTokensUsed,
+    
+    // État streaming (Story 0.2)
+    isGenerating,
+    streamingContent,
+    currentStep,
+    isMinimized,
+    error: streamingError,
+    currentJobId,
+    startGeneration,
+    interrupt,
+    minimize,
+    resetStreamingState,
   } = useGenerationStore()
   
   const {
@@ -67,6 +85,14 @@ export function GenerationPanel() {
     authorProfile,
     updateProfile: updateAuthorProfile,
   } = useAuthorProfile()
+  
+  // Hook useLLMStore pour sélection provider/model (Story 0.3)
+  const { model: selectedLLMModel } = useLLMStore()
+  
+  // État pour PresetValidationModal (Task 6)
+  const [isValidationModalOpen, setIsValidationModalOpen] = useState(false)
+  const [validationResult, setValidationResult] = useState<any>(null)
+  const [pendingPreset, setPendingPreset] = useState<any>(null)
   
   const [userInstructions, setUserInstructions] = useState('')
   const [maxContextTokens, setMaxContextTokens] = useState<number>(CONTEXT_TOKENS_LIMITS.DEFAULT)
@@ -84,12 +110,172 @@ export function GenerationPanel() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved')
   const [narrativeTags, setNarrativeTags] = useState<string[]>([])
   const [previousDialoguePreview] = useState<string | null>(null)
+  
+  // Synchroniser l'état local llmModel avec useLLMStore (Story 0.3)
+  useEffect(() => {
+    if (selectedLLMModel && selectedLLMModel !== llmModel) {
+      setLlmModel(selectedLLMModel)
+      setIsDirty(true)
+      setSaveStatus('unsaved')
+    }
+  }, [selectedLLMModel])
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [, setResetMenuOpen] = useState(false)
   const toast = useToast()
   const sliderRef = useRef<HTMLInputElement>(null)
+  const eventSourceRef = useRef<EventSource | null>(null)
+  const sseClosedByClientRef = useRef(false)
+  const sseHasReceivedAnyMessageRef = useRef(false)
+  const sseErrorDebounceTimerRef = useRef<number | null>(null)
 
   const availableNarrativeTags = ['tension', 'humour', 'dramatique', 'intime', 'révélation']
+  
+  // Lancer le streaming SSE quand isGenerating devient true avec currentJobId (Story 0.2)
+  useEffect(() => {
+    if (isGenerating && currentJobId && !eventSourceRef.current) {
+      // Créer EventSource vers l'endpoint SSE du job
+      const streamUrl = `/api/v1/dialogues/generate/jobs/${currentJobId}/stream`
+      const es = new EventSource(streamUrl)
+      eventSourceRef.current = es
+      sseClosedByClientRef.current = false
+      sseHasReceivedAnyMessageRef.current = false
+      
+      const { appendChunk, setStep, complete, setError: setStreamError } = useGenerationStore.getState()
+      
+      const handleMessage = async (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data)
+          sseHasReceivedAnyMessageRef.current = true
+          
+          // Dispatcher selon le type d'événement SSE
+          switch (data.type) {
+            case 'chunk':
+              if (data.content) {
+                appendChunk(data.content)
+              }
+              break
+            case 'step':
+              if (data.step) {
+                setStep(data.step)
+              }
+              break
+            case 'metadata':
+              console.debug('SSE metadata:', data)
+              if (data.tokens) {
+                setTokensUsed(data.tokens)
+              }
+              break
+            case 'complete':
+              // Le résultat Unity JSON est dans data.result
+              if (data.result) {
+                setStoreUnityDialogueResponse(data.result)
+                setIsDirty(false)
+                if (data.result.raw_prompt && data.result.estimated_tokens && data.result.prompt_hash) {
+                  setRawPrompt(
+                    data.result.raw_prompt,
+                    data.result.estimated_tokens,
+                    data.result.prompt_hash,
+                    false,
+                    data.result.structured_prompt || null
+                  )
+                }
+                // Ajouter les nœuds générés au graphe
+                if (data.result.json_content) {
+                  try {
+                    await useGraphStore.getState().loadDialogue(data.result.json_content)
+                  } catch (graphError) {
+                    console.warn('Erreur lors du chargement du graphe généré:', graphError)
+                  }
+                }
+                toast('Génération Unity JSON réussie!', 'success')
+              }
+              complete()
+              setIsLoading(false)
+              sseClosedByClientRef.current = true
+              if (sseErrorDebounceTimerRef.current !== null) {
+                window.clearTimeout(sseErrorDebounceTimerRef.current)
+                sseErrorDebounceTimerRef.current = null
+              }
+              es.close()
+              eventSourceRef.current = null
+              break
+            case 'error':
+              if (data.message) {
+                setStreamError(data.message)
+                setError(data.message)
+                toast(data.message, 'error')
+              }
+              setIsLoading(false)
+              sseClosedByClientRef.current = true
+              if (sseErrorDebounceTimerRef.current !== null) {
+                window.clearTimeout(sseErrorDebounceTimerRef.current)
+                sseErrorDebounceTimerRef.current = null
+              }
+              es.close()
+              eventSourceRef.current = null
+              break
+          }
+        } catch (err) {
+          console.warn('Erreur parsing SSE:', err)
+        }
+      }
+      
+      es.onmessage = (event) => {
+        void handleMessage(event)
+      }
+      
+      es.onerror = () => {
+        if (sseClosedByClientRef.current || es.readyState === EventSource.CLOSED) {
+          return
+        }
+        // NOTE: EventSource déclenche souvent onerror lors d'une fermeture "normale"
+        // (EOF côté serveur → tentative de reconnexion). Pour éviter un faux toast juste
+        // avant un événement "complete", on débounce l'erreur et on l'annule si la
+        // génération se termine.
+        if (sseErrorDebounceTimerRef.current !== null) {
+          return
+        }
+
+        sseErrorDebounceTimerRef.current = window.setTimeout(() => {
+          sseErrorDebounceTimerRef.current = null
+
+          if (sseClosedByClientRef.current || es.readyState === EventSource.CLOSED) {
+            return
+          }
+
+          // Si on a déjà reçu des messages, c'est probablement un close/reconnect transitoire.
+          // On évite d'alarmer l'utilisateur avec un toast "erreur serveur" dans ce cas.
+          if (sseHasReceivedAnyMessageRef.current) {
+            console.debug('EventSource error after messages; ignoring toast.')
+            return
+          }
+
+          console.error('Erreur EventSource')
+          const errorMsg = 'Erreur de connexion au serveur'
+          setStreamError(errorMsg)
+          setError(errorMsg)
+          toast(errorMsg, 'error')
+          setIsLoading(false)
+          sseClosedByClientRef.current = true
+          es.close()
+          eventSourceRef.current = null
+        }, 600)
+      }
+    }
+    
+    // Cleanup : fermer EventSource si isGenerating devient false
+    return () => {
+      if (sseErrorDebounceTimerRef.current !== null) {
+        window.clearTimeout(sseErrorDebounceTimerRef.current)
+        sseErrorDebounceTimerRef.current = null
+      }
+      if (eventSourceRef.current && !isGenerating) {
+        sseClosedByClientRef.current = true
+        eventSourceRef.current.close()
+        eventSourceRef.current = null
+      }
+    }
+  }, [isGenerating, currentJobId, setError, setIsLoading, setTokensUsed, setStoreUnityDialogueResponse, setIsDirty, setRawPrompt, toast])
 
   // Sauvegarde automatique très fréquente (toutes les 2 secondes)
   const DRAFT_STORAGE_KEY = 'generation_draft'
@@ -146,7 +332,10 @@ export function GenerationPanel() {
           const value = Math.max(CONTEXT_TOKENS_LIMITS.MIN, draft.maxContextTokens)
           setMaxContextTokens(value)
         }
-        if (draft.maxCompletionTokens !== undefined) setMaxCompletionTokens(draft.maxCompletionTokens)
+        if (draft.maxCompletionTokens !== undefined) {
+          const clampedMaxCompletionTokens = Math.min(Math.max(draft.maxCompletionTokens, 100), 16000)
+          setMaxCompletionTokens(clampedMaxCompletionTokens)
+        }
         if (draft.llmModel !== undefined && draft.llmModel !== "unknown") {
           // Ne charger le modèle du draft que s'il est valide (sera validé plus tard lors du chargement des modèles)
           setLlmModel(draft.llmModel)
@@ -315,8 +504,16 @@ export function GenerationPanel() {
       return
     }
 
+    // Récupérer le hash actuel pour comparaison après l'appel API
+    const currentState = useGenerationStore.getState()
+    const currentHash = currentState.promptHash
+    
+    // Ne pas effacer le prompt existant pendant l'estimation
+    // On met seulement isEstimating=true pour indiquer qu'on est en train d'estimer
     setIsEstimating(true)
-      setRawPrompt(null, null, null, true, null)
+    // Ne pas effacer le prompt : on le garde visible pendant l'estimation
+    // setRawPrompt(null, null, null, true, null) // RETIRÉ : on garde le prompt existant
+    
     try {
       const contextSelections = buildContextSelections()
       
@@ -358,8 +555,13 @@ export function GenerationPanel() {
       // Estimer approximativement les tokens côté frontend pour l'affichage
       const estimatedTokenCount = estimateTokensUtil(response.raw_prompt)
       
-      
-      setRawPrompt(response.raw_prompt, estimatedTokenCount, response.prompt_hash, false, response.structured_prompt || null)
+      // Mettre à jour le prompt seulement si le hash a changé ou si on n'avait pas de prompt
+      // Cela évite de reconstruire l'affichage si le prompt est identique
+      if (currentHash !== response.prompt_hash || currentHash === null) {
+        setRawPrompt(response.raw_prompt, estimatedTokenCount, response.prompt_hash, false, response.structured_prompt || null)
+      }
+      // Si le hash est identique, on ne met pas à jour le prompt (évite re-render inutile)
+      // isEstimating sera mis à false dans le finally
     } catch (err: unknown) {
       // Ne logger que les erreurs non liées à la connexion (backend non accessible)
       const e = err as { code?: string; response?: { status?: number } } | null
@@ -397,11 +599,11 @@ export function GenerationPanel() {
     }
     
     if (maxCompletionTokens !== null) {
-      if (maxCompletionTokens < 500) {
-        errors.maxCompletionTokens = 'Minimum 500 tokens'
+      if (maxCompletionTokens < 100) {
+        errors.maxCompletionTokens = 'Minimum 100 tokens'
       }
-      if (maxCompletionTokens > 50000) {
-        errors.maxCompletionTokens = 'Maximum 50 000 tokens'
+      if (maxCompletionTokens > 16000) {
+        errors.maxCompletionTokens = 'Maximum 16 000 tokens (limite backend)'
       }
     }
     
@@ -451,18 +653,6 @@ export function GenerationPanel() {
 
     setIsLoading(true)
     setError(null)
-    // Toast sans durée (0) pour qu'il reste affiché pendant la génération, avec action d'annulation
-    const cancelGeneration = () => {
-      setIsLoading(false)
-      setError('Génération annulée')
-    }
-    const toastId = toast('Génération en cours...', 'info', 0, [
-      {
-        label: 'Annuler',
-        action: cancelGeneration,
-        style: 'secondary',
-      },
-    ])
 
     try {
       const contextSelections = buildContextSelections()
@@ -471,9 +661,6 @@ export function GenerationPanel() {
       const hasCharacters = (contextSelections.characters_full?.length || 0) + (contextSelections.characters_excerpt?.length || 0) > 0
       if (!hasCharacters) {
         toast('Au moins un personnage doit être sélectionné pour générer un dialogue Unity', 'error')
-        if (toastId) {
-          toastManager.remove(toastId)
-        }
         setIsLoading(false)
         return
       }
@@ -547,12 +734,18 @@ export function GenerationPanel() {
       
       // Utiliser une valeur par défaut si userInstructions est vide (backend exige min_length=1)
       const userInstructionsValue = userInstructions.trim() || ' '
+      const safeMaxCompletionTokens = maxCompletionTokens !== null
+        ? Math.min(Math.max(maxCompletionTokens, 100), 16000)
+        : null
+      if (safeMaxCompletionTokens !== maxCompletionTokens) {
+        setMaxCompletionTokens(safeMaxCompletionTokens)
+      }
       const request: GenerateUnityDialogueRequest = {
         user_instructions: userInstructionsValue,
         context_selections: contextSelections,
         npc_speaker_id: sceneSelection.characterB || undefined,
         max_context_tokens: maxContextTokens,
-        max_completion_tokens: maxCompletionTokens ?? undefined,
+        max_completion_tokens: safeMaxCompletionTokens ?? undefined,
         system_prompt_override: systemPromptOverride || undefined,
         author_profile: authorProfile || undefined,
         llm_model_identifier: modelToUse,
@@ -568,68 +761,24 @@ export function GenerationPanel() {
           : undefined
       }
 
-
-      const response = await dialoguesAPI.generateUnityDialogue(request)
+      // Créer le job de génération avec streaming SSE (Story 0.2)
+      const job = await dialoguesAPI.createGenerationJob(request)
       
-      // Afficher un avertissement si DummyLLMClient a été utilisé
-      if (response.warning) {
-        toast(response.warning, 'error', 10000)
-      }
+      // Démarrer la génération avec le job_id
+      startGeneration(job.job_id)
       
-      // Stocker directement la réponse Unity dans le store
-      setStoreUnityDialogueResponse(response)
-      setIsDirty(false)
-      
-      // Valider le hash si on a déjà fait une estimation
-      if (promptHash && response.prompt_hash !== promptHash) {
-        console.warn(`[HASH MISMATCH] Le prompt généré (${response.prompt_hash.slice(0, 8)}) diffère du prompt estimé (${promptHash.slice(0, 8)}).`)
-      }
-      
-      // Mettre à jour le prompt réel dans le store
-      setRawPrompt(response.raw_prompt, response.estimated_tokens, response.prompt_hash, false, response.structured_prompt || null)
-
-      
-      // Fermer le toast de génération en cours et afficher le succès
-      if (toastId) {
-        toastManager.remove(toastId)
-      }
-      if (!response.warning) {
-        toast('Génération Unity JSON réussie!', 'success')
-      }
+      // Le useEffect ci-dessus se chargera de connecter l'EventSource
+      // et de mettre à jour le store avec les événements SSE
     } catch (err) {
       const errorMsg = getErrorMessage(err)
       setError(errorMsg)
-      // Fermer le toast de génération en cours en cas d'erreur
-      if (toastId) {
-        toastManager.remove(toastId)
-      }
       toast(errorMsg, 'error')
+      // Si la création du job échoue, on peut reset le streaming (sinon le SSE gère)
+      resetStreamingState()
     } finally {
       setIsLoading(false)
     }
-  }, [
-    sceneSelection,
-    userInstructions,
-    maxContextTokens,
-    maxCompletionTokens,
-    systemPromptOverride,
-    llmModel,
-    reasoningEffort,
-    authorProfile,
-    maxChoices,
-    choicesMode,
-    narrativeTags,
-    promptHash,
-    availableModels,
-    vocabularyConfig,
-    includeNarrativeGuides,
-    previousDialoguePreview,
-    buildContextSelections,
-    toast,
-    setStoreUnityDialogueResponse,
-    setTokensUsed,
-    setRawPrompt,
-  ])
+  }, [startGeneration, resetStreamingState, buildContextSelections, toast, sceneSelection, userInstructions, maxContextTokens, maxCompletionTokens, systemPromptOverride, llmModel, reasoningEffort, authorProfile, maxChoices, choicesMode, narrativeTags, promptHash, availableModels, vocabularyConfig, includeNarrativeGuides, previousDialoguePreview, setStoreUnityDialogueResponse, setTokensUsed, setRawPrompt, setIsDirty, setAvailableModels])
 
   const handlePreview = useCallback(() => {
     // TODO: Implémenter prévisualisation
@@ -712,6 +861,131 @@ export function GenerationPanel() {
     setResetMenuOpen(false)
     toast('Sélections réinitialisées', 'info')
   }, [clearSelections, toast])
+
+  // Handlers Preset (Task 6)
+  const handlePresetLoaded = useCallback(async (preset: any) => {
+    try {
+      // Validation du preset
+      const validation = await fetch(`/api/v1/presets/${preset.id}/validate`)
+      const validationResult = await validation.json()
+      
+      if (!validationResult.valid) {
+        // Afficher modal de validation si références obsolètes
+        setValidationResult(validationResult)
+        setPendingPreset(preset)
+        setIsValidationModalOpen(true)
+      } else {
+        // Appliquer directement si valide
+        applyPreset(preset)
+        toast('Preset chargé avec succès', 'success')
+      }
+    } catch (err) {
+      const message = getErrorMessage(err)
+      toast(`Erreur lors de la validation du preset: ${message}`, 'error')
+    }
+  }, [toast])
+  
+  const applyPreset = useCallback((preset: any) => {
+    const config = preset.configuration
+
+    // Appliquer le preset au ContextStore pour que le ContextSelector reflète exactement le preset
+    // (sinon on garde des sélections résiduelles hors preset)
+    const contextState = useContextStore.getState()
+    if (config.contextSelections) {
+      contextState.restoreState(
+        config.contextSelections,
+        config.selectedRegion ?? config.region ?? null,
+        Array.isArray(config.selectedSubLocations)
+          ? config.selectedSubLocations
+          : (config.subLocation ? [config.subLocation] : [])
+      )
+    } else {
+      contextState.clearSelections()
+      ;(config.characters || []).forEach((name: string) => {
+        contextState.toggleCharacter(name, 'full')
+      })
+      contextState.setRegion(config.region || null)
+      if (config.subLocation) {
+        contextState.toggleSubLocation(config.subLocation)
+      }
+    }
+    
+    // Pré-remplir sceneSelection
+    setSceneSelection({
+      characterA: config.characters?.[0] || null,
+      characterB: config.characters?.[1] || null,
+      sceneRegion: (config.selectedRegion ?? config.region) || null,
+      subLocation: (Array.isArray(config.selectedSubLocations) ? config.selectedSubLocations[0] : config.subLocation) || null,
+    })
+    
+    // Pré-remplir instructions
+    setUserInstructions(config.instructions || '')
+    
+    // Pré-remplir fieldConfigs si sauvegardé
+    if (config.fieldConfigs) {
+      const { setFieldConfig } = useContextConfigStore.getState()
+      Object.entries(config.fieldConfigs).forEach(([category, fields]) => {
+        setFieldConfig(category, fields as string[])
+      })
+    }
+    
+    setIsDirty(true)
+    setSaveStatus('unsaved')
+  }, [setSceneSelection])
+  
+  const handleValidationConfirm = useCallback(() => {
+    if (pendingPreset) {
+      applyPreset(pendingPreset)
+      toast('Preset chargé (avec warnings)', 'warning')
+    }
+    setIsValidationModalOpen(false)
+    setPendingPreset(null)
+    setValidationResult(null)
+  }, [pendingPreset, applyPreset, toast])
+  
+  const handleValidationClose = useCallback(() => {
+    setIsValidationModalOpen(false)
+    setPendingPreset(null)
+    setValidationResult(null)
+  }, [])
+  
+  // Configuration actuelle pour sauvegarde preset
+  const getCurrentConfiguration = useCallback(() => {
+    const { fieldConfigs } = useContextConfigStore.getState()
+    const contextState = useContextStore.getState()
+    const selections = contextState.selections
+    const selectedRegion = contextState.selectedRegion
+    const selectedSubLocations = contextState.selectedSubLocations
+
+    const uniq = <T,>(arr: T[]) => Array.from(new Set(arr))
+    const allCharacters = uniq([
+      ...(Array.isArray(selections.characters_full) ? selections.characters_full : []),
+      ...(Array.isArray(selections.characters_excerpt) ? selections.characters_excerpt : []),
+    ])
+
+    // Locations: inclure les cases cochées + région + sous-lieux (exhaustif)
+    const allLocations = uniq([
+      ...(Array.isArray(selections.locations_full) ? selections.locations_full : []),
+      ...(Array.isArray(selections.locations_excerpt) ? selections.locations_excerpt : []),
+      ...(selectedRegion ? [selectedRegion] : []),
+      ...(Array.isArray(selectedSubLocations) ? selectedSubLocations : []),
+    ])
+    
+    const config = {
+      characters: allCharacters,
+      locations: allLocations,
+      region: selectedRegion || sceneSelection.sceneRegion || '',
+      subLocation: selectedSubLocations?.[0] || sceneSelection.subLocation || undefined,
+      sceneType: 'Generic', // TODO: Inférer depuis narrative tags ou instructions
+      instructions: userInstructions,
+      fieldConfigs,
+      contextSelections: selections,
+      selectedRegion,
+      selectedSubLocations,
+    }
+    
+    return config
+  }, [sceneSelection, userInstructions])
 
   // Raccourcis clavier
   useKeyboardShortcuts(
@@ -806,6 +1080,12 @@ export function GenerationPanel() {
           <SaveStatusIndicator status={saveStatus} />
         </div>
 
+        {/* PresetSelector (Task 6) */}
+        <PresetSelector
+          onPresetLoaded={handlePresetLoaded}
+          getCurrentConfiguration={getCurrentConfiguration}
+        />
+
             <SceneSelectionWidget />
 
       <SystemPromptEditor
@@ -840,41 +1120,9 @@ export function GenerationPanel() {
 
       <InGameFlagsSummary />
 
+      {/* Sélecteur de modèle LLM (Story 0.3) */}
       <div style={{ marginBottom: '1rem' }}>
-        <label style={{ color: theme.text.primary }}>
-          Modèle LLM:
-          <select
-            value={llmModel}
-            onChange={(e) => {
-              const newValue = e.target.value
-              // Ne pas accepter "unknown" comme valeur valide
-              if (newValue && newValue !== "unknown") {
-                setLlmModel(newValue)
-                setIsDirty(true)
-                setSaveStatus('unsaved')
-                // Réinitialiser reasoning_effort si le modèle ne supporte pas ce paramètre
-                if (newValue !== "gpt-5.2" && newValue !== "gpt-5.2-pro") {
-                  setReasoningEffort(null)
-                }
-              }
-            }}
-            style={{ 
-              width: '100%', 
-              padding: '0.5rem', 
-              marginTop: '0.5rem', 
-              boxSizing: 'border-box',
-              backgroundColor: theme.input.background,
-              border: `1px solid ${theme.input.border}`,
-              color: theme.input.color,
-            }}
-          >
-            {availableModels.map((model, index) => (
-              <option key={`${model.model_identifier}-${index}-${model.display_name}`} value={model.model_identifier}>
-                {model.display_name || model.model_identifier}
-              </option>
-            ))}
-          </select>
-        </label>
+        <ModelSelector />
       </div>
 
       {(llmModel === "gpt-5.2" || llmModel === "gpt-5.2-pro") && (
@@ -1009,8 +1257,8 @@ export function GenerationPanel() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem' }}>
             <input
               type="range"
-              min={500}
-              max={50000}
+              min={100}
+              max={16000}
               step={500}
               value={maxCompletionTokens ?? 10000}
               onChange={(e) => {
@@ -1023,7 +1271,7 @@ export function GenerationPanel() {
                 flex: 1,
                 height: '6px',
                 borderRadius: '3px',
-                background: `linear-gradient(to right, ${theme.border.focus} 0%, ${theme.border.focus} ${((maxCompletionTokens ?? 10000) - 500) / (50000 - 500) * 100}%, ${theme.input.background} ${((maxCompletionTokens ?? 10000) - 500) / (50000 - 500) * 100}%, ${theme.input.background} 100%)`,
+                background: `linear-gradient(to right, ${theme.border.focus} 0%, ${theme.border.focus} ${((maxCompletionTokens ?? 10000) - 100) / (16000 - 100) * 100}%, ${theme.input.background} ${((maxCompletionTokens ?? 10000) - 100) / (16000 - 100) * 100}%, ${theme.input.background} 100%)`,
                 outline: 'none',
                 WebkitAppearance: 'none',
                 appearance: 'none',
@@ -1271,6 +1519,8 @@ export function GenerationPanel() {
         </div>
       )}
       </div>
+      
+      {/* Modal de progression streaming (Story 0.2) */}
       <ConfirmDialog
         isOpen={showResetConfirm}
         title="Réinitialiser le formulaire"
@@ -1281,6 +1531,48 @@ export function GenerationPanel() {
         onConfirm={performReset}
         onCancel={() => setShowResetConfirm(false)}
       />
+      
+      {/* Modal de progression streaming (Story 0.2) */}
+      <GenerationProgressModal
+        isOpen={isGenerating}
+        content={streamingContent}
+        currentStep={currentStep}
+        isMinimized={isMinimized}
+        onInterrupt={async () => {
+          // Appeler l'API de cancel avec le job_id
+          if (currentJobId) {
+            try {
+              await dialoguesAPI.cancelGenerationJob(currentJobId)
+            } catch (err) {
+              console.warn('Erreur lors de l\'annulation du job:', err)
+            }
+          }
+          // Fermer l'EventSource
+          interrupt()
+          if (eventSourceRef.current) {
+            eventSourceRef.current.close()
+            eventSourceRef.current = null
+          }
+          resetStreamingState()
+          setIsLoading(false)
+        }}
+        onMinimize={minimize}
+        onClose={() => {
+          resetStreamingState()
+          setIsLoading(false)
+        }}
+        error={streamingError}
+      />
+      
+      {/* Modal de validation preset (Task 6) */}
+      {validationResult && (
+        <PresetValidationModal
+          isOpen={isValidationModalOpen}
+          validationResult={validationResult}
+          onClose={handleValidationClose}
+          onConfirm={handleValidationConfirm}
+        />
+      )}
     </div>
   )
 }

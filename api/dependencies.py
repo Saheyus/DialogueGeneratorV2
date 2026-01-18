@@ -29,6 +29,7 @@ from services.notion_import_service import NotionImportService
 from services.prompt_enricher import PromptEnricher
 from services.skill_catalog_service import SkillCatalogService
 from services.trait_catalog_service import TraitCatalogService
+from services.preset_service import PresetService
 from constants import FilePaths, Defaults
 
 logger = logging.getLogger(__name__)
@@ -316,4 +317,24 @@ def get_trait_catalog_service(request: Request) -> TraitCatalogService:
     if container is None:
         raise RuntimeError("ServiceContainer not initialized in app.state. Ensure app.state.container is set in lifespan.")
     return container.get_trait_catalog_service()
+
+
+def get_preset_service(request: Request) -> PresetService:
+    """Retourne le service de gestion des presets.
+    
+    Utilise le ServiceContainer depuis app.state (système unifié).
+    
+    Args:
+        request: La requête HTTP (injecté automatiquement par FastAPI).
+        
+    Returns:
+        Instance de PresetService.
+        
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
+    """
+    container = getattr(request.app.state, "container", None)
+    if container is None:
+        raise RuntimeError("ServiceContainer not initialized in app.state. Ensure app.state.container is set in lifespan.")
+    return container.get_preset_service()
 

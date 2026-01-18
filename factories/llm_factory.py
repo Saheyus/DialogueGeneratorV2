@@ -4,6 +4,7 @@ import time
 import logging
 from typing import Optional, Any
 from core.llm.llm_client import ILLMClient, OpenAIClient, DummyLLMClient
+from core.llm.mistral_client import MistralClient
 
 logger = logging.getLogger(__name__)
 
@@ -81,27 +82,6 @@ class LLMClientFactory:
                     if "max_tokens" in model_config["parameters"]:
                         client_config["max_tokens"] = model_config["parameters"]["max_tokens"]
                 logger.info(f"Création d'un OpenAIClient pour model_id: {model_id} (default_model: {model_identifier})")
-                # #region agent log
-                log_data = {
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "D",
-                    "location": "llm_factory.py:create_client",
-                    "message": "Création OpenAIClient - modèle sélectionné",
-                    "data": {
-                        "model_id": model_id,
-                        "model_identifier": model_identifier,
-                        "api_identifier": model_config.get("api_identifier"),
-                        "model_identifier_from_config": model_config.get("model_identifier"),
-                        "display_name": model_config.get("display_name")
-                    },
-                    "timestamp": int(time.time() * 1000)
-                }
-                try:
-                    with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
-                        log_file.write(json.dumps(log_data) + "\n")
-                except: pass
-                # #endregion
                 return OpenAIClient(
                     api_key=api_key,
                     config=client_config,
@@ -111,6 +91,41 @@ class LLMClientFactory:
                 )
             except Exception as e:
                 logger.error(f"Erreur lors de la création de OpenAIClient pour '{model_id}': {e}. Utilisation de DummyLLMClient.")
+                return DummyLLMClient()
+        
+        elif client_type == "mistral":
+            # Support Mistral AI via MistralClient
+            mistral_api_key_env_var = config.get("mistral_api_key_env_var")
+            if not mistral_api_key_env_var:
+                logger.warning(f"Variable d'environnement pour la clé API Mistral non spécifiée pour le modèle '{model_id}'. Utilisation de DummyLLMClient.")
+                return DummyLLMClient()
+            
+            api_key = os.getenv(mistral_api_key_env_var)
+            if not api_key:
+                logger.warning(f"Clé API Mistral non trouvée dans l'environnement (variable: {mistral_api_key_env_var}) pour le modèle '{model_id}'. Utilisation de DummyLLMClient.")
+                return DummyLLMClient()
+            
+            try:
+                # La config passée à MistralClient doit contenir default_model avec l'identifiant du modèle
+                model_identifier = model_config.get("api_identifier") or model_config.get("model_identifier") or model_id
+                client_config = config.copy()  # Commencer avec la config globale
+                client_config["default_model"] = model_identifier  # Définir le modèle spécifique
+                # Ajouter les paramètres du modèle s'ils existent
+                if "parameters" in model_config:
+                    if "default_temperature" in model_config["parameters"]:
+                        client_config["temperature"] = model_config["parameters"]["default_temperature"]
+                    if "max_tokens" in model_config["parameters"]:
+                        client_config["max_tokens"] = model_config["parameters"]["max_tokens"]
+                logger.info(f"Création d'un MistralClient pour model_id: {model_id} (default_model: {model_identifier})")
+                return MistralClient(
+                    api_key=api_key,
+                    config=client_config,
+                    usage_service=usage_service,
+                    request_id=request_id,
+                    endpoint=endpoint
+                )
+            except Exception as e:
+                logger.error(f"Erreur lors de la création de MistralClient pour '{model_id}': {e}. Utilisation de DummyLLMClient.")
                 return DummyLLMClient()
         
         # Ajouter d'autres types de clients ici si nécessaire (ex: Anthropic, Cohere)

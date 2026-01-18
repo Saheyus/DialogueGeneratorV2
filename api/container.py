@@ -14,6 +14,9 @@ from services.prompt_enricher import PromptEnricher
 from services.prompt_builder import PromptBuilder
 from services.skill_catalog_service import SkillCatalogService
 from services.trait_catalog_service import TraitCatalogService
+from services.preset_service import PresetService
+from services.dialogue_generation_service import DialogueGenerationService
+from services.llm_usage_service import LLMUsageService
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +37,9 @@ class ServiceContainer:
         self._prompt_engine: Optional[PromptEngine] = None
         self._skill_catalog_service: Optional[SkillCatalogService] = None
         self._trait_catalog_service: Optional[TraitCatalogService] = None
+        self._preset_service: Optional[PresetService] = None
+        self._dialogue_generation_service: Optional[DialogueGenerationService] = None
+        self._llm_usage_service: Optional[LLMUsageService] = None
         logger.debug("ServiceContainer initialisé (services à charger au premier accès)")
     
     def get_config_service(self) -> ConfigurationService:
@@ -149,6 +155,71 @@ class ServiceContainer:
             logger.info("TraitCatalogService initialisé dans le container.")
         return self._trait_catalog_service
     
+    def get_preset_service(self) -> PresetService:
+        """Retourne le service de gestion des presets.
+        
+        Returns:
+            Instance de PresetService.
+        """
+        if self._preset_service is None:
+            config_service = self.get_config_service()
+            context_builder = self.get_context_builder()
+            self._preset_service = PresetService(
+                config_service=config_service,
+                context_builder=context_builder
+            )
+            logger.info("PresetService initialisé dans le container.")
+        return self._preset_service
+    
+    def get_dialogue_generation_service(self) -> DialogueGenerationService:
+        """Retourne le service de génération de dialogues.
+        
+        Returns:
+            Instance de DialogueGenerationService.
+        """
+        if self._dialogue_generation_service is None:
+            context_builder = self.get_context_builder()
+            prompt_engine = self.get_prompt_engine()
+            self._dialogue_generation_service = DialogueGenerationService(
+                context_builder=context_builder,
+                prompt_engine=prompt_engine
+            )
+            logger.info("DialogueGenerationService initialisé dans le container.")
+        return self._dialogue_generation_service
+    
+    def get_llm_usage_service(self) -> LLMUsageService:
+        """Retourne le service de tracking d'utilisation LLM.
+        
+        Returns:
+            Instance de LLMUsageService.
+        """
+        if self._llm_usage_service is None:
+            from api.dependencies import create_llm_usage_service
+            self._llm_usage_service = create_llm_usage_service()
+            logger.info("LLMUsageService initialisé dans le container.")
+        return self._llm_usage_service
+    
+    def get_unity_dialogue_orchestrator(self, request_id: str):
+        """Crée un orchestrateur Unity Dialogue avec toutes les dépendances.
+        
+        Args:
+            request_id: ID de la requête pour logging.
+            
+        Returns:
+            Instance de UnityDialogueOrchestrator.
+        """
+        from services.unity_dialogue_orchestrator import UnityDialogueOrchestrator
+        
+        return UnityDialogueOrchestrator(
+            dialogue_service=self.get_dialogue_generation_service(),
+            prompt_engine=self.get_prompt_engine(),
+            skill_service=self.get_skill_catalog_service(),
+            trait_service=self.get_trait_catalog_service(),
+            config_service=self.get_config_service(),
+            usage_service=self.get_llm_usage_service(),
+            request_id=request_id
+        )
+    
     def reset(self) -> None:
         """Réinitialise tous les services (utile lors d'un reload uvicorn).
         
@@ -162,4 +233,7 @@ class ServiceContainer:
         self._prompt_engine = None
         self._skill_catalog_service = None
         self._trait_catalog_service = None
+        self._preset_service = None
+        self._dialogue_generation_service = None
+        self._llm_usage_service = None
         logger.info("ServiceContainer réinitialisé (reload détecté).")
