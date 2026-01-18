@@ -12,7 +12,6 @@ import type {
   ImportSnapshotResponse,
   ExportSnapshotRequest,
   ExportSnapshotResponse,
-  FlagSnapshot,
   InGameFlag
 } from '../types/flags'
 

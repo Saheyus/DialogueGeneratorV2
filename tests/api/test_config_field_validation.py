@@ -1,7 +1,8 @@
 """Tests pour l'endpoint API de validation des champs."""
 import pytest
 from fastapi.testclient import TestClient
-from context_builder import ContextBuilder
+from core.context.context_builder import ContextBuilder
+from unittest.mock import MagicMock
 
 
 @pytest.fixture
@@ -14,9 +15,9 @@ def client():
 @pytest.fixture
 def mock_context_builder(monkeypatch):
     """Mock du ContextBuilder avec des données de test."""
-    builder = ContextBuilder()
-    
-    builder.characters = [
+    # Créer un mock pour GDDDataAccessor
+    mock_accessor = MagicMock()
+    mock_accessor.characters = [
         {
             "Nom": "Test Character",
             "Introduction": {
@@ -26,6 +27,15 @@ def mock_context_builder(monkeypatch):
             "Expressions courantes": ["Test"]
         }
     ]
+    mock_accessor.locations = []
+    mock_accessor.items = []
+    mock_accessor.species = []
+    mock_accessor.communities = []
+    mock_accessor.quests = []
+    
+    # Créer un ContextBuilder avec le mock injecté
+    builder = ContextBuilder()
+    builder._gdd_data_accessor = mock_accessor
     
     return builder
 

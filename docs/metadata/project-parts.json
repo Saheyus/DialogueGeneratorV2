@@ -1,0 +1,48 @@
+{
+  "repository_type": "multi-part",
+  "parts": [
+    {
+      "part_id": "frontend",
+      "root_path": "frontend",
+      "project_type_id": "web",
+      "display_name": "Frontend Web Application",
+      "technologies": ["React", "TypeScript", "Vite", "Zustand"],
+      "entry_points": ["src/main.tsx", "index.html"],
+      "architecture_pattern": "component-based",
+      "primary_framework": "React",
+      "primary_language": "TypeScript"
+    },
+    {
+      "part_id": "api",
+      "root_path": "api",
+      "project_type_id": "backend",
+      "display_name": "Backend API",
+      "technologies": ["FastAPI", "Python", "Pydantic"],
+      "entry_points": ["main.py"],
+      "architecture_pattern": "layered",
+      "primary_framework": "FastAPI",
+      "primary_language": "Python"
+    }
+  ],
+  "integration_points": [
+    {
+      "from": "frontend",
+      "to": "api",
+      "type": "REST API",
+      "protocol": "HTTP/HTTPS",
+      "data_format": "JSON",
+      "authentication": "JWT Bearer tokens",
+      "base_path": "/api/v1",
+      "details": {
+        "development_proxy": "Vite proxies /api to http://localhost:4243",
+        "production": "Direct API calls to configured backend URL",
+        "cors": "Configured via CORS_ORIGINS environment variable"
+      }
+    }
+  ],
+  "shared_dependencies": {
+    "data_models": "TypeScript types mirror Pydantic schemas",
+    "constants": "Shared constants in constants.py and frontend/src/constants.ts",
+    "configuration": "JSON config files in config/ directory"
+  }
+}

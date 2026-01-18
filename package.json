@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "description": "DialogueGenerator - API REST FastAPI + Frontend React",
   "scripts": {
+    "setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-venv.ps1",
+    "verify:venv": "powershell -ExecutionPolicy Bypass -File scripts/verify-venv.ps1",
     "dev": "node scripts/dev.js",
     "dev:clean": "node scripts/dev.js --clear-cache",
     "dev:back": "node scripts/dev.js --backend",
@@ -15,18 +17,18 @@
     "dev:quiet": "node scripts/dev.js --quiet",
     "build": "cd frontend && npm install && npm run build",
     "build:check": "node scripts/check-build.js",
-    "start": "python -m api.main",
-    "test": "pytest tests/",
-    "test:api": "pytest tests/api/",
+    "start": "node scripts/getPythonPath.js -m api.main",
+    "test": "node scripts/getPythonPath.js -m pytest tests/",
+    "test:api": "node scripts/getPythonPath.js -m pytest tests/api/",
     "test:frontend": "powershell -ExecutionPolicy Bypass -File scripts/test-frontend.ps1",
     "test:e2e": "playwright test",
-    "test:all": "pytest tests/ && powershell -ExecutionPolicy Bypass -File scripts/test-frontend.ps1",
-    "install:all": "pip install -r requirements.txt && cd frontend && npm install",
+    "test:all": "node scripts/getPythonPath.js -m pytest tests/ && powershell -ExecutionPolicy Bypass -File scripts/test-frontend.ps1",
+    "install:all": "powershell -ExecutionPolicy Bypass -File scripts/setup-venv.ps1 && cd frontend && npm install",
     "deploy:check": "powershell -ExecutionPolicy Bypass -File scripts/deploy_check.ps1",
     "deploy:build": "powershell -ExecutionPolicy Bypass -File scripts/build_production.ps1",
     "start:prod": "powershell -ExecutionPolicy Bypass -File scripts/start-production.ps1",
     "start:debug": "powershell -ExecutionPolicy Bypass -File scripts/start-debug.ps1",
-    "start:api": "python -m api.main"
+    "start:api": "node scripts/getPythonPath.js -m api.main"
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",

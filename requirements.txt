@@ -1,4 +1,5 @@
 openai>=1.15
+mistralai>=1.10.0  # SDK Mistral AI pour multi-provider LLM support
 PyYAML>=6.0 # Potentiellement utile pour configuration YAML (non utilisé actuellement) 
 jinja2>=3.0
 tiktoken>=0.4 

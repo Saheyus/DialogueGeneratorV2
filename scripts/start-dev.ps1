@@ -6,17 +6,17 @@ Write-Host "=== Démarrage DialogueGenerator (Dev) ===" -ForegroundColor Cyan
 $projectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $projectRoot
 
+# Importer la fonction Get-VenvPython
+. (Join-Path $projectRoot "scripts\Get-VenvPython.ps1")
+
 # Vérifier Node.js
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     Write-Host "ERREUR: Node.js n'est pas installé" -ForegroundColor Red
     exit 1
 }
 
-# Vérifier Python
-if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-    Write-Host "ERREUR: Python n'est pas installé" -ForegroundColor Red
-    exit 1
-}
+# Obtenir le chemin Python (venv ou global)
+$pythonPath = Get-VenvPython -ProjectRoot $projectRoot
 
 # Installer les dépendances frontend si nécessaire
 $frontendNodeModules = Join-Path $projectRoot "frontend" "node_modules"
@@ -36,9 +36,10 @@ Write-Host "`nAppuyez sur Ctrl+C pour arrêter`n" -ForegroundColor Yellow
 
 # Lancer backend et frontend en parallèle
 $backendJob = Start-Job -ScriptBlock {
-    Set-Location $using:projectRoot
-    python -m api.main
-}
+    param($projectRoot, $pythonPath)
+    Set-Location $projectRoot
+    & $pythonPath -m api.main
+} -ArgumentList $projectRoot, $pythonPath
 
 $frontendJob = Start-Job -ScriptBlock {
     Set-Location (Join-Path $using:projectRoot "frontend")

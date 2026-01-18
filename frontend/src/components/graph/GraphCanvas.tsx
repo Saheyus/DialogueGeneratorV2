@@ -106,7 +106,7 @@ export const GraphCanvas = memo(function GraphCanvas() {
       }
       return edge
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [storeEdges, validationErrors])
   
   useMemo(() => {

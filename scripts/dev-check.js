@@ -114,6 +114,10 @@ function isProjectProcess(processInfo) {
   if (cmd.includes('api.main') || cmd.includes('python -m api.main')) {
     return true;
   }
+  // Supporter le venv Python aussi
+  if (cmd.includes('.venv') && cmd.includes('python')) {
+    return true;
+  }
   if (cmd.includes('vite') && cmd.includes('frontend')) {
     return true;
   }

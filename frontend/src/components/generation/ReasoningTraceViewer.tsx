@@ -17,9 +17,6 @@ export const ReasoningTraceViewer = memo(function ReasoningTraceViewer({
   reasoningTrace,
   isGenerating = false,
 }: ReasoningTraceViewerProps) {
-  // #region agent log
-  fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ReasoningTraceViewer.tsx:15',message:'ReasoningTraceViewer props',data:{hasTrace: !!reasoningTrace, isGenerating, traceKeys: reasoningTrace ? Object.keys(reasoningTrace) : null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-  // #endregion
   const toast = useToast()
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set())
   const [viewMode, setViewMode] = useState<'summary' | 'items'>('summary')

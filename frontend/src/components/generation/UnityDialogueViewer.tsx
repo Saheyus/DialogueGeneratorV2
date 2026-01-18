@@ -142,15 +142,37 @@ export const UnityDialogueViewer = memo(function UnityDialogueViewer({
           padding: '1rem',
           borderBottom: `1px solid ${theme.border.primary}`,
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
+          flexDirection: 'column',
+          gap: '0.75rem',
           backgroundColor: theme.background.secondary,
         }}
       >
-        <h3 style={{ margin: 0, color: theme.text.primary }}>
-          {response.title || 'Dialogue Unity'}
-        </h3>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+          <h3 style={{ margin: 0, color: theme.text.primary }}>
+            {response.title || 'Dialogue Unity'}
+          </h3>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={handleExport}
+              style={{
+                padding: '0.5rem 1rem',
+                border: `1px solid ${theme.border.primary}`,
+                borderRadius: '4px',
+                backgroundColor: theme.button.primary.background,
+                color: theme.button.primary.color,
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: 'bold',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Exporter vers Unity
+            </button>
+          </div>
+        </div>
+
+        {/* Bouton Copier placé sous le titre */}
+        <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
           <button
             onClick={handleCopyJson}
             style={{
@@ -164,21 +186,6 @@ export const UnityDialogueViewer = memo(function UnityDialogueViewer({
             }}
           >
             Copier JSON
-          </button>
-          <button
-            onClick={handleExport}
-            style={{
-              padding: '0.5rem 1rem',
-              border: `1px solid ${theme.border.primary}`,
-              borderRadius: '4px',
-              backgroundColor: theme.button.primary.background,
-              color: theme.button.primary.color,
-              cursor: 'pointer',
-              fontSize: '0.9rem',
-              fontWeight: 'bold',
-            }}
-          >
-            Exporter vers Unity
           </button>
         </div>
       </div>

@@ -1,0 +1,12 @@
+{
+  "name": "High Contrast",
+  "background": "#ffffff",
+  "container": "#eeeeee",
+  "border": "#212121",
+  "text": "#000000",
+  "accent": "#212121",
+  "success": "#2e7d32",
+  "warning": "#f57c00",
+  "error": "#c62828",
+  "info": "#1565c0"
+}

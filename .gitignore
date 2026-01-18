@@ -1,4 +1,4 @@
-e# Windows specific files
+# Windows specific files
 desktop.ini
 Thumbs.db
 ehthumbs.db
@@ -14,14 +14,42 @@ dist/
 build/
 *.so
 
+# Python testing and coverage
+.pytest_cache/
+.coverage
+coverage.xml
+coverage.html
+htmlcov/
+*.cover
+.hypothesis/
+
 # Virtual environment
 .env
+.env.local
+.env.production
+.env.development
 .venv
 venv/
 ENV/
 env/
 env.bak/
 venv.bak/
+
+# Node.js / Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Frontend build and cache
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vite/
+frontend/test-results/
+playwright-report/
+playwright/.cache/
 
 # IDE specific files
 .vscode/
@@ -37,6 +65,12 @@ logs/
 *.log
 data/logs/*.json
 
+# Data directories (generated/cache files)
+data/llm_usage/
+data/notion_cache/
+data/interactions/
+data/UnityData/
+
 # Temporary files
 *.tmp
 *.bak
@@ -46,4 +80,7 @@ data/logs/*.json
 ui_settings.json
 
 # Données locales et générées (fichiers JSON de logs uniquement, pas les configs)
-# Note: data/config/*.json peut être versionné selon besoin 
+# Note: data/config/*.json peut être versionné selon besoin
+
+# BMAD artifacts (_bmad est ignoré, _bmad-output reste versionné)
+_bmad/ 

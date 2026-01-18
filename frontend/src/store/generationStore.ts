@@ -28,6 +28,14 @@ interface GenerationState {
   unityDialogueResponse: GenerateUnityDialogueResponse | null
   tokensUsed: number | null
   
+  // État streaming (Task 2 - Story 0.2)
+  isGenerating: boolean
+  streamingContent: string
+  currentStep: 'Prompting' | 'Generating' | 'Validating' | 'Complete'
+  isMinimized: boolean
+  error: string | null
+  currentJobId: string | null
+  
   // Actions
   setSceneSelection: (selection: Partial<SceneSelection>) => void
   setDialogueStructure: (structure: string[]) => void
@@ -38,6 +46,16 @@ interface GenerationState {
   setUnityDialogueResponse: (response: GenerateUnityDialogueResponse | null) => void
   setTokensUsed: (tokens: number | null) => void
   clearGenerationResults: () => void
+  
+  // Actions streaming (Task 2 - Story 0.2)
+  startGeneration: (jobId: string) => void
+  appendChunk: (chunk: string) => void
+  setStep: (step: 'Prompting' | 'Generating' | 'Validating' | 'Complete') => void
+  interrupt: () => void
+  minimize: () => void
+  complete: () => void
+  setError: (error: string) => void
+  resetStreamingState: () => void
 }
 
 
@@ -62,6 +80,14 @@ export const useGenerationStore = create<GenerationState>((set) => ({
   isEstimating: false,
   unityDialogueResponse: null,
   tokensUsed: null,
+
+  // État streaming initial (Task 2 - Story 0.2)
+  isGenerating: false,
+  streamingContent: '',
+  currentStep: 'Prompting',
+  isMinimized: false,
+  error: null,
+  currentJobId: null,
 
   setSceneSelection: (selection) =>
     set((state) => ({
@@ -93,6 +119,61 @@ export const useGenerationStore = create<GenerationState>((set) => ({
 
   clearGenerationResults: () =>
     set({ unityDialogueResponse: null, tokensUsed: null }),
+
+  // Actions streaming (Task 2 - Story 0.2)
+  startGeneration: (jobId) =>
+    set({
+      isGenerating: true,
+      streamingContent: '',
+      currentStep: 'Prompting',
+      isMinimized: false,
+      error: null,
+      currentJobId: jobId,
+    }),
+
+  appendChunk: (chunk) =>
+    set((state) => ({
+      streamingContent: state.streamingContent + chunk,
+    })),
+
+  setStep: (step) =>
+    set({ currentStep: step }),
+
+  interrupt: () =>
+    set({
+      isGenerating: false,
+      streamingContent: '',
+      currentStep: 'Prompting',
+      error: null,
+      currentJobId: null,
+    }),
+
+  minimize: () =>
+    set((state) => ({
+      isMinimized: !state.isMinimized,
+    })),
+
+  complete: () =>
+    set({
+      isGenerating: false,
+      currentStep: 'Complete',
+    }),
+
+  setError: (error) =>
+    set({
+      isGenerating: false,
+      error,
+    }),
+
+  resetStreamingState: () =>
+    set({
+      isGenerating: false,
+      streamingContent: '',
+      currentStep: 'Prompting',
+      isMinimized: false,
+      error: null,
+      currentJobId: null,
+    }),
 }))
 
 

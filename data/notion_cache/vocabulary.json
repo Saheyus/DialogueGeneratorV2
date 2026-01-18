@@ -170,7 +170,7 @@
     },
     {
       "term": "Deimos",
-      "definition": "Insectes géants lumineux sur ciel de roche, cycles jour/nuit d'Escelion.",
+      "definition": "Insectes géants lumineux sur ciel de roche, cycles jour/nuit d'Escelion. « Avoir son deimos » signifie aussi avoir son moment de gloire.",
       "popularité": "Mondialement",
       "category": "Créature",
       "type": "Emprunt détourné",
@@ -567,14 +567,6 @@
       "category": "Organisation",
       "type": "Néologisme",
       "origin": "Du français fragmenté et chronique, désignant l'état permanent de conscience distribuée."
-    },
-    {
-      "term": "Circuit Homéostatique",
-      "definition": "District 4 de la Vieille Ville, hub commercial, kiasu-metrics.",
-      "popularité": "Régionalement",
-      "category": "Lieu",
-      "type": "Mot-valise",
-      "origin": "De circuit et homéostasie (équilibre)."
     },
     {
       "term": "Scriptorium Greffeur",
@@ -1599,6 +1591,14 @@
       "category": "Artefact",
       "type": "Emprunt détourné",
       "origin": "De nœud avec convergence pour point focal."
+    },
+    {
+      "term": "Auscultocratie",
+      "definition": "Mode de gouvernance des Bastions Oubliés où l'autorité revient à celles et ceux capables d'interpréter les résonances et micro-rythmes des colosses (vibrations, harmoniques, craquements, cycles de grues). Variante satyrique et pragmatique d'un pouvoir technico-rituel : on \"diagnostique\" avant de décider.",
+      "popularité": "Localement",
+      "category": "Organisation",
+      "type": "Néologisme",
+      "origin": "Du latin médicalisé de rue \"auscultation\" (écouter le corps) + \"-cratie\" (pouvoir). Terme né aux Bastions Oubliés pour désigner une gouvernance fondée sur l'écoute des structures colossales et la lecture des résonances, plutôt que sur un principe spirituel."
     },
     {
       "term": "Machine Pérégrine",

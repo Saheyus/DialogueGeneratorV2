@@ -22,6 +22,59 @@ const STORAGE_KEY = 'auth-storage'
 
 // Flag pour éviter les appels multiples simultanés à initialize()
 let isInitializing = false
+let hasInitialized = false
+
+interface JwtPayload {
+  exp?: number
+}
+
+const decodeBase64 = (value: string): string | null => {
+  try {
+    if (typeof globalThis.atob === 'function') {
+      return globalThis.atob(value)
+    }
+    const bufferCtor = (globalThis as unknown as { Buffer?: { from: (input: string, encoding: string) => { toString: (encoding: string) => string } } }).Buffer
+    if (bufferCtor) {
+      return bufferCtor.from(value, 'base64').toString('binary')
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+const parseJwtPayload = (token: string): JwtPayload | null => {
+  const parts = token.split('.')
+  if (parts.length < 2) {
+    return null
+  }
+  const payload = parts[1]
+  const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4)
+  const decoded = decodeBase64(padded)
+  if (!decoded) {
+    return null
+  }
+  try {
+    return JSON.parse(decoded) as JwtPayload
+  } catch {
+    return null
+  }
+}
+
+const isTokenExpired = (token: string): boolean => {
+  const payload = parseJwtPayload(token)
+  if (!payload || typeof payload.exp !== 'number') {
+    return true
+  }
+  const nowSeconds = Math.floor(Date.now() / 1000)
+  return payload.exp <= nowSeconds
+}
+
+const clearStoredTokens = () => {
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
+}
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -48,8 +101,7 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           // Ignorer les erreurs de déconnexion
         } finally {
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('refresh_token')
+          clearStoredTokens()
           set({ user: null, isAuthenticated: false })
         }
       },
@@ -67,8 +119,7 @@ export const useAuthStore = create<AuthState>()(
             // Logger seulement les erreurs non-401
             console.error('Erreur lors de la récupération de l\'utilisateur:', error)
           }
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('refresh_token')
+          clearStoredTokens()
           set({ user: null, isAuthenticated: false, isLoading: false })
           // Rejeter l'erreur pour que l'appelant puisse la gérer
           throw error
@@ -77,16 +128,22 @@ export const useAuthStore = create<AuthState>()(
 
       // Initialise la session depuis le localStorage
       initialize: async () => {
-        // Éviter les appels multiples simultanés
-        if (isInitializing) {
+        // Éviter les appels multiples (StrictMode en dev)
+        if (hasInitialized || isInitializing) {
           return
         }
         
         isInitializing = true
+        hasInitialized = true
         set({ isLoading: true })
         try {
           const token = localStorage.getItem('access_token')
           if (token) {
+            if (isTokenExpired(token)) {
+              clearStoredTokens()
+              set({ isLoading: false, isAuthenticated: false, user: null })
+              return
+            }
             // Vérifier que le token est encore valide
             try {
               const user = await authAPI.getCurrentUser()
@@ -99,8 +156,7 @@ export const useAuthStore = create<AuthState>()(
               if (status !== 401) {
                 console.error('Erreur lors de la récupération de l\'utilisateur:', error)
               }
-              localStorage.removeItem('access_token')
-              localStorage.removeItem('refresh_token')
+              clearStoredTokens()
               set({ user: null, isAuthenticated: false, isLoading: false })
               return // Sortir immédiatement, isLoading déjà à false
             }

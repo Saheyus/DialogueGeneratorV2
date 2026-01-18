@@ -4,11 +4,9 @@ globs: ["**/*"]
 alwaysApply: true
 ---
 
-- **Création proactive de règles**: Quand un pattern, convention ou décision architecturale émerge, créer/mettre à jour une règle `.mdc` dans `.cursor/rules/` pour documenter et guider les futures modifications.
-- **Quand créer une règle**: Nouveau domaine technique (ex: nouvelle stack), pattern récurrent (ex: gestion d'erreurs), convention spécifique (ex: nommage), décision architecturale importante.
-- **Format**: Utiliser le format standard avec frontmatter YAML (`description`, `globs`, `alwaysApply`), contenu concis en puces, références vers docs détaillées si besoin.
-- **Maintenance**: Mettre à jour les règles existantes quand l'architecture évolue (ex: migration API, nouveau framework). Supprimer les règles obsolètes.
-- **Organisation**: Une règle par domaine/concern (backend_api, frontend, tests, etc.). `alwaysApply: true` pour règles générales (comme celle-ci), `false` pour règles spécifiques à certains fichiers.
-- **Références croisées**: Dans les règles, référencer les docs détaillées (`README_API.md`, `docs/DEPLOYMENT.md`) pour plus de contexte, garder les règles concises.
-- **Exemples**: Voir `.cursor/rules/backend_api.mdc`, `.cursor/rules/frontend.mdc` pour exemples de règles bien structurées.
-- **Documentation Markdown**: Seuls le fichier `README*.md` et les fichiers essentiels à la compréhension du projet peuvent être à la racine du projet. Tous les autres fichiers `.md` (surtout ceux qui sont temporaires) doivent être placés dans `docs/` dans des sous-dossiers appropriés : `docs/analysis/` pour les analyses et évaluations, `docs/mechanics/` pour les mécaniques RPG et systèmes de jeu, `docs/deployment/` pour le déploiement, etc.
+- **Création proactive**: Créer/mettre à jour une règle `.mdc` quand un pattern récurrent ou décision architecturale émerge.
+- **Quand créer**: Nouveau domaine technique, pattern récurrent, convention spécifique, décision architecturale importante.
+- **Format**: Frontmatter YAML (`description`, `globs`, `alwaysApply`), contenu concis, références vers docs détaillées.
+- **Organisation**: Une règle par domaine. `alwaysApply: true` pour générales, `false` + `globs` pour spécifiques.
+- **Maintenance**: Mettre à jour quand l'architecture évolue, supprimer les règles obsolètes.
+- **Documentation**: `README*.md` à la racine uniquement. Autres `.md` dans `docs/` (sous-dossiers appropriés).

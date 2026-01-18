@@ -8,9 +8,31 @@ Cette API est utilisée par l'**interface web React** (interface principale).
 
 ### Installation
 
+**Méthode recommandée: Script automatique**
+
 ```bash
+npm run setup
+```
+
+Ce script va:
+- Créer un environnement virtuel Python (`.venv/`)
+- Installer toutes les dépendances depuis `requirements.txt`
+- Vérifier l'installation
+
+**Méthode manuelle:**
+
+```bash
+# Créer le venv
+python -m venv .venv
+
+# Activer le venv (Windows PowerShell)
+.\.venv\Scripts\Activate.ps1
+
+# Installer les dépendances
 pip install -r requirements.txt
 ```
+
+**Note:** Tous les scripts npm utilisent automatiquement le venv. Vous n'avez besoin de l'activer manuellement que si vous exécutez des commandes Python directement.
 
 ### Configuration
 
@@ -44,11 +66,25 @@ Pour plus de détails sur la sécurité, voir [docs/SECURITY.md](docs/SECURITY.m
 
 ### Lancer l'API
 
+**Méthode 1: Via npm (utilise automatiquement le venv)**
 ```bash
-# Méthode 1: Via Python
-python -m api.main
+npm start
+# ou
+npm run start:api
+```
 
-# Méthode 2: Via uvicorn directement
+**Méthode 2: Via Python directement (nécessite activation du venv)**
+```bash
+# Activer le venv d'abord
+.\.venv\Scripts\Activate.ps1
+
+# Puis lancer l'API
+python -m api.main
+```
+
+**Méthode 3: Via uvicorn directement**
+```bash
+# Avec le venv activé
 uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 

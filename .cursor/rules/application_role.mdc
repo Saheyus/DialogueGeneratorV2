@@ -4,9 +4,7 @@ globs: []
 alwaysApply: true
 ---
 
-- **Rôle principal**: Outil de génération de dialogues IA pour jeux de rôle, assisté par LLM (OpenAI) et basé sur un Game Design Document (GDD).
-- **Flux principal**: Chargement GDD (JSON Notion) → Sélection contexte (personnages, lieux, objets) → Génération dialogues (LLM) → Format JSON Unity → Validation/Export.
-- **Architecture**: Interface web React (frontend) + API REST FastAPI (backend) + Services métier Python (réutilisables).
-- **Intégration**: Pipeline de production jeu (export JSON Unity, commit Git), compatible avec Unity Dialogue System.
-- **Données**: GDD chargé depuis `data/GDD_categories/` (lien symbolique) et `import/Bible_Narrative/Vision.json`.
-- **Références**: Voir `README.md` pour spécifications complètes, `docs/Spécification technique.md` pour détails techniques.
+- **Rôle**: Outil de génération de dialogues IA pour jeux de rôle (LLM + GDD → JSON Unity).
+- **Architecture**: React (frontend) + FastAPI (backend) + Services Python réutilisables.
+- **Données**: GDD depuis `data/GDD_categories/` (lien symbolique) et `import/Bible_Narrative/Vision.json`.
+- **Références**: `README.md` (spécifications), `docs/Spécification technique.md` (détails techniques).

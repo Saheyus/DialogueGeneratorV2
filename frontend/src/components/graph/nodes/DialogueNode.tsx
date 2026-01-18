@@ -202,6 +202,7 @@ export const DialogueNode = memo(function DialogueNode({
         <div
           style={{
             padding: '12px',
+            paddingBottom: hasChoices ? '28px' : '12px', // Espace pour les ronds oranges si des choix existent
             fontSize: '0.9rem',
             lineHeight: 1.4,
             color: theme.text.primary,

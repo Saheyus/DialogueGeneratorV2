@@ -18,6 +18,9 @@ if ($ProjectPath -eq $PSScriptRoot) {
     $ProjectPath = Split-Path -Parent $PSScriptRoot
 }
 
+# Importer la fonction Get-VenvPython
+. (Join-Path $ProjectPath "scripts\Get-VenvPython.ps1")
+
 Write-Host "[*] Demarrage du frontend DialogueGenerator (Production)" -ForegroundColor Cyan
 Write-Host "[*] Repertoire projet: $ProjectPath" -ForegroundColor Gray
 
@@ -158,11 +161,11 @@ if ($startApi) {
     }
     
     $apiJob = Start-Job -ScriptBlock {
-        param($projectPath, $port)
+        param($projectPath, $port, $pythonPath)
         $env:API_PORT = $port
         Set-Location $projectPath
-        python -m api.main
-    } -ArgumentList $ProjectPath, $ApiPort
+        & $pythonPath -m api.main
+    } -ArgumentList $ProjectPath, $ApiPort, (Get-VenvPython -ProjectRoot $ProjectPath -Quiet)
     
     Write-Host "[+] API demarree (job ID: $($apiJob.Id))" -ForegroundColor Green
     Write-Host "[*] Pour voir les logs de l'API, utilisez: Receive-Job -Id $($apiJob.Id) -Keep" -ForegroundColor Gray

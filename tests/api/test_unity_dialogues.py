@@ -125,7 +125,8 @@ class TestListUnityDialogues:
         
         assert response.status_code == 422
         data = response.json()
-        assert "detail" in data
+        assert "error" in data
+        assert data["error"]["code"] == "VALIDATION_ERROR"
     
     def test_list_unity_dialogues_invalid_json_ignored(self, client, mock_config_service, tmp_path):
         """Test que les fichiers JSON invalides sont ignorés lors du listing."""
@@ -200,11 +201,10 @@ class TestReadUnityDialogue:
         
         response = client.get("/api/v1/unity-dialogues/nonexistent.json")
         
-        # Le code actuel lève une exception avec une signature incorrecte, donc 500
-        # Une fois corrigé, ce sera 404
-        assert response.status_code in [404, 500]
+        assert response.status_code == 404
         data = response.json()
-        assert "detail" in data
+        assert "error" in data
+        assert data["error"]["code"] == "NOT_FOUND"
     
     def test_read_unity_dialogue_path_traversal(self, client, mock_config_service):
         """Test de sécurité contre path traversal."""
@@ -218,9 +218,12 @@ class TestReadUnityDialogue:
         # Le path traversal devrait être détecté et retourner 422
         # Mais FastAPI peut aussi retourner 404 si la route n'existe pas
         assert response.status_code in [404, 422]
-        if response.status_code == 422:
-            data = response.json()
+        data = response.json()
+        if response.status_code == 404:
             assert "detail" in data
+        else:
+            assert "error" in data
+            assert data["error"]["code"] == "VALIDATION_ERROR"
     
     def test_read_unity_dialogue_invalid_json(self, client, mock_config_service, tmp_path):
         """Test de lecture d'un fichier JSON invalide."""
@@ -235,10 +238,10 @@ class TestReadUnityDialogue:
         response = client.get("/api/v1/unity-dialogues/invalid.json")
         
         # Le fichier existe mais JSON invalide devrait retourner 422
-        # Mais actuellement le code peut retourner 500 à cause de l'exception
-        assert response.status_code in [422, 500]
+        assert response.status_code == 422
         data = response.json()
-        assert "detail" in data
+        assert "error" in data
+        assert data["error"]["code"] == "VALIDATION_ERROR"
     
     def test_read_unity_dialogue_not_array(self, client, mock_config_service, tmp_path):
         """Test de lecture d'un JSON qui n'est pas un tableau."""
@@ -253,9 +256,10 @@ class TestReadUnityDialogue:
         response = client.get("/api/v1/unity-dialogues/not_array.json")
         
         # JSON valide mais pas un tableau devrait retourner 422
-        assert response.status_code in [422, 500]
+        assert response.status_code == 422
         data = response.json()
-        assert "detail" in data
+        assert "error" in data
+        assert data["error"]["code"] == "VALIDATION_ERROR"
     
     def test_read_unity_dialogue_path_not_configured(self, client, mock_config_service):
         """Test avec chemin Unity non configuré."""
@@ -265,7 +269,8 @@ class TestReadUnityDialogue:
         
         assert response.status_code == 422
         data = response.json()
-        assert "detail" in data
+        assert "error" in data
+        assert data["error"]["code"] == "VALIDATION_ERROR"
 
 
 class TestDeleteUnityDialogue:
@@ -312,10 +317,10 @@ class TestDeleteUnityDialogue:
         
         response = client.delete("/api/v1/unity-dialogues/nonexistent.json")
         
-        # Le code actuel peut retourner 500 à cause de l'exception, mais devrait être 404
-        assert response.status_code in [404, 500]
+        assert response.status_code == 404
         data = response.json()
-        assert "detail" in data
+        assert "error" in data
+        assert data["error"]["code"] == "NOT_FOUND"
     
     def test_delete_unity_dialogue_path_traversal(self, client, mock_config_service):
         """Test de sécurité contre path traversal."""
@@ -327,7 +332,14 @@ class TestDeleteUnityDialogue:
         response = client.delete("/api/v1/unity-dialogues/../../../etc/passwd")
         
         # Le path traversal devrait être détecté et retourner 422
-        assert response.status_code in [404, 422]
+        # Certaines plateformes peuvent normaliser vers /etc/passwd (405 sur méthode)
+        assert response.status_code in [404, 405, 422]
+        data = response.json()
+        if response.status_code in [404, 405]:
+            assert "detail" in data
+        else:
+            assert "error" in data
+            assert data["error"]["code"] == "VALIDATION_ERROR"
         if response.status_code == 422:
             data = response.json()
             assert "detail" in data
@@ -340,7 +352,8 @@ class TestDeleteUnityDialogue:
         
         assert response.status_code == 422
         data = response.json()
-        assert "detail" in data
+        assert "error" in data
+        assert data["error"]["code"] == "VALIDATION_ERROR"
 
 
 class TestPreviewUnityDialogue:
@@ -371,9 +384,9 @@ class TestPreviewUnityDialogue:
         
         # Le JSON invalide devrait retourner 422
         assert response.status_code == 422
-        if response.status_code == 422:
-            data = response.json()
-            assert "detail" in data
+        data = response.json()
+        assert "error" in data
+        assert data["error"]["code"] == "VALIDATION_ERROR"
     
     def test_preview_unity_dialogue_not_array(self, client):
         """Test de preview avec JSON qui n'est pas un tableau."""
@@ -384,9 +397,9 @@ class TestPreviewUnityDialogue:
         
         # JSON valide mais pas un tableau devrait retourner 422
         assert response.status_code == 422
-        if response.status_code == 422:
-            data = response.json()
-            assert "detail" in data
+        data = response.json()
+        assert "error" in data
+        assert data["error"]["code"] == "VALIDATION_ERROR"
     
     def test_preview_unity_dialogue_empty_array(self, client):
         """Test de preview avec tableau vide."""

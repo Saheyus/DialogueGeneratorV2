@@ -7,14 +7,7 @@ import { temporal } from 'zundo'
 import type { Node, Edge } from 'reactflow'
 import * as graphAPI from '../api/graph'
 import type {
-  LoadGraphRequest,
-  LoadGraphResponse,
-  SaveGraphRequest,
   SaveGraphResponse,
-  GenerateNodeRequest,
-  GenerateNodeResponse,
-  ValidateGraphRequest,
-  ValidateGraphResponse,
   ValidationErrorDetail,
 } from '../types/graph'
 

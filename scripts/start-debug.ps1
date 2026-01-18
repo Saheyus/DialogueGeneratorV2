@@ -12,6 +12,9 @@ if ($ProjectPath -eq $PSScriptRoot) {
     $ProjectPath = Split-Path -Parent $PSScriptRoot
 }
 
+# Importer la fonction Get-VenvPython
+. (Join-Path $ProjectPath "scripts\Get-VenvPython.ps1")
+
 Write-Host "[*] Mode DEBUG - Demarrage de l'API uniquement" -ForegroundColor Cyan
 Write-Host "[*] Port debug : $ApiPort (production utilise 4242)" -ForegroundColor Gray
 Write-Host "[*] Repertoire projet: $ProjectPath" -ForegroundColor Gray
@@ -80,7 +83,10 @@ if (-not (Test-Path $ProjectPath)) {
 Set-Location $ProjectPath
 $env:API_PORT = $ApiPort
 Write-Host "[*] Port API defini a : $ApiPort (mode debug)" -ForegroundColor Gray
-python -m api.main
+
+# Obtenir le chemin Python du venv
+$pythonPath = Get-VenvPython -ProjectRoot $ProjectPath -Quiet
+& $pythonPath -m api.main
 
 
 

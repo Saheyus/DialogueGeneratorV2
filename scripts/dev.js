@@ -7,6 +7,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const services = require('./dev-services');
+const { venvExists } = require('./getPythonPath');
 
 // Parse des arguments
 const args = process.argv.slice(2);
@@ -302,6 +303,13 @@ async function handleAll() {
 
 // Point d'entrée principal
 async function main() {
+  // Vérifier que le venv existe (warning si absent)
+  const projectRoot = path.join(__dirname, '..');
+  if (!venvExists(projectRoot)) {
+    console.warn('⚠️  Venv non trouvé. Créez-le avec: npm run setup');
+    console.warn('   Le système utilisera Python global en attendant.\n');
+  }
+  
   // Vérifications rapides
   await checkCommand('python', 'Python n\'est pas installé ou pas dans le PATH');
   await checkCommand('node', 'Node.js n\'est pas installé ou pas dans le PATH');

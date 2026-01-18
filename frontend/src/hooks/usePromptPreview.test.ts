@@ -491,15 +491,13 @@ describe('parsePromptFromJson', () => {
     expect(result).toHaveLength(2)
     expect(result[0].title).toBe('System Prompt')
     expect(result[0].content).toBe('You are a helpful assistant.')
-    expect(result[1].title).toBe('CONTEXTE GÉNÉRAL DE LA SCÈNE')
+    // Les sections de "contexte" sont aplaties: les catégories deviennent des sections top-level
+    expect(result[1].title).toBe('CHARACTERS')
     expect(result[1].children).toBeDefined()
     expect(result[1].children).toHaveLength(1)
-    expect(result[1].children![0].title).toBe('CHARACTERS')
+    expect(result[1].children![0].title).toBe('PNJ 1')
     expect(result[1].children![0].children).toBeDefined()
-    expect(result[1].children![0].children).toHaveLength(1)
-    expect(result[1].children![0].children![0].title).toBe('PNJ 1')
-    expect(result[1].children![0].children![0].children).toBeDefined()
-    expect(result[1].children![0].children![0].children).toHaveLength(2)
+    expect(result[1].children![0].children).toHaveLength(2)
   })
 
   it('should return empty array for null input', () => {

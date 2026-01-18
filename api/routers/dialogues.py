@@ -28,8 +28,6 @@ from api.dependencies import (
 from core.prompt.prompt_engine import PromptEngine, PromptInput, BuiltPrompt
 from api.exceptions import InternalServerException, ValidationException, NotFoundException, OpenAIException
 from services.dialogue_generation_service import DialogueGenerationService
-from services.unity_dialogue_generation_service import UnityDialogueGenerationService
-from services.json_renderer.unity_json_renderer import UnityJsonRenderer
 from services.configuration_service import ConfigurationService
 from services.skill_catalog_service import SkillCatalogService
 from services.trait_catalog_service import TraitCatalogService
@@ -397,152 +395,30 @@ async def generate_unity_dialogue(
     request_id: Annotated[str, Depends(get_request_id)]
 ) -> GenerateUnityDialogueResponse:
     """Génère un nœud de dialogue au format Unity JSON.
+    
+    Utilise UnityDialogueOrchestrator pour factoriser la logique
+    avec le streaming SSE.
     """
     try:
-        # 1. Convertir ContextSelection en dict
-        context_selections_dict = request_data.context_selections.to_service_dict()
-        all_characters = context_selections_dict.get('characters', [])
-        if not all_characters:
-            raise ValidationException(message="Au moins un personnage doit être sélectionné", request_id=request_id)
-        
-        # 2. Déterminer le PNJ interlocuteur
-        npc_speaker_id = request_data.npc_speaker_id or all_characters[0]
-        
-        # 3. Charger catalogues (services injectés)
-        skills_list = []
-        try:
-            skills_list = skill_service.load_skills()
-        except Exception as e:
-            logger.warning(f"Erreur lors du chargement des compétences (request_id: {request_id}): {e}", exc_info=True)
-            # Continuer avec une liste vide si le chargement échoue
-        
-        traits_list = []
-        try:
-            traits_list = trait_service.get_trait_labels()
-        except Exception as e:
-            logger.warning(f"Erreur lors du chargement des traits (request_id: {request_id}): {e}", exc_info=True)
-            # Continuer avec une liste vide si le chargement échoue
-        
-        # 4. Construire le contexte GDD (JSON obligatoire, plus de fallback)
-        context_builder = dialogue_service.context_builder
-        if request_data.previous_dialogue_preview:
-            context_builder.set_previous_dialogue_context(request_data.previous_dialogue_preview)
-        
-        structured_context = context_builder.build_context_json(
-            selected_elements=context_selections_dict,
-            scene_instruction=request_data.user_instructions,
-            field_configs=None,
-            organization_mode="narrative",
-            max_tokens=request_data.max_context_tokens,
-            include_dialogue_type=True,
-            element_modes=context_selections_dict.get("_element_modes")
-        )
-        # Sérialiser en texte pour le LLM
-        context_summary = context_builder._context_serializer.serialize_to_text(structured_context)
-        
-        # 5. Construire le prompt Unity via le builder unique
-        prompt_input = PromptInput(
-            user_instructions=request_data.user_instructions,
-            npc_speaker_id=npc_speaker_id,
-            player_character_id="URESAIR",
-            skills_list=skills_list,
-            traits_list=traits_list,
-            context_summary=context_summary,
-            structured_context=structured_context,
-            scene_location=request_data.context_selections.scene_location,
-            max_choices=request_data.max_choices,
-            choices_mode=request_data.choices_mode,
-            narrative_tags=request_data.narrative_tags,
-            author_profile=request_data.author_profile,
-            vocabulary_config=request_data.vocabulary_config,
-            include_narrative_guides=request_data.include_narrative_guides,
-            in_game_flags=request_data.in_game_flags  # Ajouter les flags
-        )
-        
-        built = prompt_engine.build_prompt(prompt_input)
-        prompt = built.raw_prompt
-        prompt_hash = built.prompt_hash
-        estimated_tokens = built.token_count
-        
-        # 6. Créer le client LLM
+        # Créer orchestrateur avec toutes les dépendances
+        from services.unity_dialogue_orchestrator import UnityDialogueOrchestrator
         from api.dependencies import get_config_service, create_llm_usage_service
+        
         config_service = get_config_service(request)
         usage_service = create_llm_usage_service()
-        from factories.llm_factory import LLMClientFactory
         
-        llm_client = LLMClientFactory.create_client(
-            model_id=request_data.llm_model_identifier,
-            config=config_service.get_llm_config(),
-            available_models=config_service.get_available_llm_models(),
+        orchestrator = UnityDialogueOrchestrator(
+            dialogue_service=dialogue_service,
+            prompt_engine=prompt_engine,
+            skill_service=skill_service,
+            trait_service=trait_service,
+            config_service=config_service,
             usage_service=usage_service,
-            request_id=request_id,
-            endpoint="generate/unity-dialogue"
+            request_id=request_id
         )
         
-        if request_data.max_completion_tokens is not None:
-            llm_client.max_tokens = request_data.max_completion_tokens
-        
-        # Configurer le reasoning effort si fourni (uniquement pour GPT-5.2)
-        if request_data.reasoning_effort is not None:
-            llm_client.reasoning_effort = request_data.reasoning_effort
-        
-        # 7. Générer via Structured Output
-        unity_service = UnityDialogueGenerationService()
-        generation_response = await unity_service.generate_dialogue_node(
-            llm_client=llm_client,
-            prompt=prompt,
-            system_prompt_override=request_data.system_prompt_override,
-            max_choices=request_data.max_choices
-        )
-        
-        # 8. Enrichir et normaliser
-        enriched_nodes = unity_service.enrich_with_ids(content=generation_response, start_id="START")
-        renderer = UnityJsonRenderer()
-        json_content = renderer.render_unity_nodes(nodes=enriched_nodes, normalize=True)
-        
-        # 9. Extraire le titre
-        dialogue_title = generation_response.title if hasattr(generation_response, 'title') else None
-        
-        # Convertir structured_prompt en dict pour la réponse
-        structured_prompt_dict = None
-        if built.structured_prompt:
-            try:
-                structured_prompt_dict = built.structured_prompt.model_dump()
-            except Exception as e:
-                logger.warning(f"Erreur lors de la conversion du structured_prompt en dict: {e}")
-        
-        # Extraire le reasoning trace du client LLM si disponible
-        reasoning_trace = getattr(llm_client, 'reasoning_trace', None)
-        
-        # #region agent log
-        try:
-            import time as time_module
-            with open(r"f:\Projets\Notion_Scrapper\DialogueGenerator\.cursor\debug.log", "a", encoding="utf-8") as log_file:
-                log_file.write(json.dumps({
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "B",
-                    "location": "api/routers/dialogues.py:514",
-                    "message": "Sending GenerateUnityDialogueResponse",
-                    "data": {
-                        "has_reasoning_trace": reasoning_trace is not None,
-                        "reasoning_trace_keys": list(reasoning_trace.keys()) if reasoning_trace else None
-                    },
-                    "timestamp": int(time_module.time() * 1000)
-                }) + "\n")
-        except: pass
-        # #endregion
-
-        return GenerateUnityDialogueResponse(
-            json_content=json_content,
-            title=dialogue_title,
-            raw_prompt=prompt,
-            prompt_hash=prompt_hash,
-            estimated_tokens=estimated_tokens,
-            warning=getattr(llm_client, 'warning', None),
-            structured_prompt=structured_prompt_dict,
-            reasoning_trace=reasoning_trace
-        )
+        # Appel simple sans streaming (usage REST)
+        return await orchestrator.generate(request_data)
         
     except Exception as e:
         if isinstance(e, ValidationException): raise

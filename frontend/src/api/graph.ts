@@ -1,7 +1,7 @@
 /**
  * API client pour les endpoints de gestion de graphes.
  */
-import axios from 'axios'
+import apiClient from './client'
 import type {
   LoadGraphRequest,
   LoadGraphResponse,
@@ -15,14 +15,12 @@ import type {
   CalculateLayoutResponse,
 } from '../types/graph'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4242'
-
 /**
  * Charge un dialogue Unity JSON et le convertit en graphe.
  */
 export async function loadGraph(request: LoadGraphRequest): Promise<LoadGraphResponse> {
-  const response = await axios.post<LoadGraphResponse>(
-    `${API_BASE_URL}/api/v1/unity-dialogues/graph/load`,
+  const response = await apiClient.post<LoadGraphResponse>(
+    `/api/v1/unity-dialogues/graph/load`,
     request
   )
   return response.data
@@ -32,8 +30,8 @@ export async function loadGraph(request: LoadGraphRequest): Promise<LoadGraphRes
  * Sauvegarde un graphe modifié (reconvertit en Unity JSON).
  */
 export async function saveGraph(request: SaveGraphRequest): Promise<SaveGraphResponse> {
-  const response = await axios.post<SaveGraphResponse>(
-    `${API_BASE_URL}/api/v1/unity-dialogues/graph/save`,
+  const response = await apiClient.post<SaveGraphResponse>(
+    `/api/v1/unity-dialogues/graph/save`,
     request
   )
   return response.data
@@ -45,8 +43,8 @@ export async function saveGraph(request: SaveGraphRequest): Promise<SaveGraphRes
 export async function generateNode(
   request: GenerateNodeRequest
 ): Promise<GenerateNodeResponse> {
-  const response = await axios.post<GenerateNodeResponse>(
-    `${API_BASE_URL}/api/v1/unity-dialogues/graph/generate-node`,
+  const response = await apiClient.post<GenerateNodeResponse>(
+    `/api/v1/unity-dialogues/graph/generate-node`,
     request
   )
   return response.data
@@ -58,8 +56,8 @@ export async function generateNode(
 export async function validateGraph(
   request: ValidateGraphRequest
 ): Promise<ValidateGraphResponse> {
-  const response = await axios.post<ValidateGraphResponse>(
-    `${API_BASE_URL}/api/v1/unity-dialogues/graph/validate`,
+  const response = await apiClient.post<ValidateGraphResponse>(
+    `/api/v1/unity-dialogues/graph/validate`,
     request
   )
   return response.data
@@ -71,8 +69,8 @@ export async function validateGraph(
 export async function calculateLayout(
   request: CalculateLayoutRequest
 ): Promise<CalculateLayoutResponse> {
-  const response = await axios.post<CalculateLayoutResponse>(
-    `${API_BASE_URL}/api/v1/unity-dialogues/graph/calculate-layout`,
+  const response = await apiClient.post<CalculateLayoutResponse>(
+    `/api/v1/unity-dialogues/graph/calculate-layout`,
     request
   )
   return response.data

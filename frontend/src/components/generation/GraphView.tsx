@@ -38,7 +38,7 @@ function unityJsonToGraph(jsonContent: string): { nodes: Node[]; edges: Edge[] }
     const reactflowNodes: Node[] = []
     const reactflowEdges: Edge[] = []
     
-    let xOffset = 0
+    const xOffset = 0
     let yOffset = 0
     
     for (const unityNode of unityNodes) {

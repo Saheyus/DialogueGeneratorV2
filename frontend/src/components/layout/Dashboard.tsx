@@ -7,7 +7,6 @@ import { GenerationPanel } from '../generation/GenerationPanel'
 import { GenerationOptionsModal } from '../generation/GenerationOptionsModal'
 import { EstimatedPromptPanel } from '../generation/EstimatedPromptPanel'
 import { UnityDialogueEditor } from '../generation/UnityDialogueEditor'
-import { ReasoningTraceViewer } from '../generation/ReasoningTraceViewer'
 import { ContextDetail } from '../context/ContextDetail'
 import { UsageStatsModal } from '../usage/UsageStatsModal'
 import { ResizablePanels, type ResizablePanelsRef } from '../shared/ResizablePanels'
@@ -184,28 +183,6 @@ export function Dashboard() {
       label: 'Dialogue généré',
       content: (
         <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%' }}>
-          {/* #region agent log */}
-          {(() => {
-            fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:185',message:'Dashboard dialogue tab rendering',data:{hasUnityResponse: !!unityDialogueResponse, hasReasoningTrace: !!unityDialogueResponse?.reasoning_trace, isLoading: actions.isLoading},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
-            return null;
-          })()}
-          {/* #endregion */}
-          {/* Encadré Reasoning Trace en haut */}
-          {(actions.isLoading || generationState.isEstimating || unityDialogueResponse?.reasoning_trace) && (
-            <div
-              style={{
-                borderBottom: `1px solid ${theme.border.primary}`,
-                backgroundColor: theme.background.secondary,
-                flexShrink: 0,
-              }}
-            >
-              <ReasoningTraceViewer
-                reasoningTrace={unityDialogueResponse?.reasoning_trace || null}
-                isGenerating={actions.isLoading || generationState.isEstimating}
-              />
-            </div>
-          )}
-          
           {/* Contenu du dialogue */}
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
             {unityDialogueResponse ? (

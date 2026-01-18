@@ -5,6 +5,16 @@ import os
 import time
 from abc import ABC, abstractmethod
 from openai import AsyncOpenAI, APIError, NOT_GIVEN
+# NOTE: Ne jamais ré-importer NOT_GIVEN dans une fonction : en Python, un import local
+# crée une variable locale et peut provoquer un UnboundLocalError si NOT_GIVEN est
+# référencé plus haut dans la même fonction.
+try:
+    from openai._types import NotGiven  # type: ignore
+except Exception:  # pragma: no cover
+    # Fallback très défensif : on garde seulement le filtre isinstance(v, NotGiven)
+    class NotGiven:  # type: ignore
+        """Fallback type used when openai._types.NotGiven is unavailable."""
+        pass
 import json # Ajout pour charger la config
 from pathlib import Path # Ajout pour le chemin de la config
 from typing import List, Optional, Type, TypeVar, Union, Dict, Any, Callable, Coroutine # Ajout de Dict, Any, Callable, Coroutine
@@ -14,9 +24,6 @@ import inspect # Ajout pour l'inspection de la signature
 from constants import ModelNames # Ajout pour vérifier les modèles sans température
 
 logger = logging.getLogger(__name__)
-
-# Chemin vers le fichier de configuration LLM
-LLM_CONFIG_PATH = Path(__file__).resolve().parent / "llm_config.json"
 
 class ILLMClient(ABC):
     """Interface pour les clients LLM."""
@@ -165,22 +172,6 @@ class OpenAIClient(ILLMClient):
         
         logger.info(f"OpenAIClient initialisé avec le modèle: {self.model_name}, API Key présente: {'Oui' if api_key else 'Non'}.")
         logger.info(f"System prompt template utilisé: '{self.system_prompt_template}'")
-
-    @classmethod
-    def load_llm_config(cls) -> dict:
-        """Charge la configuration depuis llm_config.json."""
-        try:
-            with open(LLM_CONFIG_PATH, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except FileNotFoundError:
-            logger.error(f"Fichier de configuration LLM introuvable: {LLM_CONFIG_PATH}")
-            return {}
-        except json.JSONDecodeError:
-            logger.error(f"Erreur de décodage JSON dans {LLM_CONFIG_PATH}")
-            return {}
-        except Exception as e:
-            logger.error(f"Erreur inattendue lors du chargement de {LLM_CONFIG_PATH}: {e}")
-            return {}
 
     async def generate_variants(
         self,
@@ -340,12 +331,13 @@ class OpenAIClient(ILLMClient):
                     logger.debug(f"Le modèle {self.model_name} ne supporte pas le paramètre temperature. Il sera omis de la requête API.")
 
                 # Logger les paramètres API (sans prompt complet) pour debug
+                # Filtre NOT_GIVEN (sentinel OpenAI) pour éviter l'erreur de sérialisation JSON
                 if use_responses_api:
-                    safe_params = {k: v for k, v in responses_params.items() if k not in ("input",)}
-                    logger.info(f"Paramètres API (Responses) pour {self.model_name}: {json.dumps(safe_params, indent=2, ensure_ascii=False)}")
+                    safe_params = {k: v for k, v in responses_params.items() if k not in ("input",) and not isinstance(v, NotGiven)}
+                    logger.info(f"Paramètres API (Responses) pour {self.model_name}: {json.dumps(safe_params, indent=2, ensure_ascii=False, default=str)}")
                 else:
-                    safe_params = {k: v for k, v in chat_params.items() if k not in ("messages",)}
-                    logger.info(f"Paramètres API (ChatCompletions) pour {self.model_name}: {json.dumps(safe_params, indent=2, ensure_ascii=False)}")
+                    safe_params = {k: v for k, v in chat_params.items() if k not in ("messages",) and not isinstance(v, NotGiven)}
+                    logger.info(f"Paramètres API (ChatCompletions) pour {self.model_name}: {json.dumps(safe_params, indent=2, ensure_ascii=False, default=str)}")
                 
                 async def _make_api_call():
                     try:
@@ -716,8 +708,10 @@ async def main_test():
         print("Erreur: La variable d'environnement OPENAI_API_KEY n'est pas définie.")
         return
 
-    # Charger la configuration LLM (pourrait être passé à OpenAIClient)
-    client_config = OpenAIClient.load_llm_config()
+    # Charger la configuration LLM via ConfigurationService
+    from services.configuration_service import ConfigurationService
+    config_service = ConfigurationService()
+    client_config = config_service.get_llm_config()
     openai_client = OpenAIClient(api_key=api_key, config=client_config)
 
     # --- Test 1: Génération de texte simple ---

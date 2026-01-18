@@ -197,8 +197,8 @@ async def read_unity_dialogue(
         
         if not file_path.exists():
             raise NotFoundException(
-                message=f"Le fichier de dialogue Unity '{filename}' n'existe pas",
-                details={"filename": filename, "file_path": str(file_path)},
+                resource_type="Dialogue Unity",
+                resource_id=filename,
                 request_id=request_id
             )
         
@@ -305,8 +305,8 @@ async def delete_unity_dialogue(
         
         if not file_path.exists():
             raise NotFoundException(
-                message=f"Le fichier de dialogue Unity '{filename}' n'existe pas",
-                details={"filename": filename, "file_path": str(file_path)},
+                resource_type="Dialogue Unity",
+                resource_id=filename,
                 request_id=request_id
             )
         

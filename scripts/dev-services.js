@@ -11,6 +11,9 @@ const { promisify } = require('util');
 
 const execAsync = promisify(exec);
 
+// Import de getPythonPath pour le venv
+const getPythonPath = require('./getPythonPath');
+
 // Chemins
 const LOCK_FILE = path.join(__dirname, '..', '.dev', '.dev.lock');
 const PROJECT_ROOT = path.join(__dirname, '..');
@@ -475,7 +478,11 @@ async function startBackend(port = 4243) {
   
   // Ne pas utiliser detached: true car cela rend le processus orphelin
   // Le kill d'arbre avec pkill -P fonctionnera correctement
-  backendProcess = spawn('python', ['-m', 'api.main'], spawnOptions);
+  
+  // Obtenir le chemin Python du venv
+  const pythonPath = getPythonPath(PROJECT_ROOT);
+  
+  backendProcess = spawn(pythonPath, ['-m', 'api.main'], spawnOptions);
   
   // Mettre à jour le lock
   updateLock({

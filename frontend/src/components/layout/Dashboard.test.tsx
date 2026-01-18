@@ -98,7 +98,7 @@ describe('Dashboard', () => {
     expect(screen.getByTestId('generation-panel')).toBeInTheDocument()
     // Les onglets devraient être présents
     expect(screen.getByText(/^prompt$/i)).toBeInTheDocument()
-    expect(screen.getByText(/dialogue unity/i)).toBeInTheDocument()
+    expect(screen.getByText(/dialogue généré/i)).toBeInTheDocument()
     expect(screen.getByText(/^détails$/i)).toBeInTheDocument()
   })
 
@@ -132,7 +132,7 @@ describe('Dashboard', () => {
     )
 
     expect(screen.getByText(/^prompt$/i)).toBeInTheDocument()
-    expect(screen.getByText(/dialogue unity/i)).toBeInTheDocument()
+    expect(screen.getByText(/dialogue généré/i)).toBeInTheDocument()
     expect(screen.getByText(/^détails$/i)).toBeInTheDocument()
   })
 
@@ -319,8 +319,8 @@ describe('Dashboard', () => {
       </BrowserRouter>
     )
 
-    // Cliquer sur l'onglet Dialogue Unity
-    const dialogueTab = screen.getByText(/dialogue unity/i)
+    // Cliquer sur l'onglet "Dialogue généré"
+    const dialogueTab = screen.getByText(/dialogue généré/i)
     await user.click(dialogueTab)
 
     await waitFor(() => {

@@ -35,6 +35,31 @@ export async function generateUnityDialogue(
 }
 
 /**
+ * Crée un job de génération Unity Dialogue avec streaming SSE (Story 0.2).
+ * 
+ * Retourne un job_id et une stream_url pour EventSource.
+ */
+export async function createGenerationJob(
+  request: GenerateUnityDialogueRequest
+): Promise<{ job_id: string; stream_url: string; status: string }> {
+  const response = await apiClient.post<{ job_id: string; stream_url: string; status: string }>(
+    '/api/v1/dialogues/generate/jobs',
+    request
+  )
+  return response.data
+}
+
+/**
+ * Annule un job de génération en cours (Story 0.2).
+ */
+export async function cancelGenerationJob(job_id: string): Promise<{ success: boolean; message: string }> {
+  const response = await apiClient.post<{ success: boolean; message: string }>(
+    `/api/v1/dialogues/generate/jobs/${job_id}/cancel`
+  )
+  return response.data
+}
+
+/**
  * Estime le nombre de tokens pour un contexte donné.
  * 
  * Retourne également le prompt brut construit, mais pour la prévisualisation

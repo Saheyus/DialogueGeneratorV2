@@ -48,6 +48,26 @@ L'application est en cours de développement actif. Les fonctionnalités suivant
     *   Appel asynchrone au client LLM configuré (OpenAI ou Dummy).
     *   Affichage des variantes générées dans l'interface web.
 
+## 📚 Documentation
+
+### Documentation la plus récente
+
+**⚠️ La documentation la plus récente et à jour se trouve dans les dossiers artifacts de BMad :**
+
+- **Planning Artifacts** : [`_bmad-output/planning-artifacts/`](_bmad-output/planning-artifacts/)
+  - Architecture détaillée, PRD, épics, rapports de préparation à l'implémentation
+  - Contient la documentation de planification la plus récente
+  
+- **Implementation Artifacts** : [`_bmad-output/implementation-artifacts/`](_bmad-output/implementation-artifacts/)
+  - ADRs (Architecture Decision Records), plans de sprint, statut d'implémentation
+  - Contient la documentation d'implémentation la plus récente
+
+**Note** : La documentation dans `docs/` est organisée et structurée, mais peut être moins à jour que celle dans `_bmad-output/`. Consultez d'abord les artifacts BMad pour la documentation la plus récente.
+
+### Documentation structurée
+
+La documentation organisée se trouve dans [`docs/`](docs/) avec un index dans [`docs/index.md`](docs/index.md).
+
 ## Structure du Projet
 
 Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux modules suivants :
@@ -89,13 +109,39 @@ Toutes les dépendances FastAPI utilisent `api/dependencies.py` qui accède au c
 ## Prérequis et Installation
 
 1.  **Python** : Version 3.10 ou ultérieure recommandée.
-2.  **Dépendances Python** : Installer les dépendances listées dans `requirements.txt`.
-    ```bash
-    pip install -r requirements.txt
-    ```
-    Ce fichier inclut `openai`, `fastapi`, et d'autres bibliothèques nécessaires.
+2.  **Node.js et npm** : Pour l'interface web et les scripts de développement.
+3.  **Environnement virtuel Python** : Le projet utilise un venv pour isoler les dépendances.
 
-3.  **Configuration des variables d'environnement** :
+### Installation Rapide
+
+**Méthode recommandée (automatique):**
+
+```bash
+# Créer le venv et installer toutes les dépendances
+npm run setup
+```
+
+**Méthode manuelle:**
+
+```bash
+# 1. Créer l'environnement virtuel Python
+python -m venv .venv
+
+# 2. Activer le venv (Windows PowerShell)
+.\.venv\Scripts\Activate.ps1
+
+# 3. Installer les dépendances Python
+pip install -r requirements.txt
+
+# 4. Installer les dépendances frontend
+cd frontend
+npm install
+cd ..
+```
+
+**Note:** Tous les scripts npm (`npm run dev`, `npm test`, etc.) utilisent automatiquement le venv. Vous n'avez besoin de l'activer manuellement que si vous exécutez des commandes Python directement.
+
+4.  **Configuration des variables d'environnement** :
     *   Copier `.env.example` vers `.env` :
         ```bash
         cp .env.example .env
@@ -105,6 +151,14 @@ Toutes les dépendances FastAPI utilisent `api/dependencies.py` qui accède au c
         *   `JWT_SECRET_KEY` : Clé secrète pour JWT (valeur par défaut acceptée en dev, **doit être changée en production**)
         *   `ENVIRONMENT` : Environnement (`development` ou `production`)
     *   Pour plus de détails, voir [README_API.md](README_API.md) et [docs/SECURITY.md](docs/SECURITY.md).
+
+### Vérifier l'Installation
+
+```bash
+npm run verify:venv
+```
+
+Ce script vérifie que le venv et toutes les dépendances sont correctement installés.
 
 ## Comment Lancer l'Application
 
