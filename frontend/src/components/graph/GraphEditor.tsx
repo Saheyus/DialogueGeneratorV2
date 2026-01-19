@@ -59,6 +59,7 @@ export function GraphEditor() {
     isGenerating,
     intentionalCycles,
     markCycleAsIntentional,
+    unmarkCycleAsIntentional,
     // États auto-save draft (Task 2 - Story 0.5)
     hasUnsavedChanges,
     lastDraftSavedAt,
@@ -694,11 +695,11 @@ export function GraphEditor() {
             {/* Panel d'erreurs de validation (overlay) */}
             {graphValidationErrors.length > 0 && (() => {
               const errors = graphValidationErrors.filter((e) => e.severity === 'error')
-              // Filtrer les cycles intentionnels des warnings
+              // Filtrer les cycles intentionnels des warnings (ne pas afficher si marqués intentionnels)
               const warnings = graphValidationErrors
                 .filter((e) => e.severity === 'warning')
                 .filter((warn) => {
-                  // Ne pas filtrer les cycles intentionnels
+                  // Filtrer les cycles intentionnels (ne pas afficher si dans intentionalCycles)
                   if (warn.type === 'cycle_detected' && warn.cycle_id) {
                     return !intentionalCycles.includes(warn.cycle_id)
                   }
@@ -917,8 +918,12 @@ export function GraphEditor() {
                                       checked={intentionalCycles.includes(warn.cycle_id)}
                                       onChange={(e) => {
                                         e.stopPropagation()
-                                        if (e.target.checked && warn.cycle_id) {
-                                          markCycleAsIntentional(warn.cycle_id)
+                                        if (warn.cycle_id) {
+                                          if (e.target.checked) {
+                                            markCycleAsIntentional(warn.cycle_id)
+                                          } else {
+                                            unmarkCycleAsIntentional(warn.cycle_id)
+                                          }
                                         }
                                       }}
                                       style={{ cursor: 'pointer' }}

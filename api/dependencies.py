@@ -189,34 +189,6 @@ def get_llm_usage_repository() -> FileLLMUsageRepository:
     return FileLLMUsageRepository(storage_dir=storage_dir)
 
 
-def create_llm_usage_service() -> LLMUsageService:
-    """Crée un service de tracking d'utilisation LLM (sans dépendances FastAPI).
-    
-    Cette fonction peut être appelée directement sans passer par le système
-    de dépendances FastAPI. Pour l'injection de dépendances dans les routes,
-    utiliser get_llm_usage_service() avec Depends().
-    
-    Returns:
-        Instance de LLMUsageService.
-    """
-    repository = get_llm_usage_repository()
-    return LLMUsageService(repository=repository)
-
-
-def get_llm_usage_service(
-    repository: Annotated[FileLLMUsageRepository, Depends(get_llm_usage_repository)]
-) -> LLMUsageService:
-    """Retourne le service de tracking d'utilisation LLM.
-    
-    Args:
-        repository: Repository injecté via dépendance.
-        
-    Returns:
-        Instance de LLMUsageService.
-    """
-    return LLMUsageService(repository=repository)
-
-
 def get_cost_budget_repository() -> FileCostBudgetRepository:
     """Crée un repository de budgets LLM basé sur fichier JSON.
     
@@ -239,6 +211,48 @@ def get_cost_governance_service(
         Instance de CostGovernanceService.
     """
     return CostGovernanceService(repository=repository)
+
+
+def create_llm_usage_service() -> LLMUsageService:
+    """Crée un service de tracking d'utilisation LLM (sans dépendances FastAPI).
+    
+    Cette fonction peut être appelée directement sans passer par le système
+    de dépendances FastAPI. Pour l'injection de dépendances dans les routes,
+    utiliser get_llm_usage_service() avec Depends().
+    
+    Le service est configuré avec CostGovernanceService pour mettre à jour
+    automatiquement le budget après chaque génération.
+    
+    Returns:
+        Instance de LLMUsageService.
+    """
+    repository = get_llm_usage_repository()
+    # Injecter CostGovernanceService pour mise à jour automatique du budget
+    cost_repository = get_cost_budget_repository()
+    cost_service = CostGovernanceService(repository=cost_repository)
+    return LLMUsageService(
+        repository=repository,
+        cost_governance_service=cost_service
+    )
+
+
+def get_llm_usage_service(
+    repository: Annotated[FileLLMUsageRepository, Depends(get_llm_usage_repository)],
+    cost_service: Annotated[CostGovernanceService, Depends(get_cost_governance_service)]
+) -> LLMUsageService:
+    """Retourne le service de tracking d'utilisation LLM.
+    
+    Args:
+        repository: Repository injecté via dépendance.
+        cost_service: Service de cost governance injecté.
+        
+    Returns:
+        Instance de LLMUsageService avec cost governance intégré.
+    """
+    return LLMUsageService(
+        repository=repository,
+        cost_governance_service=cost_service
+    )
 
 
 def get_request_id(request: Request) -> str:

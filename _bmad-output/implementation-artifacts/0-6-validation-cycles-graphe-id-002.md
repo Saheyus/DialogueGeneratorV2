@@ -76,6 +76,10 @@ So that **je peux décider consciemment si les cycles sont intentionnels (dialog
   - [ ] Tests E2E : warning affiché, highlight orange, zoom, marquage intentionnel
   - [ ] Tests E2E : graphe sans cycles ne montre pas de warning cycle
 
+- [ ] Review Follow-ups (AI)
+  - [ ] [AI-Review][HIGH] Tests E2E manquants pour valider AC #1, #2, #3, #4 (Task 6 incomplète)
+  - [ ] [AI-Review][LOW] Tests unitaires manquants pour filtrage cycles intentionnels et persistance localStorage (Task 5)
+
 ## Dev Notes
 
 ### Architecture Patterns (Extension Story 0.1)
@@ -233,6 +237,16 @@ So that **je peux décider consciemment si les cycles sont intentionnels (dialog
 - Tests intégration API: ✅ Complétés
 - Tests E2E: ⏳ À faire (nécessitent environnement Playwright configuré)
 
+**Code Review (AI) - Corrections appliquées:**
+- ✅ CRITICAL #2: Réinitialisation highlightedCycleNodes quand pas de cycles (AC #4)
+- ✅ HIGH #3: Réinitialisation highlightedCycleNodes dans loadDialogue
+- ✅ HIGH #4: Commentaire corrigé dans GraphEditor.tsx
+- ✅ HIGH #5: Fonctionnalité pour décocher cycles intentionnels ajoutée
+- ✅ HIGH #6: MD5 remplacé par SHA256 (16 caractères) pour cycle_id
+- ✅ MEDIUM #7: Gestion d'erreur localStorage améliorée (notification utilisateur)
+- ✅ MEDIUM #8: Validation explicite cycle_nodes avant itération
+- ✅ MEDIUM #9: Cycle ID utilise maintenant 16 caractères (64 bits) au lieu de 8
+
 ### File List
 
 **Backend:**
@@ -244,6 +258,6 @@ So that **je peux décider consciemment si les cycles sont intentionnels (dialog
 
 **Frontend:**
 - `frontend/src/types/graph.ts` - Type ValidationErrorDetail étendu
-- `frontend/src/store/graphStore.ts` - États highlightedCycleNodes et intentionalCycles
-- `frontend/src/components/graph/GraphEditor.tsx` - Affichage cycles avec zoom et checkbox
+- `frontend/src/store/graphStore.ts` - États highlightedCycleNodes et intentionalCycles, fonctions mark/unmarkCycleAsIntentional
+- `frontend/src/components/graph/GraphEditor.tsx` - Affichage cycles avec zoom et checkbox (cocher/décocher)
 - `frontend/src/components/graph/GraphCanvas.tsx` - Style orange nœuds cycles

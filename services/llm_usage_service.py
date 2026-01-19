@@ -15,21 +15,26 @@ class LLMUsageService:
     """Service principal pour le tracking de l'utilisation LLM.
     
     Gère l'enregistrement des appels LLM et le calcul des statistiques.
+    Met à jour automatiquement le budget si CostGovernanceService est fourni.
     """
     
     def __init__(
         self,
         repository: ILLMUsageRepository,
-        pricing_service: Optional[LLMPricingService] = None
+        pricing_service: Optional[LLMPricingService] = None,
+        cost_governance_service: Optional[any] = None  # Type: CostGovernanceService (éviter import circulaire)
     ):
         """Initialise le service de tracking.
         
         Args:
             repository: Repository pour stocker les enregistrements.
             pricing_service: Service de calcul des prix. Si None, en crée un nouveau.
+            cost_governance_service: Service de cost governance (optionnel). Si fourni,
+                                    met à jour le budget après chaque track_usage.
         """
         self.repository = repository
         self.pricing_service = pricing_service or LLMPricingService()
+        self.cost_governance_service = cost_governance_service
         logger.info("LLMUsageService initialisé")
     
     def track_usage(
@@ -85,6 +90,20 @@ class LLMUsageService:
             
             # Sauvegarder
             self.repository.save(record)
+            
+            # Mettre à jour le budget si le service de cost governance est disponible
+            if self.cost_governance_service and success:
+                try:
+                    # User ID par défaut (V1.0: pas d'authentification)
+                    DEFAULT_USER_ID = "default_user"
+                    self.cost_governance_service.update_budget(
+                        user_id=DEFAULT_USER_ID,
+                        cost=estimated_cost
+                    )
+                    logger.debug(f"Budget mis à jour: +${estimated_cost:.6f}")
+                except Exception as budget_error:
+                    # Ne pas faire échouer le tracking si la mise à jour du budget échoue
+                    logger.warning(f"Erreur lors de la mise à jour du budget: {budget_error}", exc_info=True)
             
             logger.debug(
                 f"Usage LLM enregistré: {model_name}, "

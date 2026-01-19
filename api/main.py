@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware as FastAPICORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from api.middleware import RequestIDMiddleware, LoggingMiddleware
+from api.middleware.cost_governance import CostGovernanceMiddleware
 from api.exceptions import APIException, ValidationException
 from api.dependencies import get_request_id
 from api.config.security_config import get_security_config
@@ -311,6 +312,7 @@ app.add_middleware(
 # Middleware personnalisés
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(LoggingMiddleware)
+app.add_middleware(CostGovernanceMiddleware)  # Cost governance (Story 0.7)
 
 # Middleware anti-cache en développement (doit être avant le cache HTTP)
 if not is_production_env:

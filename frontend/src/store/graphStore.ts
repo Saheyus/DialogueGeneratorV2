@@ -82,6 +82,7 @@ export interface GraphState {
   
   // Cycles intentionnels
   markCycleAsIntentional: (cycleId: string) => void
+  unmarkCycleAsIntentional: (cycleId: string) => void
   
   // Actions auto-save draft (Task 1 - Story 0.5)
   markDirty: () => void
@@ -159,6 +160,7 @@ export const useGraphStore = create<GraphState>()(
             },
             isLoading: false,
             validationErrors: [],
+            highlightedCycleNodes: [], // Réinitialiser highlight cycles lors du chargement
             // Réinitialiser l'état auto-save draft (Task 1 - Story 0.5)
             hasUnsavedChanges: false,
             lastDraftSavedAt: null,
@@ -460,17 +462,18 @@ export const useGraphStore = create<GraphState>()(
           
           // Extraire les nœuds des cycles depuis les warnings
           const cycleWarnings = response.warnings.filter(
-            (w) => w.type === 'cycle_detected' && w.cycle_nodes
+            (w) => w.type === 'cycle_detected' && w.cycle_nodes && Array.isArray(w.cycle_nodes)
           )
           const cycleNodeIds = new Set<string>()
           cycleWarnings.forEach((warn) => {
-            if (warn.cycle_nodes) {
+            if (warn.cycle_nodes && Array.isArray(warn.cycle_nodes)) {
               warn.cycle_nodes.forEach((nodeId) => cycleNodeIds.add(nodeId))
             }
           })
           
           set({
             validationErrors: [...response.errors, ...response.warnings],
+            // Réinitialiser highlightedCycleNodes même s'il n'y a pas de cycles (AC #4)
             highlightedCycleNodes: Array.from(cycleNodeIds),
           })
         } catch (error) {
@@ -657,6 +660,30 @@ export const useGraphStore = create<GraphState>()(
             localStorage.setItem('graph_intentional_cycles', JSON.stringify(newIntentionalCycles))
           } catch (error) {
             console.error('Erreur lors de la sauvegarde des cycles intentionnels:', error)
+            // Afficher une notification à l'utilisateur si localStorage est plein
+            if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+              alert('Impossible de sauvegarder le marquage intentionnel: l\'espace de stockage est plein. Veuillez libérer de l\'espace.')
+            }
+          }
+          
+          return { intentionalCycles: newIntentionalCycles }
+        })
+      },
+      
+      // Décocher un cycle intentionnel
+      unmarkCycleAsIntentional: (cycleId: string) => {
+        set((state) => {
+          const newIntentionalCycles = state.intentionalCycles.filter((id) => id !== cycleId)
+          
+          // Persister dans localStorage
+          try {
+            localStorage.setItem('graph_intentional_cycles', JSON.stringify(newIntentionalCycles))
+          } catch (error) {
+            console.error('Erreur lors de la sauvegarde des cycles intentionnels:', error)
+            // Afficher une notification à l'utilisateur si localStorage est plein
+            if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+              alert('Impossible de sauvegarder le marquage intentionnel: l\'espace de stockage est plein. Veuillez libérer de l\'espace.')
+            }
           }
           
           return { intentionalCycles: newIntentionalCycles }

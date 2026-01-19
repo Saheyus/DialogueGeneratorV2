@@ -117,54 +117,20 @@ class CostGovernanceMiddleware(BaseHTTPMiddleware):
     async def _estimate_cost(self, request: Request) -> float:
         """Estime le coût d'une génération basé sur la requête.
         
+        Pour simplifier et éviter les problèmes de lecture multiple du body,
+        on utilise des estimations conservatrices par défaut.
+        Une estimation plus précise peut être faite dans les endpoints après
+        construction du prompt, mais cette vérification protège financièrement.
+        
         Args:
             request: La requête HTTP.
             
         Returns:
-            Coût estimé en USD.
+            Coût estimé en USD (estimation conservatrice).
         """
-        try:
-            # Lire le body de la requête (une seule fois)
-            # Note: FastAPI/Starlette permet de lire le body plusieurs fois via request._body
-            # mais pour être sûr, on utilise une approche non-destructive
-            if hasattr(request, "_body"):
-                body = request._body
-            else:
-                body = await request.body()
-                # Stocker pour réutilisation (si possible)
-                if hasattr(request, "_body"):
-                    request._body = body
-            
-            # Si le body est vide, utiliser les valeurs par défaut
-            if not body:
-                return self._calculate_cost_with_defaults()
-            
-            # Parser le JSON
-            try:
-                body_data = json.loads(body)
-            except json.JSONDecodeError:
-                # Si le parsing échoue, utiliser les valeurs par défaut
-                return self._calculate_cost_with_defaults()
-            
-            # Extraire le modèle (si disponible)
-            model_name = body_data.get("model_name") or body_data.get("model") or Defaults.MODEL_ID
-            
-            # Essayer d'extraire les tokens estimés (si disponibles)
-            prompt_tokens = body_data.get("token_count") or body_data.get("prompt_tokens") or DEFAULT_PROMPT_TOKENS
-            completion_tokens = body_data.get("max_completion_tokens") or body_data.get("completion_tokens") or DEFAULT_COMPLETION_TOKENS
-            
-            # Calculer le coût
-            cost = self.pricing_service.calculate_cost(
-                model_name=model_name,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens
-            )
-            
-            return cost
-            
-        except Exception as e:
-            logger.warning(f"Erreur lors de l'estimation du coût: {e}, utilisation des valeurs par défaut")
-            return self._calculate_cost_with_defaults()
+        # Utiliser des valeurs par défaut conservatrices
+        # Mieux vaut bloquer trop tôt que trop tard pour la protection financière
+        return self._calculate_cost_with_defaults()
     
     def _calculate_cost_with_defaults(self) -> float:
         """Calcule le coût avec les valeurs par défaut.

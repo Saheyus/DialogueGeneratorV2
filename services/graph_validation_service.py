@@ -367,9 +367,10 @@ class GraphValidationService:
                     cycle_nodes = list(dict.fromkeys(cycle_path[:-1]))  # Garde l'ordre
                     
                     # Générer cycle_id stable basé sur les nœuds triés
+                    # Utiliser SHA256 au lieu de MD5 (déprécié) et prendre 16 caractères pour réduire risque de collision
                     sorted_nodes = sorted(cycle_nodes)
                     node_str = ",".join(sorted_nodes)
-                    cycle_id = f"cycle_{hashlib.md5(node_str.encode()).hexdigest()[:8]}"
+                    cycle_id = f"cycle_{hashlib.sha256(node_str.encode()).hexdigest()[:16]}"
                     
                     # Formater le chemin pour affichage
                     path_str = " → ".join(cycle_path[:-1]) + f" → {cycle_path[0]}"
