@@ -19,12 +19,13 @@ from api.middleware.rate_limiter import get_limiter, get_rate_limit_string
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
-security = HTTPBearer()
-auth_service = AuthService()
-
 # Configuration cookies (utilise SecurityConfig)
 security_config = get_security_config()
+
+router = APIRouter()
+# En développement, rendre le security optionnel pour permettre l'accès sans token
+security = HTTPBearer(auto_error=False) if security_config.is_development else HTTPBearer()
+auth_service = AuthService()
 _is_production = security_config.is_production
 _cookie_domain = None  # Peut être étendu via config si nécessaire
 _cookie_secure = _is_production  # Secure=True en production uniquement
@@ -100,22 +101,42 @@ def _delete_refresh_cookie(response: Response) -> None:
 
 
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-    request: Request
+    request: Request,
+    credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(security)] = None
 ) -> dict:
     """Dépendance pour obtenir l'utilisateur courant depuis le token JWT.
     
+    En développement, retourne automatiquement un utilisateur mock sans vérifier le token.
+    En production, vérifie le token JWT.
+    
     Args:
-        credentials: Credentials HTTP (token).
+        credentials: Credentials HTTP (token). Optionnel en dev.
         request: La requête HTTP.
         
     Returns:
         Dictionnaire avec les informations de l'utilisateur.
         
     Raises:
-        AuthenticationException: Si le token est invalide ou expiré.
+        AuthenticationException: Si le token est invalide ou expiré (production uniquement).
     """
+    # En développement, retourner un utilisateur mock sans vérifier le token
+    if security_config.is_development:
+        logger.debug("Mode développement: authentification désactivée, retour utilisateur mock")
+        return {
+            "id": "1",
+            "username": "admin",
+            "email": "admin@example.com"
+        }
+    
+    # En production, vérifier le token normalement
     request_id = getattr(request.state, "request_id", "unknown")
+    
+    if credentials is None:
+        raise AuthenticationException(
+            message="Token manquant",
+            request_id=request_id
+        )
+    
     token = credentials.credentials
     
     payload = auth_service.verify_token(token, token_type="access")

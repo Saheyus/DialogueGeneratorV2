@@ -62,9 +62,11 @@ class SuggestedConnection(BaseModel):
 
 class GenerateNodeResponse(BaseModel):
     """Réponse après génération d'un nœud."""
-    node: Dict[str, Any] = Field(..., description="Nœud généré (avec ID)")
+    node: Optional[Dict[str, Any]] = Field(None, description="Nœud généré (avec ID) - pour backward compatibility")
+    nodes: Optional[List[Dict[str, Any]]] = Field(None, description="Liste de nœuds générés (pour génération batch)")
     suggested_connections: List[SuggestedConnection] = Field(..., description="Connexions suggérées")
     parent_node_id: str = Field(..., description="ID du nœud parent")
+    batch_count: Optional[int] = Field(None, description="Nombre total de nœuds générés en batch (si applicable)")
 
 
 class ValidateGraphRequest(BaseModel):

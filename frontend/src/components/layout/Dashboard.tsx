@@ -69,8 +69,8 @@ export function Dashboard() {
   const { loadDefaultConfig } = useContextConfigStore()
   const commandPalette = useCommandPalette()
   
-  // État du graphe pour détecter si un nœud est sélectionné
-  const { selectedNodeId } = useGraphStore()
+  // État du graphe pour détecter si un nœud est sélectionné et si une génération est en cours
+  const { selectedNodeId, isGenerating: isGraphGenerating } = useGraphStore()
 
   // Boutons replier/déplier panneaux gauche & droite (layout 3 panneaux)
   const panelsRef = useRef<ResizablePanelsRef>(null)
@@ -204,7 +204,7 @@ export function Dashboard() {
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
-                {actions.isLoading || generationState.isEstimating
+                {actions.isLoading || generationState.isEstimating || isGraphGenerating
                   ? 'Génération en cours...'
                   : 'Aucun dialogue Unity généré'}
               </div>
@@ -255,7 +255,7 @@ export function Dashboard() {
         </div>
       ),
     },
-  ], [unityDialogueResponse, rawPrompt, isEstimating, tokenCount, promptHash, selectedContextItem, selectedNodeId, actions.isLoading, generationState.isEstimating])
+  ], [unityDialogueResponse, rawPrompt, isEstimating, tokenCount, promptHash, selectedContextItem, selectedNodeId, actions.isLoading, generationState.isEstimating, isGraphGenerating])
   
   // Basculer automatiquement vers l'onglet "Édition de nœud" quand un nœud est sélectionné dans le graphe
   useEffect(() => {
@@ -683,7 +683,7 @@ export function Dashboard() {
             </button>
             <button
               onClick={actions.handleExportUnity || (() => {})}
-              disabled={actions.isLoading}
+              disabled={actions.isLoading || isGraphGenerating}
               style={{
                 padding: '0.4rem 0.8rem',
                 fontSize: '0.85rem',
@@ -691,8 +691,8 @@ export function Dashboard() {
                 color: theme.button.default.color,
                 border: `1px solid ${theme.border.primary}`,
                 borderRadius: '4px',
-                cursor: actions.isLoading ? 'not-allowed' : 'pointer',
-                opacity: actions.isLoading ? 0.6 : 1,
+                cursor: (actions.isLoading || isGraphGenerating) ? 'not-allowed' : 'pointer',
+                opacity: (actions.isLoading || isGraphGenerating) ? 0.6 : 1,
               }}
             >
               Exporter (Unity)
@@ -710,7 +710,7 @@ export function Dashboard() {
                     actions.handleReset()
                   }
                 }}
-                disabled={actions.isLoading}
+                disabled={actions.isLoading || isGraphGenerating}
                 style={{
                   padding: '0.4rem 0.8rem',
                   fontSize: '0.85rem',
@@ -718,8 +718,8 @@ export function Dashboard() {
                   color: theme.button.default.color,
                   border: `1px solid ${theme.border.primary}`,
                   borderRadius: '4px',
-                  cursor: actions.isLoading ? 'not-allowed' : 'pointer',
-                  opacity: actions.isLoading ? 0.6 : 1,
+                  cursor: (actions.isLoading || isGraphGenerating) ? 'not-allowed' : 'pointer',
+                  opacity: (actions.isLoading || isGraphGenerating) ? 0.6 : 1,
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.25rem',
@@ -780,7 +780,7 @@ export function Dashboard() {
             }}
           >
             {/* Barre de progression */}
-            {(actions.isLoading || generationState.isEstimating) && (
+            {(actions.isLoading || generationState.isEstimating || isGraphGenerating) && (
               <>
                 <div
                   style={{
@@ -813,7 +813,9 @@ export function Dashboard() {
                     marginBottom: '0.5rem',
                   }}
                 >
-                  {generationState.isEstimating && !actions.isLoading
+                  {isGraphGenerating
+                    ? 'Génération de nœud...'
+                    : generationState.isEstimating && !actions.isLoading
                     ? 'Estimation des tokens...'
                     : actions.isLoading && !generationState.unityDialogueResponse
                     ? 'Génération du dialogue...'
@@ -835,7 +837,7 @@ export function Dashboard() {
             )}
             <button
               onClick={actions.handleGenerate}
-              disabled={actions.isLoading}
+              disabled={actions.isLoading || isGraphGenerating}
               style={{
                 width: '100%',
                 padding: '0.875rem 1rem',
@@ -845,8 +847,8 @@ export function Dashboard() {
                 color: theme.button.primary.color,
                 border: 'none',
                 borderRadius: '6px',
-                cursor: actions.isLoading ? 'not-allowed' : 'pointer',
-                opacity: actions.isLoading ? 0.6 : 1,
+                cursor: (actions.isLoading || isGraphGenerating) ? 'not-allowed' : 'pointer',
+                opacity: (actions.isLoading || isGraphGenerating) ? 0.6 : 1,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

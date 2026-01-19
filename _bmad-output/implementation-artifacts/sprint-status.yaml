@@ -50,6 +50,7 @@ development_status:
   0-7-cost-governance-id-003: review
   0-8-streaming-cleanup-id-004: ready-for-dev
   0-9-preset-validation-id-005: ready-for-dev
+  0-10-tests-4-resultats-critiques: ready-for-dev
   epic-0-retrospective: optional
   epic-1: backlog
   1-1-générer-un-nœud-de-dialogue-single-avec-llm-fr1: backlog

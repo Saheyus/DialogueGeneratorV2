@@ -15,7 +15,15 @@ import './App.css'
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, initialize } = useAuthStore()
 
+  // En développement, désactiver l'authentification
+  const isDev = import.meta.env.DEV
+
   useEffect(() => {
+    if (isDev) {
+      // En dev, on skip l'initialisation de l'auth
+      return
+    }
+    
     // Initialiser la session au démarrage (vérifie le token dans localStorage)
     if (import.meta.env.DEV) {
       console.log('[ProtectedRoute] Initialisation...')
@@ -33,9 +41,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   // Log pour debug
   useEffect(() => {
     if (import.meta.env.DEV) {
-      console.log('[ProtectedRoute] State changé:', { isLoading, isAuthenticated })
+      console.log('[ProtectedRoute] State changé:', { isLoading, isAuthenticated, isDev })
     }
-  }, [isLoading, isAuthenticated])
+  }, [isLoading, isAuthenticated, isDev])
+
+  // En développement, toujours autoriser l'accès
+  if (isDev) {
+    return <>{children}</>
+  }
 
   if (isLoading) {
     return (

@@ -4,6 +4,7 @@
 import { memo } from 'react'
 import { useFormContext, Controller } from 'react-hook-form'
 import { theme } from '../../theme'
+import { useGraphStore } from '../../store/graphStore'
 import type { Choice, DialogueNodeData } from '../../schemas/nodeEditorSchema'
 
 export interface ChoiceEditorProps {
@@ -18,6 +19,7 @@ export const ChoiceEditor = memo(function ChoiceEditor({
   onGenerateForChoice,
 }: ChoiceEditorProps) {
   const { register, formState: { errors }, control, watch } = useFormContext<DialogueNodeData>()
+  const { isGenerating } = useGraphStore()
   const choicesErrors = errors.choices?.[choiceIndex]
   const choices = watch('choices') || []
   const currentChoice = choices[choiceIndex]
@@ -47,18 +49,20 @@ export const ChoiceEditor = memo(function ChoiceEditor({
             <button
               type="button"
               onClick={() => onGenerateForChoice(choiceIndex)}
+              disabled={isGenerating}
               style={{
                 padding: '0.25rem 0.5rem',
                 border: `1px solid ${theme.button.primary.background}`,
                 borderRadius: 4,
                 backgroundColor: theme.button.primary.background,
                 color: theme.button.primary.color,
-                cursor: 'pointer',
+                cursor: isGenerating ? 'not-allowed' : 'pointer',
+                opacity: isGenerating ? 0.6 : 1,
                 fontSize: '0.75rem',
               }}
               title="Générer la suite pour ce choix"
             >
-              ✨ Générer
+              {isGenerating ? 'Génération...' : '✨ Générer'}
             </button>
           )}
           {onRemove && (

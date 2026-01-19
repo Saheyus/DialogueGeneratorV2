@@ -23,9 +23,15 @@ const apiClient: AxiosInstance = axios.create({
 
 /**
  * Intercepteur pour ajouter le token d'authentification.
+ * En développement, on n'envoie pas de token (l'auth est désactivée côté serveur).
  */
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    // En développement, ne pas envoyer de token (auth désactivée)
+    if (import.meta.env.DEV) {
+      return config
+    }
+    
     const token = localStorage.getItem('access_token')
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
@@ -51,6 +57,11 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+
+    // En développement, ignorer les erreurs 401 (auth désactivée)
+    if (import.meta.env.DEV) {
+      return Promise.reject(error)
+    }
 
     // Si erreur 401 et pas déjà retenté
     if (error.response?.status === 401 && !originalRequest._retry) {

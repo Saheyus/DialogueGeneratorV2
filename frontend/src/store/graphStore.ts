@@ -126,18 +126,22 @@ export const useGraphStore = create<GraphState>()(
       ...initialState,
       
       // Charger un dialogue Unity JSON
-      loadDialogue: async (jsonContent: string) => {
+      loadDialogue: async (jsonContent: string, savedPositions?: Record<string, { x: number; y: number }>) => {
         set({ isLoading: true })
         try {
           const response = await graphAPI.loadGraph({ json_content: jsonContent })
           
           // Convertir les nœuds en format ReactFlow
-          const nodes: Node[] = response.nodes.map((node: any) => ({
-            id: node.id,
-            type: node.type,
-            position: node.position,
-            data: node.data,
-          }))
+          // Restaurer les positions sauvegardées si disponibles, sinon utiliser celles du backend
+          const nodes: Node[] = response.nodes.map((node: any) => {
+            const savedPosition = savedPositions?.[node.id]
+            return {
+              id: node.id,
+              type: node.type,
+              position: savedPosition || node.position, // Utiliser position sauvegardée si disponible
+              data: node.data,
+            }
+          })
           
           // Convertir les edges
           const edges: Edge[] = response.edges.map((edge: any) => ({
@@ -378,8 +382,10 @@ export const useGraphStore = create<GraphState>()(
           })
           
           // Gérer génération batch (si generate_all_choices, l'API retourne une liste)
-          // Pour l'instant, l'API retourne toujours un seul nœud, mais on prépare pour Task 2
-          const generatedNodes = response.node ? [response.node] : []
+          // Utiliser response.nodes si disponible (batch), sinon response.node (backward compatibility)
+          const generatedNodes = response.nodes && response.nodes.length > 0 
+            ? response.nodes 
+            : (response.node ? [response.node] : [])
           
           // Ajouter les nouveaux nœuds avec positionnement en cascade pour batch
           const generatedNodeIds: string[] = []
@@ -431,7 +437,15 @@ export const useGraphStore = create<GraphState>()(
           set({ isGenerating: false })
           
           // Retourner le nodeId du premier nouveau nœud pour feedback visuel
-          return generatedNodeIds[0] || generatedNodes[0]?.id
+          // Note: Pour batch, on retourne l'ID du premier nœud, mais tous les nœuds sont ajoutés
+          const firstNodeId = generatedNodeIds[0] || generatedNodes[0]?.id
+          
+          // Logger le résultat batch si applicable
+          if (options.generate_all_choices && response.batch_count) {
+            console.log(`Génération batch: ${response.batch_count} nœud(s) généré(s)`)
+          }
+          
+          return firstNodeId
         } catch (error) {
           console.error('Erreur lors de la génération de nœud:', error)
           set({ isGenerating: false })

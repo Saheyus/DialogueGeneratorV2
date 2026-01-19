@@ -167,9 +167,17 @@ async def test_generate_node_with_generate_all_choices(client, sample_parent_nod
         data = response.json()
         # Vérifier que le service batch a été appelé
         mock_graph_service.generate_nodes_for_all_choices.assert_called_once()
-        # Vérifier que le premier nœud est retourné
+        # Vérifier que tous les nœuds sont retournés (nouveau format batch)
+        assert "nodes" in data
+        assert len(data["nodes"]) == 2
+        assert data["nodes"][0]["id"] == "NODE_PARENT_1_CHOICE_0"
+        assert data["nodes"][1]["id"] == "NODE_PARENT_1_CHOICE_1"
+        # Vérifier backward compatibility (node pour le premier)
         assert "node" in data
         assert data["node"]["id"] == "NODE_PARENT_1_CHOICE_0"
+        # Vérifier batch_count
+        assert "batch_count" in data
+        assert data["batch_count"] == 2
         # Vérifier que les connexions sont retournées
         assert len(data["suggested_connections"]) == 2
 

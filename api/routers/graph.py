@@ -195,39 +195,66 @@ async def generate_node(
         
         # Gérer génération batch si generate_all_choices=True
         if request_data.generate_all_choices and parent_choices:
+            # Si les instructions sont vides, utiliser un texte par défaut
+            user_instructions = request_data.user_instructions.strip() if request_data.user_instructions else ""
+            if not user_instructions:
+                user_instructions = "Ecris la réponse du PNJ à ce que dit le PJ"
+            
             # Utiliser le service batch pour générer tous les choix
             graph_generation_service = GraphGenerationService(generation_service)
             batch_result = await graph_generation_service.generate_nodes_for_all_choices(
                 parent_node=parent_content,
-                instructions=request_data.user_instructions,
+                instructions=user_instructions,
                 context=request_data.context_selections,
                 llm_client=llm_client,
                 system_prompt_override=request_data.system_prompt_override,
                 max_choices=request_data.max_choices
             )
             
-            # Pour l'instant, retourner le premier nœud (l'API retourne un seul nœud)
-            # TODO: Modifier GenerateNodeResponse pour supporter liste de nœuds si nécessaire
+            # Retourner tous les nœuds générés en batch
+            failed_choices = batch_result.get("failed_choices", [])
+            batch_count = len(batch_result["nodes"])
+            
             if batch_result["nodes"]:
-                generated_node = batch_result["nodes"][0]
                 suggested_connections = [
                     SuggestedConnection(**conn) for conn in batch_result["connections"]
                 ]
                 
-                logger.info(
-                    f"Génération batch: {len(batch_result['nodes'])} nœud(s) généré(s) "
-                    f"pour parent {request_data.parent_node_id} (request_id: {request_id})"
-                )
+                # Logger les résultats (succès et échecs)
+                if failed_choices:
+                    logger.warning(
+                        f"Génération batch partielle: {batch_count} nœud(s) généré(s), "
+                        f"{len(failed_choices)} échec(s) pour parent {request_data.parent_node_id} "
+                        f"(request_id: {request_id})"
+                    )
+                else:
+                    logger.info(
+                        f"Génération batch: {batch_count} nœud(s) généré(s) "
+                        f"pour parent {request_data.parent_node_id} (request_id: {request_id})"
+                    )
                 
+                # Retourner tous les nœuds avec le premier pour backward compatibility
                 return GenerateNodeResponse(
-                    node=generated_node,
+                    node=batch_result["nodes"][0] if batch_result["nodes"] else None,
+                    nodes=batch_result["nodes"],
                     suggested_connections=suggested_connections,
-                    parent_node_id=request_data.parent_node_id
+                    parent_node_id=request_data.parent_node_id,
+                    batch_count=batch_count
                 )
             else:
-                # Aucun nœud généré (tous les choix déjà connectés)
+                # Aucun nœud généré
+                if failed_choices:
+                    # Tous les choix ont échoué
+                    error_msg = (
+                        f"Aucun nœud généré. {len(failed_choices)} échec(s) de génération. "
+                        f"Vérifiez les logs pour plus de détails."
+                    )
+                else:
+                    # Tous les choix déjà connectés
+                    error_msg = "Tous les choix sont déjà connectés. Aucun nœud à générer."
+                
                 raise ValidationException(
-                    message="Tous les choix sont déjà connectés. Aucun nœud à générer.",
+                    message=error_msg,
                     request_id=request_id
                 )
         
@@ -236,11 +263,40 @@ async def generate_node(
         parent_speaker = parent_content.get("speaker", "PNJ")
         parent_line = parent_content.get("line", "")
         
-        enriched_instructions = f"""Contexte précédent:
+        # Si les instructions sont vides, utiliser un texte par défaut
+        user_instructions = request_data.user_instructions.strip() if request_data.user_instructions else ""
+        if not user_instructions:
+            user_instructions = "Ecris la réponse du PNJ à ce que dit le PJ"
+        
+        # Si target_choice_index est fourni, inclure le texte du choix correspondant
+        if request_data.target_choice_index is not None and parent_choices:
+            choice_index = request_data.target_choice_index
+            if 0 <= choice_index < len(parent_choices):
+                choice_text = parent_choices[choice_index].get("text", "")
+                enriched_instructions = f"""Contexte précédent:
+{parent_speaker}: {parent_line}
+
+Réponse du joueur:
+{choice_text}
+
+Instructions pour la suite:
+{user_instructions}
+"""
+            else:
+                # Index invalide, utiliser le format sans choix
+                enriched_instructions = f"""Contexte précédent:
 {parent_speaker}: {parent_line}
 
 Instructions pour la suite:
-{request_data.user_instructions}
+{user_instructions}
+"""
+        else:
+            # Pas de choix spécifique (nextNode ou génération normale)
+            enriched_instructions = f"""Contexte précédent:
+{parent_speaker}: {parent_line}
+
+Instructions pour la suite:
+{user_instructions}
 """
         
         # Pour la génération normale, on utilise juste les instructions enrichies comme prompt string

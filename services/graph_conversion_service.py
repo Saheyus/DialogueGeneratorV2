@@ -53,10 +53,10 @@ class GraphConversionService:
                     "data": unity_node  # Toutes les données Unity stockées dans data
                 }
                 
-                reactflow_nodes.append(reactflow_node)
-                
                 # Position suivante (layout basique en cascade)
                 y_offset += 150
+                
+                reactflow_nodes.append(reactflow_node)
                 
                 # Créer les edges depuis ce nœud
                 edges = GraphConversionService._extract_edges_from_node(unity_node)

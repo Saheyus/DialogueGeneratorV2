@@ -130,8 +130,16 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
   
   // Handler pour générer la suite (nextNode)
   const handleGenerateNext = useCallback(async () => {
-    if (!selectedNodeId || !userInstructions.trim()) {
-      toast('Veuillez entrer des instructions', 'warning')
+    if (!selectedNodeId) {
+      toast('Aucun nœud sélectionné', 'warning')
+      return
+    }
+    
+    // Vérifier si le nœud a des choix : en mode nextNode, il faut sélectionner au moins un choix
+    const nodeChoices = selectedNode?.data?.choices || []
+    if (nodeChoices.length > 0) {
+      // Si le nœud a des choix, il faut utiliser le panneau AIGenerationPanel pour sélectionner un choix
+      toast('Ce nœud a des choix. Utilisez le bouton "Générer la suite avec l\'IA" pour sélectionner un choix spécifique.', 'warning')
       return
     }
     
@@ -142,9 +150,12 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
       ]
       const npcSpeakerId = allCharacters.length > 0 ? allCharacters[0] : undefined
       
+      // Si les instructions sont vides, on utilisera un texte par défaut côté backend
+      const finalInstructions = userInstructions.trim() || "Ecris la réponse du PNJ à ce que dit le PJ"
+      
       const newNodeId = await generateFromNode(
         selectedNodeId,
-        userInstructions,
+        finalInstructions,
         {
           context_selections: selections,
           npc_speaker_id: npcSpeakerId,
@@ -211,8 +222,8 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
   
   // Handler pour générer pour tous les choix
   const handleGenerateAllChoices = useCallback(async () => {
-    if (!selectedNodeId || !userInstructions.trim()) {
-      toast('Veuillez entrer des instructions', 'warning')
+    if (!selectedNodeId) {
+      toast('Aucun nœud sélectionné', 'warning')
       return
     }
     
@@ -223,9 +234,12 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
       ]
       const npcSpeakerId = allCharacters.length > 0 ? allCharacters[0] : undefined
       
+      // Si les instructions sont vides, on utilisera un texte par défaut côté backend
+      const finalInstructions = userInstructions.trim() || "Ecris la réponse du PNJ à ce que dit le PJ"
+      
       const newNodeId = await generateFromNode(
         selectedNodeId,
-        userInstructions,
+        finalInstructions,
         {
           context_selections: selections,
           npc_speaker_id: npcSpeakerId,
@@ -449,7 +463,9 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
         )}
         
         {/* Choix (pour dialogue nodes) */}
-        {nodeType === 'dialogueNode' && <ChoicesEditor />}
+        {nodeType === 'dialogueNode' && (
+          <ChoicesEditor onGenerateForChoice={handleGenerateForChoice} />
+        )}
         
         {/* Section Génération IA */}
         {nodeType === 'dialogueNode' && (
@@ -540,7 +556,7 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
                   <button
                     type="button"
                     onClick={handleGenerateNext}
-                    disabled={isGenerating || !userInstructions.trim()}
+                    disabled={isGenerating}
                     style={{
                       width: '100%',
                       padding: '0.75rem',
@@ -548,8 +564,8 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
                       borderRadius: 4,
                       backgroundColor: theme.button.primary.background,
                       color: theme.button.primary.color,
-                      cursor: (isGenerating || !userInstructions.trim()) ? 'not-allowed' : 'pointer',
-                      opacity: (isGenerating || !userInstructions.trim()) ? 0.6 : 1,
+                      cursor: isGenerating ? 'not-allowed' : 'pointer',
+                      opacity: isGenerating ? 0.6 : 1,
                       fontSize: '0.9rem',
                       fontWeight: 'bold',
                     }}
@@ -566,7 +582,7 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
                       <button
                         type="button"
                         onClick={handleGenerateAllChoices}
-                        disabled={isGenerating || !userInstructions.trim()}
+                        disabled={isGenerating}
                         style={{
                           width: '100%',
                           padding: '0.75rem',
@@ -574,8 +590,8 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
                           borderRadius: 4,
                           backgroundColor: theme.button.default.background,
                           color: theme.button.default.color,
-                          cursor: (isGenerating || !userInstructions.trim()) ? 'not-allowed' : 'pointer',
-                          opacity: (isGenerating || !userInstructions.trim()) ? 0.6 : 1,
+                          cursor: isGenerating ? 'not-allowed' : 'pointer',
+                          opacity: isGenerating ? 0.6 : 1,
                           fontSize: '0.9rem',
                         }}
                       >
@@ -640,7 +656,11 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
 /**
  * Composant interne pour gérer les choix avec useFieldArray.
  */
-function ChoicesEditor() {
+interface ChoicesEditorProps {
+  onGenerateForChoice?: (choiceIndex: number) => void
+}
+
+function ChoicesEditor({ onGenerateForChoice }: ChoicesEditorProps) {
   const { control, watch } = useFormContext<DialogueNodeData>()
   const { fields, append, remove } = useFieldArray({
     control,
@@ -699,7 +719,7 @@ function ChoicesEditor() {
             key={field.id}
             choiceIndex={index}
             onRemove={fields.length > 1 ? () => remove(index) : undefined}
-            onGenerateForChoice={handleGenerateForChoice}
+            onGenerateForChoice={onGenerateForChoice}
           />
         ))
       )}

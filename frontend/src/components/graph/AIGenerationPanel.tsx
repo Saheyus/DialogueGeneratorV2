@@ -62,9 +62,22 @@ export function AIGenerationPanel({
   
   // Handler pour générer le nœud
   const handleGenerate = useCallback(async () => {
-    if (!parentNodeId || !userInstructions.trim()) {
-      toast('Veuillez entrer des instructions', 'warning')
+    if (!parentNodeId) {
+      toast('Aucun nœud parent sélectionné', 'warning')
       return
+    }
+    
+    // En mode "suite (nextNode)", si le parent a des choix, il faut en sélectionner au moins un
+    const parentChoices = parentNode?.data?.choices || []
+    const hasChoices = parentChoices.length > 0
+    const isContinuationMode = generationMode === 'continuation'
+    
+    if (isContinuationMode && hasChoices) {
+      // En mode continuation avec choix disponibles, il faut sélectionner au moins un choix
+      if (targetChoiceIndex === null && !generateAllChoices) {
+        toast('Veuillez sélectionner au moins un choix pour générer la suite', 'warning')
+        return
+      }
     }
     
     // Vérifier le budget avant génération (Task 7)
@@ -83,19 +96,40 @@ export function AIGenerationPanel({
       ]
       const npcSpeakerId = allCharacters.length > 0 ? allCharacters[0] : undefined
       
+      // Si les instructions sont vides, on utilisera un texte par défaut côté backend
+      const finalInstructions = userInstructions.trim() || "Ecris la réponse du PNJ à ce que dit le PJ"
+      
       const newNodeId = await generateFromNode(
         parentNodeId,
-        userInstructions,
+        finalInstructions,
         {
           context_selections: selections,
           max_choices: maxChoices,
           npc_speaker_id: npcSpeakerId,
           narrative_tags: narrativeTags.length > 0 ? narrativeTags : undefined,
           llm_model_identifier: llmModel,
+          target_choice_index: targetChoiceIndex ?? null,
+          generate_all_choices: generateAllChoices,
         }
       )
       
-      toast('Nœud généré avec succès', 'success', 2000)
+      // Message de succès adapté selon le mode de génération
+      if (generateAllChoices) {
+        // Pour batch, afficher un message générique (le nombre exact est loggé dans la console)
+        const parentChoices = parentNode?.data?.choices || []
+        const unconnectedCount = parentChoices.filter(
+          (c: any) => !c.targetNode || c.targetNode === 'END'
+        ).length
+        toast(
+          `Génération batch terminée${unconnectedCount > 1 ? ` (${unconnectedCount} choix)` : ''}`,
+          'success',
+          3000
+        )
+      } else if (targetChoiceIndex !== null) {
+        toast(`Nœud généré pour le choix ${targetChoiceIndex + 1}`, 'success', 2000)
+      } else {
+        toast('Nœud généré avec succès', 'success', 2000)
+      }
       
       // Déclencher un événement pour sélectionner et zoomer vers le nouveau nœud
       const event = new CustomEvent('focus-generated-node', {
@@ -122,6 +156,8 @@ export function AIGenerationPanel({
     onClose,
     targetChoiceIndex,
     generateAllChoices,
+    parentNode,
+    checkBudget,
   ])
   
   if (!parentNodeId || !parentNode) {
@@ -130,6 +166,19 @@ export function AIGenerationPanel({
         Aucun nœud parent sélectionné
       </div>
     )
+  }
+  
+  // Fonction helper pour vérifier si le bouton doit être désactivé
+  const isGenerateDisabled = () => {
+    if (isGenerating) return true
+    // En mode "suite (nextNode)", si le parent a des choix, il faut en sélectionner au moins un
+    const parentChoices = parentNode?.data?.choices || []
+    const hasChoices = parentChoices.length > 0
+    const isContinuationMode = generationMode === 'continuation'
+    if (isContinuationMode && hasChoices) {
+      return targetChoiceIndex === null && !generateAllChoices
+    }
+    return false
   }
   
   return (
@@ -535,7 +584,7 @@ export function AIGenerationPanel({
         </button>
         <button
           onClick={handleGenerate}
-          disabled={isGenerating || !userInstructions.trim()}
+          disabled={isGenerateDisabled()}
           style={{
             flex: 1,
             padding: '0.75rem',
@@ -543,8 +592,8 @@ export function AIGenerationPanel({
             borderRadius: '6px',
             backgroundColor: theme.button.primary.background,
             color: theme.button.primary.color,
-            cursor: (isGenerating || !userInstructions.trim()) ? 'not-allowed' : 'pointer',
-            opacity: (isGenerating || !userInstructions.trim()) ? 0.6 : 1,
+            cursor: isGenerateDisabled() ? 'not-allowed' : 'pointer',
+            opacity: isGenerateDisabled() ? 0.6 : 1,
             fontWeight: 700,
             fontSize: '0.9rem',
           }}

@@ -53,9 +53,11 @@ export interface SuggestedConnection {
 }
 
 export interface GenerateNodeResponse {
-  node: Record<string, any>
+  node?: Record<string, any> // Pour backward compatibility
+  nodes?: Record<string, any>[] // Liste de nœuds générés (pour génération batch)
   suggested_connections: SuggestedConnection[]
   parent_node_id: string
+  batch_count?: number // Nombre total de nœuds générés en batch (si applicable)
 }
 
 export interface ValidateGraphRequest {

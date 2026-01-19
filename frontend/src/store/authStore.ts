@@ -128,6 +128,20 @@ export const useAuthStore = create<AuthState>()(
 
       // Initialise la session depuis le localStorage
       initialize: async () => {
+        // En développement, auto-login avec un utilisateur mock
+        if (import.meta.env.DEV) {
+          set({
+            user: {
+              id: '1',
+              username: 'admin',
+              email: 'admin@example.com'
+            },
+            isAuthenticated: true,
+            isLoading: false
+          })
+          return
+        }
+        
         // Éviter les appels multiples (StrictMode en dev)
         if (hasInitialized || isInitializing) {
           return

@@ -8,6 +8,7 @@ import { ContextFieldSelector } from './ContextFieldSelector'
 import { VocabularyGuidesTab } from './VocabularyGuidesTab'
 import { PromptsTab } from './PromptsTab'
 import { ErrorBoundary } from '../shared/ErrorBoundary'
+import { BudgetSettings } from '../settings/BudgetSettings'
 import { theme } from '../../theme'
 import { getAllShortcuts, formatShortcut } from '../../hooks/useKeyboardShortcuts'
 import * as configAPI from '../../api/config'
@@ -282,6 +283,9 @@ export function GenerationOptionsModal({
               previewTokens={previewTokens}
               isLoadingPreview={isLoadingPreview}
               onPreview={handlePreview}
+              onBudgetUpdated={() => {
+                // Optionnel: recharger les données si nécessaire
+              }}
             />
           )}
 
@@ -538,6 +542,7 @@ function GeneralTab({
   previewTokens,
   isLoadingPreview,
   onPreview,
+  onBudgetUpdated,
 }: {
   unityPath: string
   setUnityPath: (path: string) => void
@@ -551,6 +556,7 @@ function GeneralTab({
   previewTokens: number
   isLoadingPreview: boolean
   onPreview: () => void
+  onBudgetUpdated?: (budget: any) => void
 }) {
   return (
     <div>
@@ -609,6 +615,11 @@ function GeneralTab({
         >
           {isSavingUnity ? 'Enregistrement...' : 'Enregistrer'}
         </button>
+      </div>
+
+      {/* Section Budget LLM */}
+      <div style={{ marginBottom: '2rem' }}>
+        <BudgetSettings onBudgetUpdated={onBudgetUpdated} />
       </div>
 
       {/* Section Organisation */}

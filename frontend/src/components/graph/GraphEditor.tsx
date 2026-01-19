@@ -29,7 +29,7 @@ export function GraphEditor() {
   
   // États auto-save draft (Task 2 - Story 0.5)
   const [showRestoreDialog, setShowRestoreDialog] = useState(false)
-  const [draftToRestore, setDraftToRestore] = useState<{json_content: string; timestamp: number} | null>(null)
+  const [draftToRestore, setDraftToRestore] = useState<{json_content: string; timestamp: number; positions?: Record<string, { x: number; y: number }>} | null>(null)
   
   // État pour le dialogue de sélection de format d'export
   const [showExportFormatDialog, setShowExportFormatDialog] = useState(false)
@@ -137,7 +137,18 @@ export function GraphEditor() {
           }
           
           // Charger le dialogue normalement
-          return loadDialogue(response.json_content)
+          // Restaurer les positions depuis le draft si disponibles
+          const draftStr = localStorage.getItem(draftKey)
+          let savedPositions: Record<string, { x: number; y: number }> | undefined
+          if (draftStr) {
+            try {
+              const draft = JSON.parse(draftStr)
+              savedPositions = draft.positions // Positions ReactFlow sauvegardées
+            } catch {
+              // Ignorer les erreurs de parsing
+            }
+          }
+          return loadDialogue(response.json_content, savedPositions)
         })
         .then(() => {
           setIsLoadingDialogue(false)
@@ -170,9 +181,15 @@ export function GraphEditor() {
       try {
         clearDraftError()
         const json_content = exportToUnity()
+        // Extraire les positions des nodes pour persistance séparée (Unity ne les utilise pas)
+        const positions: Record<string, { x: number; y: number }> = {}
+        nodes.forEach((node) => {
+          positions[node.id] = node.position
+        })
         const draft = {
           filename: selectedDialogue.filename,
           json_content,
+          positions, // Positions ReactFlow (non utilisées par Unity)
           timestamp: Date.now(),
         }
         localStorage.setItem(draftKey, JSON.stringify(draft))
@@ -294,7 +311,8 @@ export function GraphEditor() {
   const handleRestoreDraft = useCallback(() => {
     if (draftToRestore && selectedDialogue) {
       setIsLoadingDialogue(true)
-      loadDialogue(draftToRestore.json_content)
+      // Restaurer aussi les positions depuis le draft
+      loadDialogue(draftToRestore.json_content, draftToRestore.positions)
         .then(() => {
           setShowRestoreDialog(false)
           setDraftToRestore(null)

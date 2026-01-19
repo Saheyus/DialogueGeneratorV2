@@ -68,6 +68,7 @@ class GraphGenerationService:
         
         generated_nodes = []
         suggested_connections = []
+        failed_choices = []  # Tracker les choix qui ont échoué
         
         # Générer un nœud pour chaque choix filtré
         for choice_index, choice in choices_to_generate:
@@ -110,6 +111,13 @@ Instructions pour la suite:
                 
                 if enriched_nodes:
                     generated_node = enriched_nodes[0]
+                    # Valider que le nœud a un ID avant de l'ajouter
+                    if not generated_node.get("id"):
+                        logger.error(
+                            f"Nœud généré pour choix {choice_index} n'a pas d'ID - ignoré"
+                        )
+                        continue
+                    
                     generated_nodes.append(generated_node)
                     
                     # Créer la connexion suggérée
@@ -134,15 +142,29 @@ Instructions pour la suite:
                     f"du parent {parent_id}: {e}",
                     exc_info=True
                 )
+                # Tracker l'échec pour rapport
+                failed_choices.append({
+                    "choice_index": choice_index,
+                    "choice_text": choice.get("text", ""),
+                    "error": str(e)
+                })
                 # Continuer avec les autres choix même si un échoue
                 continue
         
-        logger.info(
-            f"Génération batch terminée: {len(generated_nodes)} nœud(s) généré(s) "
-            f"pour le parent {parent_id}"
-        )
+        # Logger un avertissement si des échecs partiels
+        if failed_choices:
+            logger.warning(
+                f"Génération batch partielle: {len(generated_nodes)}/{len(choices_to_generate)} "
+                f"nœud(s) généré(s) avec succès, {len(failed_choices)} échec(s) pour le parent {parent_id}"
+            )
+        else:
+            logger.info(
+                f"Génération batch terminée: {len(generated_nodes)} nœud(s) généré(s) "
+                f"pour le parent {parent_id}"
+            )
         
         return {
             "nodes": generated_nodes,
-            "connections": suggested_connections
+            "connections": suggested_connections,
+            "failed_choices": failed_choices  # Retourner les échecs pour information
         }

@@ -2,7 +2,7 @@
  * Canvas principal du graphe avec ReactFlow.
  * Gère l'affichage interactif du graphe de dialogues.
  */
-import { memo, useCallback, useMemo, useEffect, useRef } from 'react'
+import { memo, useCallback, useMemo, useEffect } from 'react'
 import ReactFlow, {
   Background,
   Controls,
@@ -33,28 +33,11 @@ export const GraphCanvas = memo(function GraphCanvas() {
     connectNodes,
   } = useGraphStore()
   
-  const { fitView, getNode } = useReactFlow()
-  const prevSelectedNodeIdRef = useRef<string | null>(null)
-  
   // Utiliser les hooks ReactFlow pour gérer l'état local du graphe
   const [nodes, setNodes, onNodesChange] = useNodesState(storeNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(storeEdges)
   
-  // Scroll vers le nœud sélectionné si changé depuis l'extérieur (ex: panel d'erreurs)
-  useEffect(() => {
-    if (selectedNodeId && selectedNodeId !== prevSelectedNodeIdRef.current) {
-      const node = getNode(selectedNodeId)
-      if (node) {
-        // Utiliser fitView avec les options pour centrer le nœud
-        fitView({
-          nodes: [node],
-          duration: 300,
-          padding: 0.2,
-        })
-      }
-      prevSelectedNodeIdRef.current = selectedNodeId
-    }
-  }, [selectedNodeId, getNode, fitView])
+  // Zoom automatique retiré : le zoom ne se fait plus automatiquement lors d'un clic sur un nœud
   
   // Synchroniser avec le store quand les nodes/edges changent
   // Enrichir les nœuds avec les erreurs de validation et le highlight de recherche
@@ -182,12 +165,33 @@ export const GraphCanvas = memo(function GraphCanvas() {
     [updateNodePosition]
   )
   
+  // Handler pour synchroniser les changements de position depuis ReactFlow vers le store
+  // Cela capture tous les changements de position, y compris pendant le drag
+  const handleNodesChange = useCallback(
+    (changes: any[]) => {
+      // Appeler le handler ReactFlow par défaut
+      onNodesChange(changes)
+      
+      // Synchroniser les changements de position vers le store
+      // ReactFlow envoie des changes avec type 'position' ou 'positionDragging'
+      for (const change of changes) {
+        if ((change.type === 'position' || change.type === 'positionDragging') && 
+            change.position && 
+            change.id) {
+          // Toujours mettre à jour la position dans le store
+          // updateNodePosition gère déjà la vérification de changement
+          updateNodePosition(change.id, change.position)
+        }
+      }
+    },
+    [onNodesChange, updateNodePosition]
+  )
+  
   // Composant interne pour utiliser useReactFlow (doit être dans ReactFlowProvider)
   const GraphCanvasInner = memo(function GraphCanvasInner() {
     const reactFlowInstance = useReactFlow()
     const { fitView, getNode } = reactFlowInstance
-    const { setSelectedNode, selectedNodeId: storeSelectedNodeId } = useGraphStore()
-    const prevSelectedNodeIdRef = useRef<string | null>(null)
+    const { setSelectedNode } = useGraphStore()
     
     // Exposer l'instance ReactFlow pour l'export (via un custom event ou ref)
     useEffect(() => {
@@ -198,21 +202,7 @@ export const GraphCanvas = memo(function GraphCanvas() {
       window.dispatchEvent(event)
     }, [reactFlowInstance])
     
-    // Scroll vers le nœud sélectionné si changé depuis l'extérieur (ex: panel d'erreurs)
-    useEffect(() => {
-      if (storeSelectedNodeId && storeSelectedNodeId !== prevSelectedNodeIdRef.current) {
-        const node = getNode(storeSelectedNodeId)
-        if (node) {
-          // Utiliser fitView avec les options pour centrer le nœud
-          fitView({
-            nodes: [node],
-            duration: 300,
-            padding: 0.2,
-          })
-        }
-        prevSelectedNodeIdRef.current = storeSelectedNodeId
-      }
-    }, [storeSelectedNodeId, getNode, fitView])
+    // Zoom automatique retiré : le zoom ne se fait plus automatiquement lors d'un clic sur un nœud
     
     // Écouter l'événement pour focus un nœud généré (avec animation flash)
     useEffect(() => {
@@ -256,7 +246,7 @@ export const GraphCanvas = memo(function GraphCanvas() {
           })
           window.dispatchEvent(event)
         }}
-        onNodesChange={onNodesChange}
+        onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeClick={onNodeClick}
