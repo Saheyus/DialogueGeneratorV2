@@ -20,8 +20,10 @@ from services.dialogue_generation_service import DialogueGenerationService
 from services.linked_selector import LinkedSelectorService
 # FileInteractionRepository supprimé - système obsolète
 from services.repositories.llm_usage_repository import FileLLMUsageRepository
+from services.repositories.cost_budget_repository import FileCostBudgetRepository
 from services.llm_usage_service import LLMUsageService
 from services.llm_pricing_service import LLMPricingService
+from services.cost_governance_service import CostGovernanceService
 from factories.llm_factory import LLMClientFactory
 from services.vocabulary_service import VocabularyService
 from services.narrative_guides_service import NarrativeGuidesService
@@ -213,6 +215,30 @@ def get_llm_usage_service(
         Instance de LLMUsageService.
     """
     return LLMUsageService(repository=repository)
+
+
+def get_cost_budget_repository() -> FileCostBudgetRepository:
+    """Crée un repository de budgets LLM basé sur fichier JSON.
+    
+    Returns:
+        Instance de FileCostBudgetRepository.
+    """
+    storage_file = str(DIALOGUE_GENERATOR_DIR / FilePaths.COST_BUDGETS_FILE)
+    return FileCostBudgetRepository(storage_file=storage_file)
+
+
+def get_cost_governance_service(
+    repository: Annotated[FileCostBudgetRepository, Depends(get_cost_budget_repository)]
+) -> CostGovernanceService:
+    """Retourne le service de cost governance.
+    
+    Args:
+        repository: Repository injecté via dépendance.
+        
+    Returns:
+        Instance de CostGovernanceService.
+    """
+    return CostGovernanceService(repository=repository)
 
 
 def get_request_id(request: Request) -> str:

@@ -25,6 +25,7 @@ class FilePaths:
     DATA_DIR = Path("data")
     INTERACTIONS_DIR = DATA_DIR / "interactions"
     LLM_USAGE_DIR = DATA_DIR / "llm_usage"
+    COST_BUDGETS_FILE = DATA_DIR / "cost_budgets.json"
     LOGS_DIR = DATA_DIR / "logs"
     LLM_CONFIG = "llm_config.json"
 
