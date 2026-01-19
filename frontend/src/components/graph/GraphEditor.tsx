@@ -47,6 +47,7 @@ export function GraphEditor() {
   }, [])
   
   const {
+    nodes,
     loadDialogue,
     exportToUnity,
     validateGraph,
@@ -96,9 +97,11 @@ export function GraphEditor() {
         .then((response) => {
           // Vérifier s'il existe un draft local
           const draftStr = localStorage.getItem(draftKey)
+          let savedPositions: Record<string, { x: number; y: number }> | undefined
           if (draftStr) {
             try {
               const draft = JSON.parse(draftStr)
+              savedPositions = draft.positions // Positions ReactFlow sauvegardées
               const draftTimestamp = draft.timestamp || 0
               const fileTimestamp = selectedDialogue.modified_time 
                 ? new Date(selectedDialogue.modified_time).getTime() 
@@ -137,17 +140,6 @@ export function GraphEditor() {
           }
           
           // Charger le dialogue normalement
-          // Restaurer les positions depuis le draft si disponibles
-          const draftStr = localStorage.getItem(draftKey)
-          let savedPositions: Record<string, { x: number; y: number }> | undefined
-          if (draftStr) {
-            try {
-              const draft = JSON.parse(draftStr)
-              savedPositions = draft.positions // Positions ReactFlow sauvegardées
-            } catch {
-              // Ignorer les erreurs de parsing
-            }
-          }
           return loadDialogue(response.json_content, savedPositions)
         })
         .then(() => {
@@ -202,7 +194,7 @@ export function GraphEditor() {
     }, 3000) // Debounce 3s après le dernier changement
     
     return () => clearTimeout(timeoutId)
-  }, [selectedDialogue, hasUnsavedChanges, isGraphLoading, isGraphSaving, isLoadingDialogue, isGenerating, exportToUnity, markDraftSaved, markDraftError, clearDraftError])
+  }, [selectedDialogue, hasUnsavedChanges, isGraphLoading, isGraphSaving, isLoadingDialogue, isGenerating, nodes, exportToUnity, markDraftSaved, markDraftError, clearDraftError])
   
   // Handler pour valider le graphe
   const handleValidate = useCallback(async () => {

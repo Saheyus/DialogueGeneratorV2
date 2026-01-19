@@ -40,7 +40,10 @@ export interface GraphState {
   lastDraftError: string | null
   
   // Actions CRUD
-  loadDialogue: (jsonContent: string) => Promise<void>
+  loadDialogue: (
+    jsonContent: string,
+    savedPositions?: Record<string, { x: number; y: number }>
+  ) => Promise<void>
   addNode: (node: Node) => void
   updateNode: (nodeId: string, updates: Partial<Node>) => void
   deleteNode: (nodeId: string) => void
