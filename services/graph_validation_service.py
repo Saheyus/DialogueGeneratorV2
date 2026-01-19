@@ -1,5 +1,6 @@
 """Service de validation de graphes de dialogues."""
 import logging
+import hashlib
 from typing import List, Dict, Any, Set, Optional
 from collections import defaultdict
 
@@ -15,13 +16,19 @@ class ValidationError:
         node_id: Optional[str], 
         message: str,
         severity: str = "error",
-        target: Optional[str] = None
+        target: Optional[str] = None,
+        cycle_path: Optional[str] = None,
+        cycle_nodes: Optional[List[str]] = None,
+        cycle_id: Optional[str] = None
     ):
         self.type = error_type
         self.node_id = node_id
         self.message = message
         self.severity = severity  # "error" ou "warning"
         self.target = target
+        self.cycle_path = cycle_path
+        self.cycle_nodes = cycle_nodes
+        self.cycle_id = cycle_id
     
     def to_dict(self) -> Dict[str, Any]:
         """Convertit en dictionnaire."""
@@ -34,6 +41,12 @@ class ValidationError:
             result["node_id"] = self.node_id
         if self.target:
             result["target"] = self.target
+        if self.cycle_path:
+            result["cycle_path"] = self.cycle_path
+        if self.cycle_nodes:
+            result["cycle_nodes"] = self.cycle_nodes
+        if self.cycle_id:
+            result["cycle_id"] = self.cycle_id
         return result
 
 
@@ -61,11 +74,17 @@ class ValidationResult:
         error_type: str, 
         node_id: Optional[str], 
         message: str,
-        target: Optional[str] = None
+        target: Optional[str] = None,
+        cycle_path: Optional[str] = None,
+        cycle_nodes: Optional[List[str]] = None,
+        cycle_id: Optional[str] = None
     ):
         """Ajoute un warning."""
         self.warnings.append(
-            ValidationError(error_type, node_id, message, "warning", target)
+            ValidationError(
+                error_type, node_id, message, "warning", target,
+                cycle_path, cycle_nodes, cycle_id
+            )
         )
     
     @property
@@ -312,7 +331,7 @@ class GraphValidationService:
         edges: List[Dict[str, Any]], 
         result: ValidationResult
     ):
-        """Détecte les cycles dans le graphe (warning seulement).
+        """Détecte les cycles dans le graphe avec chemin complet (warning seulement).
         
         Note: Les cycles peuvent être intentionnels (ex: boucle de dialogue).
         """
@@ -324,35 +343,66 @@ class GraphValidationService:
             if source and target:
                 adjacency[source].append(target)
         
-        # DFS pour détecter les cycles
+        # Détecter tous les cycles avec leurs chemins complets
+        detected_cycles: List[Dict[str, Any]] = []
         visited: Set[str] = set()
         rec_stack: Set[str] = set()
+        path_stack: List[str] = []
         
-        def has_cycle_dfs(node_id: str) -> bool:
+        def dfs_cycle_detection(node_id: str) -> None:
+            """DFS pour détecter les cycles avec stockage du chemin."""
             visited.add(node_id)
             rec_stack.add(node_id)
+            path_stack.append(node_id)
             
             for neighbor in adjacency.get(node_id, []):
                 if neighbor not in visited:
-                    if has_cycle_dfs(neighbor):
-                        return True
+                    dfs_cycle_detection(neighbor)
                 elif neighbor in rec_stack:
-                    # Cycle détecté
-                    result.add_warning(
-                        "cycle_detected",
-                        node_id,
-                        f"Cycle détecté impliquant le nœud '{node_id}'"
-                    )
-                    return True
+                    # Cycle détecté: extraire le chemin du cycle
+                    cycle_start_idx = path_stack.index(neighbor)
+                    cycle_path = path_stack[cycle_start_idx:] + [neighbor]
+                    
+                    # Extraire les nœuds uniques du cycle (sans le dernier doublon)
+                    cycle_nodes = list(dict.fromkeys(cycle_path[:-1]))  # Garde l'ordre
+                    
+                    # Générer cycle_id stable basé sur les nœuds triés
+                    sorted_nodes = sorted(cycle_nodes)
+                    node_str = ",".join(sorted_nodes)
+                    cycle_id = f"cycle_{hashlib.md5(node_str.encode()).hexdigest()[:8]}"
+                    
+                    # Formater le chemin pour affichage
+                    path_str = " → ".join(cycle_path[:-1]) + f" → {cycle_path[0]}"
+                    
+                    # Vérifier si ce cycle n'a pas déjà été détecté (même cycle_id)
+                    if not any(c.get("cycle_id") == cycle_id for c in detected_cycles):
+                        detected_cycles.append({
+                            "cycle_id": cycle_id,
+                            "nodes": cycle_nodes,
+                            "path": path_str
+                        })
             
             rec_stack.remove(node_id)
-            return False
+            path_stack.pop()
         
         # Tester depuis tous les nœuds non visités
         for node in nodes:
             node_id = node.get("id")
             if node_id and node_id not in visited:
-                has_cycle_dfs(node_id)
+                dfs_cycle_detection(node_id)
+        
+        # Ajouter les warnings pour chaque cycle détecté
+        for cycle in detected_cycles:
+            # Utiliser le premier nœud du cycle comme node_id pour le warning
+            first_node = cycle["nodes"][0] if cycle["nodes"] else None
+            result.add_warning(
+                "cycle_detected",
+                first_node,
+                f"Cycle détecté : {cycle['path']}",
+                cycle_path=cycle["path"],
+                cycle_nodes=cycle["nodes"],
+                cycle_id=cycle["cycle_id"]
+            )
     
     @staticmethod
     def find_orphan_nodes(

@@ -1,6 +1,6 @@
 # Story 0.6: Validation cycles graphe (ID-002)
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -36,43 +36,43 @@ So that **je peux décider consciemment si les cycles sont intentionnels (dialog
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Améliorer détection cycles backend pour retourner chemin complet (AC: #1, #2)
-  - [ ] Modifier `GraphValidationService._validate_cycles()` pour retourner chemin complet du cycle (liste de nœuds)
-  - [ ] Retourner format `{cycle_id: string, nodes: [node_id1, node_id2, ...], path: "A → B → C → A"}`
-  - [ ] Gérer plusieurs cycles distincts (chaque cycle a son propre `cycle_id`)
-  - [ ] Tests unitaires : détection cycle avec chemin complet, détection plusieurs cycles
+- [x] Task 1: Améliorer détection cycles backend pour retourner chemin complet (AC: #1, #2)
+  - [x] Modifier `GraphValidationService._validate_cycles()` pour retourner chemin complet du cycle (liste de nœuds)
+  - [x] Retourner format `{cycle_id: string, nodes: [node_id1, node_id2, ...], path: "A → B → C → A"}`
+  - [x] Gérer plusieurs cycles distincts (chaque cycle a son propre `cycle_id`)
+  - [x] Tests unitaires : détection cycle avec chemin complet, détection plusieurs cycles
 
-- [ ] Task 2: Étendre schéma API pour inclure chemin complet cycles (AC: #1, #2)
-  - [ ] Modifier `api/schemas/graph.py::ValidationErrorDetail` pour inclure `cycle_path: Optional[str]` et `cycle_nodes: Optional[List[str]]`
-  - [ ] Modifier `api/routers/graph.py::validate_graph()` pour mapper chemin complet depuis `GraphValidationService`
-  - [ ] Tests unitaires : schéma inclut cycle_path et cycle_nodes
+- [x] Task 2: Étendre schéma API pour inclure chemin complet cycles (AC: #1, #2)
+  - [x] Modifier `api/schemas/graph.py::ValidationErrorDetail` pour inclure `cycle_path: Optional[str]` et `cycle_nodes: Optional[List[str]]`
+  - [x] Modifier `api/routers/graph.py::validate_graph()` pour mapper chemin complet depuis `GraphValidationService`
+  - [x] Tests unitaires : schéma inclut cycle_path et cycle_nodes
 
-- [ ] Task 3: Améliorer affichage cycles dans GraphEditor.tsx (AC: #1, #2)
-  - [ ] Afficher chemin complet du cycle dans le warning (format "A → B → C → A")
-  - [ ] Rendre chaque cycle cliquable pour zoomer sur les nœuds concernés
-  - [ ] Utiliser `reactFlowInstance.fitView()` avec `nodes: cycle_nodes` pour zoomer
+- [x] Task 3: Améliorer affichage cycles dans GraphEditor.tsx (AC: #1, #2)
+  - [x] Afficher chemin complet du cycle dans le warning (format "A → B → C → A")
+  - [x] Rendre chaque cycle cliquable pour zoomer sur les nœuds concernés
+  - [x] Utiliser `reactFlowInstance.fitView()` avec `nodes: cycle_nodes` pour zoomer
   - [ ] Tests E2E : clic sur cycle zoome vers nœuds concernés
 
-- [ ] Task 4: Implémenter highlight orange des nœuds dans cycles (AC: #1)
-  - [ ] Ajouter état `highlightedCycleNodes: Set<string>` dans `graphStore.ts`
-  - [ ] Mettre à jour `highlightedCycleNodes` quand cycles détectés
-  - [ ] Modifier `GraphCanvas.tsx` pour appliquer style orange aux nœuds dans `highlightedCycleNodes`
-  - [ ] Style : `border: 3px solid orange`, `backgroundColor: rgba(255, 165, 0, 0.2)`
-  - [ ] Réinitialiser highlight quand validation relancée sans cycles
+- [x] Task 4: Implémenter highlight orange des nœuds dans cycles (AC: #1)
+  - [x] Ajouter état `highlightedCycleNodes: Set<string>` dans `graphStore.ts`
+  - [x] Mettre à jour `highlightedCycleNodes` quand cycles détectés
+  - [x] Modifier `GraphCanvas.tsx` pour appliquer style orange aux nœuds dans `highlightedCycleNodes`
+  - [x] Style : `border: 3px solid orange`, `backgroundColor: rgba(255, 165, 0, 0.2)`
+  - [x] Réinitialiser highlight quand validation relancée sans cycles
   - [ ] Tests E2E : nœuds cycles surlignés orange
 
-- [ ] Task 5: Implémenter marquage cycles comme "intentionnels" (AC: #3)
-  - [ ] Ajouter état `intentionalCycles: Set<string>` dans `graphStore.ts` (persisté localStorage)
-  - [ ] Ajouter checkbox "Marquer comme intentionnel" dans affichage warning cycle
-  - [ ] Quand checkbox cochée, ajouter `cycle_id` à `intentionalCycles`
-  - [ ] Filtrer cycles intentionnels dans affichage warnings (ne pas afficher si dans `intentionalCycles`)
-  - [ ] Persister `intentionalCycles` dans localStorage (clé `graph_intentional_cycles`)
+- [x] Task 5: Implémenter marquage cycles comme "intentionnels" (AC: #3)
+  - [x] Ajouter état `intentionalCycles: Set<string>` dans `graphStore.ts` (persisté localStorage)
+  - [x] Ajouter checkbox "Marquer comme intentionnel" dans affichage warning cycle
+  - [x] Quand checkbox cochée, ajouter `cycle_id` à `intentionalCycles`
+  - [x] Filtrer cycles intentionnels dans affichage warnings (ne pas afficher si dans `intentionalCycles`)
+  - [x] Persister `intentionalCycles` dans localStorage (clé `graph_intentional_cycles`)
   - [ ] Tests unitaires : filtrage cycles intentionnels, persistance localStorage
   - [ ] Tests E2E : marquer cycle intentionnel, warning disparaît
 
 - [ ] Task 6: Validation et tests (AC: #4)
-  - [ ] Tests unitaires : détection cycles avec chemin complet, plusieurs cycles
-  - [ ] Tests intégration : API validation retourne cycles avec chemin complet
+  - [x] Tests unitaires : détection cycles avec chemin complet, plusieurs cycles
+  - [x] Tests intégration : API validation retourne cycles avec chemin complet
   - [ ] Tests E2E : warning affiché, highlight orange, zoom, marquage intentionnel
   - [ ] Tests E2E : graphe sans cycles ne montre pas de warning cycle
 
@@ -216,4 +216,34 @@ So that **je peux décider consciemment si les cycles sont intentionnels (dialog
 
 ### Completion Notes List
 
+**Task 1-2 (Backend):** ✅ Complété
+- Modifié `GraphValidationService._validate_cycles()` pour retourner chemin complet avec cycle_id stable
+- Étendu `ValidationError` pour inclure `cycle_path`, `cycle_nodes`, `cycle_id`
+- Étendu schéma API `ValidationErrorDetail` pour inclure champs cycles
+- Tests unitaires et intégration passent (7 tests)
+
+**Task 3-5 (Frontend):** ✅ Complété
+- Affichage chemin complet cycles dans GraphEditor.tsx avec zoom interactif
+- Highlight orange nœuds cycles dans GraphCanvas.tsx
+- Marquage cycles intentionnels avec persistance localStorage
+- Filtrage cycles intentionnels dans affichage warnings
+
+**Task 6 (Tests):** ⚠️ Partiel
+- Tests unitaires backend: ✅ Complétés
+- Tests intégration API: ✅ Complétés
+- Tests E2E: ⏳ À faire (nécessitent environnement Playwright configuré)
+
 ### File List
+
+**Backend:**
+- `services/graph_validation_service.py` - Détection cycles avec chemin complet
+- `api/schemas/graph.py` - Schéma étendu avec cycle_path, cycle_nodes, cycle_id
+- `api/routers/graph.py` - Mapping cycles depuis service (déjà fonctionnel via to_dict())
+- `tests/services/test_graph_validation_service.py` - Tests unitaires cycles
+- `tests/api/test_graph_validate.py` - Tests intégration API cycles
+
+**Frontend:**
+- `frontend/src/types/graph.ts` - Type ValidationErrorDetail étendu
+- `frontend/src/store/graphStore.ts` - États highlightedCycleNodes et intentionalCycles
+- `frontend/src/components/graph/GraphEditor.tsx` - Affichage cycles avec zoom et checkbox
+- `frontend/src/components/graph/GraphCanvas.tsx` - Style orange nœuds cycles

@@ -69,6 +69,9 @@ export interface ValidationErrorDetail {
   message: string
   severity: string
   target?: string
+  cycle_path?: string
+  cycle_nodes?: string[]
+  cycle_id?: string
 }
 
 export interface ValidateGraphResponse {

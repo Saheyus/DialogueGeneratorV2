@@ -80,6 +80,9 @@ class ValidationErrorDetail(BaseModel):
     message: str = Field(..., description="Message d'erreur")
     severity: str = Field("error", description="Sévérité (error, warning)")
     target: Optional[str] = Field(None, description="Cible de la référence (si applicable)")
+    cycle_path: Optional[str] = Field(None, description="Chemin complet du cycle (format: 'A → B → C → A')")
+    cycle_nodes: Optional[List[str]] = Field(None, description="Liste des nœuds dans le cycle")
+    cycle_id: Optional[str] = Field(None, description="ID stable du cycle (pour marquage intentionnel)")
 
 
 class ValidateGraphResponse(BaseModel):

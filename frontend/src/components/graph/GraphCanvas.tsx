@@ -27,6 +27,7 @@ export const GraphCanvas = memo(function GraphCanvas() {
     validationErrors,
     selectedNodeId,
     highlightedNodeIds,
+    highlightedCycleNodes,
     setSelectedNode,
     updateNodePosition,
     connectNodes,
@@ -63,9 +64,18 @@ export const GraphCanvas = memo(function GraphCanvas() {
       const errors = nodeErrors.filter((err) => err.severity === 'error')
       const warnings = nodeErrors.filter((err) => err.severity === 'warning')
       const isHighlighted = highlightedNodeIds.includes(node.id)
+      const isInCycle = highlightedCycleNodes.includes(node.id)
       
       return {
         ...node,
+        style: {
+          ...node.style,
+          // Style orange pour les nœuds dans des cycles
+          ...(isInCycle && {
+            border: '3px solid orange',
+            backgroundColor: 'rgba(255, 165, 0, 0.2)',
+          }),
+        },
         data: {
           ...node.data,
           validationErrors: errors,
@@ -74,7 +84,7 @@ export const GraphCanvas = memo(function GraphCanvas() {
         },
       }
     })
-  }, [storeNodes, validationErrors, highlightedNodeIds])
+  }, [storeNodes, validationErrors, highlightedNodeIds, highlightedCycleNodes])
   
   useMemo(() => {
     setNodes(enrichedNodes)

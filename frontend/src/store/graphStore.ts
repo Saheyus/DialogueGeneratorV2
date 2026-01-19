@@ -31,6 +31,8 @@ export interface GraphState {
   isSaving: boolean
   validationErrors: ValidationErrorDetail[]
   highlightedNodeIds: string[] // Pour la recherche
+  highlightedCycleNodes: string[] // Pour les nœuds dans des cycles
+  intentionalCycles: string[] // IDs des cycles marqués comme intentionnels (persisté localStorage)
   
   // État auto-save draft (Task 1 - Story 0.5)
   hasUnsavedChanges: boolean
@@ -78,6 +80,9 @@ export interface GraphState {
   // Recherche
   setHighlightedNodes: (nodeIds: string[]) => void
   
+  // Cycles intentionnels
+  markCycleAsIntentional: (cycleId: string) => void
+  
   // Actions auto-save draft (Task 1 - Story 0.5)
   markDirty: () => void
   markDraftSaved: () => void
@@ -99,6 +104,16 @@ const initialState = {
   isSaving: false,
   validationErrors: [],
   highlightedNodeIds: [],
+  highlightedCycleNodes: [],
+  intentionalCycles: (() => {
+    // Charger depuis localStorage au démarrage
+    try {
+      const stored = localStorage.getItem('graph_intentional_cycles')
+      return stored ? JSON.parse(stored) : []
+    } catch {
+      return []
+    }
+  })(),
   hasUnsavedChanges: false,
   lastDraftSavedAt: null,
   lastDraftError: null,
@@ -239,7 +254,44 @@ export const useGraphStore = create<GraphState>()(
         
         const newEdges = [...state.edges, newEdge]
         
+        // Mettre à jour targetNode dans le parent si connexion via choix
+        const updatedNodes = [...state.nodes]
+        if (choiceIndex !== undefined) {
+          const sourceNodeIndex = updatedNodes.findIndex((n) => n.id === sourceId)
+          if (sourceNodeIndex !== -1) {
+            const sourceNode = updatedNodes[sourceNodeIndex]
+            if (sourceNode.data?.choices && sourceNode.data.choices[choiceIndex]) {
+              // Mettre à jour targetNode dans le choix
+              updatedNodes[sourceNodeIndex] = {
+                ...sourceNode,
+                data: {
+                  ...sourceNode.data,
+                  choices: sourceNode.data.choices.map((choice: any, idx: number) =>
+                    idx === choiceIndex
+                      ? { ...choice, targetNode: targetId }
+                      : choice
+                  ),
+                },
+              }
+            }
+          }
+        } else if (connectionType === 'nextNode') {
+          // Mettre à jour nextNode dans le parent pour navigation linéaire
+          const sourceNodeIndex = updatedNodes.findIndex((n) => n.id === sourceId)
+          if (sourceNodeIndex !== -1) {
+            const sourceNode = updatedNodes[sourceNodeIndex]
+            updatedNodes[sourceNodeIndex] = {
+              ...sourceNode,
+              data: {
+                ...sourceNode.data,
+                nextNode: targetId,
+              },
+            }
+          }
+        }
+        
         set({
+          nodes: updatedNodes,
           edges: newEdges,
           dialogueMetadata: {
             ...state.dialogueMetadata,
@@ -329,14 +381,32 @@ export const useGraphStore = create<GraphState>()(
           
           // Ajouter les nouveaux nœuds avec positionnement en cascade pour batch
           const generatedNodeIds: string[] = []
-          generatedNodes.forEach((generatedNode, index) => {
+          
+          // Créer un map pour associer chaque connexion à son nœud généré
+          const connectionMap = new Map<number, { node: any, conn: any }>()
+          for (const conn of response.suggested_connections) {
+            const node = generatedNodes.find((n) => n.id === conn.to)
+            if (node && conn.via_choice_index !== undefined) {
+              connectionMap.set(conn.via_choice_index, { node, conn })
+            }
+          }
+          
+          // Trier les connexions par via_choice_index pour positionnement cascade
+          const sortedConnections = Array.from(connectionMap.entries()).sort((a, b) => a[0] - b[0])
+          
+          // Si pas de connexions avec via_choice_index, utiliser l'ordre des nœuds
+          const nodesToAdd = sortedConnections.length > 0
+            ? sortedConnections.map(([choiceIndex, { node }]) => ({ node, choiceIndex }))
+            : generatedNodes.map((node, index) => ({ node, choiceIndex: index }))
+          
+          nodesToAdd.forEach(({ node: generatedNode, choiceIndex }) => {
             const newNode: Node = {
               id: generatedNode.id,
               type: 'dialogueNode',
               position: {
                 x: parentNode.position.x + 300,
-                // Positionnement en cascade verticale pour batch (offset Y = 150 * index)
-                y: parentNode.position.y + (options.generate_all_choices ? 150 * index : 0),
+                // Positionnement en cascade verticale pour batch (offset Y = 150 * index_choice)
+                y: parentNode.position.y + (options.generate_all_choices ? 150 * choiceIndex : 0),
               },
               data: generatedNode,
             }
@@ -345,9 +415,9 @@ export const useGraphStore = create<GraphState>()(
             generatedNodeIds.push(generatedNode.id)
           })
 
-          // Créer les connexions suggérées (appliquer automatiquement si auto_apply)
+          // Créer les connexions suggérées (appliquer automatiquement)
           for (const conn of response.suggested_connections) {
-            // Appliquer automatiquement les connexions (pas seulement suggérer)
+            // Appliquer automatiquement les connexions (mise à jour targetNode dans parent)
             get().connectNodes(
               conn.from,
               conn.to,
@@ -388,8 +458,20 @@ export const useGraphStore = create<GraphState>()(
             })),
           })
           
+          // Extraire les nœuds des cycles depuis les warnings
+          const cycleWarnings = response.warnings.filter(
+            (w) => w.type === 'cycle_detected' && w.cycle_nodes
+          )
+          const cycleNodeIds = new Set<string>()
+          cycleWarnings.forEach((warn) => {
+            if (warn.cycle_nodes) {
+              warn.cycle_nodes.forEach((nodeId) => cycleNodeIds.add(nodeId))
+            }
+          })
+          
           set({
             validationErrors: [...response.errors, ...response.warnings],
+            highlightedCycleNodes: Array.from(cycleNodeIds),
           })
         } catch (error) {
           console.error('Erreur lors de la validation:', error)
@@ -561,6 +643,24 @@ export const useGraphStore = create<GraphState>()(
       // Définir les nœuds en surbrillance (pour la recherche)
       setHighlightedNodes: (nodeIds: string[]) => {
         set({ highlightedNodeIds: nodeIds })
+      },
+      
+      // Marquer un cycle comme intentionnel
+      markCycleAsIntentional: (cycleId: string) => {
+        set((state) => {
+          const newIntentionalCycles = state.intentionalCycles.includes(cycleId)
+            ? state.intentionalCycles
+            : [...state.intentionalCycles, cycleId]
+          
+          // Persister dans localStorage
+          try {
+            localStorage.setItem('graph_intentional_cycles', JSON.stringify(newIntentionalCycles))
+          } catch (error) {
+            console.error('Erreur lors de la sauvegarde des cycles intentionnels:', error)
+          }
+          
+          return { intentionalCycles: newIntentionalCycles }
+        })
       },
       
       // Actions auto-save draft (Task 1 - Story 0.5)

@@ -46,8 +46,8 @@ development_status:
   0-4-presets-système-adr-002: done
   0-5-auto-save-dialogues-id-001: done
   0-5-5-génération-next-node-avec-gestion-automatique-des-connexions: in-progress
-  0-6-validation-cycles-graphe-id-002: in-progress
-  0-7-cost-governance-id-003: ready-for-dev
+  0-6-validation-cycles-graphe-id-002: review
+  0-7-cost-governance-id-003: in-progress
   0-8-streaming-cleanup-id-004: ready-for-dev
   0-9-preset-validation-id-005: ready-for-dev
   epic-0-retrospective: optional

@@ -57,6 +57,8 @@ export function GraphEditor() {
     validationErrors: graphValidationErrors,
     isSaving: isGraphSaving,
     isGenerating,
+    intentionalCycles,
+    markCycleAsIntentional,
     // États auto-save draft (Task 2 - Story 0.5)
     hasUnsavedChanges,
     lastDraftSavedAt,
@@ -692,7 +694,16 @@ export function GraphEditor() {
             {/* Panel d'erreurs de validation (overlay) */}
             {graphValidationErrors.length > 0 && (() => {
               const errors = graphValidationErrors.filter((e) => e.severity === 'error')
-              const warnings = graphValidationErrors.filter((e) => e.severity === 'warning')
+              // Filtrer les cycles intentionnels des warnings
+              const warnings = graphValidationErrors
+                .filter((e) => e.severity === 'warning')
+                .filter((warn) => {
+                  // Ne pas filtrer les cycles intentionnels
+                  if (warn.type === 'cycle_detected' && warn.cycle_id) {
+                    return !intentionalCycles.includes(warn.cycle_id)
+                  }
+                  return true
+                })
               
               // Grouper les erreurs par type
               const errorsByType = errors.reduce((acc, err) => {
@@ -833,39 +844,98 @@ export function GraphEditor() {
                         <span>{getIconForType(type)}</span>
                         <span>{getLabelForType(type)} ({typeWarnings.length})</span>
                       </div>
-                      {typeWarnings.map((warn, idx) => (
-                        <div
-                          key={idx}
-                          onClick={() => {
-                            if (warn.node_id) {
-                              setSelectedNode(warn.node_id)
+                      {typeWarnings.map((warn, idx) => {
+                        // Gestion spéciale pour les cycles
+                        const isCycle = type === 'cycle_detected' && warn.cycle_path && warn.cycle_nodes
+                        
+                        const handleClick = () => {
+                          if (isCycle && reactFlowInstance && warn.cycle_nodes) {
+                            // Zoomer vers les nœuds du cycle
+                            const cycleNodeObjects = warn.cycle_nodes
+                              .map(nodeId => reactFlowInstance.getNode(nodeId))
+                              .filter(node => node !== undefined)
+                            
+                            if (cycleNodeObjects.length > 0) {
+                              reactFlowInstance.fitView({
+                                nodes: cycleNodeObjects,
+                                padding: 0.2,
+                                duration: 300
+                              })
                             }
-                          }}
-                          style={{
-                            fontSize: '0.75rem',
-                            color: theme.state.warning.color,
-                            marginBottom: '0.2rem',
-                            padding: '0.3rem 0.5rem',
-                            borderRadius: '4px',
-                            cursor: warn.node_id ? 'pointer' : 'default',
-                            backgroundColor: warn.node_id ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-                            transition: 'background-color 0.2s',
-                            marginLeft: '1.5rem',
-                          }}
-                          onMouseEnter={(e) => {
-                            if (warn.node_id) {
-                              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)'
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (warn.node_id) {
-                              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'
-                            }
-                          }}
-                        >
-                          {warn.node_id ? `[${warn.node_id}] ` : ''}{warn.message}
-                        </div>
-                      ))}
+                          } else if (warn.node_id) {
+                            setSelectedNode(warn.node_id)
+                          }
+                        }
+                        
+                        return (
+                          <div
+                            key={idx}
+                            onClick={handleClick}
+                            style={{
+                              fontSize: '0.75rem',
+                              color: theme.state.warning.color,
+                              marginBottom: '0.2rem',
+                              padding: '0.3rem 0.5rem',
+                              borderRadius: '4px',
+                              cursor: (isCycle || warn.node_id) ? 'pointer' : 'default',
+                              backgroundColor: (isCycle || warn.node_id) ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                              transition: 'background-color 0.2s',
+                              marginLeft: '1.5rem',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (isCycle || warn.node_id) {
+                                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)'
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (isCycle || warn.node_id) {
+                                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'
+                              }
+                            }}
+                            title={isCycle ? 'Cliquer pour zoomer sur les nœuds du cycle' : undefined}
+                          >
+                            {isCycle ? (
+                              // Afficher le chemin complet du cycle avec checkbox "intentionnel"
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: 500, flex: 1 }}>
+                                  {warn.cycle_path}
+                                </span>
+                                {warn.cycle_id && (
+                                  <label
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.25rem',
+                                      fontSize: '0.7rem',
+                                      cursor: 'pointer',
+                                      userSelect: 'none',
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={intentionalCycles.includes(warn.cycle_id)}
+                                      onChange={(e) => {
+                                        e.stopPropagation()
+                                        if (e.target.checked && warn.cycle_id) {
+                                          markCycleAsIntentional(warn.cycle_id)
+                                        }
+                                      }}
+                                      style={{ cursor: 'pointer' }}
+                                    />
+                                    <span>Marquer comme intentionnel</span>
+                                  </label>
+                                )}
+                              </div>
+                            ) : (
+                              // Affichage normal pour les autres warnings
+                              <>
+                                {warn.node_id ? `[${warn.node_id}] ` : ''}{warn.message}
+                              </>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   ))}
                 </div>
