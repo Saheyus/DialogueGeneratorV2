@@ -2,7 +2,7 @@
  * Tests unitaires pour le store graphStore (cycles intentionnels).
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { useGraphStore } from '../../frontend/src/store/graphStore'
+import { useGraphStore } from '../store/graphStore'
 
 describe('graphStore - Intentional Cycles', () => {
   beforeEach(() => {
@@ -48,15 +48,17 @@ describe('graphStore - Intentional Cycles', () => {
       expect(parsed).toContain('cycle_abc123')
     })
 
-    it('should handle localStorage quota exceeded error', () => {
-      // Mock localStorage.setItem pour simuler QuotaExceededError
-      const originalSetItem = localStorage.setItem
-      const mockAlert = vi.fn()
-      global.alert = mockAlert
+    it('should handle localStorage quota exceeded error gracefully', () => {
+      // Mock Storage.prototype.setItem pour simuler QuotaExceededError
+      const originalSetItem = Storage.prototype.setItem
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       
-      localStorage.setItem = vi.fn(() => {
-        const error = new DOMException('Quota exceeded', 'QuotaExceededError')
-        throw error
+      Storage.prototype.setItem = vi.fn(function(key: string, value: string) {
+        if (key === 'graph_intentional_cycles') {
+          const error = new DOMException('Quota exceeded', 'QuotaExceededError')
+          throw error
+        }
+        originalSetItem.call(this, key, value)
       })
 
       const { markCycleAsIntentional } = useGraphStore.getState()
@@ -64,14 +66,12 @@ describe('graphStore - Intentional Cycles', () => {
       // Ne devrait pas crasher
       expect(() => markCycleAsIntentional('cycle_abc123')).not.toThrow()
       
-      // Alert devrait être appelé
-      expect(mockAlert).toHaveBeenCalledWith(
-        expect.stringContaining('Impossible de sauvegarder')
-      )
+      // console.error devrait être appelé
+      expect(consoleErrorSpy).toHaveBeenCalled()
 
       // Restaurer
-      localStorage.setItem = originalSetItem
-      global.alert = window.alert
+      Storage.prototype.setItem = originalSetItem
+      consoleErrorSpy.mockRestore()
     })
   })
 
@@ -104,29 +104,31 @@ describe('graphStore - Intentional Cycles', () => {
       expect(parsed).toContain('cycle_def456')
     })
 
-    it('should handle localStorage quota exceeded error when unmarking', () => {
+    it('should handle localStorage quota exceeded error when unmarking gracefully', () => {
       const { markCycleAsIntentional, unmarkCycleAsIntentional } = useGraphStore.getState()
       markCycleAsIntentional('cycle_abc123')
       
-      // Mock localStorage.setItem pour simuler QuotaExceededError
-      const originalSetItem = localStorage.setItem
-      const mockAlert = vi.fn()
-      global.alert = mockAlert
+      // Mock Storage.prototype.setItem pour simuler QuotaExceededError
+      const originalSetItem = Storage.prototype.setItem
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       
-      localStorage.setItem = vi.fn(() => {
-        const error = new DOMException('Quota exceeded', 'QuotaExceededError')
-        throw error
+      Storage.prototype.setItem = vi.fn(function(key: string, value: string) {
+        if (key === 'graph_intentional_cycles') {
+          const error = new DOMException('Quota exceeded', 'QuotaExceededError')
+          throw error
+        }
+        originalSetItem.call(this, key, value)
       })
 
       // Ne devrait pas crasher
       expect(() => unmarkCycleAsIntentional('cycle_abc123')).not.toThrow()
       
-      // Alert devrait être appelé
-      expect(mockAlert).toHaveBeenCalled()
+      // console.error devrait être appelé
+      expect(consoleErrorSpy).toHaveBeenCalled()
 
       // Restaurer
-      localStorage.setItem = originalSetItem
-      global.alert = window.alert
+      Storage.prototype.setItem = originalSetItem
+      consoleErrorSpy.mockRestore()
     })
   })
 

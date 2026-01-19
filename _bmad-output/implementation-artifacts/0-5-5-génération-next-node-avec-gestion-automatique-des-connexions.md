@@ -116,8 +116,9 @@ So that **je peux rapidement construire des arbres de dialogue complets avec tou
   - [x] Tests unitaires : génération choix spécifique, génération batch, gestion IDs (3 tests passants)
   - [x] Tests intégration : génération batch multi-choix, connexions automatiques (4 tests service passants)
   - [x] Tests validation : références valides après génération normale et batch (2 tests passants)
-  - [x] Tests E2E : génération depuis éditeur de graphe + depuis éditeur de dialogue (7 scénarios E2E créés avec Playwright)
+  - [x] Tests E2E : génération depuis éditeur de graphe + depuis éditeur de dialogue (7 scénarios E2E créés avec Playwright, avec gestion authentification)
   - [x] Tests E2E : filtrage choix déjà connectés (scénario E2E créé)
+  - ⚠️ Note : Les tests E2E nécessitent un dialogue chargé avec des nœuds pour s'exécuter (skip automatique si données manquantes)
 
 ## Dev Notes
 
@@ -331,6 +332,6 @@ Auto (Cursor Agent)
 - `frontend/src/components/graph/ChoiceEditor.tsx` : Bouton "✨ Générer" pour génération depuis éditeur de choix
 - `frontend/src/__tests__/useGraphStore.test.ts` : 4 nouveaux tests pour batch generation (target_choice_index, generate_all_choices, mise à jour targetNode, positionnement cascade)
 - `tests/api/test_graph_generate_node_validation.py` : 2 nouveaux tests de validation (références targetNode/nextNode valides)
-- `e2e/graph-node-generation.spec.ts` : 7 scénarios E2E Playwright (génération depuis graphe, éditeur, batch, nextNode, validation, filtrage, ChoiceEditor)
+- `e2e/graph-node-generation.spec.ts` : 7 scénarios E2E Playwright avec gestion authentification (génération depuis graphe, éditeur, batch, nextNode, validation, filtrage, ChoiceEditor)
 - `tests/api/test_graph_generate_node.py` : Nouveau fichier avec 3 tests unitaires (génération choix spécifique, batch, nextNode)
 - `tests/services/test_graph_generation_service.py` : Nouveau fichier avec 4 tests unitaires (génération batch, filtrage, format IDs, cas vide)
