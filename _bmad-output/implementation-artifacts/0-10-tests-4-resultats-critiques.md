@@ -18,9 +18,10 @@ So that **je peux créer des dialogues plus nuancés avec des résultats de test
    **And** chaque réponse est connectée à un nœud distinct dans le graphe
 
 2. **Given** un choix avec `test` dans le graphe
-   **When** je visualise le nœud de test dans l'éditeur
-   **Then** je vois 4 handles de sortie distincts : échec critique (rouge foncé), échec (rouge), réussite (vert), réussite critique (vert foncé)
-   **And** chaque handle est étiqueté clairement
+   **When** je visualise le graphe dans l'éditeur
+   **Then** un TestNode (barre avec 4 ronds) apparaît automatiquement après le choix avec test
+   **And** le TestNode affiche 4 handles de sortie distincts : échec critique (rouge foncé), échec (rouge), réussite (vert), réussite critique (vert foncé)
+   **And** chaque handle est étiqueté clairement (visible au survol)
 
 3. **Given** je génère un nœud suivant depuis un choix avec test
    **When** la génération est complète
@@ -52,11 +53,12 @@ So that **je peux créer des dialogues plus nuancés avec des résultats de test
   - [ ] Tests unitaires : Sérialisation/désérialisation avec 2 et 4 résultats
 
 - [ ] Task 3: Mettre à jour TestNode React pour afficher 4 handles (AC: #2)
-  - [ ] Modifier `frontend/src/components/graph/nodes/TestNode.tsx`
-  - [ ] Ajouter 4 handles de sortie : `critical-failure` (rouge foncé #C0392B), `failure` (rouge #E74C3C), `success` (vert #27AE60), `critical-success` (vert foncé #229954)
+  - [ ] Modifier `frontend/src/components/graph/nodes/TestNode.tsx` (point de départ : composant existant)
+  - [ ] Transformer le TestNode en "barre compacte" avec 4 handles de sortie : `critical-failure` (rouge foncé #C0392B), `failure` (rouge #E74C3C), `success` (vert #27AE60), `critical-success` (vert foncé #229954)
   - [ ] Positionner handles : critical-failure (gauche 12.5%), failure (gauche 37.5%), success (droite 37.5%), critical-success (droite 12.5%)
-  - [ ] Mettre à jour labels : Afficher "Échec critique", "Échec", "Réussite", "Réussite critique" dans footer
-  - [ ] Tests visuels : Vérifier affichage 4 handles avec couleurs distinctes
+  - [ ] Labels au survol uniquement : Afficher "Échec critique", "Échec", "Réussite", "Réussite critique" au survol du handle (pas de texte visible sur la barre)
+  - [ ] Apparition automatique : Le TestNode doit apparaître automatiquement quand un choix dans un DialogueNode contient un attribut `test`
+  - [ ] Tests visuels : Vérifier affichage 4 handles avec couleurs distinctes et labels au survol
 
 - [ ] Task 4: Mettre à jour génération IA pour créer 4 réponses (AC: #1, #3)
   - [ ] Modifier `services/unity_dialogue_generation_service.py` : Détecter choix avec `test`
@@ -69,8 +71,9 @@ So that **je peux créer des dialogues plus nuancés avec des résultats de test
 - [ ] Task 5: Mettre à jour GraphView pour charger 4 résultats (AC: #5)
   - [ ] Modifier `frontend/src/components/generation/GraphView.tsx` : Fonction `unityJsonToGraph()`
   - [ ] Détecter `testCriticalFailureNode`, `testCriticalSuccessNode` en plus de `testFailureNode`, `testSuccessNode`
-  - [ ] Créer edges pour les 4 résultats avec labels et couleurs appropriés
-  - [ ] Tests unitaires : Chargement JSON avec 4 résultats affiche 4 connexions
+  - [ ] Créer automatiquement un TestNode (barre avec 4 handles) quand un choix contient un test avec 4 résultats
+  - [ ] Créer edges pour les 4 résultats avec labels et couleurs appropriés : `DialogueNode` (choix avec test) → `TestNode` → `4 DialogueNodes` (réponses)
+  - [ ] Tests unitaires : Chargement JSON avec 4 résultats affiche TestNode et 4 connexions
 
 - [ ] Task 6: Mettre à jour ChoiceEditor pour éditer 4 résultats (AC: #2)
   - [ ] Modifier `frontend/src/components/graph/ChoiceEditor.tsx`
@@ -88,10 +91,11 @@ So that **je peux créer des dialogues plus nuancés avec des résultats de test
 
 - [ ] Task 8: Mettre à jour GraphConversionService pour exporter 4 résultats (AC: #4)
   - [ ] Modifier `services/graph_conversion_service.py` : Méthode `graph_to_unity_json()`
-  - [ ] Détecter connexions vers handles `critical-failure`, `critical-success` en plus de `failure`, `success`
-  - [ ] Exporter `testCriticalFailureNode`, `testCriticalSuccessNode` dans JSON Unity
+  - [ ] Détecter connexions depuis TestNode vers handles `critical-failure`, `critical-success` en plus de `failure`, `success`
+  - [ ] Exporter `testCriticalFailureNode`, `testCriticalSuccessNode` dans JSON Unity (dans le choix du DialogueNode, pas dans un nœud séparé)
+  - [ ] **Important** : Le TestNode n'est pas exporté dans le JSON Unity, seuls les champs `test*Node` dans les choix sont exportés
   - [ ] Validation : Vérifier que JSON exporté contient les 4 champs si présents
-  - [ ] Tests unitaires : Export graphe avec 4 résultats génère JSON valide
+  - [ ] Tests unitaires : Export graphe avec 4 résultats génère JSON valide (sans TestNode dans JSON)
 
 - [ ] Task 9: Mettre à jour UnityJsonRenderer pour valider 4 résultats (AC: #4)
   - [ ] Modifier `services/json_renderer/unity_json_renderer.py` : Méthode `validate_nodes()`
@@ -126,6 +130,12 @@ So that **je peux créer des dialogues plus nuancés avec des résultats de test
   - **Pour les choix** (dans `choices[]`) : `testCriticalSuccessNode`, `testSuccessNode`, `testFailureNode`, `testCriticalFailureNode`
   - **Pour les nœuds** (au niveau racine) : `criticalSuccessNode`, `successNode`, `failureNode`, `criticalFailureNode`
   - **Important** : Cette story se concentre sur les **choix avec test**, donc utiliser les champs avec préfixe `test*`
+- **TestNode comme visualisation graphique** : 
+  - **Point de départ** : Le composant `TestNode.tsx` existant est le point de départ de cette story
+  - **Visualisation** : Le TestNode devient la "barre avec 4 ronds" (handles) qui visualise les choix avec test
+  - **Apparition automatique** : Le TestNode doit être visible automatiquement dès qu'un choix PJ (rond orange sur DialogueNode) contient un attribut `test`
+  - **Représentation graphique uniquement** : Le TestNode n'est **pas** un élément supplémentaire dans le JSON Unity, mais la représentation graphique des choix avec test dans l'éditeur de graphe
+  - **Flux** : `DialogueNode` (avec choix contenant `test`) → `choice handle` (rond orange) → `TestNode` (barre avec 4 handles) → `4 DialogueNodes` (réponses selon résultat)
 
 ### Fichiers à Modifier
 
@@ -156,15 +166,22 @@ So that **je peux créer des dialogues plus nuancés avec des résultats de test
      - Failure : score >= DD - 5 et < DD
      - Critical failure : score < DD - 5
 
-2. **Couleurs handles** : 
+2. **TestNode comme visualisation graphique** :
+   - **Point de départ** : Le composant `TestNode.tsx` existant est le point de départ
+   - **Visualisation** : Le TestNode devient une "barre compacte" avec 4 handles (ronds colorés)
+   - **Apparition automatique** : Le TestNode apparaît automatiquement quand un choix PJ (rond orange sur DialogueNode) contient un attribut `test`
+   - **Flux graphique** : `DialogueNode` (avec choix contenant `test`) → `choice handle` (rond orange) → `TestNode` (barre avec 4 handles) → `4 DialogueNodes` (réponses selon résultat)
+   - **Pas dans JSON Unity** : Le TestNode n'est **pas** un élément supplémentaire dans le JSON Unity, mais uniquement la représentation graphique des choix avec test dans l'éditeur
+
+3. **Couleurs handles** : 
    - Échec critique : `#C0392B` (rouge foncé)
    - Échec : `#E74C3C` (rouge)
    - Réussite : `#27AE60` (vert)
    - Réussite critique : `#229954` (vert foncé)
 
-3. **Position handles** : Répartir équitablement sur 4 positions (12.5%, 37.5%, 62.5%, 87.5% de la largeur)
+4. **Position handles** : Répartir équitablement sur 4 positions (12.5%, 37.5%, 62.5%, 87.5% de la largeur)
 
-4. **Génération IA** : Modifier prompt pour demander explicitement 4 réponses avec contexte de chaque résultat :
+5. **Génération IA** : Modifier prompt pour demander explicitement 4 réponses avec contexte de chaque résultat :
    - **Échec critique** (score < DD - 5) : Réponse très négative, conséquence grave
    - **Échec** (score >= DD - 5 et < DD) : Réponse négative, conséquence modérée
    - **Réussite** (score >= DD et < DD + 5) : Réponse positive, conséquence favorable

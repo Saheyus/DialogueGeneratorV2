@@ -1,7 +1,7 @@
 {
   "type": "excalidraw",
   "version": 2,
-  "source": "DialogueGenerator-UX-Design",
+  "source": "https://marketplace.visualstudio.com/items?itemName=pomdtr.excalidraw-editor",
   "elements": [
     {
       "id": "app-container",
@@ -19,14 +19,17 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [],
-      "boundElements": null,
+      "boundElements": [],
       "locked": false,
       "seed": 9000,
-      "version": 1,
-      "versionNonce": 9001,
+      "version": 2,
+      "versionNonce": 328393217,
       "isDeleted": false,
-      "updated": 1768851600,
-      "link": null
+      "updated": 1768846844026,
+      "link": null,
+      "index": "a0",
+      "frameId": null,
+      "roundness": null
     },
     {
       "id": "left-panel",
@@ -43,15 +46,25 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-left"],
-      "boundElements": [{ "type": "text", "id": "t-left-title" }],
+      "groupIds": [
+        "g-left"
+      ],
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "t-left-title"
+        }
+      ],
       "locked": false,
       "seed": 9002,
-      "version": 1,
-      "versionNonce": 9003,
+      "version": 2,
+      "versionNonce": 1292171919,
       "isDeleted": false,
-      "updated": 1768851600,
-      "link": null
+      "updated": 1768846844026,
+      "link": null,
+      "index": "a1",
+      "frameId": null,
+      "roundness": null
     },
     {
       "id": "t-left-title",
@@ -68,14 +81,16 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-left"],
-      "boundElements": null,
+      "groupIds": [
+        "g-left"
+      ],
+      "boundElements": [],
       "locked": false,
       "seed": 9004,
-      "version": 1,
-      "versionNonce": 9005,
+      "version": 2,
+      "versionNonce": 768145889,
       "isDeleted": false,
-      "updated": 1768851600,
+      "updated": 1768846844026,
       "link": null,
       "fontSize": 16,
       "fontFamily": 1,
@@ -85,7 +100,11 @@
       "containerId": "left-panel",
       "originalText": "Dialogues Unity",
       "lineHeight": 1.25,
-      "baseline": 16
+      "baseline": 16,
+      "index": "a2",
+      "frameId": null,
+      "roundness": null,
+      "autoResize": true
     },
     {
       "id": "left-search",
@@ -102,15 +121,25 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-left-search"],
-      "boundElements": [{ "type": "text", "id": "t-left-search" }],
+      "groupIds": [
+        "g-left-search"
+      ],
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "t-left-search"
+        }
+      ],
       "locked": false,
       "seed": 9006,
-      "version": 1,
-      "versionNonce": 9007,
+      "version": 2,
+      "versionNonce": 717541551,
       "isDeleted": false,
-      "updated": 1768851600,
-      "link": null
+      "updated": 1768846844026,
+      "link": null,
+      "index": "a3",
+      "frameId": null,
+      "roundness": null
     },
     {
       "id": "t-left-search",
@@ -127,14 +156,16 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-left-search"],
-      "boundElements": null,
+      "groupIds": [
+        "g-left-search"
+      ],
+      "boundElements": [],
       "locked": false,
       "seed": 9008,
-      "version": 1,
-      "versionNonce": 9009,
+      "version": 2,
+      "versionNonce": 1831933377,
       "isDeleted": false,
-      "updated": 1768851600,
+      "updated": 1768846844026,
       "link": null,
       "fontSize": 12,
       "fontFamily": 1,
@@ -144,7 +175,11 @@
       "containerId": "left-search",
       "originalText": "Recherche…   (raccourci: /)",
       "lineHeight": 1.25,
-      "baseline": 12
+      "baseline": 12,
+      "index": "a4",
+      "frameId": null,
+      "roundness": null,
+      "autoResize": true
     },
     {
       "id": "left-sort",
@@ -161,15 +196,25 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-left-sort"],
-      "boundElements": [{ "type": "text", "id": "t-left-sort" }],
+      "groupIds": [
+        "g-left-sort"
+      ],
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "t-left-sort"
+        }
+      ],
       "locked": false,
       "seed": 9010,
-      "version": 1,
-      "versionNonce": 9011,
+      "version": 2,
+      "versionNonce": 174383823,
       "isDeleted": false,
-      "updated": 1768851600,
-      "link": null
+      "updated": 1768846844026,
+      "link": null,
+      "index": "a5",
+      "frameId": null,
+      "roundness": null
     },
     {
       "id": "t-left-sort",
@@ -186,14 +231,16 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-left-sort"],
-      "boundElements": null,
+      "groupIds": [
+        "g-left-sort"
+      ],
+      "boundElements": [],
       "locked": false,
       "seed": 9012,
-      "version": 1,
-      "versionNonce": 9013,
+      "version": 2,
+      "versionNonce": 1693103521,
       "isDeleted": false,
-      "updated": 1768851600,
+      "updated": 1768846844026,
       "link": null,
       "fontSize": 12,
       "fontFamily": 1,
@@ -203,7 +250,11 @@
       "containerId": "left-sort",
       "originalText": "Tri: date (desc) ▾",
       "lineHeight": 1.25,
-      "baseline": 12
+      "baseline": 12,
+      "index": "a6",
+      "frameId": null,
+      "roundness": null,
+      "autoResize": true
     },
     {
       "id": "left-item-1",
@@ -220,15 +271,29 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-left-item-1"],
-      "boundElements": [{ "type": "text", "id": "t-left-item-1a" }, { "type": "text", "id": "t-left-item-1b" }],
+      "groupIds": [
+        "g-left-item-1"
+      ],
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "t-left-item-1a"
+        },
+        {
+          "type": "text",
+          "id": "t-left-item-1b"
+        }
+      ],
       "locked": false,
       "seed": 9014,
-      "version": 1,
-      "versionNonce": 9015,
+      "version": 2,
+      "versionNonce": 1014870255,
       "isDeleted": false,
-      "updated": 1768851600,
-      "link": null
+      "updated": 1768846844026,
+      "link": null,
+      "index": "a7",
+      "frameId": null,
+      "roundness": null
     },
     {
       "id": "t-left-item-1a",
@@ -245,14 +310,16 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-left-item-1"],
-      "boundElements": null,
+      "groupIds": [
+        "g-left-item-1"
+      ],
+      "boundElements": [],
       "locked": false,
       "seed": 9016,
-      "version": 1,
-      "versionNonce": 9017,
+      "version": 2,
+      "versionNonce": 405100929,
       "isDeleted": false,
-      "updated": 1768851600,
+      "updated": 1768846844026,
       "link": null,
       "fontSize": 14,
       "fontFamily": 1,
@@ -262,7 +329,11 @@
       "containerId": "left-item-1",
       "originalText": "Akthar-Neth — Deimos (v1)",
       "lineHeight": 1.25,
-      "baseline": 14
+      "baseline": 14,
+      "index": "a8",
+      "frameId": null,
+      "roundness": null,
+      "autoResize": true
     },
     {
       "id": "t-left-item-1b",
@@ -279,14 +350,16 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-left-item-1"],
-      "boundElements": null,
+      "groupIds": [
+        "g-left-item-1"
+      ],
+      "boundElements": [],
       "locked": false,
       "seed": 9018,
-      "version": 1,
-      "versionNonce": 9019,
+      "version": 2,
+      "versionNonce": 1788328719,
       "isDeleted": false,
-      "updated": 1768851600,
+      "updated": 1768846844026,
       "link": null,
       "fontSize": 12,
       "fontFamily": 1,
@@ -296,7 +369,11 @@
       "containerId": "left-item-1",
       "originalText": "18.2 KB • 19 janv. 2026 16:12",
       "lineHeight": 1.25,
-      "baseline": 12
+      "baseline": 12,
+      "index": "a9",
+      "frameId": null,
+      "roundness": null,
+      "autoResize": true
     },
     {
       "id": "left-item-2",
@@ -313,15 +390,29 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-left-item-2"],
-      "boundElements": [{ "type": "text", "id": "t-left-item-2a" }, { "type": "text", "id": "t-left-item-2b" }],
+      "groupIds": [
+        "g-left-item-2"
+      ],
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "t-left-item-2a"
+        },
+        {
+          "type": "text",
+          "id": "t-left-item-2b"
+        }
+      ],
       "locked": false,
       "seed": 9020,
-      "version": 1,
-      "versionNonce": 9021,
+      "version": 2,
+      "versionNonce": 2015396193,
       "isDeleted": false,
-      "updated": 1768851600,
-      "link": null
+      "updated": 1768846844026,
+      "link": null,
+      "index": "aA",
+      "frameId": null,
+      "roundness": null
     },
     {
       "id": "t-left-item-2a",
@@ -338,14 +429,16 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-left-item-2"],
-      "boundElements": null,
+      "groupIds": [
+        "g-left-item-2"
+      ],
+      "boundElements": [],
       "locked": false,
       "seed": 9022,
-      "version": 1,
-      "versionNonce": 9023,
+      "version": 2,
+      "versionNonce": 2032894255,
       "isDeleted": false,
-      "updated": 1768851600,
+      "updated": 1768846844026,
       "link": null,
       "fontSize": 14,
       "fontFamily": 1,
@@ -355,7 +448,11 @@
       "containerId": "left-item-2",
       "originalText": "Taverne des Poutres Brisées",
       "lineHeight": 1.25,
-      "baseline": 14
+      "baseline": 14,
+      "index": "aB",
+      "frameId": null,
+      "roundness": null,
+      "autoResize": true
     },
     {
       "id": "t-left-item-2b",
@@ -372,14 +469,16 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-left-item-2"],
-      "boundElements": null,
+      "groupIds": [
+        "g-left-item-2"
+      ],
+      "boundElements": [],
       "locked": false,
       "seed": 9024,
-      "version": 1,
-      "versionNonce": 9025,
+      "version": 2,
+      "versionNonce": 573287745,
       "isDeleted": false,
-      "updated": 1768851600,
+      "updated": 1768846844026,
       "link": null,
       "fontSize": 12,
       "fontFamily": 1,
@@ -389,7 +488,11 @@
       "containerId": "left-item-2",
       "originalText": "9.7 KB • 18 janv. 2026 20:44",
       "lineHeight": 1.25,
-      "baseline": 12
+      "baseline": 12,
+      "index": "aC",
+      "frameId": null,
+      "roundness": null,
+      "autoResize": true
     },
     {
       "id": "center-panel",
@@ -406,15 +509,20 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-center"],
-      "boundElements": null,
+      "groupIds": [
+        "g-center"
+      ],
+      "boundElements": [],
       "locked": false,
       "seed": 9026,
-      "version": 1,
-      "versionNonce": 9027,
+      "version": 2,
+      "versionNonce": 698450767,
       "isDeleted": false,
-      "updated": 1768851600,
-      "link": null
+      "updated": 1768846844026,
+      "link": null,
+      "index": "aD",
+      "frameId": null,
+      "roundness": null
     },
     {
       "id": "toolbar",
@@ -431,15 +539,25 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-toolbar"],
-      "boundElements": [{ "type": "text", "id": "t-toolbar-title" }],
+      "groupIds": [
+        "g-toolbar"
+      ],
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "t-toolbar-title"
+        }
+      ],
       "locked": false,
       "seed": 9028,
-      "version": 1,
-      "versionNonce": 9029,
+      "version": 2,
+      "versionNonce": 1571183905,
       "isDeleted": false,
-      "updated": 1768851600,
-      "link": null
+      "updated": 1768846844026,
+      "link": null,
+      "index": "aE",
+      "frameId": null,
+      "roundness": null
     },
     {
       "id": "t-toolbar-title",
@@ -456,14 +574,16 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-toolbar"],
-      "boundElements": null,
+      "groupIds": [
+        "g-toolbar"
+      ],
+      "boundElements": [],
       "locked": false,
       "seed": 9030,
-      "version": 1,
-      "versionNonce": 9031,
+      "version": 2,
+      "versionNonce": 2085765487,
       "isDeleted": false,
-      "updated": 1768851600,
+      "updated": 1768846844026,
       "link": null,
       "fontSize": 16,
       "fontFamily": 1,
@@ -473,7 +593,11 @@
       "containerId": "toolbar",
       "originalText": "Éditeur de Graphe — Akthar-Neth — Deimos (v1)",
       "lineHeight": 1.25,
-      "baseline": 16
+      "baseline": 16,
+      "index": "aF",
+      "frameId": null,
+      "roundness": null,
+      "autoResize": true
     },
     {
       "id": "toolbar-badges",
@@ -490,15 +614,25 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-toolbar-badges"],
-      "boundElements": [{ "type": "text", "id": "t-toolbar-badges" }],
+      "groupIds": [
+        "g-toolbar-badges"
+      ],
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "t-toolbar-badges"
+        }
+      ],
       "locked": false,
       "seed": 9032,
-      "version": 1,
-      "versionNonce": 9033,
+      "version": 2,
+      "versionNonce": 1509953793,
       "isDeleted": false,
-      "updated": 1768851600,
-      "link": null
+      "updated": 1768846844026,
+      "link": null,
+      "index": "aG",
+      "frameId": null,
+      "roundness": null
     },
     {
       "id": "t-toolbar-badges",
@@ -515,14 +649,16 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-toolbar-badges"],
-      "boundElements": null,
+      "groupIds": [
+        "g-toolbar-badges"
+      ],
+      "boundElements": [],
       "locked": false,
       "seed": 9034,
-      "version": 1,
-      "versionNonce": 9035,
+      "version": 2,
+      "versionNonce": 1384528783,
       "isDeleted": false,
-      "updated": 1768851600,
+      "updated": 1768846844026,
       "link": null,
       "fontSize": 12,
       "fontFamily": 1,
@@ -532,7 +668,11 @@
       "containerId": "toolbar-badges",
       "originalText": "✓ Graphe valide",
       "lineHeight": 1.25,
-      "baseline": 12
+      "baseline": 12,
+      "index": "aH",
+      "frameId": null,
+      "roundness": null,
+      "autoResize": true
     },
     {
       "id": "toolbar-btns",
@@ -549,15 +689,25 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-toolbar-btns"],
-      "boundElements": [{ "type": "text", "id": "t-toolbar-btns" }],
+      "groupIds": [
+        "g-toolbar-btns"
+      ],
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "t-toolbar-btns"
+        }
+      ],
       "locked": false,
       "seed": 9036,
-      "version": 1,
-      "versionNonce": 9037,
+      "version": 2,
+      "versionNonce": 750274785,
       "isDeleted": false,
-      "updated": 1768851600,
-      "link": null
+      "updated": 1768846844026,
+      "link": null,
+      "index": "aI",
+      "frameId": null,
+      "roundness": null
     },
     {
       "id": "t-toolbar-btns",
@@ -574,14 +724,16 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-toolbar-btns"],
-      "boundElements": null,
+      "groupIds": [
+        "g-toolbar-btns"
+      ],
+      "boundElements": [],
       "locked": false,
       "seed": 9038,
-      "version": 1,
-      "versionNonce": 9039,
+      "version": 2,
+      "versionNonce": 1349906863,
       "isDeleted": false,
-      "updated": 1768851600,
+      "updated": 1768846844026,
       "link": null,
       "fontSize": 12,
       "fontFamily": 1,
@@ -591,13 +743,17 @@
       "containerId": "toolbar-btns",
       "originalText": "Valider | Layout TB ▾ | Auto-layout | ✨ Générer | 📥 Export | 💾 Sauver",
       "lineHeight": 1.25,
-      "baseline": 12
+      "baseline": 12,
+      "index": "aJ",
+      "frameId": null,
+      "roundness": null,
+      "autoResize": true
     },
     {
       "id": "canvas",
       "type": "rectangle",
-      "x": 320,
-      "y": 64,
+      "x": 321,
+      "y": 65,
       "width": 1280,
       "height": 1016,
       "angle": 0,
@@ -608,21 +764,31 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-canvas"],
-      "boundElements": [{ "type": "text", "id": "t-grid" }],
+      "groupIds": [
+        "g-canvas"
+      ],
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "t-grid"
+        }
+      ],
       "locked": false,
       "seed": 9040,
-      "version": 1,
-      "versionNonce": 9041,
+      "version": 4,
+      "versionNonce": 1277575247,
       "isDeleted": false,
-      "updated": 1768851600,
-      "link": null
+      "updated": 1768846892477,
+      "link": null,
+      "index": "aK",
+      "frameId": null,
+      "roundness": null
     },
     {
       "id": "t-grid",
       "type": "text",
-      "x": 340,
-      "y": 88,
+      "x": 341,
+      "y": 89,
       "width": 420,
       "height": 16,
       "angle": 0,
@@ -633,14 +799,16 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-canvas"],
-      "boundElements": null,
+      "groupIds": [
+        "g-canvas"
+      ],
+      "boundElements": [],
       "locked": false,
       "seed": 9042,
-      "version": 1,
-      "versionNonce": 9043,
+      "version": 4,
+      "versionNonce": 1228365423,
       "isDeleted": false,
-      "updated": 1768851600,
+      "updated": 1768846892477,
       "link": null,
       "fontSize": 12,
       "fontFamily": 1,
@@ -650,14 +818,18 @@
       "containerId": "canvas",
       "originalText": "Canvas (ReactFlow) • grille 15px • Controls + MiniMap",
       "lineHeight": 1.25,
-      "baseline": 12
+      "baseline": 12,
+      "index": "aL",
+      "frameId": null,
+      "roundness": null,
+      "autoResize": true
     },
     {
       "id": "node-dialogue",
       "type": "rectangle",
-      "x": 520,
-      "y": 220,
-      "width": 300,
+      "x": 548,
+      "y": 227,
+      "width": 280,
       "height": 140,
       "angle": 0,
       "strokeColor": "#4A90E2",
@@ -667,22 +839,71 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-node-dialogue"],
-      "boundElements": [{ "type": "text", "id": "t-node-dialogue" }, { "type": "arrow", "id": "edge-1" }],
+      "groupIds": [
+        "g-node-dialogue"
+      ],
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "t-node-dialogue"
+        },
+        {
+          "type": "arrow",
+          "id": "edge-1"
+        }
+      ],
       "locked": false,
       "seed": 9044,
-      "version": 1,
-      "versionNonce": 9045,
+      "version": 70,
+      "versionNonce": 547413935,
       "isDeleted": false,
-      "updated": 1768851600,
-      "link": null
+      "updated": 1768846868024,
+      "link": null,
+      "index": "aM",
+      "frameId": null,
+      "roundness": null
+    },
+    {
+      "id": "choice-dot-ov",
+      "type": "ellipse",
+      "x": 648,
+      "y": 352,
+      "width": 10,
+      "height": 10,
+      "angle": 0,
+      "strokeColor": "#ffffff",
+      "backgroundColor": "#F5A623",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "g-node-dialogue"
+      ],
+      "boundElements": [
+        {
+          "type": "arrow",
+          "id": "edge-1"
+        }
+      ],
+      "locked": false,
+      "seed": 90441,
+      "version": 101,
+      "versionNonce": 997559457,
+      "isDeleted": false,
+      "updated": 1768846881125,
+      "link": null,
+      "index": "aN",
+      "frameId": null,
+      "roundness": null
     },
     {
       "id": "t-node-dialogue",
       "type": "text",
-      "x": 540,
-      "y": 240,
-      "width": 260,
+      "x": 568,
+      "y": 247,
+      "width": 240,
       "height": 90,
       "angle": 0,
       "strokeColor": "rgba(255, 255, 255, 0.95)",
@@ -692,14 +913,16 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-node-dialogue"],
-      "boundElements": null,
+      "groupIds": [
+        "g-node-dialogue"
+      ],
+      "boundElements": [],
       "locked": false,
       "seed": 9046,
-      "version": 1,
-      "versionNonce": 9047,
+      "version": 70,
+      "versionNonce": 669454799,
       "isDeleted": false,
-      "updated": 1768851600,
+      "updated": 1768846868024,
       "link": null,
       "fontSize": 12,
       "fontFamily": 1,
@@ -709,39 +932,57 @@
       "containerId": "node-dialogue",
       "originalText": "DialogueNode (bleu)\nSpeaker: Akthar\n\"… Certains cherchent…\"",
       "lineHeight": 1.25,
-      "baseline": 12
+      "baseline": 12,
+      "index": "aO",
+      "frameId": null,
+      "roundness": null,
+      "autoResize": true
     },
     {
-      "id": "node-test",
+      "id": "node-dialogue-2",
       "type": "rectangle",
-      "x": 900,
-      "y": 220,
-      "width": 260,
+      "x": 585,
+      "y": 450,
+      "width": 280,
       "height": 140,
       "angle": 0,
-      "strokeColor": "#F5A623",
+      "strokeColor": "#4A90E2",
       "backgroundColor": "#2d2d2d",
       "fillStyle": "solid",
       "strokeWidth": 2,
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-node-test"],
-      "boundElements": [{ "type": "text", "id": "t-node-test" }, { "type": "arrow", "id": "edge-1" }],
+      "groupIds": [
+        "g-node-dialogue-2"
+      ],
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "t-node-dialogue-2"
+        },
+        {
+          "id": "edge-1",
+          "type": "arrow"
+        }
+      ],
       "locked": false,
       "seed": 9048,
-      "version": 1,
-      "versionNonce": 9049,
+      "version": 48,
+      "versionNonce": 13606145,
       "isDeleted": false,
-      "updated": 1768851600,
-      "link": null
+      "updated": 1768846877293,
+      "link": null,
+      "index": "aP",
+      "frameId": null,
+      "roundness": null
     },
     {
-      "id": "t-node-test",
+      "id": "t-node-dialogue-2",
       "type": "text",
-      "x": 920,
-      "y": 240,
-      "width": 220,
+      "x": 605,
+      "y": 470,
+      "width": 240,
       "height": 90,
       "angle": 0,
       "strokeColor": "rgba(255, 255, 255, 0.95)",
@@ -751,32 +992,38 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-node-test"],
-      "boundElements": null,
+      "groupIds": [
+        "g-node-dialogue-2"
+      ],
+      "boundElements": [],
       "locked": false,
       "seed": 9050,
-      "version": 1,
-      "versionNonce": 9051,
+      "version": 47,
+      "versionNonce": 1283923439,
       "isDeleted": false,
-      "updated": 1768851600,
+      "updated": 1768846865491,
       "link": null,
       "fontSize": 12,
       "fontFamily": 1,
-      "text": "TestNode (orange)\nTest: Raison+Rhétorique:8\nSuccess/Failure →",
+      "text": "DialogueNode (bleu)\nSpeaker: NPC\n\"… Réponse du PNJ…\"",
       "textAlign": "left",
       "verticalAlign": "top",
-      "containerId": "node-test",
-      "originalText": "TestNode (orange)\nTest: Raison+Rhétorique:8\nSuccess/Failure →",
+      "containerId": "node-dialogue-2",
+      "originalText": "DialogueNode (bleu)\nSpeaker: NPC\n\"… Réponse du PNJ…\"",
       "lineHeight": 1.25,
-      "baseline": 12
+      "baseline": 12,
+      "index": "aQ",
+      "frameId": null,
+      "roundness": null,
+      "autoResize": true
     },
     {
       "id": "edge-1",
       "type": "arrow",
-      "x": 820,
-      "y": 290,
-      "width": 80,
-      "height": 0,
+      "x": 655.3037576472618,
+      "y": 360.944559905479,
+      "width": 118.66318305642062,
+      "height": 88.05544009452103,
       "angle": 0,
       "strokeColor": "rgba(255, 255, 255, 0.75)",
       "backgroundColor": "transparent",
@@ -786,20 +1033,47 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [],
-      "boundElements": null,
+      "boundElements": [],
       "locked": false,
       "seed": 9052,
-      "version": 1,
-      "versionNonce": 9053,
+      "version": 163,
+      "versionNonce": 616469409,
       "isDeleted": false,
-      "updated": 1768851600,
+      "updated": 1768846896926,
       "link": null,
-      "points": [[0, 0], [80, 0]],
-      "lastCommittedPoint": [80, 0],
-      "startBinding": { "elementId": "node-dialogue", "focus": 0, "gap": 10 },
-      "endBinding": { "elementId": "node-test", "focus": 0, "gap": 10 },
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          71.69624235273818,
+          28.555440094520975
+        ],
+        [
+          118.66318305642062,
+          88.05544009452103
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "choice-dot-ov",
+        "focus": 0.4329609322688612,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "node-dialogue-2",
+        "focus": 0.537816725542612,
+        "gap": 1
+      },
       "startArrowhead": null,
-      "endArrowhead": "arrow"
+      "endArrowhead": "arrow",
+      "index": "aR",
+      "frameId": null,
+      "roundness": {
+        "type": 2
+      },
+      "elbowed": false
     },
     {
       "id": "minimap",
@@ -816,15 +1090,25 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-minimap"],
-      "boundElements": [{ "type": "text", "id": "t-minimap" }],
+      "groupIds": [
+        "g-minimap"
+      ],
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "t-minimap"
+        }
+      ],
       "locked": false,
       "seed": 9054,
-      "version": 1,
-      "versionNonce": 9055,
+      "version": 2,
+      "versionNonce": 917085249,
       "isDeleted": false,
-      "updated": 1768851600,
-      "link": null
+      "updated": 1768846844026,
+      "link": null,
+      "index": "aS",
+      "frameId": null,
+      "roundness": null
     },
     {
       "id": "t-minimap",
@@ -841,14 +1125,16 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-minimap"],
-      "boundElements": null,
+      "groupIds": [
+        "g-minimap"
+      ],
+      "boundElements": [],
       "locked": false,
       "seed": 9056,
-      "version": 1,
-      "versionNonce": 9057,
+      "version": 2,
+      "versionNonce": 394134607,
       "isDeleted": false,
-      "updated": 1768851600,
+      "updated": 1768846844026,
       "link": null,
       "fontSize": 12,
       "fontFamily": 1,
@@ -858,7 +1144,11 @@
       "containerId": "minimap",
       "originalText": "MiniMap",
       "lineHeight": 1.25,
-      "baseline": 12
+      "baseline": 12,
+      "index": "aT",
+      "frameId": null,
+      "roundness": null,
+      "autoResize": true
     },
     {
       "id": "right-panel",
@@ -875,15 +1165,25 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-right"],
-      "boundElements": [{ "type": "text", "id": "t-right-title" }],
+      "groupIds": [
+        "g-right"
+      ],
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "t-right-title"
+        }
+      ],
       "locked": false,
       "seed": 9058,
-      "version": 1,
-      "versionNonce": 9059,
+      "version": 2,
+      "versionNonce": 713976865,
       "isDeleted": false,
-      "updated": 1768851600,
-      "link": null
+      "updated": 1768846844026,
+      "link": null,
+      "index": "aU",
+      "frameId": null,
+      "roundness": null
     },
     {
       "id": "t-right-title",
@@ -900,14 +1200,16 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-right"],
-      "boundElements": null,
+      "groupIds": [
+        "g-right"
+      ],
+      "boundElements": [],
       "locked": false,
       "seed": 9060,
-      "version": 1,
-      "versionNonce": 9061,
+      "version": 2,
+      "versionNonce": 1559667311,
       "isDeleted": false,
-      "updated": 1768851600,
+      "updated": 1768846844026,
       "link": null,
       "fontSize": 16,
       "fontFamily": 1,
@@ -917,7 +1219,11 @@
       "containerId": "right-panel",
       "originalText": "Édition du nœud",
       "lineHeight": 1.25,
-      "baseline": 16
+      "baseline": 16,
+      "index": "aV",
+      "frameId": null,
+      "roundness": null,
+      "autoResize": true
     },
     {
       "id": "right-placeholder",
@@ -934,15 +1240,25 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-right-ph"],
-      "boundElements": [{ "type": "text", "id": "t-right-ph" }],
+      "groupIds": [
+        "g-right-ph"
+      ],
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "t-right-ph"
+        }
+      ],
       "locked": false,
       "seed": 9062,
-      "version": 1,
-      "versionNonce": 9063,
+      "version": 2,
+      "versionNonce": 219037697,
       "isDeleted": false,
-      "updated": 1768851600,
-      "link": null
+      "updated": 1768846844026,
+      "link": null,
+      "index": "aW",
+      "frameId": null,
+      "roundness": null
     },
     {
       "id": "t-right-ph",
@@ -959,14 +1275,16 @@
       "strokeStyle": "solid",
       "roughness": 0,
       "opacity": 100,
-      "groupIds": ["g-right-ph"],
-      "boundElements": null,
+      "groupIds": [
+        "g-right-ph"
+      ],
+      "boundElements": [],
       "locked": false,
       "seed": 9064,
-      "version": 1,
-      "versionNonce": 9065,
+      "version": 2,
+      "versionNonce": 1106672783,
       "isDeleted": false,
-      "updated": 1768851600,
+      "updated": 1768846844026,
       "link": null,
       "fontSize": 12,
       "fontFamily": 1,
@@ -976,7 +1294,18 @@
       "containerId": "right-placeholder",
       "originalText": "NodeEditorPanel\n\n- Speaker\n- Dialogue (textarea)\n- Choix (liste)\n- nextNode\n\nBoutons:\nSauver / Supprimer / Générer",
       "lineHeight": 1.25,
-      "baseline": 12
+      "baseline": 12,
+      "index": "aX",
+      "frameId": null,
+      "roundness": null,
+      "autoResize": true
     }
-  ]
+  ],
+  "appState": {
+    "gridSize": 20,
+    "gridStep": 5,
+    "gridModeEnabled": false,
+    "viewBackgroundColor": "#ffffff"
+  },
+  "files": {}
 }

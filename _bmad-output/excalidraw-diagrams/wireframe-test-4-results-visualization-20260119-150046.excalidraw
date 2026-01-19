@@ -144,10 +144,10 @@
     {
       "id": "single-handle",
       "type": "ellipse",
-      "x": 454,
+      "x": 455,
       "y": 250,
-      "width": 12,
-      "height": 12,
+      "width": 10,
+      "height": 10,
       "angle": 0,
       "strokeColor": "#f57c00",
       "backgroundColor": "#f57c00",
@@ -157,7 +157,12 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [],
-      "boundElements": [],
+      "boundElements": [
+        {
+          "id": "connection-to-bar",
+          "type": "arrow"
+        }
+      ],
       "locked": false,
       "seed": 204,
       "version": 2,
@@ -204,10 +209,18 @@
         ]
       ],
       "lastCommittedPoint": null,
-      "startBinding": null,
-      "endBinding": null,
+      "startBinding": {
+        "elementId": "single-handle",
+        "focus": 0,
+        "gap": 2
+      },
+      "endBinding": {
+        "elementId": "results-bar",
+        "focus": 0,
+        "gap": 2
+      },
       "startArrowhead": null,
-      "endArrowhead": null,
+      "endArrowhead": "arrow",
       "index": "a5",
       "frameId": null,
       "roundness": null
@@ -230,7 +243,12 @@
       "groupIds": [
         "g-results-bar"
       ],
-      "boundElements": [],
+      "boundElements": [
+        {
+          "id": "connection-to-bar",
+          "type": "arrow"
+        }
+      ],
       "locked": false,
       "seed": 206,
       "version": 2,
