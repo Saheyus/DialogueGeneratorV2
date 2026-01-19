@@ -120,28 +120,32 @@ async def test_generate_node_with_generate_all_choices(client, sample_parent_nod
     """Test génération batch pour tous les choix (generate_all_choices=True).
     
     AC: #3 - Génération batch pour tous les choix depuis éditeur de graphe.
-    Note: Pour l'instant, l'endpoint retourne un seul nœud même si generate_all_choices=True.
-    La génération batch sera implémentée dans Task 2 (service graph_generation_service).
     """
     with patch('factories.llm_factory.LLMClientFactory') as mock_factory, \
          patch('api.routers.graph.ServiceContainer') as mock_container, \
-         patch('api.routers.graph.PromptEngine') as mock_prompt_engine, \
-         patch('api.routers.graph.ContextBuilder') as mock_context_builder, \
+         patch('api.routers.graph.GraphGenerationService') as mock_graph_service_class, \
          patch('api.routers.graph.UnityDialogueGenerationService') as mock_service_class:
         
         # Setup mocks
         mock_service = MagicMock()
         mock_service_class.return_value = mock_service
         
-        # Mock de la génération (pour l'instant, un seul nœud même si generate_all_choices=True)
-        mock_node = {
-            "id": "NODE_PARENT_1_CHOICE_0",
-            "speaker": "PNJ",
-            "line": "Réponse au choix 1",
-            "choices": []
+        # Mock GraphGenerationService pour batch
+        mock_graph_service = MagicMock()
+        mock_graph_service_class.return_value = mock_graph_service
+        
+        # Mock résultat batch (2 choix sans targetNode)
+        mock_batch_result = {
+            "nodes": [
+                {"id": "NODE_PARENT_1_CHOICE_0", "speaker": "PNJ", "line": "Réponse 1", "choices": []},
+                {"id": "NODE_PARENT_1_CHOICE_1", "speaker": "PNJ", "line": "Réponse 2", "choices": []}
+            ],
+            "connections": [
+                {"from": "NODE_PARENT_1", "to": "NODE_PARENT_1_CHOICE_0", "via_choice_index": 0, "connection_type": "choice"},
+                {"from": "NODE_PARENT_1", "to": "NODE_PARENT_1_CHOICE_1", "via_choice_index": 1, "connection_type": "choice"}
+            ]
         }
-        mock_service.enrich_with_ids.return_value = [mock_node]
-        mock_service.generate_dialogue_node = AsyncMock(return_value={"nodes": [mock_node]})
+        mock_graph_service.generate_nodes_for_all_choices = AsyncMock(return_value=mock_batch_result)
         
         # Mock LLM client
         mock_llm_client = MagicMock()
@@ -154,11 +158,6 @@ async def test_generate_node_with_generate_all_choices(client, sample_parent_nod
         mock_container_instance = MagicMock()
         mock_container_instance.get_config_service.return_value = mock_config_service
         mock_container.return_value = mock_container_instance
-        
-        # Mock prompt engine
-        mock_engine_instance = MagicMock()
-        mock_engine_instance.build_prompt.return_value = "test prompt"
-        mock_prompt_engine.return_value = mock_engine_instance
         
         request_data = {
             "parent_node_id": "NODE_PARENT_1",
@@ -173,9 +172,13 @@ async def test_generate_node_with_generate_all_choices(client, sample_parent_nod
         
         assert response.status_code == 200
         data = response.json()
-        # Pour l'instant, l'endpoint retourne un seul nœud même si generate_all_choices=True
-        # La génération batch sera implémentée dans Task 2
+        # Vérifier que le service batch a été appelé
+        mock_graph_service.generate_nodes_for_all_choices.assert_called_once()
+        # Vérifier que le premier nœud est retourné
         assert "node" in data
+        assert data["node"]["id"] == "NODE_PARENT_1_CHOICE_0"
+        # Vérifier que les connexions sont retournées
+        assert len(data["suggested_connections"]) == 2
 
 
 @pytest.mark.asyncio

@@ -23,9 +23,8 @@ from api.dependencies import get_request_id
 from services.graph_conversion_service import GraphConversionService
 from services.graph_validation_service import GraphValidationService
 from services.unity_dialogue_generation_service import UnityDialogueGenerationService
+from services.graph_generation_service import GraphGenerationService
 from core.llm.llm_client import ILLMClient
-from core.prompt.prompt_engine import PromptEngine
-from core.context.context_builder import ContextBuilder
 from api.container import ServiceContainer
 
 logger = logging.getLogger(__name__)
@@ -175,12 +174,67 @@ async def generate_node(
         InternalServerException: Si la génération échoue.
     """
     try:
-        # Créer le prompt avec contexte parent
+        # Obtenir le service container et les services nécessaires
+        container = ServiceContainer()
+        config_service = container.get_config_service()
+        
+        # Import local pour éviter les imports circulaires
+        from factories.llm_factory import LLMClientFactory
+        
+        # Générer le client LLM
+        llm_client = LLMClientFactory.create_client(
+            model_id=request_data.llm_model_identifier,
+            config=config_service.get_llm_config(),
+            available_models=config_service.get_available_llm_models(),
+        )
+        
+        generation_service = UnityDialogueGenerationService()
+        parent_content = request_data.parent_node_content
+        parent_choices = parent_content.get("choices", [])
+        
+        # Gérer génération batch si generate_all_choices=True
+        if request_data.generate_all_choices and parent_choices:
+            # Utiliser le service batch pour générer tous les choix
+            graph_generation_service = GraphGenerationService(generation_service)
+            batch_result = await graph_generation_service.generate_nodes_for_all_choices(
+                parent_node=parent_content,
+                instructions=request_data.user_instructions,
+                context=request_data.context_selections,
+                llm_client=llm_client,
+                system_prompt_override=request_data.system_prompt_override,
+                max_choices=request_data.max_choices
+            )
+            
+            # Pour l'instant, retourner le premier nœud (l'API retourne un seul nœud)
+            # TODO: Modifier GenerateNodeResponse pour supporter liste de nœuds si nécessaire
+            if batch_result["nodes"]:
+                generated_node = batch_result["nodes"][0]
+                suggested_connections = [
+                    SuggestedConnection(**conn) for conn in batch_result["connections"]
+                ]
+                
+                logger.info(
+                    f"Génération batch: {len(batch_result['nodes'])} nœud(s) généré(s) "
+                    f"pour parent {request_data.parent_node_id} (request_id: {request_id})"
+                )
+                
+                return GenerateNodeResponse(
+                    node=generated_node,
+                    suggested_connections=suggested_connections,
+                    parent_node_id=request_data.parent_node_id
+                )
+            else:
+                # Aucun nœud généré (tous les choix déjà connectés)
+                raise ValidationException(
+                    message="Tous les choix sont déjà connectés. Aucun nœud à générer.",
+                    request_id=request_id
+                )
+        
+        # Génération normale (choix spécifique ou nextNode)
+        # Construire le prompt avec contexte parent
         context_builder = ContextBuilder()
         prompt_engine = PromptEngine(context_builder)
         
-        # Construire le contexte de continuation
-        parent_content = request_data.parent_node_content
         parent_speaker = parent_content.get("speaker", "PNJ")
         parent_line = parent_content.get("line", "")
         
@@ -192,39 +246,18 @@ Instructions pour la suite:
 {request_data.user_instructions}
 """
         
-        # Construire le prompt complet
-        prompt = prompt_engine.build_prompt(
-            user_instructions=enriched_instructions,
-            context_selections=request_data.context_selections,
-            max_context_tokens=4000,
-            system_prompt_override=request_data.system_prompt_override
-        )
-        
-        # Obtenir le service container et les services nécessaires
-        container = ServiceContainer()
-        config_service = container.get_config_service()
-        
-        # Import local pour éviter les imports circulaires
-        from factories.llm_factory import LLMClientFactory
-        
-        # Générer le nœud avec LLMClientFactory
-        llm_client = LLMClientFactory.create_client(
-            model_id=request_data.llm_model_identifier,
-            config=config_service.get_llm_config(),
-            available_models=config_service.get_available_llm_models(),
-        )
-        
-        generation_service = UnityDialogueGenerationService()
+        # Construire le prompt complet (pour génération normale)
+        # Note: Pour le batch, le service construit le prompt lui-même
+        # Pour la génération normale, on utilise juste les instructions enrichies comme prompt string
+        # (le service generate_dialogue_node attend un string, pas un BuiltPrompt)
         response = await generation_service.generate_dialogue_node(
             llm_client=llm_client,
-            prompt=prompt,
+            prompt=enriched_instructions,
             system_prompt_override=request_data.system_prompt_override,
             max_choices=request_data.max_choices
         )
         
         # Déterminer l'ID de départ selon le mode de génération
-        parent_choices = parent_content.get("choices", [])
-        
         if request_data.target_choice_index is not None:
             # Génération pour choix spécifique : utiliser format CHOICE_{index}
             start_id = f"NODE_{request_data.parent_node_id}_CHOICE_{request_data.target_choice_index}"

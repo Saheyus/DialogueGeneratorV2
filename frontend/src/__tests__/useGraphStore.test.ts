@@ -262,4 +262,199 @@ describe('useGraphStore - Auto-save draft state', () => {
       expect(mockLoadGraph).toHaveBeenCalledWith({ json_content: '{"id": "START"}' })
     })
   })
+
+  describe('generateFromNode - Batch generation support', () => {
+    beforeEach(() => {
+      useGraphStore.getState().resetGraph()
+    })
+
+    it('should pass target_choice_index to API when provided', async () => {
+      const { addNode, generateFromNode } = useGraphStore.getState()
+      
+      // Créer un nœud parent avec choix
+      const parentNode: Node = {
+        id: 'parent-1',
+        type: 'dialogueNode',
+        position: { x: 0, y: 0 },
+        data: {
+          speaker: 'PNJ',
+          line: 'Test',
+          choices: [
+            { text: 'Choix 1', targetNode: null },
+            { text: 'Choix 2', targetNode: null },
+          ],
+        },
+      }
+      addNode(parentNode)
+      
+      // Mock generateNode API
+      const graphAPI = await import('../api/graph')
+      const mockGenerateNode = vi.mocked(graphAPI.generateNode)
+      mockGenerateNode.mockResolvedValueOnce({
+        node: {
+          id: 'generated-1',
+          speaker: 'PNJ',
+          line: 'Réponse',
+        },
+        suggested_connections: [
+          {
+            from: 'parent-1',
+            to: 'generated-1',
+            via_choice_index: 0,
+            connection_type: 'choice',
+          },
+        ],
+        parent_node_id: 'parent-1',
+      })
+      
+      await generateFromNode('parent-1', 'Instructions', {
+        target_choice_index: 0,
+        generate_all_choices: false,
+      })
+      
+      // Vérifier que l'API a été appelée avec target_choice_index
+      expect(mockGenerateNode).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parent_node_id: 'parent-1',
+          target_choice_index: 0,
+          generate_all_choices: false,
+        })
+      )
+    })
+
+    it('should pass generate_all_choices to API when true', async () => {
+      const { addNode, generateFromNode } = useGraphStore.getState()
+      
+      const parentNode: Node = {
+        id: 'parent-2',
+        type: 'dialogueNode',
+        position: { x: 0, y: 0 },
+        data: {
+          speaker: 'PNJ',
+          line: 'Test',
+          choices: [
+            { text: 'Choix 1', targetNode: null },
+            { text: 'Choix 2', targetNode: null },
+          ],
+        },
+      }
+      addNode(parentNode)
+      
+      const graphAPI = await import('../api/graph')
+      const mockGenerateNode = vi.mocked(graphAPI.generateNode)
+      mockGenerateNode.mockResolvedValueOnce({
+        node: {
+          id: 'generated-1',
+          speaker: 'PNJ',
+          line: 'Réponse',
+        },
+        suggested_connections: [],
+        parent_node_id: 'parent-2',
+      })
+      
+      await generateFromNode('parent-2', 'Instructions', {
+        generate_all_choices: true,
+      })
+      
+      expect(mockGenerateNode).toHaveBeenCalledWith(
+        expect.objectContaining({
+          generate_all_choices: true,
+        })
+      )
+    })
+
+    it('should update targetNode in parent when connecting via choice', async () => {
+      const { addNode, generateFromNode } = useGraphStore.getState()
+      
+      const parentNode: Node = {
+        id: 'parent-3',
+        type: 'dialogueNode',
+        position: { x: 0, y: 0 },
+        data: {
+          speaker: 'PNJ',
+          line: 'Test',
+          choices: [
+            { text: 'Choix 1', targetNode: null },
+          ],
+        },
+      }
+      addNode(parentNode)
+      
+      const graphAPI = await import('../api/graph')
+      const mockGenerateNode = vi.mocked(graphAPI.generateNode)
+      mockGenerateNode.mockResolvedValueOnce({
+        node: {
+          id: 'generated-1',
+          speaker: 'PNJ',
+          line: 'Réponse',
+        },
+        suggested_connections: [
+          {
+            from: 'parent-3',
+            to: 'generated-1',
+            via_choice_index: 0,
+            connection_type: 'choice',
+          },
+        ],
+        parent_node_id: 'parent-3',
+      })
+      
+      await generateFromNode('parent-3', 'Instructions', {
+        target_choice_index: 0,
+      })
+      
+      // Vérifier que targetNode a été mis à jour dans le parent
+      const state = useGraphStore.getState()
+      const updatedParent = state.nodes.find((n) => n.id === 'parent-3')
+      expect(updatedParent?.data?.choices?.[0]?.targetNode).toBe('generated-1')
+    })
+
+    it('should position nodes in cascade for batch generation', async () => {
+      const { addNode, generateFromNode } = useGraphStore.getState()
+      
+      const parentNode: Node = {
+        id: 'parent-4',
+        type: 'dialogueNode',
+        position: { x: 100, y: 100 },
+        data: {
+          speaker: 'PNJ',
+          line: 'Test',
+          choices: [
+            { text: 'Choix 1', targetNode: null },
+            { text: 'Choix 2', targetNode: null },
+          ],
+        },
+      }
+      addNode(parentNode)
+      
+      const graphAPI = await import('../api/graph')
+      const mockGenerateNode = vi.mocked(graphAPI.generateNode)
+      mockGenerateNode.mockResolvedValueOnce({
+        node: {
+          id: 'generated-1',
+          speaker: 'PNJ',
+          line: 'Réponse',
+        },
+        suggested_connections: [
+          {
+            from: 'parent-4',
+            to: 'generated-1',
+            via_choice_index: 0,
+            connection_type: 'choice',
+          },
+        ],
+        parent_node_id: 'parent-4',
+      })
+      
+      await generateFromNode('parent-4', 'Instructions', {
+        generate_all_choices: true,
+      })
+      
+      // Vérifier positionnement (pour l'instant un seul nœud, mais position calculée)
+      const state = useGraphStore.getState()
+      const generatedNode = state.nodes.find((n) => n.id === 'generated-1')
+      expect(generatedNode?.position.x).toBe(400) // parent.x + 300
+      expect(generatedNode?.position.y).toBe(100) // parent.y + (150 * 0) pour choix index 0
+    })
+  })
 })
