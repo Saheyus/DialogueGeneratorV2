@@ -32,6 +32,11 @@ export interface GraphState {
   validationErrors: ValidationErrorDetail[]
   highlightedNodeIds: string[] // Pour la recherche
   
+  // État auto-save draft (Task 1 - Story 0.5)
+  hasUnsavedChanges: boolean
+  lastDraftSavedAt: number | null
+  lastDraftError: string | null
+  
   // Actions CRUD
   loadDialogue: (jsonContent: string) => Promise<void>
   addNode: (node: Node) => void
@@ -72,6 +77,12 @@ export interface GraphState {
   
   // Recherche
   setHighlightedNodes: (nodeIds: string[]) => void
+  
+  // Actions auto-save draft (Task 1 - Story 0.5)
+  markDirty: () => void
+  markDraftSaved: () => void
+  markDraftError: (message: string) => void
+  clearDraftError: () => void
 }
 
 const initialState = {
@@ -88,6 +99,9 @@ const initialState = {
   isSaving: false,
   validationErrors: [],
   highlightedNodeIds: [],
+  hasUnsavedChanges: false,
+  lastDraftSavedAt: null,
+  lastDraftError: null,
 }
 
 export const useGraphStore = create<GraphState>()(
@@ -130,6 +144,10 @@ export const useGraphStore = create<GraphState>()(
             },
             isLoading: false,
             validationErrors: [],
+            // Réinitialiser l'état auto-save draft (Task 1 - Story 0.5)
+            hasUnsavedChanges: false,
+            lastDraftSavedAt: null,
+            lastDraftError: null,
           })
         } catch (error) {
           console.error('Erreur lors du chargement du graphe:', error)
@@ -149,6 +167,8 @@ export const useGraphStore = create<GraphState>()(
             node_count: newNodes.length,
           },
         })
+        // Marquer dirty pour auto-save draft (Task 1 - Story 0.5)
+        get().markDirty()
       },
       
       // Mettre à jour un nœud
@@ -158,6 +178,8 @@ export const useGraphStore = create<GraphState>()(
             node.id === nodeId ? { ...node, ...updates } : node
           ),
         }))
+        // Marquer dirty pour auto-save draft (Task 1 - Story 0.5)
+        get().markDirty()
       },
       
       // Supprimer un nœud
@@ -179,6 +201,8 @@ export const useGraphStore = create<GraphState>()(
             edge_count: newEdges.length,
           },
         })
+        // Marquer dirty pour auto-save draft (Task 1 - Story 0.5)
+        get().markDirty()
       },
       
       // Connecter deux nœuds
@@ -222,6 +246,8 @@ export const useGraphStore = create<GraphState>()(
             edge_count: newEdges.length,
           },
         })
+        // Marquer dirty pour auto-save draft (Task 1 - Story 0.5)
+        get().markDirty()
       },
       
       // Déconnecter deux nœuds
@@ -236,6 +262,8 @@ export const useGraphStore = create<GraphState>()(
             edge_count: newEdges.length,
           },
         })
+        // Marquer dirty pour auto-save draft (Task 1 - Story 0.5)
+        get().markDirty()
       },
       
       // Sélectionner un nœud
@@ -250,6 +278,8 @@ export const useGraphStore = create<GraphState>()(
             node.id === nodeId ? { ...node, position } : node
           ),
         }))
+        // Marquer dirty pour auto-save draft (Task 1 - Story 0.5)
+        get().markDirty()
       },
       
       // Générer un nœud depuis un parent avec l'IA
@@ -497,6 +527,8 @@ export const useGraphStore = create<GraphState>()(
             ...updates,
           },
         }))
+        // Marquer dirty pour auto-save draft (Task 1 - Story 0.5)
+        get().markDirty()
       },
       
       // Réinitialiser le graphe
@@ -507,6 +539,29 @@ export const useGraphStore = create<GraphState>()(
       // Définir les nœuds en surbrillance (pour la recherche)
       setHighlightedNodes: (nodeIds: string[]) => {
         set({ highlightedNodeIds: nodeIds })
+      },
+      
+      // Actions auto-save draft (Task 1 - Story 0.5)
+      markDirty: () => {
+        set({ hasUnsavedChanges: true })
+      },
+      
+      markDraftSaved: () => {
+        set({
+          hasUnsavedChanges: false,
+          lastDraftSavedAt: Date.now(),
+        })
+      },
+      
+      markDraftError: (message: string) => {
+        set({
+          lastDraftError: message,
+          hasUnsavedChanges: false,
+        })
+      },
+      
+      clearDraftError: () => {
+        set({ lastDraftError: null })
       },
     }),
     {

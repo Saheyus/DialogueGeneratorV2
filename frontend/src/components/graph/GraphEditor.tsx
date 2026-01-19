@@ -9,9 +9,9 @@ import { UnityDialogueList, type UnityDialogueListRef } from '../unityDialogues/
 import { GraphCanvas } from './GraphCanvas'
 import { AIGenerationPanel } from './AIGenerationPanel'
 import { useGraphStore } from '../../store/graphStore'
-import { exportGraphToPNG, exportGraphToSVG, exportFullGraphToPNG } from '../../utils/graphExport'
+import { exportGraphToPNG, exportGraphToSVG } from '../../utils/graphExport'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
-import { useToast } from '../shared'
+import { useToast, ConfirmDialog, SaveStatusIndicator } from '../shared'
 import { theme } from '../../theme'
 import * as unityDialoguesAPI from '../../api/unityDialogues'
 import * as dialoguesAPI from '../../api/dialogues'
@@ -26,6 +26,10 @@ export function GraphEditor() {
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null)
   const dialogueListRef = useRef<UnityDialogueListRef>(null)
   const toast = useToast()
+  
+  // États auto-save draft (Task 2 - Story 0.5)
+  const [showRestoreDialog, setShowRestoreDialog] = useState(false)
+  const [draftToRestore, setDraftToRestore] = useState<{json_content: string; timestamp: number} | null>(null)
   
   // Écouter l'événement pour obtenir l'instance ReactFlow
   useEffect(() => {
@@ -49,6 +53,14 @@ export function GraphEditor() {
     isLoading: isGraphLoading,
     validationErrors: graphValidationErrors,
     isSaving: isGraphSaving,
+    isGenerating,
+    // États auto-save draft (Task 2 - Story 0.5)
+    hasUnsavedChanges,
+    lastDraftSavedAt,
+    lastDraftError,
+    markDraftSaved,
+    markDraftError,
+    clearDraftError,
   } = useGraphStore()
   
   // Écouter l'événement pour ouvrir le panel de génération depuis un nœud
@@ -65,12 +77,44 @@ export function GraphEditor() {
     }
   }, [setSelectedNode])
   
-  // Charger le dialogue sélectionné dans le graphe
+  // Charger le dialogue sélectionné dans le graphe + vérifier draft (Task 2 - Story 0.5)
   useEffect(() => {
     if (selectedDialogue) {
       setIsLoadingDialogue(true)
+      
+      // Clé stable pour le draft
+      const draftKey = `unity_dialogue_draft:${selectedDialogue.filename}`
+      
+      // Charger le dialogue depuis l'API
       unityDialoguesAPI.getUnityDialogue(selectedDialogue.filename)
         .then((response) => {
+          // Vérifier s'il existe un draft local
+          const draftStr = localStorage.getItem(draftKey)
+          if (draftStr) {
+            try {
+              const draft = JSON.parse(draftStr)
+              const draftTimestamp = draft.timestamp || 0
+              const fileTimestamp = selectedDialogue.modified_time 
+                ? new Date(selectedDialogue.modified_time).getTime() 
+                : 0
+              
+              // Si draft plus récent que le fichier → proposer restauration
+              if (draftTimestamp > fileTimestamp) {
+                setDraftToRestore(draft)
+                setShowRestoreDialog(true)
+                setIsLoadingDialogue(false)
+                return // Attendre la décision de l'utilisateur
+              } else {
+                // Draft obsolète → supprimer
+                localStorage.removeItem(draftKey)
+              }
+            } catch (err) {
+              console.error('Erreur lors de la lecture du draft:', err)
+              localStorage.removeItem(draftKey)
+            }
+          }
+          
+          // Charger le dialogue normalement
           return loadDialogue(response.json_content)
         })
         .then(() => {
@@ -86,6 +130,40 @@ export function GraphEditor() {
       useGraphStore.getState().resetGraph()
     }
   }, [selectedDialogue, loadDialogue, toast])
+  
+  // Auto-save draft avec debounce (Task 2 - Story 0.5)
+  useEffect(() => {
+    // Ne pas auto-save si conditions bloquantes
+    if (!selectedDialogue || 
+        !hasUnsavedChanges || 
+        isGraphLoading || 
+        isGraphSaving || 
+        isLoadingDialogue ||
+        isGenerating) {
+      return
+    }
+    
+    const draftKey = `unity_dialogue_draft:${selectedDialogue.filename}`
+    const timeoutId = setTimeout(() => {
+      try {
+        clearDraftError()
+        const json_content = exportToUnity()
+        const draft = {
+          filename: selectedDialogue.filename,
+          json_content,
+          timestamp: Date.now(),
+        }
+        localStorage.setItem(draftKey, JSON.stringify(draft))
+        markDraftSaved()
+      } catch (err) {
+        console.error('Erreur lors de l\'auto-save draft:', err)
+        const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue'
+        markDraftError(errorMessage)
+      }
+    }, 3000) // Debounce 3s après le dernier changement
+    
+    return () => clearTimeout(timeoutId)
+  }, [selectedDialogue, hasUnsavedChanges, isGraphLoading, isGraphSaving, isLoadingDialogue, isGenerating, exportToUnity, markDraftSaved, markDraftError, clearDraftError])
   
   // Handler pour valider le graphe
   const handleValidate = useCallback(async () => {
@@ -164,6 +242,12 @@ export function GraphEditor() {
         filename: selectedDialogue.filename.replace('.json', ''), // Enlever l'extension
       })
       toast(`Dialogue sauvegardé: ${response.filename}`, 'success', 3000)
+      
+      // Supprimer le draft après sauvegarde réussie (Task 2 - Story 0.5)
+      const draftKey = `unity_dialogue_draft:${selectedDialogue.filename}`
+      localStorage.removeItem(draftKey)
+      markDraftSaved()
+      
       // Rafraîchir la liste
       dialogueListRef.current?.refresh()
     } catch (err) {
@@ -171,7 +255,49 @@ export function GraphEditor() {
     } finally {
       setIsLoadingDialogue(false)
     }
-  }, [selectedDialogue, exportToUnity, toast])
+  }, [selectedDialogue, exportToUnity, toast, markDraftSaved])
+  
+  // Handlers pour restauration draft (Task 2 - Story 0.5)
+  const handleRestoreDraft = useCallback(() => {
+    if (draftToRestore && selectedDialogue) {
+      setIsLoadingDialogue(true)
+      loadDialogue(draftToRestore.json_content)
+        .then(() => {
+          setShowRestoreDialog(false)
+          setDraftToRestore(null)
+          setIsLoadingDialogue(false)
+          toast('Brouillon restauré', 'success', 2000)
+        })
+        .catch((err) => {
+          console.error('Erreur lors de la restauration du brouillon:', err)
+          toast(`Erreur: ${getErrorMessage(err)}`, 'error')
+          setIsLoadingDialogue(false)
+        })
+    }
+  }, [draftToRestore, selectedDialogue, loadDialogue, toast])
+  
+  const handleDiscardDraft = useCallback(() => {
+    if (selectedDialogue) {
+      const draftKey = `unity_dialogue_draft:${selectedDialogue.filename}`
+      localStorage.removeItem(draftKey)
+      setShowRestoreDialog(false)
+      setDraftToRestore(null)
+      
+      // Charger le dialogue normal depuis l'API
+      setIsLoadingDialogue(true)
+      unityDialoguesAPI.getUnityDialogue(selectedDialogue.filename)
+        .then((response) => loadDialogue(response.json_content))
+        .then(() => {
+          setIsLoadingDialogue(false)
+          toast('Brouillon supprimé, dialogue du fichier chargé', 'info', 2000)
+        })
+        .catch((err) => {
+          console.error('Erreur lors du chargement du dialogue:', err)
+          toast(`Erreur: ${getErrorMessage(err)}`, 'error')
+          setIsLoadingDialogue(false)
+        })
+    }
+  }, [selectedDialogue, loadDialogue, toast])
   
   // Raccourcis clavier
   useKeyboardShortcuts(
@@ -351,6 +477,25 @@ export function GraphEditor() {
                       : `${warnings.length} avertissement${warnings.length > 1 ? 's' : ''}`}
                   </span>
                 </div>
+              )
+            })()}
+            {/* Indicateur auto-save draft (Task 3 - Story 0.5) */}
+            {selectedDialogue && (() => {
+              const isWriting = hasUnsavedChanges && !isGraphLoading && !isGraphSaving && !isLoadingDialogue
+              const status: 'saved' | 'saving' | 'unsaved' | 'error' = lastDraftError 
+                ? 'error' 
+                : isWriting 
+                ? 'saving' 
+                : hasUnsavedChanges 
+                ? 'unsaved' 
+                : 'saved'
+              
+              return (
+                <SaveStatusIndicator
+                  status={status}
+                  lastSavedAt={lastDraftSavedAt}
+                  errorMessage={lastDraftError}
+                />
               )
             })()}
             <button
@@ -765,6 +910,19 @@ export function GraphEditor() {
           </div>
         )}
       </div>
+      
+      {/* Dialog de restauration draft (Task 2 - Story 0.5) */}
+      {showRestoreDialog && draftToRestore && (
+        <ConfirmDialog
+          isOpen={showRestoreDialog}
+          title="Brouillon local trouvé"
+          message={`Un brouillon plus récent que le fichier a été trouvé pour ce dialogue (sauvegardé ${new Date(draftToRestore.timestamp).toLocaleString()}).\n\nVoulez-vous restaurer le brouillon ?`}
+          confirmLabel="Restaurer le brouillon"
+          cancelLabel="Charger le fichier"
+          onConfirm={handleRestoreDraft}
+          onCancel={handleDiscardDraft}
+        />
+      )}
     </div>
   )
 }
