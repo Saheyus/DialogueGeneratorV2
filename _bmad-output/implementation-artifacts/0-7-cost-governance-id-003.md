@@ -341,4 +341,4 @@ N/A
   - Hook `useCostGovernance` pour vérification budget avant génération (toast 90%, modal 100%)
   - Intégration avec `LLMUsageService` pour mise à jour automatique du budget
   - 23 tests backend passent (unitaires + intégration)
-  - Tests E2E frontend à faire (Task 9)
+  - Tests E2E : Structure créée dans `e2e/cost-governance.spec.ts` (nécessite application running)
