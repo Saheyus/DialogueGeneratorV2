@@ -29,9 +29,10 @@ import { GenerationProgressModal } from './GenerationProgressModal'
 import { ModelSelector } from './ModelSelector'
 import { PresetSelector } from './PresetSelector'
 import { PresetValidationModal } from './PresetValidationModal'
-import { useToast, toastManager, SaveStatusIndicator, ConfirmDialog } from '../shared'
+import { useToast, SaveStatusIndicator, ConfirmDialog } from '../shared'
 import { CONTEXT_TOKENS_LIMITS, DEFAULT_MODEL } from '../../constants'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
+import { useCostGovernance } from '../../hooks/useCostGovernance'
 import type { SaveStatus } from '../shared/SaveStatusIndicator'
 import { useFlagsStore } from '../../store/flagsStore'
 
@@ -93,6 +94,11 @@ export function GenerationPanel() {
   const [isValidationModalOpen, setIsValidationModalOpen] = useState(false)
   const [validationResult, setValidationResult] = useState<any>(null)
   const [pendingPreset, setPendingPreset] = useState<any>(null)
+  
+  // Hook cost governance (Task 7)
+  const { checkBudget } = useCostGovernance()
+  const [showBudgetBlockModal, setShowBudgetBlockModal] = useState(false)
+  const [budgetBlockMessage, setBudgetBlockMessage] = useState<string>('')
   
   const [userInstructions, setUserInstructions] = useState('')
   const [maxContextTokens, setMaxContextTokens] = useState<number>(CONTEXT_TOKENS_LIMITS.DEFAULT)
@@ -648,6 +654,14 @@ export function GenerationPanel() {
     // Validation minimale
     if (!sceneSelection.characterA && !sceneSelection.characterB && !userInstructions.trim()) {
       toast('Veuillez sélectionner au moins un personnage ou ajouter des instructions', 'error')
+      return
+    }
+
+    // Vérifier le budget avant génération (Task 7)
+    const budgetCheck = await checkBudget()
+    if (!budgetCheck.allowed) {
+      setBudgetBlockMessage(budgetCheck.message || 'Budget dépassé')
+      setShowBudgetBlockModal(true)
       return
     }
 
@@ -1573,6 +1587,18 @@ export function GenerationPanel() {
           onConfirm={handleValidationConfirm}
         />
       )}
+      
+      {/* Modal de blocage budget (Task 7) */}
+      <ConfirmDialog
+        isOpen={showBudgetBlockModal}
+        title="Budget dépassé"
+        message={budgetBlockMessage || "Votre quota mensuel a été atteint. Veuillez augmenter le budget ou attendre le prochain mois."}
+        confirmLabel="Fermer"
+        cancelLabel="Fermer"
+        variant="danger"
+        onConfirm={() => setShowBudgetBlockModal(false)}
+        onCancel={() => setShowBudgetBlockModal(false)}
+      />
     </div>
   )
 }

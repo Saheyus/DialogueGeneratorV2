@@ -6,6 +6,8 @@ import { useState, useCallback, useEffect } from 'react'
 import { useGraphStore } from '../../store/graphStore'
 import { useContextStore } from '../../store/contextStore'
 import { useToast } from '../shared'
+import { useCostGovernance } from '../../hooks/useCostGovernance'
+import { ConfirmDialog } from '../shared'
 import { theme } from '../../theme'
 import { getErrorMessage } from '../../types/errors'
 import { DEFAULT_MODEL } from '../../constants'
@@ -26,8 +28,11 @@ export function AIGenerationPanel({
   const { generateFromNode, isGenerating, nodes } = useGraphStore()
   const { selections } = useContextStore()
   const toast = useToast()
+  const { checkBudget } = useCostGovernance()
   
   const [userInstructions, setUserInstructions] = useState('')
+  const [showBudgetBlockModal, setShowBudgetBlockModal] = useState(false)
+  const [budgetBlockMessage, setBudgetBlockMessage] = useState<string>('')
   const [generationMode, setGenerationMode] = useState<'continuation' | 'branch'>('continuation')
   const [llmModel, setLlmModel] = useState<string>(DEFAULT_MODEL)
   const [maxChoices, setMaxChoices] = useState<number | null>(null)
@@ -59,6 +64,14 @@ export function AIGenerationPanel({
   const handleGenerate = useCallback(async () => {
     if (!parentNodeId || !userInstructions.trim()) {
       toast('Veuillez entrer des instructions', 'warning')
+      return
+    }
+    
+    // Vérifier le budget avant génération (Task 7)
+    const budgetCheck = await checkBudget()
+    if (!budgetCheck.allowed) {
+      setBudgetBlockMessage(budgetCheck.message || 'Budget dépassé')
+      setShowBudgetBlockModal(true)
       return
     }
     
@@ -542,6 +555,18 @@ export function AIGenerationPanel({
           }
         </button>
       </div>
+      
+      {/* Modal de blocage budget (Task 7) */}
+      <ConfirmDialog
+        isOpen={showBudgetBlockModal}
+        title="Budget dépassé"
+        message={budgetBlockMessage || "Votre quota mensuel a été atteint. Veuillez augmenter le budget ou attendre le prochain mois."}
+        confirmLabel="Fermer"
+        cancelLabel="Fermer"
+        variant="danger"
+        onConfirm={() => setShowBudgetBlockModal(false)}
+        onCancel={() => setShowBudgetBlockModal(false)}
+      />
     </div>
   )
 }

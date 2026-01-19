@@ -3,6 +3,7 @@
  */
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { getUsageStatistics, type LLMUsageStatistics } from '../../api/llmUsage'
+import { getBudget, getUsage, type BudgetResponse, type UsageResponse } from '../../api/costs'
 import { UsageStatsCard } from './UsageStatsCard'
 import { UsageHistoryTable } from './UsageHistoryTable'
 import { getErrorMessage } from '../../types/errors'
@@ -20,6 +21,8 @@ export function UsageDashboard() {
   }, [])
 
   const [statistics, setStatistics] = useState<LLMUsageStatistics | null>(null)
+  const [budget, setBudget] = useState<BudgetResponse | null>(null)
+  const [usage, setUsage] = useState<UsageResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [startDate, setStartDate] = useState<string | null>(() => defaultDates.start)
@@ -30,8 +33,14 @@ export function UsageDashboard() {
     setLoading(true)
     setError(null)
     try {
-      const stats = await getUsageStatistics(startDate, endDate, model)
+      const [stats, budgetData, usageData] = await Promise.all([
+        getUsageStatistics(startDate, endDate, model),
+        getBudget(),
+        getUsage(),
+      ])
       setStatistics(stats)
+      setBudget(budgetData)
+      setUsage(usageData)
     } catch (err: unknown) {
       setError(getErrorMessage(err))
     } finally {
@@ -102,6 +111,71 @@ export function UsageDashboard() {
         <div className="usage-dashboard__loading">Chargement des statistiques...</div>
       ) : statistics ? (
         <>
+          {/* Section Budget LLM */}
+          {budget && (
+            <div className="usage-dashboard__budget-section">
+              <h2 style={{ marginTop: 0, marginBottom: '1.5rem', color: 'rgba(255, 255, 255, 0.95)' }}>
+                Budget LLM
+              </h2>
+              <div className="usage-dashboard__stats-grid">
+                <UsageStatsCard
+                  title="Quota mensuel"
+                  value={formatCost(budget.quota)}
+                  subtitle="Budget total"
+                />
+                <UsageStatsCard
+                  title="Montant dépensé"
+                  value={formatCost(budget.amount)}
+                  subtitle={`${budget.percentage.toFixed(1)}% utilisé`}
+                />
+                <UsageStatsCard
+                  title="Montant restant"
+                  value={formatCost(budget.remaining)}
+                  subtitle="Disponible ce mois"
+                />
+                <UsageStatsCard
+                  title="Pourcentage utilisé"
+                  value={budget.percentage.toFixed(1)}
+                  unit="%"
+                  subtitle={budget.percentage >= 90 ? '⚠️ Approche de la limite' : budget.percentage >= 100 ? '🚫 Budget dépassé' : '✅ Dans les limites'}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Graphique d'évolution des coûts */}
+          {usage && usage.daily_costs.length > 0 && (
+            <div className="usage-dashboard__chart-section">
+              <h2 style={{ marginTop: '2rem', marginBottom: '1.5rem', color: 'rgba(255, 255, 255, 0.95)' }}>
+                Évolution des coûts (mois actuel)
+              </h2>
+              <div className="usage-dashboard__chart">
+                <div className="usage-dashboard__chart-bars">
+                  {usage.daily_costs.map((daily) => {
+                    const maxCost = Math.max(...usage.daily_costs.map(d => d.cost), 1)
+                    const heightPercent = (daily.cost / maxCost) * 100
+                    return (
+                      <div key={daily.date} className="usage-dashboard__chart-bar-container">
+                        <div
+                          className="usage-dashboard__chart-bar"
+                          style={{ height: `${heightPercent}%` }}
+                          title={`${daily.date}: ${formatCost(daily.cost)}`}
+                        />
+                        <div className="usage-dashboard__chart-label">
+                          {new Date(daily.date).getDate()}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="usage-dashboard__chart-summary">
+                  <div>Total du mois: {formatCost(usage.total)}</div>
+                  <div>Pourcentage du budget: {usage.percentage.toFixed(1)}%</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="usage-dashboard__stats-grid">
             <UsageStatsCard
               title="Coût total"
