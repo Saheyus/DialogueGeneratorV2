@@ -25,6 +25,7 @@ from services.graph_validation_service import GraphValidationService
 from services.unity_dialogue_generation_service import UnityDialogueGenerationService
 from services.graph_generation_service import GraphGenerationService
 from core.llm.llm_client import ILLMClient
+from core.context.context_builder import ContextBuilder
 from api.container import ServiceContainer
 
 logger = logging.getLogger(__name__)
@@ -231,14 +232,10 @@ async def generate_node(
                 )
         
         # Génération normale (choix spécifique ou nextNode)
-        # Construire le prompt avec contexte parent
-        context_builder = ContextBuilder()
-        prompt_engine = PromptEngine(context_builder)
-        
+        # Enrichir les instructions avec le contexte parent
         parent_speaker = parent_content.get("speaker", "PNJ")
         parent_line = parent_content.get("line", "")
         
-        # Enrichir les instructions avec le contexte parent
         enriched_instructions = f"""Contexte précédent:
 {parent_speaker}: {parent_line}
 
@@ -246,8 +243,6 @@ Instructions pour la suite:
 {request_data.user_instructions}
 """
         
-        # Construire le prompt complet (pour génération normale)
-        # Note: Pour le batch, le service construit le prompt lui-même
         # Pour la génération normale, on utilise juste les instructions enrichies comme prompt string
         # (le service generate_dialogue_node attend un string, pas un BuiltPrompt)
         response = await generation_service.generate_dialogue_node(

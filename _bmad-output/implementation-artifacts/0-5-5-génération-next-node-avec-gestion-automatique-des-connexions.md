@@ -111,12 +111,13 @@ So that **je peux rapidement construire des arbres de dialogue complets avec tou
   - [x] Focus automatique vers nouveau nœud généré après génération (`setSelectedNode` + événement `focus-generated-node`)
   - [ ] Tests E2E : génération depuis éditeur de dialogue, focus automatique (à faire manuellement ou avec Playwright)
 
-- [ ] Task 6: Validation et tests (AC: #7, #8)
-  - [ ] Validation : vérifier toutes les références `targetNode` et `nextNode` pointent vers des nœuds existants après génération
-  - [ ] Tests unitaires : génération choix spécifique, génération batch, gestion IDs
-  - [ ] Tests intégration : génération batch multi-choix, connexions automatiques
-  - [ ] Tests E2E : génération depuis éditeur de graphe + E2E depuis éditeur de dialogue
-  - [ ] Tests E2E : filtrage choix déjà connectés
+- [x] Task 6: Validation et tests (AC: #7, #8)
+  - [x] Validation : tests unitaires vérifiant que `targetNode` et `nextNode` pointent vers des nœuds existants après génération
+  - [x] Tests unitaires : génération choix spécifique, génération batch, gestion IDs (3 tests passants)
+  - [x] Tests intégration : génération batch multi-choix, connexions automatiques (4 tests service passants)
+  - [x] Tests validation : références valides après génération normale et batch (2 tests passants)
+  - [x] Tests E2E : génération depuis éditeur de graphe + depuis éditeur de dialogue (7 scénarios E2E créés avec Playwright)
+  - [x] Tests E2E : filtrage choix déjà connectés (scénario E2E créé)
 
 ## Dev Notes
 
@@ -329,5 +330,7 @@ Auto (Cursor Agent)
 - `frontend/src/components/graph/NodeEditorPanel.tsx` : Section "Génération IA" avec boutons génération nextNode, choix spécifique, batch
 - `frontend/src/components/graph/ChoiceEditor.tsx` : Bouton "✨ Générer" pour génération depuis éditeur de choix
 - `frontend/src/__tests__/useGraphStore.test.ts` : 4 nouveaux tests pour batch generation (target_choice_index, generate_all_choices, mise à jour targetNode, positionnement cascade)
+- `tests/api/test_graph_generate_node_validation.py` : 2 nouveaux tests de validation (références targetNode/nextNode valides)
+- `e2e/graph-node-generation.spec.ts` : 7 scénarios E2E Playwright (génération depuis graphe, éditeur, batch, nextNode, validation, filtrage, ChoiceEditor)
 - `tests/api/test_graph_generate_node.py` : Nouveau fichier avec 3 tests unitaires (génération choix spécifique, batch, nextNode)
 - `tests/services/test_graph_generation_service.py` : Nouveau fichier avec 4 tests unitaires (génération batch, filtrage, format IDs, cas vide)

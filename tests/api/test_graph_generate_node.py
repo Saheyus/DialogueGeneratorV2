@@ -59,8 +59,6 @@ async def test_generate_node_with_target_choice_index(client, sample_parent_node
     """
     with patch('factories.llm_factory.LLMClientFactory') as mock_factory, \
          patch('api.routers.graph.ServiceContainer') as mock_container, \
-         patch('api.routers.graph.PromptEngine') as mock_prompt_engine, \
-         patch('api.routers.graph.ContextBuilder') as mock_context_builder, \
          patch('api.routers.graph.UnityDialogueGenerationService') as mock_service_class:
         
         # Setup mocks
@@ -88,11 +86,6 @@ async def test_generate_node_with_target_choice_index(client, sample_parent_node
         mock_container_instance = MagicMock()
         mock_container_instance.get_config_service.return_value = mock_config_service
         mock_container.return_value = mock_container_instance
-        
-        # Mock prompt engine
-        mock_engine_instance = MagicMock()
-        mock_engine_instance.build_prompt.return_value = "test prompt"
-        mock_prompt_engine.return_value = mock_engine_instance
         
         request_data = {
             "parent_node_id": "NODE_PARENT_1",
@@ -189,8 +182,6 @@ async def test_generate_node_nextnode_linear(client, sample_parent_node_without_
     """
     with patch('factories.llm_factory.LLMClientFactory') as mock_factory, \
          patch('api.routers.graph.ServiceContainer') as mock_container, \
-         patch('api.routers.graph.PromptEngine') as mock_prompt_engine, \
-         patch('api.routers.graph.ContextBuilder') as mock_context_builder, \
          patch('api.routers.graph.UnityDialogueGenerationService') as mock_service_class:
         
         # Setup mocks
@@ -217,11 +208,6 @@ async def test_generate_node_nextnode_linear(client, sample_parent_node_without_
         mock_container_instance = MagicMock()
         mock_container_instance.get_config_service.return_value = mock_config_service
         mock_container.return_value = mock_container_instance
-        
-        # Mock prompt engine
-        mock_engine_instance = MagicMock()
-        mock_engine_instance.build_prompt.return_value = "test prompt"
-        mock_prompt_engine.return_value = mock_engine_instance
         
         request_data = {
             "parent_node_id": "NODE_PARENT_2",
