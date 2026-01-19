@@ -42,9 +42,9 @@ development_status:
   epic-0: in-progress
   0-1-fix-graph-editor-stableid-adr-003: done
   0-2-progress-feedback-modal-avec-sse-streaming-adr-001: done
-  0-3-multi-provider-llm-avec-abstraction-mistral-adr-004: ready-for-dev
-  0-4-presets-système-adr-002: ready-for-review
-  0-5-auto-save-dialogues-id-001: backlog
+  0-3-multi-provider-llm-avec-abstraction-mistral-adr-004: done
+  0-4-presets-système-adr-002: done
+  0-5-auto-save-dialogues-id-001: review
   0-6-validation-cycles-graphe-id-002: backlog
   0-7-cost-governance-id-003: backlog
   0-8-streaming-cleanup-id-004: backlog
