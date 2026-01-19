@@ -9,14 +9,19 @@ import type { Choice, DialogueNodeData } from '../../schemas/nodeEditorSchema'
 export interface ChoiceEditorProps {
   choiceIndex: number
   onRemove?: () => void
+  onGenerateForChoice?: (choiceIndex: number) => void
 }
 
 export const ChoiceEditor = memo(function ChoiceEditor({
   choiceIndex,
   onRemove,
+  onGenerateForChoice,
 }: ChoiceEditorProps) {
-  const { register, formState: { errors }, control } = useFormContext<DialogueNodeData>()
+  const { register, formState: { errors }, control, watch } = useFormContext<DialogueNodeData>()
   const choicesErrors = errors.choices?.[choiceIndex]
+  const choices = watch('choices') || []
+  const currentChoice = choices[choiceIndex]
+  const isConnected = currentChoice?.targetNode && currentChoice.targetNode !== 'END'
   
   return (
     <div
@@ -31,24 +36,49 @@ export const ChoiceEditor = memo(function ChoiceEditor({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
         <h4 style={{ margin: 0, fontSize: '0.9rem', color: theme.text.primary }}>
           Choix #{choiceIndex + 1}
+          {isConnected && (
+            <span style={{ fontSize: '0.75rem', color: theme.text.secondary, marginLeft: '0.5rem', fontStyle: 'italic' }}>
+              (connecté)
+            </span>
+          )}
         </h4>
-        {onRemove && (
-          <button
-            type="button"
-            onClick={onRemove}
-            style={{
-              padding: '0.25rem 0.5rem',
-              border: `1px solid ${theme.border.primary}`,
-              borderRadius: 4,
-              backgroundColor: '#E74C3C',
-              color: 'white',
-              cursor: 'pointer',
-              fontSize: '0.75rem',
-            }}
-          >
-            🗑️ Supprimer
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {onGenerateForChoice && !isConnected && (
+            <button
+              type="button"
+              onClick={() => onGenerateForChoice(choiceIndex)}
+              style={{
+                padding: '0.25rem 0.5rem',
+                border: `1px solid ${theme.button.primary.background}`,
+                borderRadius: 4,
+                backgroundColor: theme.button.primary.background,
+                color: theme.button.primary.color,
+                cursor: 'pointer',
+                fontSize: '0.75rem',
+              }}
+              title="Générer la suite pour ce choix"
+            >
+              ✨ Générer
+            </button>
+          )}
+          {onRemove && (
+            <button
+              type="button"
+              onClick={onRemove}
+              style={{
+                padding: '0.25rem 0.5rem',
+                border: `1px solid ${theme.border.primary}`,
+                borderRadius: 4,
+                backgroundColor: '#E74C3C',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '0.75rem',
+              }}
+            >
+              🗑️ Supprimer
+            </button>
+          )}
+        </div>
       </div>
       
       {/* Texte du choix */}

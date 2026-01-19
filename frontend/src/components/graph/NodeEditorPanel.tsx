@@ -2,11 +2,17 @@
  * Panel pour éditer les propriétés d'un nœud sélectionné.
  * Version avec React Hook Form + Zod pour validation.
  */
-import { memo, useEffect } from 'react'
+import { memo, useEffect, useState, useCallback } from 'react'
 import { useForm, FormProvider, useFormContext, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useGraphStore } from '../../store/graphStore'
+import { useContextStore } from '../../store/contextStore'
+import { useToast } from '../shared'
 import { theme } from '../../theme'
+import { getErrorMessage } from '../../types/errors'
+import { DEFAULT_MODEL } from '../../constants'
+import * as configAPI from '../../api/config'
+import type { LLMModelResponse } from '../../types/api'
 import {
   dialogueNodeDataSchema,
   testNodeDataSchema,
@@ -19,7 +25,25 @@ import {
 import { ChoiceEditor } from './ChoiceEditor'
 
 export const NodeEditorPanel = memo(function NodeEditorPanel() {
-  const { selectedNodeId, nodes, updateNode, deleteNode } = useGraphStore()
+  const { selectedNodeId, nodes, updateNode, deleteNode, generateFromNode, isGenerating, setSelectedNode } = useGraphStore()
+  const { selections } = useContextStore()
+  const toast = useToast()
+  
+  const [showGenerationOptions, setShowGenerationOptions] = useState(false)
+  const [userInstructions, setUserInstructions] = useState('')
+  const [llmModel, setLlmModel] = useState<string>(DEFAULT_MODEL)
+  const [availableModels, setAvailableModels] = useState<LLMModelResponse[]>([])
+  
+  // Charger les modèles disponibles
+  useEffect(() => {
+    configAPI.listLLMModels()
+      .then((response) => {
+        setAvailableModels(response.models)
+      })
+      .catch((err) => {
+        console.error('Erreur lors du chargement des modèles:', err)
+      })
+  }, [])
   
   const selectedNode = nodes.find((n) => n.id === selectedNodeId)
   
@@ -103,6 +127,128 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
       deleteNode(selectedNodeId)
     }
   }
+  
+  // Handler pour générer la suite (nextNode)
+  const handleGenerateNext = useCallback(async () => {
+    if (!selectedNodeId || !userInstructions.trim()) {
+      toast('Veuillez entrer des instructions', 'warning')
+      return
+    }
+    
+    try {
+      const allCharacters = [
+        ...(selections.characters_full || []),
+        ...(selections.characters_excerpt || []),
+      ]
+      const npcSpeakerId = allCharacters.length > 0 ? allCharacters[0] : undefined
+      
+      const newNodeId = await generateFromNode(
+        selectedNodeId,
+        userInstructions,
+        {
+          context_selections: selections,
+          npc_speaker_id: npcSpeakerId,
+          llm_model_identifier: llmModel,
+        }
+      )
+      
+      toast('Nœud généré avec succès', 'success', 2000)
+      
+      // Focus automatique vers le nouveau nœud
+      setSelectedNode(newNodeId)
+      const event = new CustomEvent('focus-generated-node', {
+        detail: { nodeId: newNodeId }
+      })
+      window.dispatchEvent(event)
+      
+      setShowGenerationOptions(false)
+      setUserInstructions('')
+    } catch (err) {
+      toast(`Erreur lors de la génération: ${getErrorMessage(err)}`, 'error')
+    }
+  }, [selectedNodeId, userInstructions, selections, llmModel, generateFromNode, setSelectedNode, toast])
+  
+  // Handler pour générer pour un choix spécifique
+  const handleGenerateForChoice = useCallback(async (choiceIndex: number) => {
+    if (!selectedNodeId) return
+    
+    // Si pas d'instructions, utiliser un prompt par défaut
+    const instructions = userInstructions.trim() || 'Continue la conversation de manière naturelle'
+    
+    try {
+      const allCharacters = [
+        ...(selections.characters_full || []),
+        ...(selections.characters_excerpt || []),
+      ]
+      const npcSpeakerId = allCharacters.length > 0 ? allCharacters[0] : undefined
+      
+      const newNodeId = await generateFromNode(
+        selectedNodeId,
+        instructions,
+        {
+          context_selections: selections,
+          npc_speaker_id: npcSpeakerId,
+          llm_model_identifier: llmModel,
+          target_choice_index: choiceIndex,
+        }
+      )
+      
+      toast('Nœud généré avec succès', 'success', 2000)
+      
+      // Focus automatique vers le nouveau nœud
+      setSelectedNode(newNodeId)
+      const event = new CustomEvent('focus-generated-node', {
+        detail: { nodeId: newNodeId }
+      })
+      window.dispatchEvent(event)
+      
+      setShowGenerationOptions(false)
+      setUserInstructions('')
+    } catch (err) {
+      toast(`Erreur lors de la génération: ${getErrorMessage(err)}`, 'error')
+    }
+  }, [selectedNodeId, userInstructions, selections, llmModel, generateFromNode, setSelectedNode, toast])
+  
+  // Handler pour générer pour tous les choix
+  const handleGenerateAllChoices = useCallback(async () => {
+    if (!selectedNodeId || !userInstructions.trim()) {
+      toast('Veuillez entrer des instructions', 'warning')
+      return
+    }
+    
+    try {
+      const allCharacters = [
+        ...(selections.characters_full || []),
+        ...(selections.characters_excerpt || []),
+      ]
+      const npcSpeakerId = allCharacters.length > 0 ? allCharacters[0] : undefined
+      
+      const newNodeId = await generateFromNode(
+        selectedNodeId,
+        userInstructions,
+        {
+          context_selections: selections,
+          npc_speaker_id: npcSpeakerId,
+          llm_model_identifier: llmModel,
+          generate_all_choices: true,
+        }
+      )
+      
+      toast('Nœuds générés avec succès', 'success', 2000)
+      
+      // Focus automatique vers le premier nouveau nœud
+      setSelectedNode(newNodeId)
+      const event = new CustomEvent('focus-generated-node', {
+        detail: { nodeId: newNodeId }
+      })
+      window.dispatchEvent(event)
+      
+      setShowGenerationOptions(false)
+      setUserInstructions('')
+    } catch (err) {
+      toast(`Erreur lors de la génération: ${getErrorMessage(err)}`, 'error')
+    }
+  }, [selectedNodeId, userInstructions, selections, llmModel, generateFromNode, setSelectedNode, toast])
   
   if (!selectedNode) {
     return (
@@ -305,6 +451,144 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
         {/* Choix (pour dialogue nodes) */}
         {nodeType === 'dialogueNode' && <ChoicesEditor />}
         
+        {/* Section Génération IA */}
+        {nodeType === 'dialogueNode' && (
+          <div
+            style={{
+              padding: '1rem',
+              backgroundColor: theme.background.secondary,
+              borderRadius: 6,
+              border: `1px solid ${theme.border.primary}`,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 'bold', color: theme.text.primary }}>
+                ✨ Génération IA
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowGenerationOptions(!showGenerationOptions)}
+                style={{
+                  padding: '0.5rem 0.75rem',
+                  border: `1px solid ${theme.border.primary}`,
+                  borderRadius: 4,
+                  backgroundColor: showGenerationOptions ? theme.button.primary.background : theme.button.default.background,
+                  color: showGenerationOptions ? theme.button.primary.color : theme.button.default.color,
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                }}
+              >
+                {showGenerationOptions ? 'Masquer' : 'Afficher'}
+              </button>
+            </div>
+            
+            {showGenerationOptions && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {/* Instructions */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 'bold', color: theme.text.primary }}>
+                    Instructions pour la génération
+                  </label>
+                  <textarea
+                    value={userInstructions}
+                    onChange={(e) => setUserInstructions(e.target.value)}
+                    placeholder="Décrivez ce que vous voulez générer..."
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem',
+                      border: `1px solid ${theme.border.primary}`,
+                      borderRadius: 4,
+                      backgroundColor: theme.background.tertiary,
+                      color: theme.text.primary,
+                      fontSize: '0.9rem',
+                      fontFamily: 'inherit',
+                      resize: 'vertical',
+                    }}
+                  />
+                </div>
+                
+                {/* Modèle LLM */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 'bold', color: theme.text.primary }}>
+                    Modèle LLM
+                  </label>
+                  <select
+                    value={llmModel}
+                    onChange={(e) => setLlmModel(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem',
+                      border: `1px solid ${theme.border.primary}`,
+                      borderRadius: 4,
+                      backgroundColor: theme.background.tertiary,
+                      color: theme.text.primary,
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    {availableModels.map((model, index) => (
+                      <option key={`${model.model_identifier}-${index}-${model.display_name || ''}`} value={model.model_identifier}>
+                        {model.display_name || model.model_identifier}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                {/* Boutons de génération */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {/* Bouton "Générer la suite" (nextNode) */}
+                  <button
+                    type="button"
+                    onClick={handleGenerateNext}
+                    disabled={isGenerating || !userInstructions.trim()}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: 'none',
+                      borderRadius: 4,
+                      backgroundColor: theme.button.primary.background,
+                      color: theme.button.primary.color,
+                      cursor: (isGenerating || !userInstructions.trim()) ? 'not-allowed' : 'pointer',
+                      opacity: (isGenerating || !userInstructions.trim()) ? 0.6 : 1,
+                      fontSize: '0.9rem',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    {isGenerating ? 'Génération...' : '✨ Générer la suite (nextNode)'}
+                  </button>
+                  
+                  {/* Bouton "Générer pour tous les choix" si plusieurs choix sans targetNode */}
+                  {(() => {
+                    const unconnectedChoices = (choices || []).filter(
+                      (choice: Choice) => !choice.targetNode || choice.targetNode === 'END'
+                    )
+                    return unconnectedChoices.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={handleGenerateAllChoices}
+                        disabled={isGenerating || !userInstructions.trim()}
+                        style={{
+                          width: '100%',
+                          padding: '0.75rem',
+                          border: `1px solid ${theme.border.primary}`,
+                          borderRadius: 4,
+                          backgroundColor: theme.button.default.background,
+                          color: theme.button.default.color,
+                          cursor: (isGenerating || !userInstructions.trim()) ? 'not-allowed' : 'pointer',
+                          opacity: (isGenerating || !userInstructions.trim()) ? 0.6 : 1,
+                          fontSize: '0.9rem',
+                        }}
+                      >
+                        {isGenerating ? 'Génération batch...' : `✨ Générer pour tous les choix (${unconnectedChoices.length})`}
+                      </button>
+                    ) : null
+                  })()}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        
         {/* Actions */}
         <div
           style={{
@@ -415,6 +699,7 @@ function ChoicesEditor() {
             key={field.id}
             choiceIndex={index}
             onRemove={fields.length > 1 ? () => remove(index) : undefined}
+            onGenerateForChoice={handleGenerateForChoice}
           />
         ))
       )}
