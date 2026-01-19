@@ -48,6 +48,8 @@ class GenerateNodeRequest(BaseModel):
     system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
     narrative_tags: Optional[List[str]] = Field(None, description="Tags narratifs")
     llm_model_identifier: Optional[str] = Field(None, description="Identifiant du modèle LLM")
+    target_choice_index: Optional[int] = Field(None, description="Index du choix spécifique à connecter (si None, génère pour tous les choix sans targetNode)")
+    generate_all_choices: bool = Field(False, description="Si True, génère un nœud pour chaque choix sans targetNode")
 
 
 class SuggestedConnection(BaseModel):

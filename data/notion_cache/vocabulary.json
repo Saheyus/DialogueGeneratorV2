@@ -417,6 +417,14 @@
       "origin": "De retrait (se retirer) comme posture philosophique."
     },
     {
+      "term": "Zim",
+      "definition": "Genre social Umcut : soignants et gardiens des murs d'incubation (~45% de la population). Entretiennent les murs et élèvent les nouveau-nés.",
+      "popularité": "Occulte",
+      "category": "Concept",
+      "type": "",
+      "origin": ""
+    },
+    {
       "term": "Couronnes Intermédiaires",
       "definition": "Zone tampon entre Vieille Ville et Périphéries, 8 sous-lieux.",
       "popularité": "Mondialement",
@@ -607,6 +615,14 @@
       "category": "Créature",
       "type": "Emprunt détourné",
       "origin": "De chœur pour Rêveur collectif aquatique."
+    },
+    {
+      "term": "Émergence (Umcut)",
+      "definition": "Désigne chacune des 5 communautés-tours Umcut : La Flèche (Ulcérés), Spirales, Vortex, Opposés et Fractals.",
+      "popularité": "Occulte",
+      "category": "Concept",
+      "type": "",
+      "origin": ""
     },
     {
       "term": "Nectar Stygien",
@@ -937,6 +953,22 @@
       "origin": "De l'écriture kharosthi historique (Inde ancienne), détourné pour désigner les inscriptions techno-liturgiques de la Lisière."
     },
     {
+      "term": "Nev",
+      "definition": "Genre social Umcut : négociateurs et médiateurs (~35% de la population). Gèrent les relations commerciales et diplomatiques, souvent sédentaires.",
+      "popularité": "Occulte",
+      "category": "Concept",
+      "type": "",
+      "origin": ""
+    },
+    {
+      "term": "Sans-Cycle",
+      "definition": "Umcut définitivement coupé de sa tour d'origine, ne pouvant plus renaître et faisant face à une mort définitive. Environ 5% de la diaspora.",
+      "popularité": "Occulte",
+      "category": "Concept",
+      "type": "",
+      "origin": ""
+    },
+    {
       "term": "Commémoration de l'Agénèse",
       "definition": "Célébration universelle du sacrifice des Rêveurs et de la stabilisation d'Escelion.",
       "popularité": "Mondialement",
@@ -983,6 +1015,14 @@
       "category": "Créature",
       "type": "Emprunt détourné",
       "origin": "De supplicié (torturé) pour Rêveur incomplet."
+    },
+    {
+      "term": "Mur d'incubation",
+      "definition": "Structure organique des tours Umcut où s'opère la renaissance. Sécrète une matrice embryonnaire dans laquelle se développe un nouveau corps pendant 180 jours.",
+      "popularité": "Occulte",
+      "category": "Concept",
+      "type": "",
+      "origin": ""
     },
     {
       "term": "Stèle Vœux Contre-Ondoyants",
@@ -1359,6 +1399,14 @@
       "category": "Organisation",
       "type": "Emprunt détourné",
       "origin": "D'archipel (îles dispersées) pour justice mobile."
+    },
+    {
+      "term": "Saturation mémorielle",
+      "definition": "Pulsion croissante de retour vers la tour ressentie par les Umcuts après ~45 Nuées. L'individu se sent « plein » d'expériences à transmettre.",
+      "popularité": "Occulte",
+      "category": "Concept",
+      "type": "",
+      "origin": ""
     },
     {
       "term": "Xyriad Achromatique",
@@ -2250,7 +2298,7 @@
     },
     {
       "term": "Umcut",
-      "definition": "Vermines à renaissance cyclique, 3 ethnies : Fractals/Opposés/Spirales.",
+      "definition": "Polyformes sessiles-mobiles d'apparence rat-tapir bipède à renaissance cyclique, 3 genres, 5 émergences.",
       "popularité": "Mondialement",
       "category": "Race/Espèce",
       "type": "Pure invention",
@@ -2375,6 +2423,14 @@
       "category": "Lieu",
       "type": "",
       "origin": "De dune avec fovéal (centre rétine)."
+    },
+    {
+      "term": "Kor",
+      "definition": "Genre social Umcut : explorateurs et voyageurs (~20% de la population). Quittent les tours pour parcourir Escelion, accumulant savoirs et biens.",
+      "popularité": "Occulte",
+      "category": "Concept",
+      "type": "",
+      "origin": ""
     },
     {
       "term": "Fiach-Örtei",

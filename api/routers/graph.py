@@ -222,10 +222,23 @@ Instructions pour la suite:
             max_choices=request_data.max_choices
         )
         
+        # Déterminer l'ID de départ selon le mode de génération
+        parent_choices = parent_content.get("choices", [])
+        
+        if request_data.target_choice_index is not None:
+            # Génération pour choix spécifique : utiliser format CHOICE_{index}
+            start_id = f"NODE_{request_data.parent_node_id}_CHOICE_{request_data.target_choice_index}"
+        elif parent_choices:
+            # Génération pour choix (premier sans targetNode) : utiliser format CHILD
+            start_id = f"NODE_{request_data.parent_node_id}_CHILD"
+        else:
+            # Génération nextNode (navigation linéaire) : utiliser format CHILD
+            start_id = f"NODE_{request_data.parent_node_id}_CHILD"
+        
         # Enrichir avec ID
         enriched_nodes = generation_service.enrich_with_ids(
             content=response,
-            start_id=f"NODE_{request_data.parent_node_id}_CHILD"
+            start_id=start_id
         )
         
         # Le premier nœud enrichi
@@ -235,9 +248,19 @@ Instructions pour la suite:
         suggested_connections = []
         
         # Connexion depuis le parent vers le nouveau nœud
-        # Si le parent a des choix, on suggère de connecter un choix spécifique
-        parent_choices = parent_content.get("choices", [])
-        if parent_choices:
+        if request_data.target_choice_index is not None:
+            # Connexion pour choix spécifique
+            suggested_connections.append(
+                SuggestedConnection(
+                    **{
+                        "from": request_data.parent_node_id,
+                        "to": generated_node["id"],
+                        "via_choice_index": request_data.target_choice_index,
+                        "connection_type": "choice"
+                    }
+                )
+            )
+        elif parent_choices:
             # Suggérer de connecter le premier choix sans targetNode
             for i, choice in enumerate(parent_choices):
                 if not choice.get("targetNode") or choice.get("targetNode") == "END":

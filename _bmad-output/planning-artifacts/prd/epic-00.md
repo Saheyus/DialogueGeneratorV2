@@ -413,6 +413,145 @@ So that **je ne perds jamais mon travail même en cas de crash ou fermeture acci
 
 ---
 
+### Story 0.5.5: Génération next node avec gestion automatique des connexions
+
+As a **utilisateur créant des dialogues dans l'éditeur de graphe OU dans l'éditeur de dialogue**,
+I want **générer la suite d'un dialogue (next node) pour un choix de réponse spécifique ou pour tous les choix d'un coup**,
+So that **je peux rapidement construire des arbres de dialogue complets avec toutes les connexions (targetNode/nextNode) gérées automatiquement par le logiciel, que je travaille dans l'éditeur de graphe ou dans l'éditeur de dialogue**.
+
+**Acceptance Criteria:**
+
+**Given** je suis dans l'éditeur de graphe et je sélectionne un nœud de dialogue PNJ qui contient plusieurs réponses PJ (choices)
+**When** je sélectionne une réponse PJ spécifique (choice) et je lance "Générer la suite pour ce choix"
+**Then** un nouveau nœud de dialogue PNJ est généré par l'IA
+**And** le champ `targetNode` de la réponse PJ sélectionnée est automatiquement rempli avec l'ID du nouveau nœud généré
+**And** le nouveau nœud est ajouté au graphe à une position logique (à droite du parent, légèrement décalé verticalement)
+**And** une connexion visuelle (edge) est créée automatiquement entre le choix et le nouveau nœud
+
+**Given** je suis dans l'éditeur de dialogue et je sélectionne un nœud de dialogue PNJ qui contient plusieurs réponses PJ (choices)
+**When** je sélectionne une réponse PJ spécifique (choice) dans le panneau d'édition et je lance "Générer la suite pour ce choix"
+**Then** un nouveau nœud de dialogue PNJ est généré par l'IA
+**And** le champ `targetNode` de la réponse PJ sélectionnée est automatiquement rempli avec l'ID du nouveau nœud généré
+**And** les connexions sont gérées automatiquement identiquement à l'éditeur de graphe
+**And** après génération, je suis redirigé vers le nouveau nœud généré (focus automatique dans l'éditeur de dialogue)
+
+**Given** je suis dans l'éditeur de graphe et je sélectionne un nœud de dialogue PNJ qui contient plusieurs réponses PJ (choices) dont aucune n'a de `targetNode` défini
+**When** je lance "Générer la suite pour tous les choix"
+**Then** un nouveau nœud de dialogue PNJ est généré par l'IA pour chaque réponse PJ sans `targetNode`
+**And** chaque nouveau nœud est positionné dans le graphe de manière organisée (en cascade verticale, à droite du parent)
+**And** chaque champ `targetNode` des réponses PJ est automatiquement rempli avec l'ID du nœud correspondant
+**And** toutes les connexions visuelles (edges) sont créées automatiquement
+**And** les nœuds sont générés séquentiellement ou en batch (selon configuration) avec indicateur de progression
+
+**Given** je suis dans l'éditeur de dialogue et je sélectionne un nœud de dialogue PNJ qui contient plusieurs réponses PJ (choices) dont aucune n'a de `targetNode` défini
+**When** je lance "Générer la suite pour tous les choix" depuis le panneau d'édition
+**Then** un nouveau nœud de dialogue PNJ est généré par l'IA pour chaque réponse PJ sans `targetNode`
+**And** chaque champ `targetNode` des réponses PJ est automatiquement rempli avec l'ID du nœud correspondant
+**And** les connexions sont gérées automatiquement identiquement à l'éditeur de graphe
+**And** les nœuds sont générés séquentiellement ou en batch avec indicateur de progression dans la modal
+**And** après génération, je suis redirigé vers le premier nouveau nœud généré (focus automatique)
+
+**Given** je suis dans l'éditeur de graphe et je sélectionne un nœud de dialogue PNJ sans choix (navigation linéaire)
+**When** je lance "Générer la suite (nextNode)"
+**Then** un nouveau nœud de dialogue PNJ est généré par l'IA
+**And** le champ `nextNode` du nœud parent est automatiquement rempli avec l'ID du nouveau nœud généré
+**And** le nouveau nœud est ajouté au graphe à une position logique (à droite du parent)
+**And** une connexion visuelle (edge) est créée automatiquement entre le parent et le nouveau nœud
+
+**Given** je suis dans l'éditeur de dialogue et je sélectionne un nœud de dialogue PNJ sans choix (navigation linéaire)
+**When** je lance "Générer la suite (nextNode)" depuis le panneau d'édition
+**Then** un nouveau nœud de dialogue PNJ est généré par l'IA
+**And** le champ `nextNode` du nœud parent est automatiquement rempli avec l'ID du nouveau nœud généré
+**And** les connexions sont gérées automatiquement identiquement à l'éditeur de graphe
+**And** après génération, je suis redirigé vers le nouveau nœud généré (focus automatique)
+
+**Given** je génère plusieurs nœuds depuis un même parent (génération multi-choix), que ce soit depuis l'éditeur de graphe ou l'éditeur de dialogue
+**When** les nœuds sont générés
+**Then** chaque nouveau nœud reçoit un ID unique et stable (format cohérent)
+**And** les références `targetNode` et `nextNode` pointent vers les bons IDs
+**And** aucune référence orpheline n'est créée (toutes les références pointent vers des nœuds existants)
+**And** l'ordre logique des connexions est respecté (les nœuds se suivent dans l'ordre de génération)
+
+**Given** je génère la suite d'un dialogue avec des choix déjà connectés à d'autres nœuds, que ce soit depuis l'éditeur de graphe ou l'éditeur de dialogue
+**When** je lance "Générer la suite pour tous les choix"
+**Then** seuls les choix sans `targetNode` (ou avec `targetNode="END"`) génèrent de nouveaux nœuds
+**And** les choix déjà connectés ne sont pas modifiés
+**And** un message indique "X choix(s) déjà connecté(s), Y nouveau(x) nœud(s) généré(s)"
+
+**Technical Requirements:**
+- Backend : Étendre endpoint `/api/v1/graph/generate-node` pour support choix spécifique
+  - Nouveau paramètre optionnel `target_choice_index: Optional[int]` pour générer pour un choix spécifique
+  - Nouveau paramètre optionnel `generate_all_choices: bool = False` pour générer tous les choix en batch
+  - Modifier logique connexions suggérées : si `target_choice_index` fourni, connecter explicitement ce choix
+  - Si `generate_all_choices=True`, générer plusieurs nœuds et retourner liste avec connexions
+- Backend : Service `services/graph_generation_service.py` pour logique batch génération multi-choix
+  - Fonction `generate_nodes_for_all_choices(parent_node, instructions, context)` → liste nœuds + connexions
+  - Gestion automatique IDs : générer IDs uniques pour chaque nœud (format `NODE_{parent_id}_CHOICE_{index}`)
+  - Gestion automatique connexions : remplir `targetNode` dans les choix du parent, créer `suggested_connections`
+- Frontend : Étendre `AIGenerationPanel.tsx` pour support génération choix spécifique
+  - Nouveau mode sélection : "Générer pour ce choix" (visible quand parent a des choix)
+  - Nouveau bouton "Générer la suite pour tous les choix" (visible quand parent a plusieurs choix sans targetNode)
+  - Indicateur de progression si génération batch (plusieurs nœuds)
+- Frontend : Étendre `graphStore.ts` méthode `generateFromNode` pour support batch
+  - Nouveau paramètre `targetChoiceIndex?: number` pour choix spécifique
+  - Nouveau paramètre `generateAllChoices?: boolean` pour génération batch
+  - Gestion automatique connexions : après génération, mettre à jour `targetNode` dans le parent automatiquement
+  - Positionnement automatique : calculer positions en cascade pour batch génération
+- Frontend : Étendre `NodeEditorPanel.tsx` pour support génération depuis éditeur de dialogue
+  - Bouton "Générer la suite" pour nœud sélectionné (visible dans panneau édition)
+  - Menu contextuel choix : "Générer suite pour ce choix" (si parent a des choix)
+  - Bouton "Générer la suite pour tous les choix" (visible quand parent a plusieurs choix sans targetNode)
+  - Intégration même logique que `AIGenerationPanel.tsx` (réutilisation code génération)
+  - Support génération choix spécifique (`targetChoiceIndex`) et batch (`generateAllChoices`)
+  - Gestion automatique connexions identique à éditeur de graphe (mettre à jour `targetNode`/`nextNode`)
+  - Focus automatique vers nouveau nœud généré après génération
+- Frontend : Éditeur de dialogue - S'assurer que toutes les fonctionnalités de génération sont disponibles
+  - Même UX que éditeur de graphe : modal progression, streaming, indicateur batch
+  - Même gestion connexions automatiques : `targetNode` et `nextNode` remplis automatiquement
+  - Navigation après génération : focus vers nouveau nœud (équivalent zoom graphe)
+- Validation : Vérifier que toutes les références `targetNode` et `nextNode` pointent vers des nœuds existants après génération (depuis les deux interfaces)
+- Tests : Unit (génération choix spécifique), Integration (génération batch multi-choix), E2E (génération depuis éditeur de graphe + E2E depuis éditeur de dialogue)
+- Documentation : Mettre à jour `GRAPH_EDITOR.md` avec workflow génération next node
+
+**Dev Notes:**
+
+**Architecture Patterns (Extension Story 0.2):**
+- **Réutilisation existante** : Étendre `generateFromNode` existant au lieu de créer nouveau endpoint
+- **Gestion automatique connexions** : Le backend retourne `suggested_connections`, le frontend doit appliquer automatiquement (actuellement c'est suggéré, ici c'est obligatoire)
+- **Format IDs** : Respecter format existant pour IDs (`NODE_{parent_id}_CHILD` → `NODE_{parent_id}_CHOICE_{index}` pour choix spécifique)
+
+**Gestion automatique connexions :**
+- **Backend** : Retourner `suggested_connections` avec flag `auto_apply: true` pour différencier des suggestions manuelles
+- **Frontend** : Si `auto_apply: true`, appliquer connexion automatiquement (mettre à jour `targetNode` dans parent, créer edge)
+- **Positionnement** : Calculer positions en cascade verticale pour batch (offset Y = 150 * index_choice)
+
+**Génération batch multi-choix :**
+- **Séquentielle** : Générer un nœud à la fois (plus simple, feedback progressif)
+- **Alternative future** : Génération parallèle si nécessaire (optimisation)
+- **Progression** : Afficher "Génération 2/5..." dans modal progression si batch
+
+**Intégration éditeur dialogue (OBLIGATOIRE - Égale priorité avec éditeur de graphe) :**
+- **Parité fonctionnelle** : Toutes les fonctionnalités de génération doivent être disponibles dans l'éditeur de dialogue ET l'éditeur de graphe
+  - Génération pour choix spécifique (disponible dans les deux interfaces)
+  - Génération batch pour tous les choix (disponible dans les deux interfaces)
+  - Génération nextNode pour navigation linéaire (disponible dans les deux interfaces)
+- **Réutilisation code** : Utiliser même logique `generateFromNode` que graphe (éviter duplication)
+  - Même appel API backend (`/api/v1/graph/generate-node`)
+  - Même gestion connexions automatiques (mettre à jour `targetNode`/`nextNode`)
+  - Même modal progression et streaming
+- **UX cohérente** : Même expérience utilisateur dans les deux interfaces
+  - Modal progression identique (même design, même indicateurs)
+  - Streaming identique (même feedback temps réel)
+  - Indicateur batch identique ("Génération 2/5..." si applicable)
+- **Focus automatique** : Après génération, sélectionner et naviguer vers nouveau nœud généré
+  - Éditeur de graphe : Zoom vers nouveau nœud généré
+  - Éditeur de dialogue : Focus sur nouveau nœud dans la liste/panneau d'édition
+- **Tests obligatoires** : Tous les tests E2E doivent couvrir les deux interfaces (graphe + dialogue)
+
+**References:** Story 0.2 (Progress Modal SSE), ADR-003 (Graph Fix stableID), FR15-25 (génération dialogues avec choix)
+
+---
+
 ### Story 0.6: Validation cycles graphe (ID-002)
 
 As a **utilisateur créant des dialogues**,

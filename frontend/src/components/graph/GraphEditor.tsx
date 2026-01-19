@@ -31,6 +31,9 @@ export function GraphEditor() {
   const [showRestoreDialog, setShowRestoreDialog] = useState(false)
   const [draftToRestore, setDraftToRestore] = useState<{json_content: string; timestamp: number} | null>(null)
   
+  // État pour le dialogue de sélection de format d'export
+  const [showExportFormatDialog, setShowExportFormatDialog] = useState(false)
+  
   // Écouter l'événement pour obtenir l'instance ReactFlow
   useEffect(() => {
     const handleInstanceReady = (event: CustomEvent) => {
@@ -98,14 +101,30 @@ export function GraphEditor() {
                 ? new Date(selectedDialogue.modified_time).getTime() 
                 : 0
               
+              // Comparer le contenu JSON parsé pour vérifier si identique (plus robuste que comparaison de chaînes)
+              let contentIdentical = false
+              try {
+                const draftContent = draft.json_content || ''
+                const fileContent = response.json_content || ''
+                // Parser les deux JSON et comparer les objets (ignore les différences de sérialisation)
+                const draftObj = JSON.parse(draftContent)
+                const fileObj = JSON.parse(fileContent)
+                // Comparaison profonde des objets JSON
+                contentIdentical = JSON.stringify(draftObj) === JSON.stringify(fileObj)
+              } catch (err) {
+                // Si erreur de parsing, considérer comme différent (sécurité)
+                contentIdentical = false
+              }
+              
               // Si draft plus récent que le fichier → proposer restauration
-              if (draftTimestamp > fileTimestamp) {
+              // MAIS seulement si le contenu est différent (sinon c'est un faux positif)
+              if (draftTimestamp > fileTimestamp && !contentIdentical) {
                 setDraftToRestore(draft)
                 setShowRestoreDialog(true)
                 setIsLoadingDialogue(false)
                 return // Attendre la décision de l'utilisateur
               } else {
-                // Draft obsolète → supprimer
+                // Draft obsolète OU identique → supprimer
                 localStorage.removeItem(draftKey)
               }
             } catch (err) {
@@ -196,6 +215,15 @@ export function GraphEditor() {
     }
   }, [applyAutoLayout, layoutDirection, toast])
   
+  // Handler pour ouvrir le dialogue de sélection de format
+  const handleOpenExportDialog = useCallback(() => {
+    if (!reactFlowInstance || !selectedDialogue) {
+      toast('Aucun dialogue sélectionné', 'warning')
+      return
+    }
+    setShowExportFormatDialog(true)
+  }, [reactFlowInstance, selectedDialogue, toast])
+  
   // Handler pour exporter en PNG
   const handleExportPNG = useCallback(async () => {
     if (!reactFlowInstance || !selectedDialogue) {
@@ -203,6 +231,7 @@ export function GraphEditor() {
       return
     }
     try {
+      setShowExportFormatDialog(false)
       const filename = selectedDialogue.filename.replace('.json', '')
       await exportGraphToPNG(reactFlowInstance, filename, 1.0)
       toast('Export PNG réussi', 'success', 2000)
@@ -218,6 +247,7 @@ export function GraphEditor() {
       return
     }
     try {
+      setShowExportFormatDialog(false)
       const filename = selectedDialogue.filename.replace('.json', '')
       await exportGraphToSVG(reactFlowInstance, filename)
       toast('Export SVG réussi', 'success', 2000)
@@ -573,42 +603,23 @@ export function GraphEditor() {
             >
               ✨ Générer nœud IA
             </button>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <button
-                onClick={handleExportPNG}
-                disabled={!reactFlowInstance || isLoadingDialogue || !selectedDialogue}
-                style={{
-                  padding: '0.5rem 0.75rem',
-                  border: `1px solid ${theme.border.primary}`,
-                  borderRadius: '6px',
-                  backgroundColor: theme.button.default.background,
-                  color: theme.button.default.color,
-                  cursor: (!reactFlowInstance || isLoadingDialogue || !selectedDialogue) ? 'not-allowed' : 'pointer',
-                  opacity: (!reactFlowInstance || isLoadingDialogue || !selectedDialogue) ? 0.6 : 1,
-                  fontSize: '0.85rem',
-                }}
-                title="Exporter le graphe visible en PNG"
-              >
-                📷 PNG
-              </button>
-              <button
-                onClick={handleExportSVG}
-                disabled={!reactFlowInstance || isLoadingDialogue || !selectedDialogue}
-                style={{
-                  padding: '0.5rem 0.75rem',
-                  border: `1px solid ${theme.border.primary}`,
-                  borderRadius: '6px',
-                  backgroundColor: theme.button.default.background,
-                  color: theme.button.default.color,
-                  cursor: (!reactFlowInstance || isLoadingDialogue || !selectedDialogue) ? 'not-allowed' : 'pointer',
-                  opacity: (!reactFlowInstance || isLoadingDialogue || !selectedDialogue) ? 0.6 : 1,
-                  fontSize: '0.85rem',
-                }}
-                title="Exporter le graphe visible en SVG"
-              >
-                🎨 SVG
-              </button>
-            </div>
+            <button
+              onClick={handleOpenExportDialog}
+              disabled={!reactFlowInstance || isLoadingDialogue || !selectedDialogue}
+              style={{
+                padding: '0.5rem 1rem',
+                border: `1px solid ${theme.border.primary}`,
+                borderRadius: '6px',
+                backgroundColor: theme.button.default.background,
+                color: theme.button.default.color,
+                cursor: (!reactFlowInstance || isLoadingDialogue || !selectedDialogue) ? 'not-allowed' : 'pointer',
+                opacity: (!reactFlowInstance || isLoadingDialogue || !selectedDialogue) ? 0.6 : 1,
+                fontSize: '0.9rem',
+              }}
+              title="Exporter le graphe visible"
+            >
+              📤 Exporter
+            </button>
             <button
               onClick={handleSave}
               disabled={isGraphSaving || isLoadingDialogue || !selectedDialogue}
@@ -865,7 +876,7 @@ export function GraphEditor() {
             {showAIGenerationPanel && (
               <div
                 style={{
-                  position: 'absolute',
+                  position: 'fixed',
                   top: 0,
                   left: 0,
                   right: 0,
@@ -886,7 +897,7 @@ export function GraphEditor() {
                   style={{
                     width: '90%',
                     maxWidth: '600px',
-                    maxHeight: '90%',
+                    maxHeight: '90vh',
                     backgroundColor: theme.background.panel,
                     borderRadius: '8px',
                     boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
@@ -922,6 +933,100 @@ export function GraphEditor() {
           onConfirm={handleRestoreDraft}
           onCancel={handleDiscardDraft}
         />
+      )}
+      
+      {/* Dialog de sélection de format d'export */}
+      {showExportFormatDialog && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10001,
+          }}
+          onClick={() => setShowExportFormatDialog(false)}
+        >
+          <div
+            style={{
+              backgroundColor: theme.background.panel,
+              borderRadius: '8px',
+              padding: '1.5rem',
+              maxWidth: '400px',
+              width: '90%',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+              border: `1px solid ${theme.border.primary}`,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0, marginBottom: '1rem', color: theme.text.primary }}>
+              Choisir le format d'export
+            </h2>
+            <p style={{ marginBottom: '1.5rem', color: theme.text.secondary, lineHeight: 1.6 }}>
+              Sélectionnez le format dans lequel vous souhaitez exporter le graphe :
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', flexDirection: 'column' }}>
+              <button
+                onClick={handleExportPNG}
+                style={{
+                  padding: '0.75rem 1rem',
+                  border: `1px solid ${theme.border.primary}`,
+                  borderRadius: '6px',
+                  backgroundColor: theme.button.default.background,
+                  color: theme.button.default.color,
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  justifyContent: 'center',
+                }}
+              >
+                <span>📷</span>
+                <span>PNG (Image raster)</span>
+              </button>
+              <button
+                onClick={handleExportSVG}
+                style={{
+                  padding: '0.75rem 1rem',
+                  border: `1px solid ${theme.border.primary}`,
+                  borderRadius: '6px',
+                  backgroundColor: theme.button.default.background,
+                  color: theme.button.default.color,
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  justifyContent: 'center',
+                }}
+              >
+                <span>🎨</span>
+                <span>SVG (Vectoriel)</span>
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+              <button
+                onClick={() => setShowExportFormatDialog(false)}
+                style={{
+                  padding: '0.5rem 1rem',
+                  border: `1px solid ${theme.border.primary}`,
+                  borderRadius: '4px',
+                  backgroundColor: theme.button.default.background,
+                  color: theme.button.default.color,
+                  cursor: 'pointer',
+                }}
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

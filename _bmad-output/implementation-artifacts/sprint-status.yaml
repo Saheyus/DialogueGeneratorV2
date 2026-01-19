@@ -44,11 +44,12 @@ development_status:
   0-2-progress-feedback-modal-avec-sse-streaming-adr-001: done
   0-3-multi-provider-llm-avec-abstraction-mistral-adr-004: done
   0-4-presets-système-adr-002: done
-  0-5-auto-save-dialogues-id-001: review
-  0-6-validation-cycles-graphe-id-002: backlog
-  0-7-cost-governance-id-003: backlog
-  0-8-streaming-cleanup-id-004: backlog
-  0-9-preset-validation-id-005: backlog
+  0-5-auto-save-dialogues-id-001: done
+  0-5-5-génération-next-node-avec-gestion-automatique-des-connexions: in-progress
+  0-6-validation-cycles-graphe-id-002: in-progress
+  0-7-cost-governance-id-003: ready-for-dev
+  0-8-streaming-cleanup-id-004: ready-for-dev
+  0-9-preset-validation-id-005: ready-for-dev
   epic-0-retrospective: optional
   epic-1: backlog
   1-1-générer-un-nœud-de-dialogue-single-avec-llm-fr1: backlog

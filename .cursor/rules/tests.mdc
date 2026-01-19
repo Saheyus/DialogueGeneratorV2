@@ -1,5 +1,6 @@
 ---
-alwaysApply: true
+alwaysApply: false
+description: Structure et bonnes pratiques pour les tests pytest
 ---
 # Tests — Structure et bonnes pratiques
 

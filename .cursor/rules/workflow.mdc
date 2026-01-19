@@ -1,7 +1,6 @@
 ---
-description: Workflow (global) — commandes essentielles, tests, déploiement, venv
-globs: []
-alwaysApply: true
+description: Workflow — commandes essentielles, tests, déploiement, venv
+alwaysApply: false
 ---
 
 - **Environnement virtuel Python** :

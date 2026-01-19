@@ -33,6 +33,8 @@ export function AIGenerationPanel({
   const [maxChoices, setMaxChoices] = useState<number | null>(null)
   const [availableModels, setAvailableModels] = useState<LLMModelResponse[]>([])
   const [narrativeTags, setNarrativeTags] = useState<string[]>([])
+  const [targetChoiceIndex, setTargetChoiceIndex] = useState<number | null>(null)
+  const [generateAllChoices, setGenerateAllChoices] = useState(false)
   
   const availableNarrativeTags = ['tension', 'humour', 'dramatique', 'intime', 'révélation']
   
@@ -105,6 +107,8 @@ export function AIGenerationPanel({
     toast,
     onGenerated,
     onClose,
+    targetChoiceIndex,
+    generateAllChoices,
   ])
   
   if (!parentNodeId || !parentNode) {
@@ -119,9 +123,11 @@ export function AIGenerationPanel({
     <div style={{ 
       display: 'flex', 
       flexDirection: 'column', 
-      height: '100%',
+      flex: 1,
+      minHeight: 0,
       padding: '1rem',
       gap: '1rem',
+      overflowY: 'auto',
     }}>
       {/* En-tête avec aperçu du nœud parent */}
       <div>
@@ -255,6 +261,108 @@ export function AIGenerationPanel({
           </button>
         </div>
       </div>
+      
+      {/* Sélection de choix (si parent a des choix) */}
+      {parentNode.data?.choices && parentNode.data.choices.length > 0 && (
+        <div>
+          <label style={{ 
+            display: 'block',
+            marginBottom: '0.5rem',
+            fontSize: '0.9rem',
+            fontWeight: 'bold',
+            color: theme.text.primary,
+          }}>
+            Génération pour choix spécifique
+          </label>
+          <div style={{
+            padding: '0.75rem',
+            backgroundColor: theme.background.secondary,
+            borderRadius: '6px',
+            border: `1px solid ${theme.border.primary}`,
+            marginBottom: '0.5rem',
+          }}>
+            <div style={{
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              color: theme.text.secondary,
+              marginBottom: '0.5rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+            }}>
+              Choix disponibles
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {parentNode.data.choices.map((choice: any, index: number) => {
+                const isConnected = choice.targetNode && choice.targetNode !== 'END'
+                return (
+                  <div
+                    key={index}
+                    style={{
+                      padding: '0.5rem',
+                      backgroundColor: theme.background.panel,
+                      borderRadius: '4px',
+                      border: `1px solid ${targetChoiceIndex === index ? theme.button.primary.background : theme.border.primary}`,
+                      cursor: isConnected ? 'not-allowed' : 'pointer',
+                      opacity: isConnected ? 0.6 : 1,
+                    }}
+                    onClick={() => {
+                      if (!isConnected) {
+                        setTargetChoiceIndex(targetChoiceIndex === index ? null : index)
+                        setGenerateAllChoices(false)
+                      }
+                    }}
+                  >
+                    <div style={{ 
+                      fontSize: '0.85rem',
+                      color: theme.text.primary,
+                      fontWeight: targetChoiceIndex === index ? 600 : 400,
+                    }}>
+                      {choice.text || `Choix ${index + 1}`}
+                      {isConnected && (
+                        <span style={{ 
+                          fontSize: '0.75rem',
+                          color: theme.text.secondary,
+                          marginLeft: '0.5rem',
+                        }}>
+                          (déjà connecté)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          
+          {/* Bouton "Générer pour tous les choix" */}
+          {(() => {
+            const unconnectedChoices = parentNode.data.choices.filter(
+              (choice: any) => !choice.targetNode || choice.targetNode === 'END'
+            )
+            return unconnectedChoices.length > 1 ? (
+              <button
+                onClick={() => {
+                  setGenerateAllChoices(!generateAllChoices)
+                  setTargetChoiceIndex(null)
+                }}
+                style={{
+                  width: '100%',
+                  padding: '0.5rem',
+                  border: `1px solid ${generateAllChoices ? theme.button.primary.background : theme.input.border}`,
+                  borderRadius: '6px',
+                  backgroundColor: generateAllChoices ? theme.button.primary.background : theme.input.background,
+                  color: generateAllChoices ? theme.button.primary.color : theme.input.color,
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  marginBottom: '0.5rem',
+                }}
+              >
+                {generateAllChoices ? '✓ ' : ''}Générer la suite pour tous les choix ({unconnectedChoices.length})
+              </button>
+            ) : null
+          })()}
+        </div>
+      )}
       
       {/* Options LLM */}
       <div>
@@ -428,7 +536,10 @@ export function AIGenerationPanel({
             fontSize: '0.9rem',
           }}
         >
-          {isGenerating ? 'Génération...' : '✨ Générer'}
+          {isGenerating 
+            ? (generateAllChoices ? 'Génération batch...' : 'Génération...')
+            : (generateAllChoices ? '✨ Générer pour tous les choix' : targetChoiceIndex !== null ? `✨ Générer pour choix ${targetChoiceIndex + 1}` : '✨ Générer')
+          }
         </button>
       </div>
     </div>

@@ -41,6 +41,8 @@ export interface GenerateNodeRequest {
   system_prompt_override?: string
   narrative_tags?: string[]
   llm_model_identifier?: string
+  target_choice_index?: number | null
+  generate_all_choices?: boolean
 }
 
 export interface SuggestedConnection {

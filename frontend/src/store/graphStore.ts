@@ -273,13 +273,24 @@ export const useGraphStore = create<GraphState>()(
       
       // Mettre à jour la position d'un nœud
       updateNodePosition: (nodeId: string, position: { x: number; y: number }) => {
-        set((state) => ({
-          nodes: state.nodes.map((node) =>
-            node.id === nodeId ? { ...node, position } : node
+        const state = get()
+        const node = state.nodes.find((n) => n.id === nodeId)
+        
+        // Ne marquer dirty que si la position a vraiment changé (évite faux positifs)
+        const positionChanged = !node || 
+          Math.abs(node.position.x - position.x) > 0.1 || 
+          Math.abs(node.position.y - position.y) > 0.1
+        
+        set({
+          nodes: state.nodes.map((n) =>
+            n.id === nodeId ? { ...n, position } : n
           ),
-        }))
-        // Marquer dirty pour auto-save draft (Task 1 - Story 0.5)
-        get().markDirty()
+        })
+        
+        // Marquer dirty pour auto-save draft SEULEMENT si position a changé (Task 1 - Story 0.5)
+        if (positionChanged) {
+          get().markDirty()
+        }
       },
       
       // Générer un nœud depuis un parent avec l'IA
@@ -308,24 +319,35 @@ export const useGraphStore = create<GraphState>()(
             system_prompt_override: options.system_prompt_override,
             narrative_tags: options.narrative_tags,
             llm_model_identifier: options.llm_model_identifier,
+            target_choice_index: options.target_choice_index ?? null,
+            generate_all_choices: options.generate_all_choices ?? false,
           })
           
-          // Ajouter le nouveau nœud
-          const generatedNode = response.node
-          const newNode: Node = {
-            id: generatedNode.id,
-            type: 'dialogueNode',
-            position: {
-              x: parentNode.position.x + 300,
-              y: parentNode.position.y,
-            },
-            data: generatedNode,
-          }
+          // Gérer génération batch (si generate_all_choices, l'API retourne une liste)
+          // Pour l'instant, l'API retourne toujours un seul nœud, mais on prépare pour Task 2
+          const generatedNodes = response.node ? [response.node] : []
           
-          get().addNode(newNode)
+          // Ajouter les nouveaux nœuds avec positionnement en cascade pour batch
+          const generatedNodeIds: string[] = []
+          generatedNodes.forEach((generatedNode, index) => {
+            const newNode: Node = {
+              id: generatedNode.id,
+              type: 'dialogueNode',
+              position: {
+                x: parentNode.position.x + 300,
+                // Positionnement en cascade verticale pour batch (offset Y = 150 * index)
+                y: parentNode.position.y + (options.generate_all_choices ? 150 * index : 0),
+              },
+              data: generatedNode,
+            }
+            
+            get().addNode(newNode)
+            generatedNodeIds.push(generatedNode.id)
+          })
 
-          // Créer les connexions suggérées
+          // Créer les connexions suggérées (appliquer automatiquement si auto_apply)
           for (const conn of response.suggested_connections) {
+            // Appliquer automatiquement les connexions (pas seulement suggérer)
             get().connectNodes(
               conn.from,
               conn.to,
@@ -336,8 +358,8 @@ export const useGraphStore = create<GraphState>()(
 
           set({ isGenerating: false })
           
-          // Retourner le nodeId du nouveau nœud pour feedback visuel
-          return generatedNode.id
+          // Retourner le nodeId du premier nouveau nœud pour feedback visuel
+          return generatedNodeIds[0] || generatedNodes[0]?.id
         } catch (error) {
           console.error('Erreur lors de la génération de nœud:', error)
           set({ isGenerating: false })
