@@ -193,6 +193,12 @@ async def generate_node(
         parent_content = request_data.parent_node_content
         parent_choices = parent_content.get("choices", [])
         
+        if request_data.generate_all_choices and not parent_choices:
+            raise ValidationException(
+                message="Aucun choix disponible pour la génération batch.",
+                request_id=request_id
+            )
+        
         # Gérer génération batch si generate_all_choices=True
         if request_data.generate_all_choices and parent_choices:
             # Si les instructions sont vides, utiliser un texte par défaut
@@ -214,6 +220,10 @@ async def generate_node(
             # Retourner tous les nœuds générés en batch
             failed_choices = batch_result.get("failed_choices", [])
             batch_count = len(batch_result["nodes"])
+            connected_choices_count = batch_result.get("connected_choices_count")
+            generated_choices_count = batch_result.get("generated_choices_count")
+            failed_choices_count = batch_result.get("failed_choices_count")
+            total_choices_count = batch_result.get("total_choices_count")
             
             if batch_result["nodes"]:
                 suggested_connections = [
@@ -239,7 +249,11 @@ async def generate_node(
                     nodes=batch_result["nodes"],
                     suggested_connections=suggested_connections,
                     parent_node_id=request_data.parent_node_id,
-                    batch_count=batch_count
+                    batch_count=batch_count,
+                    generated_choices_count=generated_choices_count,
+                    connected_choices_count=connected_choices_count,
+                    failed_choices_count=failed_choices_count,
+                    total_choices_count=total_choices_count
                 )
             else:
                 # Aucun nœud généré
@@ -271,9 +285,14 @@ async def generate_node(
         # Si target_choice_index est fourni, inclure le texte du choix correspondant
         if request_data.target_choice_index is not None and parent_choices:
             choice_index = request_data.target_choice_index
-            if 0 <= choice_index < len(parent_choices):
-                choice_text = parent_choices[choice_index].get("text", "")
-                enriched_instructions = f"""Contexte précédent:
+            if not (0 <= choice_index < len(parent_choices)):
+                raise ValidationException(
+                    message=f"Index de choix invalide: {choice_index}.",
+                    request_id=request_id
+                )
+            
+            choice_text = parent_choices[choice_index].get("text", "")
+            enriched_instructions = f"""Contexte précédent:
 {parent_speaker}: {parent_line}
 
 Réponse du joueur:
@@ -282,14 +301,11 @@ Réponse du joueur:
 Instructions pour la suite:
 {user_instructions}
 """
-            else:
-                # Index invalide, utiliser le format sans choix
-                enriched_instructions = f"""Contexte précédent:
-{parent_speaker}: {parent_line}
-
-Instructions pour la suite:
-{user_instructions}
-"""
+        elif request_data.target_choice_index is not None and not parent_choices:
+            raise ValidationException(
+                message="Aucun choix disponible pour la génération d'un choix spécifique.",
+                request_id=request_id
+            )
         else:
             # Pas de choix spécifique (nextNode ou génération normale)
             enriched_instructions = f"""Contexte précédent:
@@ -309,15 +325,20 @@ Instructions pour la suite:
         )
         
         # Déterminer l'ID de départ selon le mode de génération
+        normalized_parent_id = (
+            request_data.parent_node_id
+            if request_data.parent_node_id.startswith("NODE_")
+            else f"NODE_{request_data.parent_node_id}"
+        )
         if request_data.target_choice_index is not None:
             # Génération pour choix spécifique : utiliser format CHOICE_{index}
-            start_id = f"NODE_{request_data.parent_node_id}_CHOICE_{request_data.target_choice_index}"
+            start_id = f"{normalized_parent_id}_CHOICE_{request_data.target_choice_index}"
         elif parent_choices:
             # Génération pour choix (premier sans targetNode) : utiliser format CHILD
-            start_id = f"NODE_{request_data.parent_node_id}_CHILD"
+            start_id = f"{normalized_parent_id}_CHILD"
         else:
             # Génération nextNode (navigation linéaire) : utiliser format CHILD
-            start_id = f"NODE_{request_data.parent_node_id}_CHILD"
+            start_id = f"{normalized_parent_id}_CHILD"
         
         # Enrichir avec ID
         enriched_nodes = generation_service.enrich_with_ids(
@@ -382,6 +403,8 @@ Instructions pour la suite:
             parent_node_id=request_data.parent_node_id
         )
         
+    except ValidationException:
+        raise
     except Exception as e:
         logger.exception(f"Erreur lors de la génération de nœud (request_id: {request_id})")
         raise InternalServerException(

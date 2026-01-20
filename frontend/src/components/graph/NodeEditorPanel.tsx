@@ -33,6 +33,7 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
   const [userInstructions, setUserInstructions] = useState('')
   const [llmModel, setLlmModel] = useState<string>(DEFAULT_MODEL)
   const [availableModels, setAvailableModels] = useState<LLMModelResponse[]>([])
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null)
   
   // Charger les modèles disponibles
   useEffect(() => {
@@ -153,7 +154,7 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
       // Si les instructions sont vides, on utilisera un texte par défaut côté backend
       const finalInstructions = userInstructions.trim() || "Ecris la réponse du PNJ à ce que dit le PJ"
       
-      const newNodeId = await generateFromNode(
+      const generationResult = await generateFromNode(
         selectedNodeId,
         finalInstructions,
         {
@@ -166,11 +167,13 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
       toast('Nœud généré avec succès', 'success', 2000)
       
       // Focus automatique vers le nouveau nœud
-      setSelectedNode(newNodeId)
-      const event = new CustomEvent('focus-generated-node', {
-        detail: { nodeId: newNodeId }
-      })
-      window.dispatchEvent(event)
+      if (generationResult.nodeId) {
+        setSelectedNode(generationResult.nodeId)
+        const event = new CustomEvent('focus-generated-node', {
+          detail: { nodeId: generationResult.nodeId }
+        })
+        window.dispatchEvent(event)
+      }
       
       setShowGenerationOptions(false)
       setUserInstructions('')
@@ -193,7 +196,7 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
       ]
       const npcSpeakerId = allCharacters.length > 0 ? allCharacters[0] : undefined
       
-      const newNodeId = await generateFromNode(
+      const generationResult = await generateFromNode(
         selectedNodeId,
         instructions,
         {
@@ -207,11 +210,13 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
       toast('Nœud généré avec succès', 'success', 2000)
       
       // Focus automatique vers le nouveau nœud
-      setSelectedNode(newNodeId)
-      const event = new CustomEvent('focus-generated-node', {
-        detail: { nodeId: newNodeId }
-      })
-      window.dispatchEvent(event)
+      if (generationResult.nodeId) {
+        setSelectedNode(generationResult.nodeId)
+        const event = new CustomEvent('focus-generated-node', {
+          detail: { nodeId: generationResult.nodeId }
+        })
+        window.dispatchEvent(event)
+      }
       
       setShowGenerationOptions(false)
       setUserInstructions('')
@@ -237,7 +242,7 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
       // Si les instructions sont vides, on utilisera un texte par défaut côté backend
       const finalInstructions = userInstructions.trim() || "Ecris la réponse du PNJ à ce que dit le PJ"
       
-      const newNodeId = await generateFromNode(
+      const generationResult = await generateFromNode(
         selectedNodeId,
         finalInstructions,
         {
@@ -245,22 +250,29 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
           npc_speaker_id: npcSpeakerId,
           llm_model_identifier: llmModel,
           generate_all_choices: true,
+          onBatchProgress: (current: number, total: number) => {
+            setBatchProgress({ current, total })
+          },
         }
       )
       
       toast('Nœuds générés avec succès', 'success', 2000)
       
       // Focus automatique vers le premier nouveau nœud
-      setSelectedNode(newNodeId)
-      const event = new CustomEvent('focus-generated-node', {
-        detail: { nodeId: newNodeId }
-      })
-      window.dispatchEvent(event)
+      if (generationResult.nodeId) {
+        setSelectedNode(generationResult.nodeId)
+        const event = new CustomEvent('focus-generated-node', {
+          detail: { nodeId: generationResult.nodeId }
+        })
+        window.dispatchEvent(event)
+      }
       
       setShowGenerationOptions(false)
       setUserInstructions('')
     } catch (err) {
       toast(`Erreur lors de la génération: ${getErrorMessage(err)}`, 'error')
+    } finally {
+      setBatchProgress(null)
     }
   }, [selectedNodeId, userInstructions, selections, llmModel, generateFromNode, setSelectedNode, toast])
   
@@ -595,7 +607,11 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
                           fontSize: '0.9rem',
                         }}
                       >
-                        {isGenerating ? 'Génération batch...' : `✨ Générer pour tous les choix (${unconnectedChoices.length})`}
+                        {isGenerating
+                          ? batchProgress?.total
+                            ? `Génération ${batchProgress.current}/${batchProgress.total}...`
+                            : 'Génération batch...'
+                          : `✨ Générer pour tous les choix (${unconnectedChoices.length})`}
                       </button>
                     ) : null
                   })()}

@@ -136,7 +136,11 @@ async def test_generate_node_with_generate_all_choices(client, sample_parent_nod
             "connections": [
                 {"from": "NODE_PARENT_1", "to": "NODE_PARENT_1_CHOICE_0", "via_choice_index": 0, "connection_type": "choice"},
                 {"from": "NODE_PARENT_1", "to": "NODE_PARENT_1_CHOICE_1", "via_choice_index": 1, "connection_type": "choice"}
-            ]
+            ],
+            "connected_choices_count": 1,  # 1 choix avec "END" (index 2)
+            "generated_choices_count": 2,
+            "failed_choices_count": 0,
+            "total_choices_count": 3
         }
         mock_graph_service.generate_nodes_for_all_choices = AsyncMock(return_value=mock_batch_result)
         
@@ -178,6 +182,15 @@ async def test_generate_node_with_generate_all_choices(client, sample_parent_nod
         # Vérifier batch_count
         assert "batch_count" in data
         assert data["batch_count"] == 2
+        # Vérifier que les compteurs batch sont retournés
+        assert "generated_choices_count" in data
+        assert data["generated_choices_count"] == 2
+        assert "connected_choices_count" in data
+        assert data["connected_choices_count"] == 1
+        assert "failed_choices_count" in data
+        assert data["failed_choices_count"] == 0
+        assert "total_choices_count" in data
+        assert data["total_choices_count"] == 3
         # Vérifier que les connexions sont retournées
         assert len(data["suggested_connections"]) == 2
 
@@ -235,3 +248,224 @@ async def test_generate_node_nextnode_linear(client, sample_parent_node_without_
         # Vérifier que la connexion suggérée est de type nextNode
         assert len(data["suggested_connections"]) > 0
         assert data["suggested_connections"][0]["connection_type"] == "nextNode"
+
+
+@pytest.mark.asyncio
+async def test_generate_node_id_normalization_no_double_prefix(client, sample_parent_node_with_choices):
+    """Test que la normalisation des IDs évite les doubles préfixes NODE_.
+    
+    Si parent_node_id est déjà "NODE_XXX", on ne doit pas générer "NODE_NODE_XXX_CHOICE_0".
+    """
+    with patch('factories.llm_factory.LLMClientFactory') as mock_factory, \
+         patch('api.routers.graph.ServiceContainer') as mock_container, \
+         patch('api.routers.graph.UnityDialogueGenerationService') as mock_service_class:
+        
+        mock_service = MagicMock()
+        mock_service_class.return_value = mock_service
+        
+        # Parent avec ID déjà préfixé
+        parent_with_prefix = {
+            "id": "NODE_ALREADY_PREFIXED",
+            "speaker": "PNJ",
+            "line": "Test",
+            "choices": [{"text": "Choix 1", "targetNode": None}]
+        }
+        
+        mock_node = {
+            "id": "NODE_ALREADY_PREFIXED_CHOICE_0",  # Pas de double préfixe
+            "speaker": "PNJ",
+            "line": "Réponse",
+            "choices": []
+        }
+        mock_service.enrich_with_ids.return_value = [mock_node]
+        mock_service.generate_dialogue_node = AsyncMock(return_value={"nodes": [mock_node]})
+        
+        mock_llm_client = MagicMock()
+        mock_factory.create_client.return_value = mock_llm_client
+        
+        mock_config_service = MagicMock()
+        mock_config_service.get_llm_config.return_value = {}
+        mock_config_service.get_available_llm_models.return_value = []
+        mock_container_instance = MagicMock()
+        mock_container_instance.get_config_service.return_value = mock_config_service
+        mock_container.return_value = mock_container_instance
+        
+        request_data = {
+            "parent_node_id": "NODE_ALREADY_PREFIXED",
+            "parent_node_content": parent_with_prefix,
+            "user_instructions": "Test",
+            "context_selections": {},
+            "target_choice_index": 0,
+            "generate_all_choices": False
+        }
+        
+        response = client.post("/api/v1/unity-dialogues/graph/generate-node", json=request_data)
+        
+        assert response.status_code == 200
+        data = response.json()
+        # Vérifier que l'ID généré n'a pas de double préfixe
+        assert data["node"]["id"] == "NODE_ALREADY_PREFIXED_CHOICE_0"
+        assert not data["node"]["id"].startswith("NODE_NODE_")
+
+
+@pytest.mark.asyncio
+async def test_generate_node_id_normalization_adds_prefix(client, sample_parent_node_with_choices):
+    """Test que la normalisation ajoute le préfixe NODE_ si absent.
+    
+    Si parent_node_id est "XXX" (sans préfixe), on doit générer "NODE_XXX_CHOICE_0".
+    """
+    with patch('factories.llm_factory.LLMClientFactory') as mock_factory, \
+         patch('api.routers.graph.ServiceContainer') as mock_container, \
+         patch('api.routers.graph.UnityDialogueGenerationService') as mock_service_class:
+        
+        mock_service = MagicMock()
+        mock_service_class.return_value = mock_service
+        
+        # Parent sans préfixe
+        parent_no_prefix = {
+            "id": "PARENT_NO_PREFIX",
+            "speaker": "PNJ",
+            "line": "Test",
+            "choices": [{"text": "Choix 1", "targetNode": None}]
+        }
+        
+        mock_node = {
+            "id": "NODE_PARENT_NO_PREFIX_CHOICE_0",  # Préfixe ajouté
+            "speaker": "PNJ",
+            "line": "Réponse",
+            "choices": []
+        }
+        mock_service.enrich_with_ids.return_value = [mock_node]
+        mock_service.generate_dialogue_node = AsyncMock(return_value={"nodes": [mock_node]})
+        
+        mock_llm_client = MagicMock()
+        mock_factory.create_client.return_value = mock_llm_client
+        
+        mock_config_service = MagicMock()
+        mock_config_service.get_llm_config.return_value = {}
+        mock_config_service.get_available_llm_models.return_value = []
+        mock_container_instance = MagicMock()
+        mock_container_instance.get_config_service.return_value = mock_config_service
+        mock_container.return_value = mock_container_instance
+        
+        request_data = {
+            "parent_node_id": "PARENT_NO_PREFIX",
+            "parent_node_content": parent_no_prefix,
+            "user_instructions": "Test",
+            "context_selections": {},
+            "target_choice_index": 0,
+            "generate_all_choices": False
+        }
+        
+        response = client.post("/api/v1/unity-dialogues/graph/generate-node", json=request_data)
+        
+        assert response.status_code == 200
+        data = response.json()
+        # Vérifier que l'ID généré a le préfixe ajouté
+        assert data["node"]["id"] == "NODE_PARENT_NO_PREFIX_CHOICE_0"
+        assert data["node"]["id"].startswith("NODE_")
+
+
+@pytest.mark.asyncio
+async def test_generate_node_validation_invalid_target_choice_index(client, sample_parent_node_with_choices):
+    """Test que target_choice_index invalide retourne ValidationException.
+    
+    AC: Validation stricte de target_choice_index.
+    """
+    with patch('factories.llm_factory.LLMClientFactory') as mock_factory, \
+         patch('api.routers.graph.ServiceContainer') as mock_container:
+        
+        mock_llm_client = MagicMock()
+        mock_factory.create_client.return_value = mock_llm_client
+        
+        mock_config_service = MagicMock()
+        mock_config_service.get_llm_config.return_value = {}
+        mock_config_service.get_available_llm_models.return_value = []
+        mock_container_instance = MagicMock()
+        mock_container_instance.get_config_service.return_value = mock_config_service
+        mock_container.return_value = mock_container_instance
+        
+        # Index hors limites (3 choix disponibles, index 0-2 valides)
+        request_data = {
+            "parent_node_id": "NODE_PARENT_1",
+            "parent_node_content": sample_parent_node_with_choices,
+            "user_instructions": "Test",
+            "context_selections": {},
+            "target_choice_index": 999,  # Index invalide
+            "generate_all_choices": False
+        }
+        
+        response = client.post("/api/v1/unity-dialogues/graph/generate-node", json=request_data)
+        
+        assert response.status_code == 422  # ValidationException
+        data = response.json()
+        assert "detail" in data
+        assert "Index de choix invalide" in data["detail"] or "invalide" in data["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_generate_node_batch_returns_choice_counts(client, sample_parent_node_with_choices):
+    """Test que la génération batch retourne les compteurs de choix.
+    
+    AC: #8 - Message "X connectés / Y générés" nécessite ces compteurs.
+    """
+    with patch('factories.llm_factory.LLMClientFactory') as mock_factory, \
+         patch('api.routers.graph.ServiceContainer') as mock_container, \
+         patch('api.routers.graph.GraphGenerationService') as mock_graph_service_class, \
+         patch('api.routers.graph.UnityDialogueGenerationService') as mock_service_class:
+        
+        mock_service = MagicMock()
+        mock_service_class.return_value = mock_service
+        
+        mock_graph_service = MagicMock()
+        mock_graph_service_class.return_value = mock_graph_service
+        
+        # Mock résultat batch avec compteurs
+        mock_batch_result = {
+            "nodes": [
+                {"id": "NODE_PARENT_1_CHOICE_0", "speaker": "PNJ", "line": "Réponse 1", "choices": []},
+                {"id": "NODE_PARENT_1_CHOICE_1", "speaker": "PNJ", "line": "Réponse 2", "choices": []}
+            ],
+            "connections": [
+                {"from": "NODE_PARENT_1", "to": "NODE_PARENT_1_CHOICE_0", "via_choice_index": 0, "connection_type": "choice"},
+                {"from": "NODE_PARENT_1", "to": "NODE_PARENT_1_CHOICE_1", "via_choice_index": 1, "connection_type": "choice"}
+            ],
+            "connected_choices_count": 1,  # 1 choix déjà connecté (index 2 avec "END")
+            "generated_choices_count": 2,
+            "failed_choices_count": 0,
+            "total_choices_count": 3
+        }
+        mock_graph_service.generate_nodes_for_all_choices = AsyncMock(return_value=mock_batch_result)
+        
+        mock_llm_client = MagicMock()
+        mock_factory.create_client.return_value = mock_llm_client
+        
+        mock_config_service = MagicMock()
+        mock_config_service.get_llm_config.return_value = {}
+        mock_config_service.get_available_llm_models.return_value = []
+        mock_container_instance = MagicMock()
+        mock_container_instance.get_config_service.return_value = mock_config_service
+        mock_container.return_value = mock_container_instance
+        
+        request_data = {
+            "parent_node_id": "NODE_PARENT_1",
+            "parent_node_content": sample_parent_node_with_choices,
+            "user_instructions": "Test",
+            "context_selections": {},
+            "target_choice_index": None,
+            "generate_all_choices": True
+        }
+        
+        response = client.post("/api/v1/unity-dialogues/graph/generate-node", json=request_data)
+        
+        assert response.status_code == 200
+        data = response.json()
+        # Vérifier que les compteurs sont retournés
+        assert "generated_choices_count" in data
+        assert data["generated_choices_count"] == 2
+        assert "connected_choices_count" in data
+        assert data["connected_choices_count"] == 1
+        assert "failed_choices_count" in data
+        assert data["failed_choices_count"] == 0
+        assert "total_choices_count" in data
+        assert data["total_choices_count"] == 3

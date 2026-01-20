@@ -1,6 +1,6 @@
 # Story 0.5.5: Génération next node avec gestion automatique des connexions
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -314,6 +314,14 @@ Auto (Cursor Agent)
 - ✅ Intégration complète : réutilisation `generateFromNode` avec `target_choice_index` et `generate_all_choices`
 - ✅ Focus automatique : `setSelectedNode` + événement `focus-generated-node` pour zoomer vers nouveau nœud
 - ⚠️ Tests E2E : à faire manuellement ou avec Playwright (non bloquant pour l'implémentation)
+
+**Review Fixes (AI) - 2026-01-20:**
+- ✅ Normalisation des IDs pour éviter les doubles préfixes `NODE_` en génération contextuelle
+- ✅ Validation stricte de `target_choice_index` (index invalide → ValidationException)
+- ✅ Retour des compteurs batch (choix connectés / générés / échecs / total) pour message utilisateur AC#8
+- ✅ Décalage vertical appliqué pour génération choix spécifique (positionnement "léger")
+- ✅ Mode "Branche alternative" rendu effectif (sélection choix requise, mode continuation bloqué si choix)
+- ✅ Indicateur de progression batch affiché pendant la génération (ex: "Génération 2/5")
 
 **Approche TDD:**
 - Phase RED : Tests créés qui échouaient (module manquant, validation des mocks)

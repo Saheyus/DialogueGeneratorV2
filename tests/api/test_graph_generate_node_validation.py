@@ -144,7 +144,11 @@ async def test_batch_generation_references_exist(client):
             "connections": [
                 {"from": "NODE_PARENT_1", "to": "NODE_PARENT_1_CHOICE_0", "via_choice_index": 0, "connection_type": "choice"},
                 {"from": "NODE_PARENT_1", "to": "NODE_PARENT_1_CHOICE_1", "via_choice_index": 1, "connection_type": "choice"}
-            ]
+            ],
+            "connected_choices_count": 0,
+            "generated_choices_count": 2,
+            "failed_choices_count": 0,
+            "total_choices_count": 2
         }
         mock_graph_service.generate_nodes_for_all_choices = AsyncMock(return_value=mock_batch_result)
         

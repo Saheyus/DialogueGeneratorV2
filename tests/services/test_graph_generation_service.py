@@ -116,6 +116,16 @@ async def test_generate_nodes_for_all_choices_basic(mock_llm_client, mock_genera
     assert result["connections"][0]["via_choice_index"] == 0
     assert result["connections"][1]["via_choice_index"] == 1
     assert result["connections"][2]["via_choice_index"] == 2
+    
+    # Vérifier compteurs batch
+    assert "connected_choices_count" in result
+    assert result["connected_choices_count"] == 0  # Aucun choix connecté dans sample_parent_node_with_choices
+    assert "generated_choices_count" in result
+    assert result["generated_choices_count"] == 3
+    assert "failed_choices_count" in result
+    assert result["failed_choices_count"] == 0
+    assert "total_choices_count" in result
+    assert result["total_choices_count"] == 3
 
 
 @pytest.mark.asyncio
@@ -167,6 +177,16 @@ async def test_generate_nodes_for_all_choices_filters_connected(mock_llm_client,
     assert len(result["connections"]) == 2
     assert result["connections"][0]["via_choice_index"] == 1
     assert result["connections"][1]["via_choice_index"] == 2
+    
+    # Vérifier compteurs batch (1 choix connecté, 2 générés)
+    assert "connected_choices_count" in result
+    assert result["connected_choices_count"] == 1  # Index 0 avec targetNode="NODE_EXISTING_1"
+    assert "generated_choices_count" in result
+    assert result["generated_choices_count"] == 2
+    assert "failed_choices_count" in result
+    assert result["failed_choices_count"] == 0
+    assert "total_choices_count" in result
+    assert result["total_choices_count"] == 3
     
     # Vérifier que generate_dialogue_node a été appelé 2 fois
     assert mock_generation_service.generate_dialogue_node.call_count == 2
@@ -227,6 +247,16 @@ async def test_generate_nodes_for_all_choices_id_format(mock_llm_client, mock_ge
     assert calls[0].kwargs["start_id"] == "NODE_PARENT_1_CHOICE_0"  # start_id pour premier choix
     assert calls[1].kwargs["start_id"] == "NODE_PARENT_1_CHOICE_1"  # start_id pour deuxième choix
     assert calls[2].kwargs["start_id"] == "NODE_PARENT_1_CHOICE_2"  # start_id pour troisième choix
+    
+    # Vérifier compteurs batch
+    assert "connected_choices_count" in result
+    assert result["connected_choices_count"] == 0
+    assert "generated_choices_count" in result
+    assert result["generated_choices_count"] == 3
+    assert "failed_choices_count" in result
+    assert result["failed_choices_count"] == 0
+    assert "total_choices_count" in result
+    assert result["total_choices_count"] == 3
 
 
 @pytest.mark.asyncio

@@ -58,6 +58,10 @@ export interface GenerateNodeResponse {
   suggested_connections: SuggestedConnection[]
   parent_node_id: string
   batch_count?: number // Nombre total de nœuds générés en batch (si applicable)
+  generated_choices_count?: number
+  connected_choices_count?: number
+  failed_choices_count?: number
+  total_choices_count?: number
 }
 
 export interface ValidateGraphRequest {

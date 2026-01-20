@@ -67,6 +67,22 @@ class GenerateNodeResponse(BaseModel):
     suggested_connections: List[SuggestedConnection] = Field(..., description="Connexions suggérées")
     parent_node_id: str = Field(..., description="ID du nœud parent")
     batch_count: Optional[int] = Field(None, description="Nombre total de nœuds générés en batch (si applicable)")
+    generated_choices_count: Optional[int] = Field(
+        None,
+        description="Nombre de nouveaux nœuds générés pour les choix (batch)"
+    )
+    connected_choices_count: Optional[int] = Field(
+        None,
+        description="Nombre de choix déjà connectés (ignorés dans le batch)"
+    )
+    failed_choices_count: Optional[int] = Field(
+        None,
+        description="Nombre de choix en échec lors de la génération batch"
+    )
+    total_choices_count: Optional[int] = Field(
+        None,
+        description="Nombre total de choix sur le nœud parent"
+    )
 
 
 class ValidateGraphRequest(BaseModel):

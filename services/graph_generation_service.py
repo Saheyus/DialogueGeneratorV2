@@ -53,14 +53,24 @@ class GraphGenerationService:
         
         # Filtrer les choix sans targetNode (ou avec "END")
         choices_to_generate = []
+        connected_choices_count = 0
         for i, choice in enumerate(parent_choices):
             target_node = choice.get("targetNode")
             if not target_node or target_node == "END":
                 choices_to_generate.append((i, choice))
+            else:
+                connected_choices_count += 1
         
         if not choices_to_generate:
             logger.info(f"Aucun choix à générer pour le nœud parent {parent_id} (tous déjà connectés)")
-            return {"nodes": [], "connections": []}
+            return {
+                "nodes": [],
+                "connections": [],
+                "connected_choices_count": connected_choices_count,
+                "generated_choices_count": 0,
+                "failed_choices_count": 0,
+                "total_choices_count": len(parent_choices)
+            }
         
         logger.info(
             f"Génération batch: {len(choices_to_generate)} nœud(s) pour le parent {parent_id}"
@@ -166,5 +176,9 @@ Instructions pour la suite:
         return {
             "nodes": generated_nodes,
             "connections": suggested_connections,
-            "failed_choices": failed_choices  # Retourner les échecs pour information
+            "failed_choices": failed_choices,  # Retourner les échecs pour information
+            "connected_choices_count": connected_choices_count,
+            "generated_choices_count": len(generated_nodes),
+            "failed_choices_count": len(failed_choices),
+            "total_choices_count": len(parent_choices),
         }

@@ -40,6 +40,7 @@ export function AIGenerationPanel({
   const [narrativeTags, setNarrativeTags] = useState<string[]>([])
   const [targetChoiceIndex, setTargetChoiceIndex] = useState<number | null>(null)
   const [generateAllChoices, setGenerateAllChoices] = useState(false)
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null)
   
   const availableNarrativeTags = ['tension', 'humour', 'dramatique', 'intime', 'révélation']
   
@@ -70,10 +71,13 @@ export function AIGenerationPanel({
     // En mode "suite (nextNode)", si le parent a des choix, il faut en sélectionner au moins un
     const parentChoices = parentNode?.data?.choices || []
     const hasChoices = parentChoices.length > 0
-    const isContinuationMode = generationMode === 'continuation'
+    if (hasChoices && generationMode === 'continuation') {
+      toast('Ce nœud a des choix. Passez en mode "Branche alternative" pour sélectionner un choix.', 'warning')
+      return
+    }
     
-    if (isContinuationMode && hasChoices) {
-      // En mode continuation avec choix disponibles, il faut sélectionner au moins un choix
+    if (hasChoices && generationMode === 'branch') {
+      // En mode branche avec choix disponibles, il faut sélectionner au moins un choix
       if (targetChoiceIndex === null && !generateAllChoices) {
         toast('Veuillez sélectionner au moins un choix pour générer la suite', 'warning')
         return
@@ -99,7 +103,7 @@ export function AIGenerationPanel({
       // Si les instructions sont vides, on utilisera un texte par défaut côté backend
       const finalInstructions = userInstructions.trim() || "Ecris la réponse du PNJ à ce que dit le PJ"
       
-      const newNodeId = await generateFromNode(
+      const generationResult = await generateFromNode(
         parentNodeId,
         finalInstructions,
         {
@@ -110,20 +114,25 @@ export function AIGenerationPanel({
           llm_model_identifier: llmModel,
           target_choice_index: targetChoiceIndex ?? null,
           generate_all_choices: generateAllChoices,
+          onBatchProgress: (current: number, total: number) => {
+            setBatchProgress({ current, total })
+          },
         }
       )
       
       // Message de succès adapté selon le mode de génération
       if (generateAllChoices) {
-        // Pour batch, afficher un message générique (le nombre exact est loggé dans la console)
-        const parentChoices = parentNode?.data?.choices || []
-        const unconnectedCount = parentChoices.filter(
-          (c: any) => !c.targetNode || c.targetNode === 'END'
-        ).length
+        const batchInfo = generationResult.batchInfo
+        const connectedCount = batchInfo?.connectedChoices ?? 0
+        const generatedCount = batchInfo?.generatedChoices ?? 0
+        const failedCount = batchInfo?.failedChoices ?? 0
+        const totalChoices = batchInfo?.totalChoices ?? 0
+        const failedSuffix = failedCount > 0 ? ` (${failedCount} échec(s))` : ''
+        const totalSuffix = totalChoices > 0 ? ` / ${totalChoices} choix` : ''
         toast(
-          `Génération batch terminée${unconnectedCount > 1 ? ` (${unconnectedCount} choix)` : ''}`,
+          `${connectedCount} choix(s) déjà connecté(s), ${generatedCount} nouveau(x) nœud(s) généré(s)${failedSuffix}${totalSuffix}`,
           'success',
-          3000
+          4000
         )
       } else if (targetChoiceIndex !== null) {
         toast(`Nœud généré pour le choix ${targetChoiceIndex + 1}`, 'success', 2000)
@@ -132,15 +141,19 @@ export function AIGenerationPanel({
       }
       
       // Déclencher un événement pour sélectionner et zoomer vers le nouveau nœud
-      const event = new CustomEvent('focus-generated-node', {
-        detail: { nodeId: newNodeId }
-      })
-      window.dispatchEvent(event)
+      if (generationResult.nodeId) {
+        const event = new CustomEvent('focus-generated-node', {
+          detail: { nodeId: generationResult.nodeId }
+        })
+        window.dispatchEvent(event)
+      }
       
       onGenerated?.()
       onClose()
     } catch (err) {
       toast(`Erreur lors de la génération: ${getErrorMessage(err)}`, 'error')
+    } finally {
+      setBatchProgress(null)
     }
   }, [
     parentNodeId,
@@ -174,8 +187,10 @@ export function AIGenerationPanel({
     // En mode "suite (nextNode)", si le parent a des choix, il faut en sélectionner au moins un
     const parentChoices = parentNode?.data?.choices || []
     const hasChoices = parentChoices.length > 0
-    const isContinuationMode = generationMode === 'continuation'
-    if (isContinuationMode && hasChoices) {
+    if (hasChoices && generationMode === 'continuation') {
+      return true
+    }
+    if (hasChoices && generationMode === 'branch') {
       return targetChoiceIndex === null && !generateAllChoices
     }
     return false
@@ -292,7 +307,11 @@ export function AIGenerationPanel({
         </label>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button
-            onClick={() => setGenerationMode('continuation')}
+            onClick={() => {
+              setGenerationMode('continuation')
+              setTargetChoiceIndex(null)
+              setGenerateAllChoices(false)
+            }}
             style={{
               flex: 1,
               padding: '0.5rem',
@@ -371,6 +390,7 @@ export function AIGenerationPanel({
                       if (!isConnected) {
                         setTargetChoiceIndex(targetChoiceIndex === index ? null : index)
                         setGenerateAllChoices(false)
+                        setGenerationMode('branch')
                       }
                     }}
                   >
@@ -406,6 +426,7 @@ export function AIGenerationPanel({
                 onClick={() => {
                   setGenerateAllChoices(!generateAllChoices)
                   setTargetChoiceIndex(null)
+                  setGenerationMode('branch')
                 }}
                 style={{
                   width: '100%',
@@ -599,7 +620,11 @@ export function AIGenerationPanel({
           }}
         >
           {isGenerating 
-            ? (generateAllChoices ? 'Génération batch...' : 'Génération...')
+            ? (generateAllChoices
+              ? batchProgress?.total
+                ? `Génération ${batchProgress.current}/${batchProgress.total}...`
+                : 'Génération batch...'
+              : 'Génération...')
             : (generateAllChoices ? '✨ Générer pour tous les choix' : targetChoiceIndex !== null ? `✨ Générer pour choix ${targetChoiceIndex + 1}` : '✨ Générer')
           }
         </button>
