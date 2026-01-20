@@ -161,6 +161,7 @@ class GraphConversionService:
                     "id": f"{source_id}-choice{choice_index}->{target_node}",
                     "source": source_id,
                     "target": target_node,
+                    "sourceHandle": f"choice-{choice_index}",  # Correspond à l'ID du handle dans DialogueNode
                     "type": "default",
                     "label": label,
                     "data": {

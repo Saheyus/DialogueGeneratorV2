@@ -64,7 +64,12 @@ export interface GraphState {
     parentNodeId: string,
     instructions: string,
     options: any
-  ) => Promise<string> // Retourne le nodeId du nouveau nœud généré
+  ) => Promise<{ nodeId: string | null; batchInfo?: {
+    generatedChoices: number
+    connectedChoices: number
+    failedChoices: number
+    totalChoices: number
+  } }> // Retourne le nodeId du nouveau nœud généré + infos batch
   
   // Validation
   validateGraph: () => Promise<void>
@@ -161,6 +166,7 @@ export const useGraphStore = create<GraphState>()(
             type: edge.type || 'default',
             label: edge.label,
             data: edge.data,
+            ...(edge.sourceHandle && { sourceHandle: edge.sourceHandle }), // Préserver sourceHandle si présent
           }))
           
           set({
@@ -261,6 +267,7 @@ export const useGraphStore = create<GraphState>()(
           id: edgeId,
           source: sourceId,
           target: targetId,
+          ...(choiceIndex !== undefined && { sourceHandle: `choice-${choiceIndex}` }), // Correspond à l'ID du handle dans DialogueNode
           type: 'default',
           data: {
             edgeType: connectionType,
@@ -426,21 +433,35 @@ export const useGraphStore = create<GraphState>()(
           const nodesToAdd = sortedConnections.length > 0
             ? sortedConnections.map(([choiceIndex, { node }]) => ({ node, choiceIndex }))
             : generatedNodes.map((node, index) => ({ node, choiceIndex: index }))
+          const totalToAdd = nodesToAdd.length
           
-          nodesToAdd.forEach(({ node: generatedNode, choiceIndex }) => {
+          if (options.generate_all_choices && typeof options.onBatchProgress === 'function' && totalToAdd > 0) {
+            options.onBatchProgress(0, totalToAdd)
+          }
+          
+          nodesToAdd.forEach(({ node: generatedNode, choiceIndex }, index) => {
+            const isBatch = options.generate_all_choices
+            const isChoiceSpecific = !isBatch && options.target_choice_index !== undefined && options.target_choice_index !== null
+            const verticalOffset = isBatch
+              ? 150 * choiceIndex
+              : (isChoiceSpecific ? (60 * choiceIndex) + 60 : 0)
             const newNode: Node = {
               id: generatedNode.id,
               type: 'dialogueNode',
               position: {
                 x: parentNode.position.x + 300,
                 // Positionnement en cascade verticale pour batch (offset Y = 150 * index_choice)
-                y: parentNode.position.y + (options.generate_all_choices ? 150 * choiceIndex : 0),
+                y: parentNode.position.y + verticalOffset,
               },
               data: generatedNode,
             }
             
             get().addNode(newNode)
             generatedNodeIds.push(generatedNode.id)
+            
+            if (isBatch && typeof options.onBatchProgress === 'function' && totalToAdd > 0) {
+              options.onBatchProgress(index + 1, totalToAdd)
+            }
           })
 
           // Créer les connexions suggérées (appliquer automatiquement)
@@ -459,13 +480,19 @@ export const useGraphStore = create<GraphState>()(
           // Retourner le nodeId du premier nouveau nœud pour feedback visuel
           // Note: Pour batch, on retourne l'ID du premier nœud, mais tous les nœuds sont ajoutés
           const firstNodeId = generatedNodeIds[0] || generatedNodes[0]?.id
+          const batchInfo = options.generate_all_choices ? {
+            generatedChoices: response.generated_choices_count ?? generatedNodes.length,
+            connectedChoices: response.connected_choices_count ?? 0,
+            failedChoices: response.failed_choices_count ?? 0,
+            totalChoices: response.total_choices_count ?? (parentNode.data?.choices?.length ?? 0),
+          } : undefined
           
           // Logger le résultat batch si applicable
           if (options.generate_all_choices && response.batch_count) {
             console.log(`Génération batch: ${response.batch_count} nœud(s) généré(s)`)
           }
           
-          return firstNodeId
+          return { nodeId: firstNodeId ?? null, batchInfo }
         } catch (error) {
           console.error('Erreur lors de la génération de nœud:', error)
           set({ isGenerating: false })

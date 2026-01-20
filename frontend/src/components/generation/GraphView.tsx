@@ -102,7 +102,7 @@ function unityJsonToGraph(jsonContent: string): { nodes: Node[]; edges: Edge[] }
               id: `${nodeId}-choice-${index}-${choice.targetNode}`,
               source: nodeId,
               target: choice.targetNode,
-              sourceHandle: `choice-${index}`,
+              sourceHandle: `choice-${index}`,  // Correspond à l'ID du handle dans DialogueNode
               type: 'smoothstep',
               label: choice.text || `Choix ${index + 1}`,
             })
