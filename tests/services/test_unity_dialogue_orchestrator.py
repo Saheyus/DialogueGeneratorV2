@@ -139,7 +139,7 @@ async def test_orchestrator_generate_with_events_sequence(orchestrator, sample_r
 
 @pytest.mark.asyncio
 async def test_orchestrator_cancellation(orchestrator, sample_request_data, mock_services):
-    """Test que l'annulation fonctionne correctement."""
+    """Test que l'annulation fonctionne correctement et arrête immédiatement."""
     
     # Mock context_builder
     mock_context_builder = Mock()
@@ -165,22 +165,56 @@ async def test_orchestrator_cancellation(orchestrator, sample_request_data, mock
         {"model_identifier": "gpt-4o"}
     ]
     
-    # Simuler annulation pendant Generating
-    cancelled = False
-    def check_cancelled():
-        return cancelled
+    # Mock UnityDialogueGenerationService pour retourner un dialogue avec texte à streamer
+    from unittest.mock import AsyncMock
+    mock_unity_service = AsyncMock()
+    mock_node = Mock()
+    mock_node.speaker = "Test Speaker"
+    mock_node.line = "Test line"
+    mock_node.choices = []
+    mock_response = Mock()
+    mock_response.node = mock_node
+    mock_response.title = "Test Dialogue"
+    mock_unity_service.generate_dialogue_node.return_value = mock_response
     
-    events = []
-    async for event in orchestrator.generate_with_events(sample_request_data, check_cancelled):
-        events.append(event)
-        # Annuler après l'événement Prompting
-        if event.type == 'step' and event.data.get('step') == 'Prompting':
-            cancelled = True
+    # Remplacer temporairement le service Unity
+    import services.unity_dialogue_generation_service
+    original_service = services.unity_dialogue_generation_service.UnityDialogueGenerationService
+    services.unity_dialogue_generation_service.UnityDialogueGenerationService = lambda: mock_unity_service
     
-    # Vérifier que erreur annulation est yieldée
-    error_events = [e for e in events if e.type == 'error']
-    assert len(error_events) > 0
-    assert 'annulée' in error_events[0].data['message'].lower() or 'cancelled' in error_events[0].data['message'].lower()
+    try:
+        # Simuler annulation pendant streaming (après quelques chunks)
+        cancelled = False
+        chunk_count = 0
+        
+        def check_cancelled():
+            return cancelled
+        
+        events = []
+        async for event in orchestrator.generate_with_events(sample_request_data, check_cancelled):
+            events.append(event)
+            # Annuler après quelques chunks pour tester l'arrêt immédiat
+            if event.type == 'chunk':
+                chunk_count += 1
+                if chunk_count == 3:  # Annuler après 3 chunks
+                    cancelled = True
+        
+        # Vérifier que erreur annulation est yieldée
+        error_events = [e for e in events if e.type == 'error']
+        assert len(error_events) > 0
+        assert 'annulée' in error_events[0].data['message'].lower() or 'cancelled' in error_events[0].data['message'].lower()
+        
+        # Vérifier que le streaming s'arrête immédiatement (pas de chunks après annulation)
+        error_index = next(i for i, e in enumerate(events) if e.type == 'error')
+        chunks_after_cancellation = [e for i, e in enumerate(events) if i > error_index and e.type == 'chunk']
+        assert len(chunks_after_cancellation) == 0, "Le streaming doit s'arrêter immédiatement après annulation"
+        
+        # Vérifier qu'aucun événement 'complete' n'est envoyé si annulé
+        complete_events = [e for e in events if e.type == 'complete']
+        assert len(complete_events) == 0, "Aucun dialogue partiel ne doit être sauvegardé si annulé"
+    finally:
+        # Restaurer le service original
+        services.unity_dialogue_generation_service.UnityDialogueGenerationService = original_service
 
 
 @pytest.mark.asyncio

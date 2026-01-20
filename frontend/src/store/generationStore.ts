@@ -35,6 +35,7 @@ interface GenerationState {
   isMinimized: boolean
   error: string | null
   currentJobId: string | null
+  isInterrupting: boolean  // Task 4 - Story 0.8
   
   // Actions
   setSceneSelection: (selection: Partial<SceneSelection>) => void
@@ -56,6 +57,7 @@ interface GenerationState {
   complete: () => void
   setError: (error: string) => void
   resetStreamingState: () => void
+  setInterrupting: (isInterrupting: boolean) => void  // Task 4 - Story 0.8
 }
 
 
@@ -88,6 +90,7 @@ export const useGenerationStore = create<GenerationState>((set) => ({
   isMinimized: false,
   error: null,
   currentJobId: null,
+  isInterrupting: false,  // Task 4 - Story 0.8
 
   setSceneSelection: (selection) =>
     set((state) => ({
@@ -173,7 +176,11 @@ export const useGenerationStore = create<GenerationState>((set) => ({
       isMinimized: false,
       error: null,
       currentJobId: null,
+      isInterrupting: false,
     }),
+
+  setInterrupting: (isInterrupting) =>
+    set({ isInterrupting }),  // Task 4 - Story 0.8
 }))
 
 

@@ -68,10 +68,13 @@ export function GenerationPanel() {
     isMinimized,
     error: streamingError,
     currentJobId,
+    isInterrupting,  // Task 4 - Story 0.8
     startGeneration,
     interrupt,
     minimize,
     resetStreamingState,
+    setInterrupting,  // Task 4 - Story 0.8
+    setError: setStreamingError,  // Task 4 - Story 0.8 (renommé pour éviter conflit avec setError local)
   } = useGenerationStore()
   
   const {
@@ -1552,23 +1555,64 @@ export function GenerationPanel() {
         content={streamingContent}
         currentStep={currentStep}
         isMinimized={isMinimized}
+        isInterrupting={isInterrupting}
         onInterrupt={async () => {
-          // Appeler l'API de cancel avec le job_id
+          // Afficher "Interruption en cours..."
+          setInterrupting(true)
+          
+          // Appeler l'API de cancel avec le job_id avec timeout de 10s
           if (currentJobId) {
             try {
-              await dialoguesAPI.cancelGenerationJob(currentJobId)
+              // Promise.race entre cancelGenerationJob et timeout 10s
+              const cancelPromise = dialoguesAPI.cancelGenerationJob(currentJobId)
+              const timeoutPromise = new Promise<'timeout'>((resolve) => 
+                setTimeout(() => resolve('timeout'), 10000)
+              )
+              
+              const result = await Promise.race([cancelPromise, timeoutPromise])
+              
+              // Si timeout atteint, force close EventSource
+              if (result === 'timeout') {
+                if (eventSourceRef.current) {
+                  eventSourceRef.current.close()
+                  eventSourceRef.current = null
+                }
+                setStreamingError('Interruption terminée')
+              } else {
+                // Interruption réussie
+                setStreamingError('Génération interrompue')
+              }
             } catch (err) {
               console.warn('Erreur lors de l\'annulation du job:', err)
+              // En cas d'erreur, force close EventSource quand même
+              if (eventSourceRef.current) {
+                eventSourceRef.current.close()
+                eventSourceRef.current = null
+              }
+              setStreamingError('Interruption terminée')
             }
+          } else {
+            // Si pas de job_id, fermer EventSource directement
+            if (eventSourceRef.current) {
+              eventSourceRef.current.close()
+              eventSourceRef.current = null
+            }
+            setStreamingError('Génération interrompue')
           }
-          // Fermer l'EventSource
+          
+          // Fermer l'EventSource et réinitialiser l'état
           interrupt()
           if (eventSourceRef.current) {
             eventSourceRef.current.close()
             eventSourceRef.current = null
           }
-          resetStreamingState()
-          setIsLoading(false)
+          
+          // Réinitialiser l'état d'interruption après un court délai pour permettre l'affichage du message
+          setTimeout(() => {
+            setInterrupting(false)
+            resetStreamingState()
+            setIsLoading(false)
+          }, 2000)  // 2 secondes pour permettre la lecture du message
         }}
         onMinimize={minimize}
         onClose={() => {

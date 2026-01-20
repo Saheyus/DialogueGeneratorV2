@@ -269,3 +269,89 @@ def test_cancel_job(client: TestClient):
     cancel_data = cancel_response.json()
     assert cancel_data["success"] is True
     assert cancel_data["job_id"] == job_id
+
+
+@pytest.mark.asyncio
+async def test_cleanup_automatic_after_completion(client: TestClient, monkeypatch, caplog):
+    """Test que le cleanup automatique fonctionne après génération normale (Task 5 - Story 0.8)."""
+    from api.services.generation_job_manager import get_job_manager
+    
+    # Créer un job
+    context_selection = ContextSelection(
+        characters_full=["character_1"],
+        characters_excerpt=[],
+        locations_full=[],
+        items_excerpt=[],
+        species_full=[],
+        species_excerpt=[],
+        communities_full=[],
+        communities_excerpt=[],
+        dialogues_examples=[],
+        scene_location=None
+    )
+    
+    job_request = {
+        "user_instructions": "Test dialogue",
+        "context_selections": context_selection.model_dump(mode='json'),
+        "llm_model_identifier": "gpt-4o"
+    }
+    
+    response = client.post("/api/v1/dialogues/generate/jobs", json=job_request)
+    job_id = response.json()["job_id"]
+    
+    job_manager = get_job_manager()
+    
+    # Mock de l'orchestrateur pour retourner un événement complete
+    with patch('services.unity_dialogue_orchestrator.UnityDialogueOrchestrator') as mock_orchestrator_class:
+        mock_orchestrator = MagicMock()
+        mock_orchestrator_class.return_value = mock_orchestrator
+        
+        from services.unity_dialogue_orchestrator import GenerationEvent
+        
+        async def mock_events(request_data, check_cancelled):
+            yield GenerationEvent(type='step', data={'step': 'Prompting'})
+            yield GenerationEvent(type='step', data={'step': 'Generating'})
+            yield GenerationEvent(type='step', data={'step': 'Validating'})
+            yield GenerationEvent(type='complete', data={
+                'result': {
+                    'json_content': '{"nodes": []}',
+                    'title': 'Test Dialogue',
+                    'raw_prompt': 'Test prompt',
+                    'prompt_hash': 'hash123',
+                    'estimated_tokens': 100,
+                    'warning': None,
+                    'structured_prompt': None,
+                    'reasoning_trace': None
+                }
+            })
+        
+        mock_orchestrator.generate_with_events = mock_events
+        
+        # Streamer le job jusqu'à completion
+        stream_response = client.get(f"/api/v1/dialogues/generate/jobs/{job_id}/stream")
+        assert stream_response.status_code == 200
+        
+        # Lire tous les événements pour déclencher le cleanup
+        content = stream_response.text
+        assert '"type": "complete"' in content
+        
+        # Attendre un peu pour que le cleanup se termine
+        import asyncio
+        await asyncio.sleep(0.2)
+        
+        # Vérifier que la tâche a été désenregistrée (cleanup automatique dans finally)
+        # Note: La tâche est désenregistrée dans le finally block de stream_generation
+        # On vérifie que le job est dans l'état completed
+        job = job_manager.get_job(job_id)
+        assert job is not None
+        assert job['status'] == 'completed'
+        
+        # Vérifier que les logs de cleanup automatique sont présents
+        log_records = [r for r in caplog.records if 'Génération terminée, cleanup automatique' in r.message]
+        assert len(log_records) > 0, "Les logs de cleanup automatique doivent être présents"
+        
+        # Vérifier que les métadonnées sont dans les logs
+        log_message = log_records[0].message
+        assert f"job_id: {job_id}" in log_message
+        assert "durée:" in log_message
+        assert "timestamp:" in log_message

@@ -52,6 +52,8 @@ async def stream_generation(job_id: str, container: ServiceContainer) -> AsyncGe
         yield f'data: {json.dumps({"type": "error", "message": "Job introuvable"})}\n\n'
         return
     
+    from datetime import datetime, timezone
+    
     try:
         current_task = asyncio.current_task()
         if current_task is not None:
@@ -67,6 +69,9 @@ async def stream_generation(job_id: str, container: ServiceContainer) -> AsyncGe
         # Construire request_data depuis job params
         request_data = GenerateUnityDialogueRequest(**job['params'])
         
+        # Stocker l'étape actuelle pour les logs
+        current_step = None
+        
         # Streamer les événements
         async for event in orchestrator.generate_with_events(
             request_data,
@@ -76,13 +81,29 @@ async def stream_generation(job_id: str, container: ServiceContainer) -> AsyncGe
             if event.type == 'chunk':
                 yield f'data: {json.dumps({"type": "chunk", "content": event.data.get("content", "")})}\n\n'
             elif event.type == 'step':
-                yield f'data: {json.dumps({"type": "step", "step": event.data["step"]})}\n\n'
+                current_step = event.data.get("step", "unknown")
+                yield f'data: {json.dumps({"type": "step", "step": current_step})}\n\n'
             elif event.type == 'metadata':
                 yield f'data: {json.dumps({"type": "metadata", "tokens": event.data["tokens"], "cost": event.data["cost"]})}\n\n'
             elif event.type == 'complete':
                 # Stocker résultat dans job
                 job_manager.update_status(job_id, "completed", result=event.data['result'])
                 yield f'data: {json.dumps({"type": "complete", "result": event.data["result"]})}\n\n'
+                
+                # Log cleanup automatique après génération normale
+                created_at = datetime.fromisoformat(job['created_at'])
+                now = datetime.now(timezone.utc)
+                duration_seconds = (now - created_at).total_seconds()
+                logger.info(
+                    f"Génération terminée, cleanup automatique - job_id: {job_id}, durée: {duration_seconds:.2f}s, "
+                    f"timestamp: {now.isoformat()}",
+                    extra={
+                        'job_id': job_id,
+                        'duration_seconds': duration_seconds,
+                        'timestamp': now.isoformat(),
+                        'status': 'completed'
+                    }
+                )
             elif event.type == 'error':
                 error_code = event.data.get("code")
                 if error_code == "cancelled" or job_manager.is_cancelled(job_id):
@@ -93,7 +114,26 @@ async def stream_generation(job_id: str, container: ServiceContainer) -> AsyncGe
                 return
         
     except asyncio.CancelledError:
+        # Calculer durée et métadonnées pour logs d'annulation
+        created_at = datetime.fromisoformat(job['created_at'])
+        now = datetime.now(timezone.utc)
+        duration_seconds = (now - created_at).total_seconds()
+        
         job_manager.update_status(job_id, "cancelled", error="Génération annulée")
+        
+        # Log détaillé avec métadonnées
+        logger.info(
+            f"Génération annulée par utilisateur - job_id: {job_id}, durée: {duration_seconds:.2f}s, "
+            f"étape: {current_step or 'unknown'}, timestamp: {now.isoformat()}",
+            extra={
+                'job_id': job_id,
+                'duration_seconds': duration_seconds,
+                'step': current_step or 'unknown',
+                'timestamp': now.isoformat(),
+                'status': 'cancelled'
+            }
+        )
+        
         yield f'data: {json.dumps({"type": "error", "message": "Génération annulée", "code": "cancelled"})}\n\n'
         return
     except Exception as e:

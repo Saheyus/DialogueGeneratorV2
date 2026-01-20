@@ -18,6 +18,8 @@ export interface GenerationProgressModalProps {
   isMinimized?: boolean
   /** Message d'erreur si génération échouée */
   error?: string | null
+  /** État d'interruption en cours (Task 4 - Story 0.8) */
+  isInterrupting?: boolean
   /** Callback pour interrompre la génération */
   onInterrupt: () => void
   /** Callback pour réduire/agrandir la modal */
@@ -42,6 +44,7 @@ export function GenerationProgressModal({
   currentStep,
   isMinimized = false,
   error = null,
+  isInterrupting = false,  // Task 4 - Story 0.8
   onInterrupt,
   onMinimize,
   onClose,
@@ -153,7 +156,11 @@ export function GenerationProgressModal({
           }}
         >
           <h2 style={{ margin: 0, color: theme.text.primary }}>
-            {currentStep === 'Complete' ? 'Génération terminée' : 'Génération en cours...'}
+            {isInterrupting 
+              ? 'Interruption en cours...' 
+              : currentStep === 'Complete' 
+                ? 'Génération terminée' 
+                : 'Génération en cours...'}
           </h2>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             {currentStep !== 'Complete' && (
@@ -239,6 +246,18 @@ export function GenerationProgressModal({
               }}
             >
               {error}
+            </div>
+          ) : isInterrupting ? (
+            <div
+              style={{
+                padding: '1rem',
+                backgroundColor: theme.state.warning?.background || theme.input.background,
+                color: theme.state.warning?.color || theme.text.primary,
+                borderRadius: '4px',
+                textAlign: 'center',
+              }}
+            >
+              Interruption en cours...
             </div>
           ) : (
             <pre

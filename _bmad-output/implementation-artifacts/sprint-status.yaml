@@ -48,7 +48,7 @@ development_status:
   0-5-5-génération-next-node-avec-gestion-automatique-des-connexions: done
   0-6-validation-cycles-graphe-id-002: done
   0-7-cost-governance-id-003: done
-  0-8-streaming-cleanup-id-004: ready-for-dev
+  0-8-streaming-cleanup-id-004: review
   0-9-preset-validation-id-005: ready-for-dev
   0-10-tests-4-resultats-critiques: ready-for-dev
   epic-0-retrospective: optional

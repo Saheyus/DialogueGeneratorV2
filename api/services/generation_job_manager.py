@@ -102,14 +102,30 @@ class GenerationJobManager:
             logger.info(f"Job {job_id} already finished, cannot cancel")
             return False
         
+        # Calculer durée de génération
+        created_at = datetime.fromisoformat(job['created_at'])
+        now = datetime.now(timezone.utc)
+        duration_seconds = (now - created_at).total_seconds()
+        
         job['cancelled'] = True
         job['status'] = 'cancelled'
-        job['updated_at'] = datetime.now(timezone.utc).isoformat()
+        job['updated_at'] = now.isoformat()
         
         task = self._tasks.get(job_id)
         if task and not task.done():
             task.cancel()
-        logger.info(f"Job {job_id} cancelled", extra={'job_id': job_id})
+        
+        # Log détaillé avec timestamp, durée et métadonnées
+        logger.info(
+            f"Génération annulée par utilisateur - job_id: {job_id}, durée: {duration_seconds:.2f}s, "
+            f"timestamp: {now.isoformat()}",
+            extra={
+                'job_id': job_id,
+                'duration_seconds': duration_seconds,
+                'timestamp': now.isoformat(),
+                'status': 'cancelled'
+            }
+        )
         return True
     
     def is_cancelled(self, job_id: str) -> bool:
