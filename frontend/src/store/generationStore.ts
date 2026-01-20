@@ -149,6 +149,7 @@ export const useGenerationStore = create<GenerationState>((set) => ({
       currentStep: 'Prompting',
       error: null,
       currentJobId: null,
+      isInterrupting: false,  // Fix: Réinitialiser isInterrupting (Issue #4)
     }),
 
   minimize: () =>

@@ -102,8 +102,13 @@ class GenerationJobManager:
             logger.info(f"Job {job_id} already finished, cannot cancel")
             return False
         
-        # Calculer durée de génération
-        created_at = datetime.fromisoformat(job['created_at'])
+        # Calculer durée de génération (fix: gestion erreur format date - Issue #7)
+        try:
+            created_at = datetime.fromisoformat(job['created_at'])
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Invalid date format for job {job_id}: {job.get('created_at')}, using current time", extra={'job_id': job_id})
+            created_at = datetime.now(timezone.utc)
+        
         now = datetime.now(timezone.utc)
         duration_seconds = (now - created_at).total_seconds()
         
@@ -135,7 +140,11 @@ class GenerationJobManager:
     
     def _is_expired(self, job: Dict[str, Any]) -> bool:
         """Vérifie si un job a expiré."""
-        expires_at = datetime.fromisoformat(job['expires_at'])
+        try:
+            expires_at = datetime.fromisoformat(job['expires_at'])
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Invalid expires_at format for job {job.get('job_id', 'unknown')}, considering expired")
+            return True  # Considérer comme expiré si format invalide
         return datetime.now(timezone.utc) > expires_at
     
     def _remove_job(self, job_id: str) -> None:
@@ -152,8 +161,11 @@ class GenerationJobManager:
     
     def unregister_task(self, job_id: str) -> None:
         """Supprime la référence à la tâche de génération."""
+        # Fix: Vérification déjà présente, mais ajout d'un log si job_id n'existe pas (Issue #9)
         if job_id in self._tasks:
             del self._tasks[job_id]
+        else:
+            logger.debug(f"Attempted to unregister non-existent task for job {job_id}")
     
     async def wait_for_completion(self, job_id: str, timeout_seconds: int = 10) -> bool:
         """Attend la fin d'un job (completed/error/cancelled) avec timeout."""
@@ -205,11 +217,15 @@ class GenerationJobManager:
     async def _cleanup_expired_jobs(self) -> None:
         """Supprime les jobs expirés."""
         now = datetime.now(timezone.utc)
-        expired_jobs = [
-            job_id
-            for job_id, job in self._jobs.items()
-            if datetime.fromisoformat(job['expires_at']) < now
-        ]
+        expired_jobs = []
+        for job_id, job in self._jobs.items():
+            try:
+                expires_at = datetime.fromisoformat(job['expires_at'])
+                if expires_at < now:
+                    expired_jobs.append(job_id)
+            except (ValueError, TypeError):
+                # Format invalide, considérer comme expiré
+                expired_jobs.append(job_id)
         
         for job_id in expired_jobs:
             self._remove_job(job_id)

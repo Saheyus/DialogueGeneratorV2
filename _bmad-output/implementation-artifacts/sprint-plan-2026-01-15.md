@@ -55,6 +55,8 @@
    - **Dépendances :** Aucune (peut être fait en parallèle)
    - **Acceptance Criteria :** 4 critères BDD
 
+4.5. Ajouts post-plan : Story 0.5.5 + 0.10 (demandes critiques de Marc) : Priorité haute
+
 #### Stories de Robustesse (Should-Have)
 
 5. **Story 0.5: Auto-save dialogues (ID-001)**
@@ -86,7 +88,6 @@
    - **Effort estimé :** Faible (1-2 jours)
    - **Dépendances :** Story 0.4 (Presets système)
    - **Acceptance Criteria :** 5 critères BDD
-
 ---
 
 ## 📊 Capacité & Effort Estimé

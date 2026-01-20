@@ -240,9 +240,14 @@ export function GenerationProgressModal({
             <div
               style={{
                 padding: '1rem',
-                backgroundColor: theme.state.error.background,
-                color: theme.state.error.color,
+                backgroundColor: error.includes('Interruption terminée') 
+                  ? (theme.state.warning?.background || theme.input.background)
+                  : theme.state.error.background,
+                color: error.includes('Interruption terminée')
+                  ? (theme.state.warning?.color || theme.text.primary)
+                  : theme.state.error.color,
                 borderRadius: '4px',
+                textAlign: 'center',
               }}
             >
               {error}
