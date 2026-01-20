@@ -97,6 +97,8 @@ export const usePresetStore = create<PresetStore>((set) => ({
         isLoading: false,
       }));
       
+      // Note: Header X-Preset-Cleanup-Message doit être lu par le composant appelant
+      // pour afficher le toast (comme dans PresetSelector.handleCreatePreset)
       return response;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
