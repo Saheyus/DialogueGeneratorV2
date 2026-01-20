@@ -399,8 +399,81 @@ async def test_generate_node_validation_invalid_target_choice_index(client, samp
         
         assert response.status_code == 422  # ValidationException
         data = response.json()
-        assert "detail" in data
-        assert "Index de choix invalide" in data["detail"] or "invalide" in data["detail"].lower()
+        assert "error" in data
+        assert "message" in data["error"]
+        assert "Index de choix invalide" in data["error"]["message"] or "invalide" in data["error"]["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_generate_node_validation_target_choice_index_no_choices(client, sample_parent_node_without_choices):
+    """Test que target_choice_index avec un parent sans choix retourne ValidationException.
+    
+    AC: Validation stricte de target_choice_index.
+    """
+    with patch('factories.llm_factory.LLMClientFactory') as mock_factory, \
+         patch('api.routers.graph.ServiceContainer') as mock_container:
+        
+        mock_llm_client = MagicMock()
+        mock_factory.create_client.return_value = mock_llm_client
+        
+        mock_config_service = MagicMock()
+        mock_config_service.get_llm_config.return_value = {}
+        mock_config_service.get_available_llm_models.return_value = []
+        mock_container_instance = MagicMock()
+        mock_container_instance.get_config_service.return_value = mock_config_service
+        mock_container.return_value = mock_container_instance
+        
+        # Parent sans choix, mais target_choice_index fourni
+        request_data = {
+            "parent_node_id": "NODE_PARENT_2",
+            "parent_node_content": sample_parent_node_without_choices,
+            "user_instructions": "Test",
+            "context_selections": {},
+            "target_choice_index": 0,  # Index fourni mais parent n'a pas de choix
+            "generate_all_choices": False
+        }
+        
+        response = client.post("/api/v1/unity-dialogues/graph/generate-node", json=request_data)
+        
+        assert response.status_code == 422  # ValidationException
+        data = response.json()
+        assert "error" in data
+        assert "message" in data["error"]
+        assert "Aucun choix disponible" in data["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_generate_node_validation_generate_all_choices_no_choices(client, sample_parent_node_without_choices):
+    """Test que generate_all_choices avec un parent sans choix retourne ValidationException."""
+    with patch('factories.llm_factory.LLMClientFactory') as mock_factory, \
+         patch('api.routers.graph.ServiceContainer') as mock_container:
+        
+        mock_llm_client = MagicMock()
+        mock_factory.create_client.return_value = mock_llm_client
+        
+        mock_config_service = MagicMock()
+        mock_config_service.get_llm_config.return_value = {}
+        mock_config_service.get_available_llm_models.return_value = []
+        mock_container_instance = MagicMock()
+        mock_container_instance.get_config_service.return_value = mock_config_service
+        mock_container.return_value = mock_container_instance
+        
+        request_data = {
+            "parent_node_id": "NODE_PARENT_2",
+            "parent_node_content": sample_parent_node_without_choices,
+            "user_instructions": "Test",
+            "context_selections": {},
+            "target_choice_index": None,
+            "generate_all_choices": True  # Batch demandé mais parent n'a pas de choix
+        }
+        
+        response = client.post("/api/v1/unity-dialogues/graph/generate-node", json=request_data)
+        
+        assert response.status_code == 422  # ValidationException
+        data = response.json()
+        assert "error" in data
+        assert "message" in data["error"]
+        assert "Aucun choix disponible" in data["error"]["message"]
 
 
 @pytest.mark.asyncio
