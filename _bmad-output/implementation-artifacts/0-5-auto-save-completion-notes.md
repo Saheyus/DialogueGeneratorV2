@@ -57,3 +57,29 @@ Implémentation complète de l'auto-save draft pour l'éditeur de graphe (Tasks 
 - Lignes ajoutées: ~300
 - Tests: 15 nouveaux (tous passent)
 - Build: Succès
+
+## Modifications post-implémentation
+
+### Fix persistance positions nodes (2026-01-20)
+
+**Problème identifié** : Les positions des nodes n'étaient pas persistées de manière fiable. Après plusieurs changements d'onglet, les nodes revenaient à leur position initiale.
+
+**Cause racine** : 
+- Les positions étaient sauvegardées uniquement dans le draft (`unity_dialogue_draft:{filename}`)
+- Le draft était supprimé si le contenu JSON était identique (ligne 134 GraphEditor.tsx), même si les positions avaient changé
+- Le `filename` n'était jamais passé au store, donc `dialogueMetadata.filename` restait `null`
+- Sans filename, aucune sauvegarde ni chargement des positions n'était possible
+
+**Solution appliquée** :
+1. Création d'un module dédié `frontend/src/utils/nodePositions.ts` pour gérer la persistance des positions
+2. Clé localStorage dédiée : `graph_positions:{filename}` (séparée du draft de contenu)
+3. Sauvegarde immédiate dans `updateNodePosition` (sans debounce)
+4. Ajout du paramètre `filename` à `loadDialogue()` et passage explicite de `selectedDialogue.filename` depuis GraphEditor
+5. Chargement systématique des positions depuis localStorage avec priorité : localStorage > draft > backend
+
+**Fichiers modifiés** :
+- `frontend/src/utils/nodePositions.ts` (créé)
+- `frontend/src/store/graphStore.ts` (signature loadDialogue + updateNodePosition + import utilities)
+- `frontend/src/components/graph/GraphEditor.tsx` (passage filename à loadDialogue, nettoyage draft)
+
+**Résultat** : Persistance permanente et transparente des positions des nodes, indépendante du contenu JSON.

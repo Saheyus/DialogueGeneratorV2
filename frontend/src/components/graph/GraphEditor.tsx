@@ -29,7 +29,7 @@ export function GraphEditor() {
   
   // États auto-save draft (Task 2 - Story 0.5)
   const [showRestoreDialog, setShowRestoreDialog] = useState(false)
-  const [draftToRestore, setDraftToRestore] = useState<{json_content: string; timestamp: number; positions?: Record<string, { x: number; y: number }>} | null>(null)
+  const [draftToRestore, setDraftToRestore] = useState<{json_content: string; timestamp: number} | null>(null)
   
   // État pour le dialogue de sélection de format d'export
   const [showExportFormatDialog, setShowExportFormatDialog] = useState(false)
@@ -97,11 +97,9 @@ export function GraphEditor() {
         .then((response) => {
           // Vérifier s'il existe un draft local
           const draftStr = localStorage.getItem(draftKey)
-          let savedPositions: Record<string, { x: number; y: number }> | undefined
           if (draftStr) {
             try {
               const draft = JSON.parse(draftStr)
-              savedPositions = draft.positions // Positions ReactFlow sauvegardées
               const draftTimestamp = draft.timestamp || 0
               const fileTimestamp = selectedDialogue.modified_time 
                 ? new Date(selectedDialogue.modified_time).getTime() 
@@ -139,8 +137,9 @@ export function GraphEditor() {
             }
           }
           
-          // Charger le dialogue normalement
-          return loadDialogue(response.json_content, savedPositions)
+          // Charger le dialogue normalement (les positions seront chargées automatiquement depuis localStorage)
+          // Passer le filename explicitement pour que le store puisse sauvegarder/charger les positions
+          return loadDialogue(response.json_content, undefined, selectedDialogue.filename)
         })
         .then(() => {
           setIsLoadingDialogue(false)
@@ -157,6 +156,7 @@ export function GraphEditor() {
   }, [selectedDialogue, loadDialogue, toast])
   
   // Auto-save draft avec debounce (Task 2 - Story 0.5)
+  // Sauvegarde immédiate lors du démontage si des changements non sauvegardés existent
   useEffect(() => {
     // Ne pas auto-save si conditions bloquantes
     if (!selectedDialogue || 
@@ -169,19 +169,16 @@ export function GraphEditor() {
     }
     
     const draftKey = `unity_dialogue_draft:${selectedDialogue.filename}`
-    const timeoutId = setTimeout(() => {
+    
+    // Fonction de sauvegarde réutilisable
+    const saveDraft = () => {
       try {
         clearDraftError()
         const json_content = exportToUnity()
-        // Extraire les positions des nodes pour persistance séparée (Unity ne les utilise pas)
-        const positions: Record<string, { x: number; y: number }> = {}
-        nodes.forEach((node) => {
-          positions[node.id] = node.position
-        })
+        // Note : Les positions sont maintenant sauvegardées séparément par updateNodePosition
         const draft = {
           filename: selectedDialogue.filename,
           json_content,
-          positions, // Positions ReactFlow (non utilisées par Unity)
           timestamp: Date.now(),
         }
         localStorage.setItem(draftKey, JSON.stringify(draft))
@@ -191,9 +188,19 @@ export function GraphEditor() {
         const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue'
         markDraftError(errorMessage)
       }
-    }, 3000) // Debounce 3s après le dernier changement
+    }
     
-    return () => clearTimeout(timeoutId)
+    // Debounce 3s après le dernier changement
+    const timeoutId = setTimeout(saveDraft, 3000)
+    
+    // Cleanup : sauvegarder immédiatement lors du démontage si des changements non sauvegardés
+    return () => {
+      clearTimeout(timeoutId)
+      // Sauvegarder immédiatement si le composant est démonté avec des changements non sauvegardés
+      if (selectedDialogue && hasUnsavedChanges && !isGraphLoading && !isGraphSaving && !isLoadingDialogue && !isGenerating) {
+        saveDraft()
+      }
+    }
   }, [selectedDialogue, hasUnsavedChanges, isGraphLoading, isGraphSaving, isLoadingDialogue, isGenerating, nodes, exportToUnity, markDraftSaved, markDraftError, clearDraftError])
   
   // Handler pour valider le graphe
@@ -303,8 +310,9 @@ export function GraphEditor() {
   const handleRestoreDraft = useCallback(() => {
     if (draftToRestore && selectedDialogue) {
       setIsLoadingDialogue(true)
-      // Restaurer aussi les positions depuis le draft
-      loadDialogue(draftToRestore.json_content, draftToRestore.positions)
+      // Les positions seront chargées automatiquement depuis localStorage
+      // Passer le filename explicitement
+      loadDialogue(draftToRestore.json_content, undefined, selectedDialogue.filename)
         .then(() => {
           setShowRestoreDialog(false)
           setDraftToRestore(null)
@@ -329,7 +337,7 @@ export function GraphEditor() {
       // Charger le dialogue normal depuis l'API
       setIsLoadingDialogue(true)
       unityDialoguesAPI.getUnityDialogue(selectedDialogue.filename)
-        .then((response) => loadDialogue(response.json_content))
+        .then((response) => loadDialogue(response.json_content, undefined, selectedDialogue.filename))
         .then(() => {
           setIsLoadingDialogue(false)
           toast('Brouillon supprimé, dialogue du fichier chargé', 'info', 2000)

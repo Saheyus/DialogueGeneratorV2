@@ -10,6 +10,7 @@ import type {
   SaveGraphResponse,
   ValidationErrorDetail,
 } from '../types/graph'
+import { saveNodePositions, loadNodePositions, type NodePositions } from '../utils/nodePositions'
 
 export interface GraphMetadata {
   title: string
@@ -42,7 +43,8 @@ export interface GraphState {
   // Actions CRUD
   loadDialogue: (
     jsonContent: string,
-    savedPositions?: Record<string, { x: number; y: number }>
+    savedPositions?: Record<string, { x: number; y: number }>,
+    filename?: string
   ) => Promise<void>
   addNode: (node: Node) => void
   updateNode: (nodeId: string, updates: Partial<Node>) => void
@@ -129,19 +131,24 @@ export const useGraphStore = create<GraphState>()(
       ...initialState,
       
       // Charger un dialogue Unity JSON
-      loadDialogue: async (jsonContent: string, savedPositions?: Record<string, { x: number; y: number }>) => {
+      loadDialogue: async (jsonContent: string, savedPositions?: Record<string, { x: number; y: number }>, explicitFilename?: string) => {
         set({ isLoading: true })
         try {
           const response = await graphAPI.loadGraph({ json_content: jsonContent })
           
+          // Charger les positions depuis localStorage (clé dédiée)
+          // Utiliser le filename passé en paramètre en priorité, sinon celui des métadonnées
+          const filename = explicitFilename || response.metadata.filename
+          const persistedPositions = filename ? loadNodePositions(filename) : null
+          
           // Convertir les nœuds en format ReactFlow
-          // Restaurer les positions sauvegardées si disponibles, sinon utiliser celles du backend
+          // Priorité : positions localStorage > positions draft (savedPositions) > positions backend
           const nodes: Node[] = response.nodes.map((node: any) => {
-            const savedPosition = savedPositions?.[node.id]
+            const position = persistedPositions?.[node.id] || savedPositions?.[node.id] || node.position
             return {
               id: node.id,
               type: node.type,
-              position: savedPosition || node.position, // Utiliser position sauvegardée si disponible
+              position,
               data: node.data,
             }
           })
@@ -163,7 +170,7 @@ export const useGraphStore = create<GraphState>()(
               title: response.metadata.title,
               node_count: response.metadata.node_count,
               edge_count: response.metadata.edge_count,
-              filename: response.metadata.filename,
+              filename: filename, // Utiliser le filename résolu (explicitFilename ou metadata)
             },
             isLoading: false,
             validationErrors: [],
@@ -351,6 +358,16 @@ export const useGraphStore = create<GraphState>()(
         // Marquer dirty pour auto-save draft SEULEMENT si position a changé (Task 1 - Story 0.5)
         if (positionChanged) {
           get().markDirty()
+          
+          // Sauvegarder immédiatement les positions dans localStorage (clé dédiée)
+          const filename = state.dialogueMetadata.filename
+          if (filename) {
+            const positions: NodePositions = {}
+            state.nodes.forEach((n) => {
+              positions[n.id] = n.id === nodeId ? position : n.position
+            })
+            saveNodePositions(filename, positions)
+          }
         }
       },
       
