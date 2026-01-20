@@ -29,6 +29,35 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Constante pour timeout d'annulation (10 secondes) - Story 0.8
+CANCEL_TIMEOUT_SECONDS = 10
+
+
+def _calculate_duration(job: Dict[str, Any]) -> float:
+    """Calcule la durée d'un job en secondes.
+    
+    Helper function pour éviter duplication de code et gérer les erreurs de format de date.
+    
+    Args:
+        job: Dictionnaire du job avec 'created_at'.
+        
+    Returns:
+        Durée en secondes, ou 0.0 si format de date invalide.
+    """
+    from datetime import datetime, timezone
+    
+    try:
+        created_at = datetime.fromisoformat(job['created_at'])
+        now = datetime.now(timezone.utc)
+        return (now - created_at).total_seconds()
+    except (ValueError, TypeError, KeyError) as e:
+        logger.warning(
+            f"Invalid date format for job {job.get('job_id', 'unknown')}: {job.get('created_at')}, "
+            f"using 0.0s duration",
+            extra={'job_id': job.get('job_id'), 'error': str(e)}
+        )
+        return 0.0
+
 
 async def stream_generation(job_id: str, container: ServiceContainer) -> AsyncGenerator[str, None]:
     """Générateur async pour streamer la génération Unity Dialogue.
@@ -69,8 +98,8 @@ async def stream_generation(job_id: str, container: ServiceContainer) -> AsyncGe
         # Construire request_data depuis job params
         request_data = GenerateUnityDialogueRequest(**job['params'])
         
-        # Stocker l'étape actuelle pour les logs
-        current_step = None
+        # Stocker l'étape actuelle pour les logs (initialiser à "queued" pour logs plus précis)
+        current_step = "queued"
         
         # Streamer les événements
         async for event in orchestrator.generate_with_events(
@@ -91,9 +120,8 @@ async def stream_generation(job_id: str, container: ServiceContainer) -> AsyncGe
                 yield f'data: {json.dumps({"type": "complete", "result": event.data["result"]})}\n\n'
                 
                 # Log cleanup automatique après génération normale
-                created_at = datetime.fromisoformat(job['created_at'])
+                duration_seconds = _calculate_duration(job)
                 now = datetime.now(timezone.utc)
-                duration_seconds = (now - created_at).total_seconds()
                 logger.info(
                     f"Génération terminée, cleanup automatique - job_id: {job_id}, durée: {duration_seconds:.2f}s, "
                     f"timestamp: {now.isoformat()}",
@@ -115,9 +143,8 @@ async def stream_generation(job_id: str, container: ServiceContainer) -> AsyncGe
         
     except asyncio.CancelledError:
         # Calculer durée et métadonnées pour logs d'annulation
-        created_at = datetime.fromisoformat(job['created_at'])
+        duration_seconds = _calculate_duration(job)
         now = datetime.now(timezone.utc)
-        duration_seconds = (now - created_at).total_seconds()
         
         job_manager.update_status(job_id, "cancelled", error="Génération annulée")
         
@@ -141,7 +168,10 @@ async def stream_generation(job_id: str, container: ServiceContainer) -> AsyncGe
         job_manager.update_status(job_id, "error", error=str(e))
         yield f'data: {json.dumps({"type": "error", "message": str(e)})}\n\n'
     finally:
-        job_manager.unregister_task(job_id)
+        # Vérifier que la tâche est enregistrée avant de la désenregistrer
+        # La tâche peut ne pas être enregistrée si une exception se produit avant register_task()
+        if job_id in job_manager._tasks:
+            job_manager.unregister_task(job_id)
 
 
 @router.post("/generate/jobs", response_model=GenerationJobResponse)
@@ -234,8 +264,8 @@ async def cancel_job(job_id: str) -> Dict[str, Any]:
             "job_id": job_id,
         }
     
-    # Attendre la fin (cleanup) avec timeout max 10s
-    await job_manager.wait_for_completion(job_id, timeout_seconds=10)
+    # Attendre la fin (cleanup) avec timeout max 10s (Story 0.8 - AC #1)
+    await job_manager.wait_for_completion(job_id, timeout_seconds=CANCEL_TIMEOUT_SECONDS)
     
     logger.info(f"Job {job_id} cancelled", extra={'job_id': job_id})
     

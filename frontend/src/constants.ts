@@ -53,6 +53,8 @@ export const API_TIMEOUTS = {
   DEFAULT: 30000,
   /** Timeout pour les requêtes LLM longues (5 minutes) - génération de dialogues */
   LLM_GENERATION: 300000,
+  /** Timeout pour l'annulation d'un job de génération (10 secondes) - Story 0.8 */
+  CANCEL_JOB: 10000,
 } as const
 
 

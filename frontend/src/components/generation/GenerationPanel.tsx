@@ -30,7 +30,9 @@ import { ModelSelector } from './ModelSelector'
 import { PresetSelector } from './PresetSelector'
 import { PresetValidationModal } from './PresetValidationModal'
 import { useToast, SaveStatusIndicator, ConfirmDialog } from '../shared'
-import { CONTEXT_TOKENS_LIMITS, DEFAULT_MODEL } from '../../constants'
+import type { Preset } from '../../types/preset'
+import { filterObsoleteReferences as filterObsoleteRefs } from '../../utils/presetUtils'
+import { CONTEXT_TOKENS_LIMITS, DEFAULT_MODEL, API_TIMEOUTS } from '../../constants'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { useCostGovernance } from '../../hooks/useCostGovernance'
 import type { SaveStatus } from '../shared/SaveStatusIndicator'
@@ -133,6 +135,24 @@ export function GenerationPanel() {
   const toast = useToast()
   const sliderRef = useRef<HTMLInputElement>(null)
   const eventSourceRef = useRef<EventSource | null>(null)
+  
+  /**
+   * Ferme l'EventSource proprement en évitant les race conditions.
+   * 
+   * Vérifie que l'EventSource existe et n'est pas déjà fermé avant de le fermer.
+   * Utilisé pour éviter les exceptions lors de fermetures multiples (timeout, erreur, succès).
+   * 
+   * Story 0.8 - Fix race condition EventSource
+   */
+  const closeEventSource = useCallback(() => {
+    if (eventSourceRef.current) {
+      // Vérifier que l'EventSource n'est pas déjà fermé
+      if (eventSourceRef.current.readyState !== EventSource.CLOSED) {
+        eventSourceRef.current.close()
+      }
+      eventSourceRef.current = null
+    }
+  }, [])
   const sseClosedByClientRef = useRef(false)
   const sseHasReceivedAnyMessageRef = useRef(false)
   const sseErrorDebounceTimerRef = useRef<number | null>(null)
@@ -951,14 +971,23 @@ export function GenerationPanel() {
   }, [setSceneSelection])
   
   const handleValidationConfirm = useCallback(() => {
-    if (pendingPreset) {
-      applyPreset(pendingPreset)
-      toast('Preset chargé (avec warnings)', 'warning')
+    if (pendingPreset && validationResult) {
+      // Filtrer les références obsolètes avant d'appliquer le preset
+      const filteredPreset = filterObsoleteRefs(pendingPreset, validationResult.obsoleteRefs || [])
+      applyPreset(filteredPreset)
+      
+      // Améliorer toast avec nombre de références obsolètes ignorées
+      const obsoleteCount = validationResult.obsoleteRefs?.length || 0
+      if (obsoleteCount > 0) {
+        toast(`Preset chargé avec ${obsoleteCount} référence(s) obsolète(s) ignorée(s)`, 'warning')
+      } else {
+        toast('Preset chargé avec succès', 'success')
+      }
     }
     setIsValidationModalOpen(false)
     setPendingPreset(null)
     setValidationResult(null)
-  }, [pendingPreset, applyPreset, toast])
+  }, [pendingPreset, validationResult, applyPreset, toast])
   
   const handleValidationClose = useCallback(() => {
     setIsValidationModalOpen(false)
@@ -1564,48 +1593,40 @@ export function GenerationPanel() {
           if (currentJobId) {
             try {
               // Promise.race entre cancelGenerationJob et timeout 10s
-              const cancelPromise = dialoguesAPI.cancelGenerationJob(currentJobId)
+              // Fix: Gérer l'erreur si cancelPromise rejette (Issue #2)
+              const cancelPromise = dialoguesAPI.cancelGenerationJob(currentJobId).catch((err) => {
+                console.warn('Erreur lors de l\'annulation du job:', err)
+                return 'error' as const
+              })
               const timeoutPromise = new Promise<'timeout'>((resolve) => 
-                setTimeout(() => resolve('timeout'), 10000)
+                setTimeout(() => resolve('timeout'), API_TIMEOUTS.CANCEL_JOB)
               )
               
               const result = await Promise.race([cancelPromise, timeoutPromise])
               
-              // Si timeout atteint, force close EventSource
-              if (result === 'timeout') {
-                if (eventSourceRef.current) {
-                  eventSourceRef.current.close()
-                  eventSourceRef.current = null
-                }
+              // Si timeout atteint ou erreur, force close EventSource
+              if (result === 'timeout' || result === 'error') {
+                closeEventSource()
                 setStreamingError('Interruption terminée')
               } else {
                 // Interruption réussie
+                closeEventSource()
                 setStreamingError('Génération interrompue')
               }
             } catch (err) {
               console.warn('Erreur lors de l\'annulation du job:', err)
               // En cas d'erreur, force close EventSource quand même
-              if (eventSourceRef.current) {
-                eventSourceRef.current.close()
-                eventSourceRef.current = null
-              }
+              closeEventSource()
               setStreamingError('Interruption terminée')
             }
           } else {
             // Si pas de job_id, fermer EventSource directement
-            if (eventSourceRef.current) {
-              eventSourceRef.current.close()
-              eventSourceRef.current = null
-            }
+            closeEventSource()
             setStreamingError('Génération interrompue')
           }
           
-          // Fermer l'EventSource et réinitialiser l'état
+          // Réinitialiser l'état
           interrupt()
-          if (eventSourceRef.current) {
-            eventSourceRef.current.close()
-            eventSourceRef.current = null
-          }
           
           // Réinitialiser l'état d'interruption après un court délai pour permettre l'affichage du message
           setTimeout(() => {
