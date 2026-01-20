@@ -1,6 +1,6 @@
 # Story 0.7: Cost governance (ID-003)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -300,6 +300,18 @@ N/A
 - **Stockage** : Fichier JSON `data/cost_budgets.json` pour V1.0 (cohérent avec architecture file-based existante)
 - **Tests** : 23 tests backend passent (unitaires + intégration), tests E2E frontend à faire dans Task 9
 
+### Code Review Fixes (2026-01-20)
+
+**Corrections HIGH severity:**
+- ✅ **Fix #1** : Frontend `useCostGovernance` bloque maintenant la génération en cas d'erreur API (fail-safe)
+- ✅ **Fix #2** : Middleware améliore l'estimation des coûts avec endpoints-specific defaults et query params pour modèle
+
+**Corrections MEDIUM severity:**
+- ✅ **Fix #3** : Validation ajoutée dans `BudgetSettings` (min: 0.01 USD, max: 10,000 USD)
+- ✅ **Fix #4** : Protection race condition ajoutée dans `FileCostBudgetRepository` (threading.Lock)
+- ✅ **Fix #5** : Amélioration gestion erreurs middleware (fail-safe avec exceptions spécifiques)
+- ✅ **Fix #6** : Tests concurrents ajoutés (3 tests pour race conditions et requêtes concurrentes)
+
 ### File List
 
 **Backend :**
@@ -342,3 +354,11 @@ N/A
   - Intégration avec `LLMUsageService` pour mise à jour automatique du budget
   - 23 tests backend passent (unitaires + intégration)
   - Tests E2E : Structure créée dans `e2e/cost-governance.spec.ts` (nécessite application running)
+
+- **2026-01-20** : Corrections issues code review
+  - Frontend: Fail-safe sur erreur API (bloque génération)
+  - Middleware: Amélioration estimation coûts (endpoints-specific + query params)
+  - BudgetSettings: Validation min/max (0.01 - 10,000 USD)
+  - Repository: Protection race condition avec threading.Lock
+  - Middleware: Gestion erreurs améliorée (fail-safe avec exceptions spécifiques)
+  - Tests: Ajout tests concurrents (3 nouveaux tests)

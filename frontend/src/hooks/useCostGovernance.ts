@@ -80,10 +80,12 @@ export function useCostGovernance(): UseCostGovernanceReturn {
       }
     } catch (error) {
       console.error('Erreur lors de la vérification du budget:', error)
-      // En cas d'erreur, autoriser la génération (ne pas bloquer)
+      // Fail-safe: bloquer la génération en cas d'erreur pour protéger le budget
+      // L'utilisateur peut réessayer ou vérifier manuellement le budget
       return {
-        allowed: true,
-        percentage: 0
+        allowed: false,
+        percentage: 100,
+        message: 'Impossible de vérifier le budget. Veuillez réessayer ou vérifier votre configuration.'
       }
     }
   }, [toast])

@@ -37,8 +37,30 @@ export function BudgetSettings({ onBudgetUpdated }: BudgetSettingsProps) {
 
   const handleSave = async () => {
     const quotaValue = parseFloat(quota)
-    if (isNaN(quotaValue) || quotaValue < 0) {
-      setError('Le quota doit être un nombre positif')
+    
+    // Validation: doit être un nombre valide
+    if (isNaN(quotaValue) || !isFinite(quotaValue)) {
+      setError('Le quota doit être un nombre valide')
+      return
+    }
+    
+    // Validation: doit être positif
+    if (quotaValue < 0) {
+      setError('Le quota doit être un nombre positif ou zéro')
+      return
+    }
+    
+    // Validation: minimum raisonnable (0.01 USD = 1 centime)
+    const MIN_QUOTA = 0.01
+    if (quotaValue > 0 && quotaValue < MIN_QUOTA) {
+      setError(`Le quota minimum est ${MIN_QUOTA.toFixed(2)} USD (1 centime)`)
+      return
+    }
+    
+    // Validation: maximum raisonnable (10,000 USD par mois)
+    const MAX_QUOTA = 10000.0
+    if (quotaValue > MAX_QUOTA) {
+      setError(`Le quota maximum est ${MAX_QUOTA.toFixed(2)} USD par mois. Contactez l'administrateur pour un quota supérieur.`)
       return
     }
 

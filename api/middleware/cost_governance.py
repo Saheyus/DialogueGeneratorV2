@@ -109,18 +109,47 @@ class CostGovernanceMiddleware(BaseHTTPMiddleware):
             # Continuer avec la requête
             return await call_next(request)
             
-        except Exception as e:
-            # En cas d'erreur, logger et continuer (ne pas bloquer la génération)
-            logger.error(f"Erreur dans CostGovernanceMiddleware: {e}", exc_info=True)
+        except FileNotFoundError as e:
+            # Fichier de budget n'existe pas encore (première utilisation)
+            # Autoriser la génération et laisser le système créer le budget
+            logger.debug(f"Fichier de budget non trouvé (première utilisation): {e}")
             return await call_next(request)
+        except (ValueError, KeyError, TypeError) as e:
+            # Erreurs de données (JSON invalide, clés manquantes, etc.)
+            # Fail-safe: bloquer la génération pour protéger le budget
+            logger.error(f"Erreur de données dans CostGovernanceMiddleware: {e}", exc_info=True)
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={
+                    "error": {
+                        "code": "BUDGET_CHECK_ERROR",
+                        "message": "Erreur lors de la vérification du budget. La génération a été bloquée pour protéger votre budget.",
+                        "details": {"error": str(e)}
+                    }
+                }
+            )
+        except Exception as e:
+            # Erreur inattendue: fail-safe en bloquant la génération
+            logger.error(f"Erreur inattendue dans CostGovernanceMiddleware: {e}", exc_info=True)
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={
+                    "error": {
+                        "code": "BUDGET_CHECK_ERROR",
+                        "message": "Erreur lors de la vérification du budget. La génération a été bloquée pour protéger votre budget.",
+                        "details": {"error": str(e)}
+                    }
+                }
+            )
     
     async def _estimate_cost(self, request: Request) -> float:
         """Estime le coût d'une génération basé sur la requête.
         
-        Pour simplifier et éviter les problèmes de lecture multiple du body,
-        on utilise des estimations conservatrices par défaut.
-        Une estimation plus précise peut être faite dans les endpoints après
-        construction du prompt, mais cette vérification protège financièrement.
+        NOTE: Le body de la requête FastAPI ne peut pas être lu en middleware
+        car il est un stream consommable une seule fois. On utilise donc:
+        1. Query parameters pour le modèle (si disponible)
+        2. Endpoint-specific defaults (plus précis selon le type de génération)
+        3. Valeurs par défaut conservatrices (fallback)
         
         Args:
             request: La requête HTTP.
@@ -128,18 +157,28 @@ class CostGovernanceMiddleware(BaseHTTPMiddleware):
         Returns:
             Coût estimé en USD (estimation conservatrice).
         """
-        # Utiliser des valeurs par défaut conservatrices
-        # Mieux vaut bloquer trop tôt que trop tard pour la protection financière
-        return self._calculate_cost_with_defaults()
-    
-    def _calculate_cost_with_defaults(self) -> float:
-        """Calcule le coût avec les valeurs par défaut.
+        # Essayer d'extraire le modèle depuis les query params
+        model_name = request.query_params.get("model") or request.query_params.get("llm_model")
+        if not model_name:
+            model_name = Defaults.MODEL_ID
         
-        Returns:
-            Coût estimé en USD avec valeurs par défaut.
-        """
+        # Estimation selon le type d'endpoint
+        path = request.url.path
+        if "/generate/variants" in path:
+            # Génération de variantes: tokens plus élevés (multiples réponses)
+            prompt_tokens = DEFAULT_PROMPT_TOKENS
+            completion_tokens = DEFAULT_COMPLETION_TOKENS * 2  # Estimation conservatrice pour variantes
+        elif "/generate/jobs" in path:
+            # Streaming generation: tokens similaires mais traitement spécial
+            prompt_tokens = DEFAULT_PROMPT_TOKENS
+            completion_tokens = DEFAULT_COMPLETION_TOKENS * 1.5
+        else:
+            # Génération standard (unity-dialogue, generate-node)
+            prompt_tokens = DEFAULT_PROMPT_TOKENS
+            completion_tokens = DEFAULT_COMPLETION_TOKENS
+        
         return self.pricing_service.calculate_cost(
-            model_name=Defaults.MODEL_ID,
-            prompt_tokens=DEFAULT_PROMPT_TOKENS,
-            completion_tokens=DEFAULT_COMPLETION_TOKENS
+            model_name=model_name,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens
         )

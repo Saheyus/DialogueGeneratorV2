@@ -2,6 +2,7 @@
 import pytest
 import json
 import tempfile
+import threading
 from pathlib import Path
 from datetime import datetime
 from services.repositories.cost_budget_repository import FileCostBudgetRepository
@@ -148,3 +149,87 @@ def test_reset_month_existing_user_preserve_quota(budget_repository, temp_storag
     assert user_budget["month"] == "2026-01"
     assert user_budget["amount"] == 0.0  # Reset à 0
     assert user_budget["quota"] == 100.0  # Quota préservé
+
+
+def test_update_budget_concurrent_requests(budget_repository, temp_storage_file):
+    """Teste update_budget avec requêtes concurrentes (protection race condition)."""
+    from datetime import datetime
+    
+    # Setup: créer un budget initial
+    budget_repository.update_budget("user_1", "2026-01", 50.0, 100.0)
+    
+    # Simuler 10 requêtes concurrentes qui ajoutent chacune 1€
+    results = []
+    errors = []
+    
+    def update_budget_thread(thread_id: int):
+        """Thread qui met à jour le budget."""
+        try:
+            # Lire le budget actuel
+            current_budget = budget_repository.get_budget("user_1", "2026-01")
+            if current_budget:
+                current_amount = current_budget.get("amount", 0.0)
+                # Ajouter 1€
+                new_amount = current_amount + 1.0
+                budget_repository.update_budget("user_1", "2026-01", new_amount, 100.0)
+                results.append(thread_id)
+        except Exception as e:
+            errors.append((thread_id, str(e)))
+    
+    # Créer et lancer 10 threads concurrents
+    threads = []
+    for i in range(10):
+        thread = threading.Thread(target=update_budget_thread, args=(i,))
+        threads.append(thread)
+        thread.start()
+    
+    # Attendre que tous les threads se terminent
+    for thread in threads:
+        thread.join()
+    
+    # Vérifier qu'il n'y a pas eu d'erreurs
+    assert len(errors) == 0, f"Erreurs lors des updates concurrents: {errors}"
+    
+    # Vérifier que le montant final est correct (50 + 10 = 60€)
+    final_budget = budget_repository.get_budget("user_1", "2026-01")
+    assert final_budget is not None
+    # Le montant devrait être 50 + 10 = 60€ (toutes les updates ont été appliquées)
+    # Note: Avec le lock, toutes les updates sont sérialisées, donc le résultat devrait être exact
+    assert final_budget["amount"] == pytest.approx(60.0, rel=1e-2)
+    assert len(results) == 10  # Tous les threads ont réussi
+
+
+def test_update_budget_concurrent_users(budget_repository, temp_storage_file):
+    """Teste update_budget avec plusieurs utilisateurs concurrents."""
+    from datetime import datetime
+    
+    # Créer des budgets pour 3 utilisateurs différents
+    users = ["user_1", "user_2", "user_3"]
+    for user_id in users:
+        budget_repository.update_budget(user_id, "2026-01", 0.0, 100.0)
+    
+    # Simuler des updates concurrents pour chaque utilisateur
+    def update_user_budget(user_id: str, amount: float):
+        """Mise à jour du budget d'un utilisateur."""
+        try:
+            budget_repository.update_budget(user_id, "2026-01", amount, 100.0)
+        except Exception as e:
+            return str(e)
+        return None
+    
+    # Lancer des updates concurrents
+    threads = []
+    for user_id in users:
+        thread = threading.Thread(target=update_user_budget, args=(user_id, 25.0))
+        threads.append(thread)
+        thread.start()
+    
+    # Attendre que tous les threads se terminent
+    for thread in threads:
+        thread.join()
+    
+    # Vérifier que tous les budgets ont été mis à jour correctement
+    for user_id in users:
+        budget = budget_repository.get_budget(user_id, "2026-01")
+        assert budget is not None
+        assert budget["amount"] == 25.0
