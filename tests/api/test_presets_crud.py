@@ -451,3 +451,125 @@ class TestPresetsValidate:
         
         # THEN
         assert response.status_code == 404
+
+
+class TestPresetsAutoCleanup:
+    """Tests pour auto-cleanup des références obsolètes dans l'API [Story 0.9]."""
+    
+    def test_create_preset_with_auto_cleanup_returns_header(
+        self, client: TestClient, mock_preset_service: MagicMock, sample_preset
+    ):
+        """GIVEN un preset avec références obsolètes
+        WHEN je crée le preset via API
+        THEN le header X-Preset-Cleanup-Message est retourné avec le message"""
+        # GIVEN: preset avec références obsolètes filtrées
+        cleaned_preset = Preset(
+            id=sample_preset.id,
+            name=sample_preset.name,
+            icon=sample_preset.icon,
+            metadata=sample_preset.metadata,
+            configuration=PresetConfiguration(
+                characters=["char-001"],  # ObsoleteChar supprimé
+                locations=sample_preset.configuration.locations,
+                region=sample_preset.configuration.region,
+                subLocation=sample_preset.configuration.subLocation,
+                sceneType=sample_preset.configuration.sceneType,
+                instructions=sample_preset.configuration.instructions
+            )
+        )
+        cleanup_message = "Preset créé avec 1 référence(s) obsolète(s) supprimée(s)"
+        mock_preset_service.create_preset.return_value = (cleaned_preset, cleanup_message)
+        
+        preset_data = PresetCreate(
+            name="Test Preset",
+            icon="🎭",
+            configuration=PresetConfiguration(
+                characters=["char-001", "ObsoleteChar"],
+                locations=["loc-001"],
+                region="Test Region",
+                subLocation="Test SubLocation",
+                sceneType="Première rencontre",
+                instructions="Test instructions"
+            )
+        )
+        
+        # WHEN
+        response = client.post("/api/v1/presets", json=preset_data.model_dump())
+        
+        # THEN
+        assert response.status_code == 201
+        assert "X-Preset-Cleanup-Message" in response.headers
+        assert response.headers["X-Preset-Cleanup-Message"] == cleanup_message
+        data = response.json()
+        assert data["id"] == sample_preset.id
+        assert "ObsoleteChar" not in data["configuration"]["characters"]
+    
+    def test_create_preset_no_cleanup_no_header(
+        self, client: TestClient, mock_preset_service: MagicMock, sample_preset
+    ):
+        """GIVEN un preset avec toutes références valides
+        WHEN je crée le preset via API
+        THEN pas de header X-Preset-Cleanup-Message"""
+        # GIVEN
+        mock_preset_service.create_preset.return_value = (sample_preset, None)
+        
+        preset_data = PresetCreate(
+            name="Test Preset",
+            icon="🎭",
+            configuration=sample_preset.configuration
+        )
+        
+        # WHEN
+        response = client.post("/api/v1/presets", json=preset_data.model_dump())
+        
+        # THEN
+        assert response.status_code == 201
+        assert "X-Preset-Cleanup-Message" not in response.headers
+    
+    def test_update_preset_with_auto_cleanup_returns_header(
+        self, client: TestClient, mock_preset_service: MagicMock, sample_preset
+    ):
+        """GIVEN une mise à jour preset avec références obsolètes
+        WHEN je mets à jour le preset via API
+        THEN le header X-Preset-Cleanup-Message est retourné"""
+        # GIVEN
+        cleaned_preset = Preset(
+            id=sample_preset.id,
+            name="Updated Preset",
+            icon=sample_preset.icon,
+            metadata=sample_preset.metadata,
+            configuration=PresetConfiguration(
+                characters=["char-001"],  # ObsoleteChar supprimé
+                locations=sample_preset.configuration.locations,
+                region=sample_preset.configuration.region,
+                subLocation=sample_preset.configuration.subLocation,
+                sceneType=sample_preset.configuration.sceneType,
+                instructions=sample_preset.configuration.instructions
+            )
+        )
+        cleanup_message = "Preset mis à jour - 1 référence(s) obsolète(s) supprimée(s)"
+        mock_preset_service.load_preset.return_value = sample_preset
+        mock_preset_service.update_preset.return_value = (cleaned_preset, cleanup_message)
+        
+        update_data = PresetUpdate(
+            name="Updated Preset",
+            configuration=PresetConfiguration(
+                characters=["char-001", "ObsoleteChar"],
+                locations=sample_preset.configuration.locations,
+                region=sample_preset.configuration.region,
+                subLocation=sample_preset.configuration.subLocation,
+                sceneType=sample_preset.configuration.sceneType,
+                instructions=sample_preset.configuration.instructions
+            )
+        )
+        
+        # WHEN
+        response = client.put(f"/api/v1/presets/{sample_preset.id}", json=update_data.model_dump())
+        
+        # THEN
+        assert response.status_code == 200
+        assert "X-Preset-Cleanup-Message" in response.headers
+        assert response.headers["X-Preset-Cleanup-Message"] == cleanup_message
+        data = response.json()
+        assert data["name"] == "Updated Preset"
+        assert "ObsoleteChar" not in data["configuration"]["characters"]

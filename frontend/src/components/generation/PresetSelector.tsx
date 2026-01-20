@@ -10,6 +10,7 @@ import React, { useEffect, useState } from 'react';
 import { usePresetStore } from '../../store/presetStore';
 import type { Preset, PresetConfiguration } from '../../types/preset';
 import { theme } from '../../theme';
+import { useToast } from '../shared';
 
 export interface PresetSelectorProps {
   /** Callback appelé quand un preset est chargé */
@@ -34,6 +35,7 @@ export const PresetSelector: React.FC<PresetSelectorProps> = ({
     deletePreset,
     setSelectedPreset,
   } = usePresetStore();
+  const toast = useToast();
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -58,16 +60,28 @@ export const PresetSelector: React.FC<PresetSelectorProps> = ({
     const configToSave = snapshotConfiguration || currentConfiguration || getCurrentConfiguration?.() || null;
     if (!newPresetName.trim() || !configToSave) return;
 
-    await createPreset({
-      name: newPresetName.trim(),
-      icon: newPresetIcon,
-      configuration: configToSave,
-    });
+    try {
+      const response = await createPreset({
+        name: newPresetName.trim(),
+        icon: newPresetIcon,
+        configuration: configToSave,
+      });
 
-    setIsCreateModalOpen(false);
-    setNewPresetName('');
-    setNewPresetIcon('📋');
-    setSnapshotConfiguration(null);
+      // Vérifier message auto-cleanup dans header
+      const cleanupMessage = response.headers.get('X-Preset-Cleanup-Message');
+      if (cleanupMessage) {
+        toast(cleanupMessage, 'warning');
+      } else {
+        toast('Preset créé avec succès', 'success');
+      }
+
+      setIsCreateModalOpen(false);
+      setNewPresetName('');
+      setNewPresetIcon('📋');
+      setSnapshotConfiguration(null);
+    } catch (error) {
+      // Error already handled by store
+    }
   };
 
   const handleDeletePreset = async () => {

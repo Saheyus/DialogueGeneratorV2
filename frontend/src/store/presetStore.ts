@@ -13,8 +13,8 @@ interface PresetStore {
 
   // Actions
   loadPresets: () => Promise<void>;
-  createPreset: (presetData: PresetCreate) => Promise<void>;
-  updatePreset: (id: string, updateData: PresetUpdate) => Promise<void>;
+  createPreset: (presetData: PresetCreate) => Promise<Response>;
+  updatePreset: (id: string, updateData: PresetUpdate) => Promise<Response>;
   deletePreset: (id: string) => Promise<void>;
   loadPreset: (id: string) => Promise<void>;
   validatePreset: (id: string) => Promise<PresetValidationResult>;
@@ -66,9 +66,12 @@ export const usePresetStore = create<PresetStore>((set) => ({
         presets: [...state.presets, newPreset],
         isLoading: false,
       }));
+      
+      return response;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       set({ error: errorMessage, isLoading: false });
+      throw error;
     }
   },
 
@@ -93,9 +96,12 @@ export const usePresetStore = create<PresetStore>((set) => ({
         selectedPreset: state.selectedPreset?.id === id ? updatedPreset : state.selectedPreset,
         isLoading: false,
       }));
+      
+      return response;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       set({ error: errorMessage, isLoading: false });
+      throw error;
     }
   },
 

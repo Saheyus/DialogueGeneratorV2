@@ -80,7 +80,7 @@ class TestPresetServiceCreate:
         When: create_preset est appelé
         Then: preset créé avec UUID et fichier JSON sauvegardé
         """
-        preset = preset_service.create_preset(sample_preset_data)
+        preset, cleanup_message = preset_service.create_preset(sample_preset_data)
         
         # Vérifier preset retourné
         assert preset.name == "Test Preset"
@@ -108,7 +108,7 @@ class TestPresetServiceCreate:
         assert not presets_dir.exists()
         
         service = PresetService(mock_config_service, mock_context_builder, presets_dir)
-        preset = service.create_preset(sample_preset_data)
+        preset, _ = service.create_preset(sample_preset_data)
         
         assert presets_dir.exists()
         assert (presets_dir / f"{preset.id}.json").exists()
@@ -118,8 +118,8 @@ class TestPresetServiceCreate:
         When: create_preset appelé plusieurs fois
         Then: chaque preset a un UUID unique
         """
-        preset1 = preset_service.create_preset(sample_preset_data)
-        preset2 = preset_service.create_preset(sample_preset_data)
+        preset1, _ = preset_service.create_preset(sample_preset_data)
+        preset2, _ = preset_service.create_preset(sample_preset_data)
         
         assert preset1.id != preset2.id
         assert UUID(preset1.id)
@@ -142,8 +142,8 @@ class TestPresetServiceList:
         When: list_presets est appelé
         Then: tous les presets retournés
         """
-        preset1 = preset_service.create_preset({**sample_preset_data, "name": "Preset 1"})
-        preset2 = preset_service.create_preset({**sample_preset_data, "name": "Preset 2"})
+        preset1, _ = preset_service.create_preset({**sample_preset_data, "name": "Preset 1"})
+        preset2, _ = preset_service.create_preset({**sample_preset_data, "name": "Preset 2"})
         
         presets = preset_service.list_presets()
         
@@ -184,7 +184,7 @@ class TestPresetServiceLoad:
         When: load_preset est appelé avec ID valide
         Then: preset retourné avec données complètes
         """
-        created_preset = preset_service.create_preset(sample_preset_data)
+        created_preset, _ = preset_service.create_preset(sample_preset_data)
         
         loaded_preset = preset_service.load_preset(created_preset.id)
         
@@ -222,14 +222,14 @@ class TestPresetServiceUpdate:
         When: update_preset est appelé avec nouvelles données
         Then: preset mis à jour, metadata.modified actualisé
         """
-        preset = preset_service.create_preset(sample_preset_data)
+        preset, _ = preset_service.create_preset(sample_preset_data)
         original_modified = preset.metadata.modified
         
         # Attendre un instant pour différence timestamp
         import time
         time.sleep(0.1)
         
-        updated_preset = preset_service.update_preset(preset.id, {"name": "Updated Name"})
+        updated_preset, _ = preset_service.update_preset(preset.id, {"name": "Updated Name"})
         
         assert updated_preset.name == "Updated Name"
         assert updated_preset.id == preset.id
@@ -252,7 +252,7 @@ class TestPresetServiceDelete:
         When: delete_preset est appelé
         Then: fichier supprimé
         """
-        preset = preset_service.create_preset(sample_preset_data)
+        preset, _ = preset_service.create_preset(sample_preset_data)
         preset_file = preset_service.presets_dir / f"{preset.id}.json"
         
         assert preset_file.exists()
@@ -278,7 +278,7 @@ class TestPresetValidation:
         When: validate_preset_references est appelé
         Then: validation réussie (valid=True, warnings=[], obsoleteRefs=[])
         """
-        preset = preset_service.create_preset(sample_preset_data)
+        preset, _ = preset_service.create_preset(sample_preset_data)
         
         result = preset_service.validate_preset_references(preset)
         
@@ -295,7 +295,7 @@ class TestPresetValidation:
         invalid_data = {**sample_preset_data}
         invalid_data["configuration"]["characters"] = ["Akthar", "Inconnu-999"]
         
-        preset = preset_service.create_preset(invalid_data)
+        preset, _ = preset_service.create_preset(invalid_data)
         
         result = preset_service.validate_preset_references(preset)
         
@@ -312,7 +312,7 @@ class TestPresetValidation:
         invalid_data = {**sample_preset_data}
         invalid_data["configuration"]["locations"] = ["Lieu-Inconnu-999"]
         
-        preset = preset_service.create_preset(invalid_data)
+        preset, _ = preset_service.create_preset(invalid_data)
         
         result = preset_service.validate_preset_references(preset)
         
@@ -329,7 +329,7 @@ class TestPresetValidation:
         invalid_data["configuration"]["characters"] = ["Inconnu-999", "Inconnu-888"]
         invalid_data["configuration"]["locations"] = ["Lieu-Inconnu-999"]
         
-        preset = preset_service.create_preset(invalid_data)
+        preset, _ = preset_service.create_preset(invalid_data)
         
         result = preset_service.validate_preset_references(preset)
         
@@ -351,7 +351,7 @@ class TestPresetServiceErrorHandling:
         """
         with patch("builtins.open", side_effect=PermissionError("Access denied")):
             with pytest.raises(PermissionError, match="Access denied"):
-                preset_service.create_preset(sample_preset_data)
+                preset_service.create_preset(sample_preset_data)[0]
     
     def test_create_preset_disk_full_error(self, preset_service: PresetService, sample_preset_data: dict):
         """Given: disque plein
@@ -360,4 +360,126 @@ class TestPresetServiceErrorHandling:
         """
         with patch("builtins.open", side_effect=OSError("No space left on device")):
             with pytest.raises(OSError, match="No space left on device"):
-                preset_service.create_preset(sample_preset_data)
+                preset_service.create_preset(sample_preset_data)[0]
+
+
+class TestPresetAutoCleanup:
+    """Tests pour auto-cleanup des références obsolètes lors de la sauvegarde."""
+    
+    def test_create_preset_auto_cleanup_obsolete_characters(
+        self, preset_service: PresetService, sample_preset_data: dict
+    ):
+        """Given: preset avec personnage obsolète
+        When: create_preset est appelé
+        Then: personnage obsolète automatiquement supprimé du preset sauvegardé"""
+        # GIVEN: preset avec personnage qui n'existe plus dans le GDD
+        invalid_data = {**sample_preset_data}
+        invalid_data["configuration"]["characters"] = ["Akthar", "ObsoleteChar"]
+        
+        # WHEN
+        preset, cleanup_message = preset_service.create_preset(invalid_data)
+        
+        # THEN: personnage obsolète supprimé
+        assert "ObsoleteChar" not in preset.configuration.characters
+        assert "Akthar" in preset.configuration.characters  # Valide préservé
+        assert cleanup_message is not None
+        assert "ObsoleteChar" in cleanup_message or "1" in cleanup_message
+    
+    def test_create_preset_auto_cleanup_obsolete_locations(
+        self, preset_service: PresetService, sample_preset_data: dict
+    ):
+        """Given: preset avec lieu obsolète
+        When: create_preset est appelé
+        Then: lieu obsolète automatiquement supprimé du preset sauvegardé"""
+        # GIVEN: preset avec lieu qui n'existe plus dans le GDD
+        invalid_data = {**sample_preset_data}
+        invalid_data["configuration"]["locations"] = ["Avili de l'Éternel Retour", "ObsoleteLocation"]
+        
+        # WHEN
+        preset, cleanup_message = preset_service.create_preset(invalid_data)
+        
+        # THEN: lieu obsolète supprimé
+        assert "ObsoleteLocation" not in preset.configuration.locations
+        assert "Avili de l'Éternel Retour" in preset.configuration.locations  # Valide préservé
+        assert cleanup_message is not None
+    
+    def test_create_preset_auto_cleanup_multiple_obsolete_refs(
+        self, preset_service: PresetService, sample_preset_data: dict
+    ):
+        """Given: preset avec plusieurs références obsolètes
+        When: create_preset est appelé
+        Then: toutes les références obsolètes supprimées"""
+        # GIVEN
+        invalid_data = {**sample_preset_data}
+        invalid_data["configuration"]["characters"] = ["Akthar", "ObsoleteChar1", "ObsoleteChar2"]
+        invalid_data["configuration"]["locations"] = ["Avili de l'Éternel Retour", "ObsoleteLocation"]
+        
+        # WHEN
+        preset, cleanup_message = preset_service.create_preset(invalid_data)
+        
+        # THEN
+        assert "ObsoleteChar1" not in preset.configuration.characters
+        assert "ObsoleteChar2" not in preset.configuration.characters
+        assert "ObsoleteLocation" not in preset.configuration.locations
+        assert "Akthar" in preset.configuration.characters
+        assert "Avili de l'Éternel Retour" in preset.configuration.locations
+        assert cleanup_message is not None
+    
+    def test_create_preset_no_cleanup_when_all_valid(
+        self, preset_service: PresetService, sample_preset_data: dict
+    ):
+        """Given: preset avec toutes références valides
+        When: create_preset est appelé
+        Then: pas de cleanup, message None"""
+        # WHEN
+        preset, cleanup_message = preset_service.create_preset(sample_preset_data)
+        
+        # THEN
+        assert cleanup_message is None
+        assert preset.configuration.characters == ["Akthar", "Neth"]
+        assert preset.configuration.locations == ["Avili de l'Éternel Retour", "Temple"]
+    
+    def test_update_preset_auto_cleanup_obsolete_refs(
+        self, preset_service: PresetService, sample_preset_data: dict
+    ):
+        """Given: mise à jour preset avec références obsolètes
+        When: update_preset est appelé
+        Then: références obsolètes automatiquement supprimées"""
+        # GIVEN: preset existant
+        preset, _ = preset_service.create_preset(sample_preset_data)
+        
+        # Mise à jour avec références obsolètes
+        update_data = {
+            "configuration": {
+                **sample_preset_data["configuration"],
+                "characters": ["Akthar", "ObsoleteChar"],
+                "locations": ["Avili de l'Éternel Retour", "ObsoleteLocation"]
+            }
+        }
+        
+        # WHEN
+        updated_preset, cleanup_message = preset_service.update_preset(preset.id, update_data)
+        
+        # THEN
+        assert "ObsoleteChar" not in updated_preset.configuration.characters
+        assert "ObsoleteLocation" not in updated_preset.configuration.locations
+        assert cleanup_message is not None
+    
+    def test_update_preset_no_cleanup_when_all_valid(
+        self, preset_service: PresetService, sample_preset_data: dict
+    ):
+        """Given: mise à jour preset avec toutes références valides
+        When: update_preset est appelé
+        Then: pas de cleanup, message None"""
+        # GIVEN
+        preset, _ = preset_service.create_preset(sample_preset_data)
+        
+        # WHEN
+        updated_preset, cleanup_message = preset_service.update_preset(
+            preset.id, {"name": "Updated Name"}
+        )
+        
+        # THEN
+        assert cleanup_message is None
+        assert updated_preset.name == "Updated Name"
+        assert updated_preset.configuration.characters == ["Akthar", "Neth"]

@@ -2,7 +2,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from uuid import uuid4
 from datetime import datetime, timezone
 from typing import cast
@@ -49,14 +49,16 @@ class PresetService:
         self.presets_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"PresetService initialisé avec dossier: {self.presets_dir}")
     
-    def create_preset(self, preset_data: Dict[str, Any]) -> Preset:
+    def create_preset(self, preset_data: Dict[str, Any]) -> Tuple[Preset, Optional[str]]:
         """Crée un nouveau preset.
+        
+        Valide et nettoie automatiquement les références obsolètes avant sauvegarde.
         
         Args:
             preset_data: Données du preset (name, icon, configuration)
         
         Returns:
-            Preset créé avec UUID généré
+            Preset créé avec UUID généré (références obsolètes supprimées si présentes)
         
         Raises:
             PermissionError: Si permissions insuffisantes sur dossier
@@ -75,11 +77,34 @@ class PresetService:
             configuration=PresetConfiguration(**preset_data["configuration"])
         )
         
-        # Sauvegarder sur disque
+        # Valider références avant sauvegarde
+        validation = self.validate_preset_references(preset)
+        
+        # Auto-cleanup si références obsolètes détectées
+        if not validation.valid and validation.obsoleteRefs:
+            # Filtrer personnages obsolètes
+            preset.configuration.characters = [
+                c for c in preset.configuration.characters
+                if c not in validation.obsoleteRefs
+            ]
+            # Filtrer lieux obsolètes
+            preset.configuration.locations = [
+                l for l in preset.configuration.locations
+                if l not in validation.obsoleteRefs
+            ]
+            logger.info(f"Preset créé avec {len(validation.obsoleteRefs)} référence(s) obsolète(s) supprimée(s)")
+        
+        # Sauvegarder preset nettoyé sur disque
         self._save_preset_to_disk(preset)
         
         logger.info(f"Preset créé: {preset.name} (ID: {preset_id})")
-        return preset
+        
+        # Retourner preset + message auto-cleanup (si applicable)
+        cleanup_message = None
+        if not validation.valid and validation.obsoleteRefs:
+            cleanup_message = f"Preset créé avec {len(validation.obsoleteRefs)} référence(s) obsolète(s) supprimée(s)"
+        
+        return preset, cleanup_message
     
     def list_presets(self) -> List[Preset]:
         """Liste tous les presets disponibles.
@@ -134,15 +159,17 @@ class PresetService:
         logger.debug(f"Preset chargé: {preset.name} (ID: {preset_id})")
         return preset
     
-    def update_preset(self, preset_id: str, update_data: Dict[str, Any]) -> Preset:
+    def update_preset(self, preset_id: str, update_data: Dict[str, Any]) -> Tuple[Preset, Optional[str]]:
         """Met à jour un preset existant.
+        
+        Valide et nettoie automatiquement les références obsolètes avant sauvegarde.
         
         Args:
             preset_id: UUID du preset
             update_data: Données à mettre à jour (champs partiels)
         
         Returns:
-            Preset mis à jour
+            Preset mis à jour (références obsolètes supprimées si présentes)
         
         Raises:
             FileNotFoundError: Si preset n'existe pas
@@ -161,11 +188,34 @@ class PresetService:
         # Actualiser metadata.modified
         preset.metadata.modified = datetime.now(timezone.utc)
         
-        # Sauvegarder
+        # Valider références avant sauvegarde
+        validation = self.validate_preset_references(preset)
+        
+        # Auto-cleanup si références obsolètes détectées
+        if not validation.valid and validation.obsoleteRefs:
+            # Filtrer personnages obsolètes
+            preset.configuration.characters = [
+                c for c in preset.configuration.characters
+                if c not in validation.obsoleteRefs
+            ]
+            # Filtrer lieux obsolètes
+            preset.configuration.locations = [
+                l for l in preset.configuration.locations
+                if l not in validation.obsoleteRefs
+            ]
+            logger.info(f"Preset mis à jour avec {len(validation.obsoleteRefs)} référence(s) obsolète(s) supprimée(s)")
+        
+        # Sauvegarder preset nettoyé
         self._save_preset_to_disk(preset)
         
         logger.info(f"Preset mis à jour: {preset.name} (ID: {preset_id})")
-        return preset
+        
+        # Retourner preset + message auto-cleanup (si applicable)
+        cleanup_message = None
+        if not validation.valid and validation.obsoleteRefs:
+            cleanup_message = f"Preset mis à jour - {len(validation.obsoleteRefs)} référence(s) obsolète(s) supprimée(s)"
+        
+        return preset, cleanup_message
     
     def delete_preset(self, preset_id: str) -> None:
         """Supprime un preset.

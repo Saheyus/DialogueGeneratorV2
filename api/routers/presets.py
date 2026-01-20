@@ -1,5 +1,5 @@
 """Router FastAPI pour les endpoints /api/v1/presets."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from typing import List
 import logging
 
@@ -35,6 +35,7 @@ def list_presets(
 @router.post("", response_model=Preset, status_code=status.HTTP_201_CREATED)
 def create_preset(
     preset_data: PresetCreate,
+    response: Response,
     preset_service: PresetService = Depends(get_preset_service)
 ) -> Preset:
     """Crée un nouveau preset.
@@ -49,8 +50,13 @@ def create_preset(
         500: Si erreur d'écriture disque ou permissions
     """
     try:
-        preset = preset_service.create_preset(preset_data.model_dump())
+        preset, cleanup_message = preset_service.create_preset(preset_data.model_dump())
         logger.info(f"Preset créé: {preset.name} (ID: {preset.id})")
+        
+        # Ajouter message auto-cleanup dans header si présent
+        if cleanup_message:
+            response.headers["X-Preset-Cleanup-Message"] = cleanup_message
+        
         return preset
     except PermissionError as e:
         logger.error(f"Permission denied creating preset: {e}")
@@ -116,6 +122,7 @@ def get_preset(
 def update_preset(
     preset_id: str,
     update_data: PresetUpdate,
+    response: Response,
     preset_service: PresetService = Depends(get_preset_service)
 ) -> Preset:
     """Met à jour un preset existant.
@@ -133,8 +140,13 @@ def update_preset(
     try:
         # Filtrer champs non-None pour update partiel
         update_dict = update_data.model_dump(exclude_none=True)
-        preset = preset_service.update_preset(preset_id, update_dict)
+        preset, cleanup_message = preset_service.update_preset(preset_id, update_dict)
         logger.info(f"Preset mis à jour: {preset.name} (ID: {preset_id})")
+        
+        # Ajouter message auto-cleanup dans header si présent
+        if cleanup_message:
+            response.headers["X-Preset-Cleanup-Message"] = cleanup_message
+        
         return preset
     except FileNotFoundError:
         logger.warning(f"Preset not found for update: {preset_id}")
