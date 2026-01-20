@@ -128,7 +128,7 @@ so that **je ne perds jamais mon travail même en cas de crash, refresh, ou ferm
 ### References
 
 - [Source: _bmad-output/planning-artifacts/prd/epic-00.md#Story-0.5] — Story 0.5 (ID-001)
-- [Source: _bmad-output/planning-artifacts/architecture.md#ID-001] — Auto-save (2min, LWW) + suspension pendant génération
+- [Source: _bmad-output/planning-artifacts/architecture/implementation-decisions-v10-details.md#ID-001] — Auto-save (2min, LWW) + suspension pendant génération
 - [Source: frontend/src/components/graph/GraphEditor.tsx] — Sauvegarde actuelle via `exportUnityDialogue` + raccourci Ctrl+S
 - [Source: frontend/src/store/graphStore.ts] — État graphe, `isGenerating`, `isSaving`, conversion Unity ↔ graphe
 - [Source: frontend/src/components/shared/SaveStatusIndicator.tsx] — Indicateur de statut existant
@@ -170,6 +170,7 @@ N/A
   - `frontend/src/components/graph/GraphEditor.tsx` ✅
   - `frontend/src/store/graphStore.ts` ✅
   - `frontend/src/components/shared/SaveStatusIndicator.tsx` ✅
+  - `frontend/src/utils/nodePositions.ts` ✅ (ajouté post-implémentation 2026-01-20)
   - `frontend/src/__tests__/useGraphStore.test.ts` ✅
   - `frontend/src/__tests__/SaveStatusIndicator.test.tsx` ✅ (tests ajoutés)
 - Backend (référence/validation):
@@ -182,4 +183,36 @@ N/A
 ### Related Docs
 
 - `_bmad-output/implementation-artifacts/0-5-auto-save-completion-notes.md`
+
+---
+
+## Modifications post-implémentation
+
+### Fix persistance positions nodes (2026-01-20)
+
+**Demandeur** : Marc
+
+**Problème identifié** : Instabilité de sauvegarde des positions de nodes. Les nodes revenaient à leur position initiale après plusieurs changements d'onglet.
+
+**Cause racine** : 
+- Les positions étaient sauvegardées uniquement dans le draft (`unity_dialogue_draft:{filename}`)
+- Le draft était supprimé si le contenu JSON était identique, même si les positions avaient changé
+- Le `filename` n'était jamais passé au store, donc `dialogueMetadata.filename` restait `null`
+- Sans filename, aucune sauvegarde ni chargement des positions n'était possible
+
+**Solution appliquée** :
+1. Création d'un module dédié `frontend/src/utils/nodePositions.ts` pour gérer la persistance des positions
+2. Clé localStorage dédiée : `graph_positions:{filename}` (séparée du draft de contenu)
+3. Sauvegarde immédiate dans `updateNodePosition` (sans debounce)
+4. Ajout du paramètre `filename` à `loadDialogue()` et passage explicite de `selectedDialogue.filename` depuis GraphEditor
+5. Chargement systématique des positions depuis localStorage avec priorité : localStorage > draft > backend
+
+**Fichiers modifiés** :
+- `frontend/src/utils/nodePositions.ts` (nouveau)
+- `frontend/src/store/graphStore.ts` (signature loadDialogue + updateNodePosition + import utilities)
+- `frontend/src/components/graph/GraphEditor.tsx` (passage filename à loadDialogue, nettoyage draft)
+
+**Méthode de debug** : Instrumentation avec logs runtime, identification du problème via analyse de logs montrant `filename:null` à chaque tentative de sauvegarde.
+
+**Résultat** : Persistance permanente et transparente des positions des nodes, indépendante du contenu JSON.
 

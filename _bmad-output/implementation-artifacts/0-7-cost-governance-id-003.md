@@ -128,7 +128,7 @@ So that **je ne dépasse jamais mon budget et je suis averti avant d'atteindre l
 - **Stockage V1.0** : Fichier JSON `data/cost_budgets.json` (structure: `{user_id: {month: "2026-01", amount: 90.0, quota: 100.0, updated_at: timestamp}}`)
   - **DÉCISION ARCHITECTURALE** : Utiliser fichier JSON pour V1.0 (cohérent avec architecture file-based existante)
   - **MIGRATION FUTURE** : Repository pattern permet migration vers DB (PostgreSQL/SQLite) en V1.5+ sans changer code métier
-  - **POURQUOI** : Pas d'infrastructure DB en V1.0 (gap mineur post-MVP selon architecture.md)
+  - **POURQUOI** : Pas d'infrastructure DB en V1.0 (gap mineur post-MVP selon architecture/implementation-decisions-v10-details.md)
 - **Reset mensuel** : Vérifier mois actuel vs mois dernier, reset `amount=0.0` si nouveau mois
 - **Soft warning (90%)** : Logger warning mais autoriser génération
 - **Hard block (100%)** : Bloquer génération avec HTTP 429
@@ -235,7 +235,7 @@ So that **je ne dépasse jamais mon budget et je suis averti avant d'atteindre l
 **Source: `_bmad-output/planning-artifacts/prd/epic-00.md#Story-0.7`**
 - Story complète avec acceptance criteria et technical requirements
 
-**Source: `_bmad-output/planning-artifacts/architecture.md#ID-003`**
+**Source: `_bmad-output/planning-artifacts/architecture/implementation-decisions-v10-details.md#ID-003`**
 - Architecture Decision : Cost Governance (soft warning 90%, hard block 100%)
 
 **Source: `services/llm_pricing_service.py` (ligne 13-111)**
@@ -250,7 +250,7 @@ So that **je ne dépasse jamais mon budget et je suis averti avant d'atteindre l
 **Source: `frontend/src/components/usage/UsageDashboard.tsx`**
 - Composant dashboard existant à étendre
 
-**Source: ID-003 (Architecture Document)**
+**Source: `_bmad-output/planning-artifacts/architecture/implementation-decisions-v10-details.md#ID-003` (Architecture Document)**
 - Décision architecture : Cost Governance (soft warning 90%, hard block 100%)
 
 ### Project Structure Notes
@@ -270,12 +270,12 @@ So that **je ne dépasse jamais mon budget et je suis averti avant d'atteindre l
 ### References
 
 - [Source: `_bmad-output/planning-artifacts/prd/epic-00.md#Story-0.7`] Story complète avec requirements
-- [Source: ID-003] Architecture Decision : Cost Governance (soft warning 90%, hard block 100%)
+- [Source: `_bmad-output/planning-artifacts/architecture/implementation-decisions-v10-details.md#ID-003`] Architecture Decision : Cost Governance (soft warning 90%, hard block 100%)
 - [Source: `services/llm_pricing_service.py`] Service pricing existant à réutiliser
 - [Source: `services/llm_usage_service.py`] Service usage existant à étendre
 - [Source: `api/routers/llm_usage.py`] Endpoints usage existants (référence)
 - [Source: `frontend/src/components/usage/UsageDashboard.tsx`] Composant dashboard existant à étendre
-- [Source: `_bmad-output/planning-artifacts/architecture.md#Pattern-V1-003`] Pattern Cost Tracking (ID-003)
+- [Source: `_bmad-output/planning-artifacts/architecture/v10-new-patterns-detailed.md#Pattern-V1-003`] Pattern Cost Tracking (ID-003)
 
 ## Dev Agent Record
 

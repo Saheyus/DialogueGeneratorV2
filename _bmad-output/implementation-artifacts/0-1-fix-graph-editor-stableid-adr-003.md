@@ -161,7 +161,7 @@ so that **le graphe ne se corrompe pas lors du renommage de dialogues et que les
 
 ### References
 
-- **ADR-003** : [Source: _bmad-output/planning-artifacts/architecture.md#ADR-003] - Graph Editor Fixes (DisplayName vs stableID)
+- **ADR-003** : [Source: _bmad-output/planning-artifacts/architecture/v10-architectural-decisions-adrs.md#ADR-003] - Graph Editor Fixes (DisplayName vs stableID)
 - **Epic 0 Story 0.1** : [Source: _bmad-output/planning-artifacts/epics/epic-00.md#Story-0.1] - Fix Graph Editor stableID
 - **NFR-R1** : Zero Blocking Bugs - Ce fix résout bug critique corruption graphe
 - **React Flow Documentation** : `node.id` doit être string unique pour connexions

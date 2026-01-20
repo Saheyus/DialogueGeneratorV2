@@ -251,12 +251,12 @@ so that **je ne pense pas que l'application est gelée et je peux interrompre si
 
 ### References
 
-- **ADR-001** : [Source: _bmad-output/planning-artifacts/architecture.md#ADR-001] - Progress Feedback Modal (Streaming SSE)
+- **ADR-001** : [Source: _bmad-output/planning-artifacts/architecture/v10-architectural-decisions-adrs.md#ADR-001] - Progress Feedback Modal (Streaming SSE)
 - **Epic 0 Story 0.2** : [Source: _bmad-output/planning-artifacts/epics/epic-00.md#Story-0.2] - Progress Feedback Modal avec SSE Streaming
 - **FR1-2** : Génération single/batch - Modal doit supporter les deux modes
 - **NFR-P2** : LLM Generation <30s - Streaming doit être fluide sans gel UI
-- **Pattern SSE** : [Source: _bmad-output/planning-artifacts/architecture.md#Pattern-V1-001] - Format SSE strict `data: {...}\n\n`
-- **Zustand Pattern** : [Source: _bmad-output/planning-artifacts/architecture.md#State-Management] - Immutable updates, stores isolés
+- **Pattern SSE** : [Source: _bmad-output/planning-artifacts/architecture/v10-new-patterns-detailed.md#Pattern-V1-001] - Format SSE strict `data: {...}\n\n`
+- **Zustand Pattern** : [Source: _bmad-output/planning-artifacts/architecture/technical-foundation-existing-architecture.md] - Immutable updates, stores isolés
 - **FastAPI StreamingResponse** : Documentation FastAPI pour SSE streaming
 
 ## Dev Agent Record
