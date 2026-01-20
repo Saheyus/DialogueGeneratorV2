@@ -58,6 +58,11 @@ export function SaveStatusIndicator({ status, lastSavedAt, errorMessage, style }
     ? `${config.label} ${relativeTime}`
     : config.label
 
+  // Construire le texte de l'infobulle
+  const tooltipText = status === 'error' && errorMessage 
+    ? errorMessage 
+    : label
+
   return (
     <div
       style={{
@@ -68,7 +73,6 @@ export function SaveStatusIndicator({ status, lastSavedAt, errorMessage, style }
         color: config.color,
         ...style,
       }}
-      title={status === 'error' && errorMessage ? errorMessage : undefined}
     >
       <div
         style={{
@@ -78,9 +82,10 @@ export function SaveStatusIndicator({ status, lastSavedAt, errorMessage, style }
           backgroundColor: config.color,
           opacity: status === 'saving' ? 0.6 : 1,
           animation: status === 'saving' ? 'pulse 1.5s ease-in-out infinite' : 'none',
+          cursor: 'default',
         }}
+        title={tooltipText}
       />
-      <span>{label}</span>
       <style>
         {`
           @keyframes pulse {
