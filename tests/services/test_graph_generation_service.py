@@ -287,5 +287,15 @@ async def test_generate_nodes_for_all_choices_empty_choices(mock_llm_client, moc
     assert len(result["nodes"]) == 0
     assert len(result["connections"]) == 0
     
+    # Vérifier compteurs batch (aucun choix à générer)
+    assert "connected_choices_count" in result
+    assert result["connected_choices_count"] == 0
+    assert "generated_choices_count" in result
+    assert result["generated_choices_count"] == 0
+    assert "failed_choices_count" in result
+    assert result["failed_choices_count"] == 0
+    assert "total_choices_count" in result
+    assert result["total_choices_count"] == 0
+    
     # Vérifier que generate_dialogue_node n'a pas été appelé
     mock_generation_service.generate_dialogue_node.assert_not_called()
