@@ -72,8 +72,10 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
           id: selectedNode?.id || '',
           test: selectedNode?.data?.test || '',
           line: selectedNode?.data?.line || '',
-          successNode: selectedNode?.data?.successNode || '',
+          criticalFailureNode: selectedNode?.data?.criticalFailureNode || '',
           failureNode: selectedNode?.data?.failureNode || '',
+          successNode: selectedNode?.data?.successNode || '',
+          criticalSuccessNode: selectedNode?.data?.criticalSuccessNode || '',
         }
       : {
           id: selectedNode?.id || '',
@@ -99,8 +101,10 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
           id: selectedNode.id,
           test: selectedNode.data.test || '',
           line: selectedNode.data.line || '',
-          successNode: selectedNode.data.successNode || '',
+          criticalFailureNode: selectedNode.data.criticalFailureNode || '',
           failureNode: selectedNode.data.failureNode || '',
+          successNode: selectedNode.data.successNode || '',
+          criticalSuccessNode: selectedNode.data.criticalSuccessNode || '',
         })
       } else {
         reset({
@@ -470,6 +474,143 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
               }}
             >
               Ex: Raison+Rhétorique:8
+            </div>
+          </div>
+        )}
+        
+        {/* Résultats de test (pour test nodes) */}
+        {nodeType === 'testNode' && (
+          <div style={{ marginBottom: '0.75rem', padding: '0.75rem', backgroundColor: theme.background.secondary, borderRadius: 6, border: `1px solid ${theme.border.primary}` }}>
+            <h5 style={{ margin: '0 0 0.75rem 0', fontSize: '0.85rem', fontWeight: 'bold', color: theme.text.primary }}>
+              Connexions de test
+            </h5>
+            
+            {/* Échec critique */}
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label
+                htmlFor="test-critical-failure-node"
+                style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontSize: '0.85rem',
+                  fontWeight: 'bold',
+                  color: theme.text.secondary,
+                }}
+              >
+                Échec critique
+              </label>
+              <input
+                id="test-critical-failure-node"
+                type="text"
+                {...register('criticalFailureNode' as const)}
+                placeholder="ID du nœud (ex: NODE_CRITICAL_FAILURE)"
+                style={{
+                  width: '100%',
+                  padding: '0.5rem',
+                  border: `1px solid ${theme.border.primary}`,
+                  borderRadius: 4,
+                  backgroundColor: theme.background.tertiary,
+                  color: theme.text.primary,
+                  fontSize: '0.85rem',
+                  fontFamily: 'monospace',
+                }}
+              />
+            </div>
+            
+            {/* Échec */}
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label
+                htmlFor="test-failure-node"
+                style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontSize: '0.85rem',
+                  fontWeight: 'bold',
+                  color: theme.text.secondary,
+                }}
+              >
+                Échec
+              </label>
+              <input
+                id="test-failure-node"
+                type="text"
+                {...register('failureNode' as const)}
+                placeholder="ID du nœud (ex: NODE_FAILURE)"
+                style={{
+                  width: '100%',
+                  padding: '0.5rem',
+                  border: `1px solid ${theme.border.primary}`,
+                  borderRadius: 4,
+                  backgroundColor: theme.background.tertiary,
+                  color: theme.text.primary,
+                  fontSize: '0.85rem',
+                  fontFamily: 'monospace',
+                }}
+              />
+            </div>
+            
+            {/* Réussite */}
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label
+                htmlFor="test-success-node"
+                style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontSize: '0.85rem',
+                  fontWeight: 'bold',
+                  color: theme.text.secondary,
+                }}
+              >
+                Réussite
+              </label>
+              <input
+                id="test-success-node"
+                type="text"
+                {...register('successNode' as const)}
+                placeholder="ID du nœud (ex: NODE_SUCCESS)"
+                style={{
+                  width: '100%',
+                  padding: '0.5rem',
+                  border: `1px solid ${theme.border.primary}`,
+                  borderRadius: 4,
+                  backgroundColor: theme.background.tertiary,
+                  color: theme.text.primary,
+                  fontSize: '0.85rem',
+                  fontFamily: 'monospace',
+                }}
+              />
+            </div>
+            
+            {/* Réussite critique */}
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label
+                htmlFor="test-critical-success-node"
+                style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontSize: '0.85rem',
+                  fontWeight: 'bold',
+                  color: theme.text.secondary,
+                }}
+              >
+                Réussite critique
+              </label>
+              <input
+                id="test-critical-success-node"
+                type="text"
+                {...register('criticalSuccessNode' as const)}
+                placeholder="ID du nœud (ex: NODE_CRITICAL_SUCCESS)"
+                style={{
+                  width: '100%',
+                  padding: '0.5rem',
+                  border: `1px solid ${theme.border.primary}`,
+                  borderRadius: 4,
+                  backgroundColor: theme.background.tertiary,
+                  color: theme.text.primary,
+                  fontSize: '0.85rem',
+                  fontFamily: 'monospace',
+                }}
+              />
             </div>
           </div>
         )}

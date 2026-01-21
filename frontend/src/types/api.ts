@@ -279,8 +279,10 @@ export interface UnityDialogueChoice {
   influenceDelta?: number
   respectDelta?: number
   test?: string
-  testSuccessNode?: string
+  testCriticalFailureNode?: string
   testFailureNode?: string
+  testSuccessNode?: string
+  testCriticalSuccessNode?: string
   condition?: string
   [key: string]: unknown
 }

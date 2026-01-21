@@ -9,6 +9,7 @@ import { VocabularyGuidesTab } from './VocabularyGuidesTab'
 import { PromptsTab } from './PromptsTab'
 import { ErrorBoundary } from '../shared/ErrorBoundary'
 import { BudgetSettings } from '../settings/BudgetSettings'
+import { UsageDashboard } from '../usage/UsageDashboard'
 import { theme } from '../../theme'
 import { getAllShortcuts, formatShortcut } from '../../hooks/useKeyboardShortcuts'
 import * as configAPI from '../../api/config'
@@ -19,9 +20,10 @@ export interface GenerationOptionsModalProps {
   isOpen: boolean
   onClose: () => void
   onApply?: () => void
+  initialTab?: 'context' | 'metadata' | 'general' | 'vocabulary' | 'prompts' | 'shortcuts' | 'usage'
 }
 
-type TabId = 'context' | 'metadata' | 'general' | 'vocabulary' | 'prompts' | 'shortcuts'
+type TabId = 'context' | 'metadata' | 'general' | 'vocabulary' | 'prompts' | 'shortcuts' | 'usage'
 
 interface Tab {
   id: TabId
@@ -32,8 +34,16 @@ export function GenerationOptionsModal({
   isOpen,
   onClose,
   onApply,
+  initialTab = 'context',
 }: GenerationOptionsModalProps) {
-  const [activeTab, setActiveTab] = useState<TabId>('context')
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab as TabId)
+  
+  // Mettre à jour l'onglet actif quand initialTab change
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveTab(initialTab as TabId)
+    }
+  }, [isOpen, initialTab])
   const [unityPath, setUnityPath] = useState('')
   const [isLoadingUnity, setIsLoadingUnity] = useState(false)
   const [isSavingUnity, setIsSavingUnity] = useState(false)
@@ -157,6 +167,7 @@ export function GenerationOptionsModal({
     { id: 'vocabulary', label: 'Vocabulaire & Guides' },
     { id: 'prompts', label: 'Prompts' },
     { id: 'shortcuts', label: 'Raccourcis' },
+    { id: 'usage', label: 'Usage IA' },
   ]
 
   if (!isOpen) return null
@@ -319,6 +330,10 @@ export function GenerationOptionsModal({
 
           {activeTab === 'shortcuts' && (
             <ShortcutsTab />
+          )}
+
+          {activeTab === 'usage' && (
+            <UsageTab />
           )}
         </div>
 
@@ -801,6 +816,17 @@ function ShortcutsTab() {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Onglet affichant les statistiques d'utilisation LLM.
+ */
+function UsageTab() {
+  return (
+    <div>
+      <UsageDashboard />
     </div>
   )
 }

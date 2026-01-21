@@ -3,8 +3,13 @@
  */
 import React, { useEffect } from 'react';
 import { useLLMStore } from '../../store/llmStore';
+import { theme } from '../../theme';
 
-export const ModelSelector: React.FC = () => {
+export interface ModelSelectorProps {
+  style?: React.CSSProperties;
+}
+
+export const ModelSelector: React.FC<ModelSelectorProps> = ({ style }) => {
   const {
     provider,
     model,
@@ -32,38 +37,37 @@ export const ModelSelector: React.FC = () => {
     setModel(selectedModel.api_identifier);
   };
 
-  const currentModel = availableModels.find((m) => m.api_identifier === model);
-  const currentModelDisplay = currentModel?.display_name || model;
-
   return (
-    <div className="model-selector">
-      <label htmlFor="model-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-        Modèle
-      </label>
-      <select
-        id="model-select"
-        value={model}
-        onChange={(e) => {
-          const selectedModel = availableModels.find((m) => m.api_identifier === e.target.value);
-          if (selectedModel) {
-            handleModelChange(selectedModel);
-          }
-        }}
-        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-white"
-      >
-        {Object.entries(modelsByProvider).map(([providerType, models]) => (
-          <optgroup key={providerType} label={providerType === 'openai' ? 'OpenAI' : 'Mistral'}>
-            {models.map((m) => (
-              <option key={m.api_identifier} value={m.api_identifier}>
-                {m.display_name}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
-      <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-        Provider actuel: {provider === 'openai' ? 'OpenAI' : 'Mistral'}
-      </div>
-    </div>
+    <select
+      id="model-select"
+      value={model}
+      onChange={(e) => {
+        const selectedModel = availableModels.find((m) => m.api_identifier === e.target.value);
+        if (selectedModel) {
+          handleModelChange(selectedModel);
+        }
+      }}
+      style={{
+        width: '100%',
+        padding: '0.5rem',
+        boxSizing: 'border-box',
+        backgroundColor: theme.input.background,
+        border: `1px solid ${theme.input.border}`,
+        color: theme.input.color,
+        borderRadius: '4px',
+        fontSize: '0.9rem',
+        ...style,
+      }}
+    >
+      {Object.entries(modelsByProvider).map(([providerType, models]) => (
+        <optgroup key={providerType} label={providerType === 'openai' ? 'OpenAI' : 'Mistral'}>
+          {models.map((m) => (
+            <option key={m.api_identifier} value={m.api_identifier}>
+              {m.display_name}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
   );
 };

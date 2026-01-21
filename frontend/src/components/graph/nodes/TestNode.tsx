@@ -17,12 +17,43 @@ interface TestNodeData {
   id: string
   test?: string
   line?: string
-  successNode?: string
+  criticalFailureNode?: string
   failureNode?: string
+  successNode?: string
+  criticalSuccessNode?: string
   validationErrors?: ValidationError[]
   validationWarnings?: ValidationError[]
   isHighlighted?: boolean
   [key: string]: unknown
+}
+
+/**
+ * Formate un test d'attribut pour l'affichage.
+ * Ex: "Raison+Architecture:8" => "Architecture (DD8)"
+ */
+function formatTest(test: string): string {
+  if (!test) return 'Test non défini'
+  
+  try {
+    // Format attendu: "Attribut+Compétence:DD"
+    const parts = test.split(':')
+    if (parts.length !== 2) return test // Format invalide, retourner tel quel
+    
+    const dd = parts[1]
+    const attributCompetence = parts[0]
+    
+    // Extraire la compétence (après le +)
+    const competenceParts = attributCompetence.split('+')
+    if (competenceParts.length >= 2) {
+      const competence = competenceParts[competenceParts.length - 1] // Dernière partie après +
+      return `${competence} (DD${dd})`
+    }
+    
+    // Si pas de +, utiliser tout le texte avant :
+    return `${attributCompetence} (DD${dd})`
+  } catch {
+    return test // En cas d'erreur, retourner tel quel
+  }
 }
 
 export const TestNode = memo(function TestNode({
@@ -37,6 +68,9 @@ export const TestNode = memo(function TestNode({
   const hasWarnings = warnings.length > 0
   const isHighlighted = data.isHighlighted || false
   const [isHovered, setIsHovered] = useState(false)
+  
+  // Formater le test pour l'affichage
+  const formattedTest = formatTest(test)
   
   // Tronquer le dialogue si présent
   const truncatedLine = line.length > 80 ? `${line.substring(0, 80)}...` : line
@@ -58,22 +92,37 @@ export const TestNode = memo(function TestNode({
     borderColor = theme.state.warning.color
   }
   
+  // Couleur de fond appropriée pour mode sombre (harmonisée avec bordure orange)
+  const backgroundColor = isHighlighted 
+    ? theme.state.selected.background 
+    : hasErrors
+    ? theme.state.error.background // '#3a1a1a'
+    : hasWarnings
+    ? theme.state.warning.background // '#3a3a1a'
+    : '#16a085' 
+  
+  // Barre compacte avec 4 handles
   return (
     <div
       style={{
-        width: 250,
-        minHeight: 100,
+        width: 200,
+        height: 44, // Hauteur réduite mais suffisante pour les cercles complets
         border: `2px solid ${borderColor}`,
         borderRadius: 8,
-        backgroundColor: isHighlighted ? theme.state.selected.background : theme.background.tertiary,
+        backgroundColor,
         boxShadow: selected
           ? '0 4px 12px rgba(0, 0, 0, 0.3)'
           : isHighlighted
           ? '0 0 0 3px rgba(116, 192, 252, 0.5)'
           : '0 2px 6px rgba(0, 0, 0, 0.2)',
-        overflow: 'hidden',
+        overflow: 'visible',
         position: 'relative',
         transition: 'all 0.2s ease',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '8px 4px', // Padding adapté à la hauteur réduite
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -135,166 +184,102 @@ export const TestNode = memo(function TestNode({
           {warnings.length}
         </div>
       )}
-      {/* Input Handle (haut) */}
+      
+      {/* Input Handle (haut) - totalement transparent mais nécessaire pour les connexions */}
       <Handle
         type="target"
         position={Position.Top}
         style={{
-          background: '#F5A623',
+          background: 'transparent',
           width: 12,
           height: 12,
-          border: '2px solid white',
+          border: 'none',
+          opacity: 0, // Totalement invisible
+          top: -1, // Positionné juste au-dessus du bord pour que la ligne passe à travers la bordure
         }}
       />
       
-      {/* Header avec icône de dé */}
+      {/* Test formaté (ex: "Architecture (DD8)") - centré dans la barre */}
       <div
         style={{
-          padding: '8px 12px',
-          backgroundColor: '#F5A623',
-          borderBottom: `1px solid ${theme.border.primary}`,
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          fontSize: '0.8rem',
+          color: theme.text.primary,
+          fontWeight: '600',
+          textAlign: 'center',
+          padding: '0 8px',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          maxWidth: '100%',
+          flex: 1,
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
+          justifyContent: 'center',
+          marginTop: -15, // Remonte le texte
         }}
+        title={test} // Tooltip avec le format original
       >
-        <span style={{ fontSize: '1.2rem' }}>🎲</span>
-        <span
-          style={{
-            fontSize: '0.85rem',
-            fontWeight: 'bold',
-            color: 'white',
-            textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
-          }}
-        >
-          Test d'attribut
-        </span>
+        {formattedTest}
       </div>
       
-      {/* Test (format: Attribut+Compétence:DD) */}
-      <div
-        style={{
-          padding: '12px',
-          backgroundColor: theme.background.secondary,
-          borderBottom: `1px solid ${theme.border.primary}`,
-        }}
-      >
-        <div
-          style={{
-            fontFamily: 'monospace',
-            fontSize: '0.85rem',
-            color: theme.text.primary,
-            fontWeight: 'bold',
-            textAlign: 'center',
-          }}
-        >
-          {test}
-        </div>
-      </div>
-      
-      {/* Dialogue contextuel (optionnel) */}
-      {line && (
-        <div
-          style={{
-            padding: '12px',
-            fontSize: '0.85rem',
-            lineHeight: 1.4,
-            color: theme.text.secondary,
-            fontStyle: 'italic',
-            whiteSpace: 'pre-wrap',
-            wordWrap: 'break-word',
-          }}
-        >
-          {truncatedLine}
-        </div>
-      )}
-      
-      {/* Labels pour success/failure */}
-      <div
-        style={{
-          padding: '8px 12px',
-          borderTop: `1px solid ${theme.border.primary}`,
-          backgroundColor: theme.background.panel,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          fontSize: '0.75rem',
-          color: theme.text.secondary,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ color: '#27AE60' }}>✓</span>
-          <span>Succès</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ color: '#E74C3C' }}>✗</span>
-          <span>Échec</span>
-        </div>
-      </div>
-      
-      {/* Output Handles (bas) - success à gauche, failure à droite */}
+      {/* Output Handles (bas) - 4 handles répartis équitablement avec couleurs vives */}
       <Handle
         type="source"
         position={Position.Bottom}
-        id="success"
+        id="critical-failure"
         style={{
-          background: '#27AE60',
+          background: '#FF4444', // Rouge vif
           width: 12,
           height: 12,
           border: '2px solid white',
-          left: '25%',
+          left: '12.5%',
+          bottom: 2, // Positionné légèrement à l'intérieur pour être complètement visible
         }}
+        title="Échec critique"
       />
       <Handle
         type="source"
         position={Position.Bottom}
         id="failure"
         style={{
-          background: '#E74C3C',
+          background: '#FF8800', // Orange vif
           width: 12,
           height: 12,
           border: '2px solid white',
-          left: '75%',
+          left: '37.5%',
+          bottom: 2, // Positionné légèrement à l'intérieur pour être complètement visible
         }}
+        title="Échec"
       />
-      
-      {/* Bouton "Générer" visible au hover */}
-      {(isHovered || selected) && (
-        <button
-          onClick={handleGenerateClick}
-          style={{
-            position: 'absolute',
-            bottom: 8,
-            right: 8,
-            padding: '0.4rem 0.6rem',
-            border: 'none',
-            borderRadius: '6px',
-            backgroundColor: theme.button.primary.background,
-            color: theme.button.primary.color,
-            cursor: 'pointer',
-            fontSize: '0.75rem',
-            fontWeight: 600,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.3rem',
-            boxShadow: '0 2px 6px rgba(0, 0, 0, 0.3)',
-            zIndex: 15,
-            transition: 'all 0.2s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'scale(1.05)'
-            e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.4)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'scale(1)'
-            e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.3)'
-          }}
-          title="Générer la suite avec l'IA"
-        >
-          <span>✨</span>
-          <span>Générer</span>
-        </button>
-      )}
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="success"
+        style={{
+          background: '#44FF44', // Vert vif
+          width: 12,
+          height: 12,
+          border: '2px solid white',
+          left: '62.5%',
+          bottom: 2, // Positionné légèrement à l'intérieur pour être complètement visible
+        }}
+        title="Réussite"
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="critical-success"
+        style={{
+          background: '#0088FF', // Bleu vif
+          width: 12,
+          height: 12,
+          border: '2px solid white',
+          left: '87.5%',
+          bottom: 2, // Positionné légèrement à l'intérieur pour être complètement visible
+        }}
+        title="Réussite critique"
+      />
     </div>
   )
 })

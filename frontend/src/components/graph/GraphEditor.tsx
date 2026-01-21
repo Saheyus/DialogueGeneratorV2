@@ -49,6 +49,7 @@ export function GraphEditor() {
   const {
     nodes,
     loadDialogue,
+    saveDialogue,
     exportToUnity,
     validateGraph,
     applyAutoLayout,
@@ -284,9 +285,11 @@ export function GraphEditor() {
     
     try {
       setIsLoadingDialogue(true)
-      const unityJson = exportToUnity()
+      // Utiliser saveDialogue() qui appelle l'API /save pour obtenir le JSON canonique
+      // (gère correctement les TestNodes avec 4 résultats, validation, etc.)
+      const saveResponse = await saveDialogue()
       const response = await dialoguesAPI.exportUnityDialogue({
-        json_content: unityJson,
+        json_content: saveResponse.json_content,
         title: selectedDialogue.title || selectedDialogue.filename,
         filename: selectedDialogue.filename.replace('.json', ''), // Enlever l'extension
       })
@@ -304,7 +307,7 @@ export function GraphEditor() {
     } finally {
       setIsLoadingDialogue(false)
     }
-  }, [selectedDialogue, exportToUnity, toast, markDraftSaved])
+  }, [selectedDialogue, saveDialogue, toast, markDraftSaved])
   
   // Handlers pour restauration draft (Task 2 - Story 0.5)
   const handleRestoreDraft = useCallback(() => {

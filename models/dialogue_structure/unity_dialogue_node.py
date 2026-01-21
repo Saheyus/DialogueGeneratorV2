@@ -17,6 +17,10 @@ class UnityDialogueChoiceContent(BaseModel):
     """Contenu d'un choix généré par l'IA."""
     text: str = Field(..., description="Texte du choix")
     test: Optional[str] = Field(None, description="Format: AttributeType+SkillId:DD (ex: 'Raison+Rhétorique:8')")
+    testCriticalFailureNode: Optional[str] = Field(None, description="ID du nœud cible en cas d'échec critique (score < DD - 5)")
+    testFailureNode: Optional[str] = Field(None, description="ID du nœud cible en cas d'échec (score >= DD - 5 et < DD)")
+    testSuccessNode: Optional[str] = Field(None, description="ID du nœud cible en cas de réussite (score >= DD et < DD + 5)")
+    testCriticalSuccessNode: Optional[str] = Field(None, description="ID du nœud cible en cas de réussite critique (score >= DD + 5)")
     traitRequirements: Optional[List[Dict[str, Any]]] = Field(
         None, 
         description="Exigences de traits (ex: [{'trait': 'Courageux', 'minValue': 5}])"

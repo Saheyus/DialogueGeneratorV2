@@ -3,7 +3,7 @@
  * Permet d'éditer speaker, line, choices[].text, choices[].targetNode.
  * Préserve tous les autres champs en lecture seule.
  */
-import { memo, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
+import { memo, useState, useEffect, useCallback, useMemo, useImperativeHandle, forwardRef, type ReactNode } from 'react'
 import * as dialoguesAPI from '../../api/dialogues'
 import { getErrorMessage } from '../../types/errors'
 import { theme } from '../../theme'
@@ -23,6 +23,13 @@ export interface UnityDialogueEditorProps {
   onSave?: (filename: string) => void
   onCancel?: () => void
   extraActions?: ReactNode
+  hideHeaderSaveButton?: boolean
+}
+
+export interface UnityDialogueEditorHandle {
+  handleSave: () => Promise<void>
+  isValid: boolean
+  isSaving: boolean
 }
 
 interface ValidationError {
@@ -31,7 +38,7 @@ interface ValidationError {
   message: string
 }
 
-export const UnityDialogueEditor = memo(function UnityDialogueEditor({
+export const UnityDialogueEditor = memo(forwardRef<UnityDialogueEditorHandle, UnityDialogueEditorProps>(function UnityDialogueEditor({
   json_content,
   title,
   subtitle,
@@ -39,7 +46,8 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
   onSave,
   onCancel,
   extraActions,
-}: UnityDialogueEditorProps) {
+  hideHeaderSaveButton = false,
+}, ref) {
   const toast = useToast()
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -259,6 +267,13 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
     }
   }, [isValid, nodes, title, filename, toast, onSave])
 
+  // Exposer handleSave, isValid et isSaving via ref
+  useImperativeHandle(ref, () => ({
+    handleSave,
+    isValid,
+    isSaving,
+  }), [handleSave, isValid, isSaving])
+
   // Raccourcis clavier
   useKeyboardShortcuts(
     [
@@ -391,22 +406,24 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
               Annuler
             </button>
           )}
-          <button
-            onClick={handleSave}
-            disabled={isSaving || !isValid}
-            style={{
-              padding: '0.5rem 1rem',
-              border: 'none',
-              borderRadius: '6px',
-              backgroundColor: theme.button.primary.background,
-              color: theme.button.primary.color,
-              cursor: isValid && !isSaving ? 'pointer' : 'not-allowed',
-              opacity: isValid && !isSaving ? 1 : 0.6,
-              fontWeight: 700,
-            }}
-          >
-            {isSaving ? 'Sauvegarde...' : 'Sauvegarder'}
-          </button>
+          {!hideHeaderSaveButton && (
+            <button
+              onClick={handleSave}
+              disabled={isSaving || !isValid}
+              style={{
+                padding: '0.5rem 1rem',
+                border: 'none',
+                borderRadius: '6px',
+                backgroundColor: theme.button.primary.background,
+                color: theme.button.primary.color,
+                cursor: isValid && !isSaving ? 'pointer' : 'not-allowed',
+                opacity: isValid && !isSaving ? 1 : 0.6,
+                fontWeight: 700,
+              }}
+            >
+              {isSaving ? 'Sauvegarde...' : 'Sauvegarder'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1033,5 +1050,5 @@ export const UnityDialogueEditor = memo(function UnityDialogueEditor({
       </div>
     </div>
   )
-})
+}))
 

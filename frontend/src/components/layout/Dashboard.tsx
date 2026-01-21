@@ -4,11 +4,9 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { ContextSelector } from '../context/ContextSelector'
 import { GenerationPanel } from '../generation/GenerationPanel'
-import { GenerationOptionsModal } from '../generation/GenerationOptionsModal'
 import { EstimatedPromptPanel } from '../generation/EstimatedPromptPanel'
-import { UnityDialogueEditor } from '../generation/UnityDialogueEditor'
+import { UnityDialogueEditor, type UnityDialogueEditorHandle } from '../generation/UnityDialogueEditor'
 import { ContextDetail } from '../context/ContextDetail'
-import { UsageStatsModal } from '../usage/UsageStatsModal'
 import { ResizablePanels, type ResizablePanelsRef } from '../shared/ResizablePanels'
 import { Tabs, type Tab } from '../shared/Tabs'
 import { UnityDialogueList, type UnityDialogueListRef } from '../unityDialogues/UnityDialogueList'
@@ -52,13 +50,12 @@ function ChevronIcon({ direction }: { direction: 'left' | 'right' }) {
 
 export function Dashboard() {
   const [selectedContextItem, setSelectedContextItem] = useState<ContextItem | null>(null)
-  const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false)
-  const [isUsageModalOpen, setIsUsageModalOpen] = useState(false)
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false)
   const [rightPanelTab, setRightPanelTab] = useState<'prompt' | 'dialogue' | 'node' | 'details'>('prompt')
   const [centerPanelTab, setCenterPanelTab] = useState<'generation' | 'edition' | 'graph'>('generation')
   const [selectedDialogue, setSelectedDialogue] = useState<UnityDialogueMetadata | null>(null)
   const dialogueListRef = useRef<UnityDialogueListRef>(null)
+  const unityDialogueEditorRef = useRef<UnityDialogueEditorHandle>(null)
   const { rawPrompt, tokenCount, promptHash, isEstimating, unityDialogueResponse } = useGenerationStore()
   const generationState = useGenerationStore((state) => ({
     isEstimating: state.isEstimating,
@@ -100,7 +97,8 @@ export function Dashboard() {
       {
         key: 'ctrl+,',
         handler: () => {
-          setIsOptionsModalOpen(true)
+          // Les options sont maintenant dans le Header
+          // Cette fonctionnalité sera gérée par le Header
         },
         description: 'Ouvrir les options',
       },
@@ -114,20 +112,17 @@ export function Dashboard() {
       {
         key: 'escape',
         handler: () => {
-          if (isOptionsModalOpen) {
-            setIsOptionsModalOpen(false)
-          } else if (isUsageModalOpen) {
-            setIsUsageModalOpen(false)
-          } else if (isHelpModalOpen) {
+          if (isHelpModalOpen) {
             setIsHelpModalOpen(false)
           }
         },
         description: 'Fermer les modals/panels',
-        enabled: isOptionsModalOpen || isUsageModalOpen || isHelpModalOpen,
+        enabled: isHelpModalOpen,
       },
     ],
-    [isOptionsModalOpen, isUsageModalOpen, isHelpModalOpen]
+    [isHelpModalOpen]
   )
+
   
   // Ref pour suivre l'ID du dernier dialogue pour lequel on a fait le basculement automatique
   const lastAutoSwitchedDialogueRef = useRef<string | null>(null)
@@ -187,8 +182,10 @@ export function Dashboard() {
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
             {unityDialogueResponse ? (
               <UnityDialogueEditor
+                ref={unityDialogueEditorRef}
                 json_content={unityDialogueResponse.json_content}
                 title={unityDialogueResponse.title}
+                hideHeaderSaveButton={true}
                 onSave={() => {
                   // Rafraîchir la liste des dialogues après sauvegarde
                   dialogueListRef.current?.refresh()
@@ -638,110 +635,28 @@ export function Dashboard() {
             <ChevronIcon direction="right" />
           </button>
         </div>
-        {/* Barre d'options en haut (toujours visible) */}
-        {actions.handleGenerate && (
+        {/* Indicateur de brouillon non sauvegardé */}
+        {actions.handleGenerate && actions.isDirty && (
           <div
             style={{
               padding: '0.5rem',
               borderBottom: `1px solid ${theme.border.primary}`,
               backgroundColor: theme.background.panelHeader,
               display: 'flex',
-              gap: '0.5rem',
-              flexWrap: 'wrap',
               alignItems: 'center',
               flexShrink: 0,
               boxSizing: 'border-box',
             }}
           >
-            <button
-              onClick={() => setIsOptionsModalOpen(true)}
-              style={{
-                padding: '0.4rem 0.8rem',
-                fontSize: '0.85rem',
-                backgroundColor: theme.button.default.background,
-                color: theme.button.default.color,
-                border: `1px solid ${theme.border.primary}`,
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              Options
-            </button>
-            <button
-              onClick={() => setIsUsageModalOpen(true)}
-              style={{
-                padding: '0.4rem 0.8rem',
-                fontSize: '0.85rem',
-                backgroundColor: theme.button.default.background,
-                color: theme.button.default.color,
-                border: `1px solid ${theme.border.primary}`,
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              Usage IA
-            </button>
-            <button
-              onClick={actions.handleExportUnity || (() => {})}
-              disabled={actions.isLoading || isGraphGenerating}
-              style={{
-                padding: '0.4rem 0.8rem',
-                fontSize: '0.85rem',
-                backgroundColor: theme.button.default.background,
-                color: theme.button.default.color,
-                border: `1px solid ${theme.border.primary}`,
-                borderRadius: '4px',
-                cursor: (actions.isLoading || isGraphGenerating) ? 'not-allowed' : 'pointer',
-                opacity: (actions.isLoading || isGraphGenerating) ? 0.6 : 1,
-              }}
-            >
-              Exporter (Unity)
-            </button>
             <div
               style={{
-                position: 'relative',
-                display: 'inline-block',
+                fontSize: '0.85rem',
+                color: theme.state.info.color,
+                fontStyle: 'italic',
               }}
             >
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (actions.handleReset) {
-                    actions.handleReset()
-                  }
-                }}
-                disabled={actions.isLoading || isGraphGenerating}
-                style={{
-                  padding: '0.4rem 0.8rem',
-                  fontSize: '0.85rem',
-                  backgroundColor: theme.button.default.background,
-                  color: theme.button.default.color,
-                  border: `1px solid ${theme.border.primary}`,
-                  borderRadius: '4px',
-                  cursor: (actions.isLoading || isGraphGenerating) ? 'not-allowed' : 'pointer',
-                  opacity: (actions.isLoading || isGraphGenerating) ? 0.6 : 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.25rem',
-                }}
-                title="Réinitialiser (menu déroulant)"
-              >
-                Reset
-                <span style={{ fontSize: '0.7rem' }}>▼</span>
-              </button>
+              ● Brouillon non sauvegardé
             </div>
-            {actions.isDirty && (
-              <div
-                style={{
-                  fontSize: '0.85rem',
-                  color: theme.state.info.color,
-                  fontStyle: 'italic',
-                  marginLeft: 'auto',
-                }}
-              >
-                ● Brouillon non sauvegardé
-              </div>
-            )}
           </div>
         )}
         {/* Zone de contenu avec scroll (prend l'espace restant, mais laisse toujours de la place pour le bouton) */}
@@ -765,7 +680,7 @@ export function Dashboard() {
             contentStyle={{ overflow: 'hidden', scrollbarGutter: 'stable' }}
           />
         </div>
-        {/* Gros bouton Générer en bas (visible sur Prompt et Dialogue généré) */}
+        {/* Boutons en bas (visible sur Prompt et Dialogue généré) */}
         {actions.handleGenerate && (rightPanelTab === 'prompt' || rightPanelTab === 'dialogue') && (
           <div
             style={{
@@ -835,54 +750,121 @@ export function Dashboard() {
                 `}</style>
               </>
             )}
-            <button
-              onClick={actions.handleGenerate}
-              disabled={actions.isLoading || isGraphGenerating}
-              style={{
-                width: '100%',
-                padding: '0.875rem 1rem',
-                fontSize: '1.1rem',
-                fontWeight: 'bold',
-                backgroundColor: theme.button.primary.background,
-                color: theme.button.primary.color,
-                border: 'none',
-                borderRadius: '6px',
-                cursor: (actions.isLoading || isGraphGenerating) ? 'not-allowed' : 'pointer',
-                opacity: (actions.isLoading || isGraphGenerating) ? 0.6 : 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.5rem',
-                transition: 'all 0.2s',
-                boxSizing: 'border-box',
-              }}
-              title="Générer (Ctrl+Enter)"
-            >
-              <span>Générer</span>
-              <span
+            {/* Si un dialogue a déjà été généré, afficher Sauvegarder + bouton reload Générer */}
+            {rightPanelTab === 'dialogue' && unityDialogueResponse ? (
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <button
+                  onClick={() => unityDialogueEditorRef.current?.handleSave()}
+                  disabled={!unityDialogueEditorRef.current?.isValid || unityDialogueEditorRef.current?.isSaving || actions.isLoading || isGraphGenerating}
+                  style={{
+                    flex: 1,
+                    padding: '0.875rem 1rem',
+                    fontSize: '1.1rem',
+                    fontWeight: 'bold',
+                    backgroundColor: theme.button.primary.background,
+                    color: theme.button.primary.color,
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: (unityDialogueEditorRef.current?.isValid && !unityDialogueEditorRef.current?.isSaving && !actions.isLoading && !isGraphGenerating) ? 'pointer' : 'not-allowed',
+                    opacity: (unityDialogueEditorRef.current?.isValid && !unityDialogueEditorRef.current?.isSaving && !actions.isLoading && !isGraphGenerating) ? 1 : 0.6,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s',
+                    boxSizing: 'border-box',
+                  }}
+                  title="Sauvegarder (Ctrl+S)"
+                >
+                  {unityDialogueEditorRef.current?.isSaving ? 'Sauvegarde...' : 'Sauvegarder'}
+                </button>
+                <button
+                  onClick={actions.handleGenerate}
+                  disabled={actions.isLoading || isGraphGenerating}
+                  style={{
+                    padding: '0.875rem',
+                    fontSize: '1.1rem',
+                    backgroundColor: theme.button.default.background,
+                    color: theme.button.default.color,
+                    border: `1px solid ${theme.border.primary}`,
+                    borderRadius: '6px',
+                    cursor: (actions.isLoading || isGraphGenerating) ? 'not-allowed' : 'pointer',
+                    opacity: (actions.isLoading || isGraphGenerating) ? 0.6 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '48px',
+                    height: '48px',
+                    transition: 'all 0.2s',
+                    boxSizing: 'border-box',
+                  }}
+                  title="Générer à nouveau (Ctrl+Enter)"
+                >
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{
+                      animation: actions.isLoading || isGraphGenerating ? 'spin 1s linear infinite' : 'none',
+                    }}
+                  >
+                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
+                  </svg>
+                  <style>{`
+                    @keyframes spin {
+                      from { transform: rotate(0deg); }
+                      to { transform: rotate(360deg); }
+                    }
+                  `}</style>
+                </button>
+              </div>
+            ) : (rightPanelTab === 'dialogue' || rightPanelTab === 'prompt') ? (
+              // Sur l'onglet Prompt ou Dialogue généré sans dialogue, afficher le bouton Générer normal
+              <button
+                onClick={actions.handleGenerate}
+                disabled={actions.isLoading || isGraphGenerating}
                 style={{
-                  fontSize: '0.75rem',
-                  opacity: 0.8,
-                  fontWeight: 'normal',
+                  width: '100%',
+                  padding: '0.875rem 1rem',
+                  fontSize: '1.1rem',
+                  fontWeight: 'bold',
+                  backgroundColor: theme.button.primary.background,
+                  color: theme.button.primary.color,
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: (actions.isLoading || isGraphGenerating) ? 'not-allowed' : 'pointer',
+                  opacity: (actions.isLoading || isGraphGenerating) ? 0.6 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  transition: 'all 0.2s',
+                  boxSizing: 'border-box',
                 }}
+                title="Générer (Ctrl+Enter)"
               >
-                Ctrl+Enter
-              </span>
-            </button>
+                <span>Générer</span>
+                <span
+                  style={{
+                    fontSize: '0.75rem',
+                    opacity: 0.8,
+                    fontWeight: 'normal',
+                  }}
+                >
+                  Ctrl+Enter
+                </span>
+              </button>
+            ) : null}
           </div>
         )}
           </>
         )}
       </div>
 
-      <GenerationOptionsModal
-        isOpen={isOptionsModalOpen}
-        onClose={() => setIsOptionsModalOpen(false)}
-      />
-      <UsageStatsModal
-        isOpen={isUsageModalOpen}
-        onClose={() => setIsUsageModalOpen(false)}
-      />
       <KeyboardShortcutsHelp
         isOpen={isHelpModalOpen}
         onClose={() => setIsHelpModalOpen(false)}

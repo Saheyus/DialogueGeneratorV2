@@ -37,6 +37,7 @@ import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { useCostGovernance } from '../../hooks/useCostGovernance'
 import type { SaveStatus } from '../shared/SaveStatusIndicator'
 import { useFlagsStore } from '../../store/flagsStore'
+import type { DialogueStructure } from '../../types/generation'
 
 
 export function GenerationPanel() {
@@ -93,7 +94,7 @@ export function GenerationPanel() {
   } = useAuthorProfile()
   
   // Hook useLLMStore pour sélection provider/model (Story 0.3)
-  const { model: selectedLLMModel } = useLLMStore()
+  const { model: selectedLLMModel, provider: currentProvider } = useLLMStore()
   
   // État pour PresetValidationModal (Task 6)
   const [isValidationModalOpen, setIsValidationModalOpen] = useState(false)
@@ -111,7 +112,8 @@ export function GenerationPanel() {
   const [llmModel, setLlmModel] = useState<string>(DEFAULT_MODEL)
   const [reasoningEffort, setReasoningEffort] = useState<'none' | 'low' | 'medium' | 'high' | 'xhigh' | null>(null)
   const [maxChoices, setMaxChoices] = useState<number | null>(null)
-  const [choicesMode, setChoicesMode] = useState<'free' | 'capped'>('free')
+  // choicesMode est déduit de maxChoices : null = "free", valeur = "capped"
+  const choicesMode: 'free' | 'capped' = maxChoices !== null ? 'capped' : 'free'
   const [availableModels, setAvailableModels] = useState<LLMModelResponse[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isEstimating, setIsEstimating] = useState(false)
@@ -133,7 +135,8 @@ export function GenerationPanel() {
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [, setResetMenuOpen] = useState(false)
   const toast = useToast()
-  const sliderRef = useRef<HTMLInputElement>(null)
+  const maxContextSliderRef = useRef<HTMLInputElement>(null)
+  const maxCompletionSliderRef = useRef<HTMLInputElement>(null)
   const eventSourceRef = useRef<EventSource | null>(null)
   
   /**
@@ -338,7 +341,7 @@ export function GenerationPanel() {
       console.error('Erreur lors de la sauvegarde automatique:', err)
       setSaveStatus('error')
     }
-  }, [userInstructions, authorProfile, systemPromptOverride, dialogueStructure, sceneSelection, maxContextTokens, maxCompletionTokens, llmModel, reasoningEffort, maxChoices, choicesMode, narrativeTags, selections, selectedRegion, selectedSubLocations])
+  }, [userInstructions, authorProfile, systemPromptOverride, dialogueStructure, sceneSelection, maxContextTokens, maxCompletionTokens, llmModel, reasoningEffort, maxChoices, narrativeTags, selections, selectedRegion, selectedSubLocations])
 
   // Charger le brouillon au démarrage (AVANT loadModels pour préserver le modèle sauvegardé)
   useEffect(() => {
@@ -371,7 +374,7 @@ export function GenerationPanel() {
         }
         if (draft.reasoningEffort !== undefined) setReasoningEffort(draft.reasoningEffort)
         if (draft.maxChoices !== undefined) setMaxChoices(draft.maxChoices)
-        if (draft.choicesMode !== undefined) setChoicesMode(draft.choicesMode)
+        // choicesMode est maintenant déduit de maxChoices, pas besoin de le charger
         if (draft.narrativeTags !== undefined) setNarrativeTags(draft.narrativeTags)
 
         // Charger les sélections de contexte
@@ -609,7 +612,7 @@ export function GenerationPanel() {
     } finally {
       setIsEstimating(false)
     }
-  }, [userInstructions, authorProfile, maxChoices, choicesMode, narrativeTags, previousDialoguePreview, hasSelections, maxContextTokens, buildContextSelections, setRawPrompt, systemPromptOverride, vocabularyConfig, includeNarrativeGuides, sceneSelection.characterB, toast])
+  }, [userInstructions, authorProfile, maxChoices, narrativeTags, previousDialoguePreview, hasSelections, maxContextTokens, buildContextSelections, setRawPrompt, systemPromptOverride, vocabularyConfig, includeNarrativeGuides, sceneSelection.characterB, toast])
 
 
 
@@ -669,7 +672,7 @@ export function GenerationPanel() {
     }, 500)
 
     return () => clearTimeout(timeoutId)
-  }, [userInstructions, selections, authorProfile, maxChoices, choicesMode, narrativeTags, previousDialoguePreview, maxContextTokens, estimateTokens, sceneSelection, dialogueStructure, systemPromptOverride, setRawPrompt, fieldConfigs, organization, vocabularyConfig, includeNarrativeGuides])
+  }, [userInstructions, selections, authorProfile, maxChoices, narrativeTags, previousDialoguePreview, maxContextTokens, estimateTokens, sceneSelection, dialogueStructure, systemPromptOverride, setRawPrompt, fieldConfigs, organization, vocabularyConfig, includeNarrativeGuides])
 
 
 
@@ -815,7 +818,7 @@ export function GenerationPanel() {
     } finally {
       setIsLoading(false)
     }
-  }, [startGeneration, resetStreamingState, buildContextSelections, toast, sceneSelection, userInstructions, maxContextTokens, maxCompletionTokens, systemPromptOverride, llmModel, reasoningEffort, authorProfile, maxChoices, choicesMode, narrativeTags, promptHash, availableModels, vocabularyConfig, includeNarrativeGuides, previousDialoguePreview, setStoreUnityDialogueResponse, setTokensUsed, setRawPrompt, setIsDirty, setAvailableModels])
+  }, [startGeneration, resetStreamingState, buildContextSelections, toast, sceneSelection, userInstructions, maxContextTokens, maxCompletionTokens, systemPromptOverride, llmModel, reasoningEffort, authorProfile, maxChoices, narrativeTags, promptHash, availableModels, vocabularyConfig, includeNarrativeGuides, previousDialoguePreview, setStoreUnityDialogueResponse, setTokensUsed, setRawPrompt, setIsDirty, setAvailableModels])
 
   const handlePreview = useCallback(() => {
     // TODO: Implémenter prévisualisation
@@ -858,15 +861,13 @@ export function GenerationPanel() {
     setSceneSelection({ characterA: null, characterB: null, sceneRegion: null, subLocation: null })
     setMaxContextTokens(CONTEXT_TOKENS_LIMITS.DEFAULT)
     setMaxCompletionTokens(null)
-    setMaxChoices(null)
-    setChoicesMode('free')
+    setMaxChoices(null) // Mode libre = maxChoices null
     setNarrativeTags([])
     setStoreUnityDialogueResponse(null)
     clearSelections()
     toast('Tout a été réinitialisé', 'info')
   }, [
     clearSelections,
-    setChoicesMode,
     setDialogueStructure,
     setMaxChoices,
     setMaxCompletionTokens,
@@ -1111,12 +1112,40 @@ export function GenerationPanel() {
   }, []) // Exécuter une seule fois au montage pour initialiser le store
 
   // Mettre à jour le style du slider en fonction de la valeur
+  const applyRangeGradient = useCallback(
+    (el: HTMLInputElement | null, value: number, min: number, max: number) => {
+      if (!el) return
+      const safeMax = Math.max(min + 1, max)
+      const percentage = ((value - min) / (safeMax - min)) * 100
+      const gradient = `linear-gradient(to right, ${theme.border.focus} 0%, ${theme.border.focus} ${percentage}%, ${theme.input.background} ${percentage}%, ${theme.input.background} 100%)`
+      // Certains navigateurs dessinent la piste via les pseudo-éléments (track).
+      // On expose donc le gradient en variable CSS pour l'utiliser sur la track.
+      el.style.setProperty('--range-track-bg', gradient)
+      // Et on le met aussi sur l'input pour les implémentations qui lisent le background directement.
+      el.style.background = gradient
+    },
+    []
+  )
+
   useEffect(() => {
-    if (sliderRef.current) {
-      const percentage = ((maxContextTokens - CONTEXT_TOKENS_LIMITS.MIN) / (CONTEXT_TOKENS_LIMITS.MAX - CONTEXT_TOKENS_LIMITS.MIN)) * 100
-      sliderRef.current.style.background = `linear-gradient(to right, ${theme.border.focus} 0%, ${theme.border.focus} ${percentage}%, ${theme.input.background} ${percentage}%, ${theme.input.background} 100%)`
-    }
-  }, [maxContextTokens])
+    applyRangeGradient(
+      maxContextSliderRef.current,
+      maxContextTokens,
+      CONTEXT_TOKENS_LIMITS.MIN,
+      CONTEXT_TOKENS_LIMITS.MAX
+    )
+  }, [applyRangeGradient, maxContextTokens])
+
+  useEffect(() => {
+    const value = maxCompletionTokens ?? 10000
+    applyRangeGradient(maxCompletionSliderRef.current, value, 100, 16000)
+  }, [applyRangeGradient, maxCompletionTokens])
+
+  const normalizedDialogueStructure = ((): DialogueStructure => {
+    const arr = Array.isArray(dialogueStructure) ? dialogueStructure : []
+    // Le store peut exposer un string[]; le widget attend une structure de longueur 6.
+    return [...arr, '', '', '', '', '', ''].slice(0, 6) as DialogueStructure
+  })()
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: theme.background.panel }}>
@@ -1156,7 +1185,7 @@ export function GenerationPanel() {
       />
 
       <DialogueStructureWidget
-        value={dialogueStructure}
+        value={normalizedDialogueStructure}
         onChange={(value) => {
           setDialogueStructure(value)
           setIsDirty(true)
@@ -1168,269 +1197,271 @@ export function GenerationPanel() {
 
       {/* Sélecteur de modèle LLM (Story 0.3) */}
       <div style={{ marginBottom: '1rem' }}>
-        <ModelSelector />
-      </div>
-
-      {(llmModel === "gpt-5.2" || llmModel === "gpt-5.2-pro") && (
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={{ color: theme.text.primary }}>
-            Niveau de raisonnement:
-            <select
-              value={reasoningEffort || 'none'}
-              onChange={(e) => {
-                const newValue = e.target.value as 'none' | 'low' | 'medium' | 'high' | 'xhigh'
-                setReasoningEffort(newValue === 'none' ? null : newValue)
-                setIsDirty(true)
-                setSaveStatus('unsaved')
-              }}
-              style={{ 
-                width: '100%', 
-                padding: '0.5rem', 
-                marginTop: '0.5rem', 
-                boxSizing: 'border-box',
-                backgroundColor: theme.input.background,
-                border: `1px solid ${theme.input.border}`,
-                color: theme.input.color,
-              }}
-            >
-              <option value="none">Aucun (rapide, latence minimale)</option>
-              <option value="low">Faible (raisonnement minimal)</option>
-              <option value="medium">Moyen (équilibré, recommandé)</option>
-              <option value="high">Élevé (raisonnement approfondi)</option>
-              <option value="xhigh">Très élevé (raisonnement maximal)</option>
-            </select>
-            <div style={{ fontSize: '0.875rem', color: theme.text.secondary, marginTop: '0.25rem' }}>
-              Contrôle la profondeur de raisonnement du modèle. Plus élevé = meilleure qualité mais plus lent et plus coûteux.
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+          {/* Colonne Modèle */}
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <label htmlFor="model-select" style={{ color: theme.text.primary, fontSize: '0.9rem', fontWeight: 500 }}>
+                Modèle
+              </label>
+              <div style={{ position: 'relative', display: 'inline-block' }}>
+                <button
+                  type="button"
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '12px',
+                    border: `1px solid ${theme.border.primary}`,
+                    backgroundColor: theme.background.secondary,
+                    color: theme.text.secondary,
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 0,
+                  }}
+                  title={`Provider actuel: ${currentProvider === 'openai' ? 'OpenAI' : 'Mistral'}`}
+                >
+                  ?
+                </button>
+              </div>
             </div>
-          </label>
-        </div>
-      )}
+            <ModelSelector />
+          </div>
 
-      <div style={{ marginBottom: '1rem' }}>
-        <label style={{ color: theme.text.primary, display: 'block' }}>
-          Max tokens contexte:
-          {validationErrors.maxContextTokens && (
-            <div style={{ fontSize: '0.85rem', color: theme.state.error.color, marginTop: '0.25rem' }}>
-              {validationErrors.maxContextTokens}
+          {/* Colonne Niveau de raisonnement */}
+          {(llmModel === "gpt-5.2" || llmModel === "gpt-5.2-pro") && (
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <label htmlFor="reasoning-effort-select" style={{ color: theme.text.primary, fontSize: '0.9rem', fontWeight: 500 }}>
+                  Niveau de raisonnement
+                </label>
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <button
+                    type="button"
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '12px',
+                      border: `1px solid ${theme.border.primary}`,
+                      backgroundColor: theme.background.secondary,
+                      color: theme.text.secondary,
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: 0,
+                    }}
+                    title="Contrôle la profondeur de raisonnement du modèle. Plus élevé = meilleure qualité mais plus lent et plus coûteux."
+                  >
+                    ?
+                  </button>
+                </div>
+              </div>
+              <select
+                id="reasoning-effort-select"
+                value={reasoningEffort || 'none'}
+                onChange={(e) => {
+                  const newValue = e.target.value as 'none' | 'low' | 'medium' | 'high' | 'xhigh'
+                  setReasoningEffort(newValue === 'none' ? null : newValue)
+                  setIsDirty(true)
+                  setSaveStatus('unsaved')
+                }}
+                style={{ 
+                  width: '100%', 
+                  padding: '0.5rem', 
+                  boxSizing: 'border-box',
+                  backgroundColor: theme.input.background,
+                  border: `1px solid ${theme.input.border}`,
+                  color: theme.input.color,
+                  borderRadius: '4px',
+                  fontSize: '0.9rem',
+                }}
+              >
+                <option value="none">Aucun (rapide, latence minimale)</option>
+                <option value="low">Faible (raisonnement minimal)</option>
+                <option value="medium">Moyen (équilibré, recommandé)</option>
+                <option value="high">Élevé (raisonnement approfondi)</option>
+                <option value="xhigh">Très élevé (raisonnement maximal)</option>
+              </select>
             </div>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem' }}>
-            <input
-              ref={sliderRef}
-              type="range"
-              min={CONTEXT_TOKENS_LIMITS.MIN}
-              max={CONTEXT_TOKENS_LIMITS.MAX}
-              step={CONTEXT_TOKENS_LIMITS.STEP}
-              value={maxContextTokens}
-              onChange={(e) => {
-                setMaxContextTokens(parseInt(e.target.value))
-                setIsDirty(true)
-                setSaveStatus('unsaved')
-              }}
-              style={{ 
-                flex: 1,
-                height: '6px',
-                borderRadius: '3px',
-                background: theme.input.background,
-                outline: 'none',
-                WebkitAppearance: 'none',
-                appearance: 'none',
-              }}
-            />
-            <span style={{ 
-              minWidth: '60px', 
-              textAlign: 'right',
-              color: theme.text.primary,
-              fontWeight: 'bold',
-            }}>
-              {maxContextTokens >= 1000 ? `${Math.round(maxContextTokens / 1000)}K` : maxContextTokens}
-            </span>
-          </div>
-          <style>{`
-            input[type="range"]::-webkit-slider-thumb {
-              -webkit-appearance: none;
-              appearance: none;
-              width: 18px;
-              height: 18px;
-              border-radius: 50%;
-              background: ${theme.border.focus};
-              cursor: pointer;
-              border: 2px solid ${theme.background.panel};
-              box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-            }
-            input[type="range"]::-webkit-slider-thumb:hover {
-              background: ${theme.button.primary.background};
-              transform: scale(1.1);
-            }
-            input[type="range"]::-moz-range-thumb {
-              width: 18px;
-              height: 18px;
-              border-radius: 50%;
-              background: ${theme.border.focus};
-              cursor: pointer;
-              border: 2px solid ${theme.background.panel};
-              box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-            }
-            input[type="range"]::-moz-range-thumb:hover {
-              background: ${theme.button.primary.background};
-              transform: scale(1.1);
-            }
-            input[type="range"]::-ms-thumb {
-              width: 18px;
-              height: 18px;
-              border-radius: 50%;
-              background: ${theme.border.focus};
-              cursor: pointer;
-              border: 2px solid ${theme.background.panel};
-              box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-            }
-            input[type="range"]::-ms-thumb:hover {
-              background: ${theme.button.primary.background};
-              transform: scale(1.1);
-            }
-          `}</style>
-        </label>
-      </div>
-
-      <div style={{ marginBottom: '1rem' }}>
-        <label style={{ color: theme.text.primary, display: 'block' }}>
-          Max tokens génération:
-          {validationErrors.maxCompletionTokens && (
-            <div style={{ fontSize: '0.85rem', color: theme.state.error.color, marginTop: '0.25rem' }}>
-              {validationErrors.maxCompletionTokens}
-            </div>
-          )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem' }}>
-            <input
-              type="range"
-              min={100}
-              max={16000}
-              step={500}
-              value={maxCompletionTokens ?? 10000}
-              onChange={(e) => {
-                const value = parseInt(e.target.value)
-                setMaxCompletionTokens(value === 10000 ? null : value) // null = valeur par défaut
-                setIsDirty(true)
-                setSaveStatus('unsaved')
-              }}
-              style={{ 
-                flex: 1,
-                height: '6px',
-                borderRadius: '3px',
-                background: `linear-gradient(to right, ${theme.border.focus} 0%, ${theme.border.focus} ${((maxCompletionTokens ?? 10000) - 100) / (16000 - 100) * 100}%, ${theme.input.background} ${((maxCompletionTokens ?? 10000) - 100) / (16000 - 100) * 100}%, ${theme.input.background} 100%)`,
-                outline: 'none',
-                WebkitAppearance: 'none',
-                appearance: 'none',
-                cursor: 'pointer',
-              }}
-            />
-            <span style={{ 
-              minWidth: '70px', 
-              textAlign: 'right',
-              color: theme.text.primary,
-              fontWeight: 'bold',
-            }}>
-              {maxCompletionTokens ? (maxCompletionTokens >= 1000 ? `${Math.round(maxCompletionTokens / 1000)}K` : maxCompletionTokens) : 'Auto (10K)'}
-            </span>
-          </div>
-          <style>{`
-            input[type="range"][value="${maxCompletionTokens ?? 10000}"]::-webkit-slider-runnable-track {
-              height: 6px;
-              border-radius: 3px;
-            }
-            input[type="range"][value="${maxCompletionTokens ?? 10000}"]::-moz-range-track {
-              height: 6px;
-              border-radius: 3px;
-              background: ${theme.input.background};
-            }
-            input[type="range"][value="${maxCompletionTokens ?? 10000}"]::-webkit-slider-thumb {
-              -webkit-appearance: none;
-              appearance: none;
-              width: 18px;
-              height: 18px;
-              border-radius: 50%;
-              background: ${theme.border.focus};
-              cursor: pointer;
-              border: 2px solid ${theme.background.panel};
-              box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-              margin-top: -6px;
-            }
-            input[type="range"][value="${maxCompletionTokens ?? 10000}"]::-webkit-slider-thumb:hover {
-              background: ${theme.button.primary.background};
-              transform: scale(1.1);
-            }
-            input[type="range"][value="${maxCompletionTokens ?? 10000}"]::-moz-range-thumb {
-              width: 18px;
-              height: 18px;
-              border-radius: 50%;
-              background: ${theme.border.focus};
-              cursor: pointer;
-              border: 2px solid ${theme.background.panel};
-              box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-            }
-            input[type="range"][value="${maxCompletionTokens ?? 10000}"]::-moz-range-thumb:hover {
-              background: ${theme.button.primary.background};
-              transform: scale(1.1);
-            }
-            input[type="range"][value="${maxCompletionTokens ?? 10000}"]::-ms-thumb {
-              width: 18px;
-              height: 18px;
-              border-radius: 50%;
-              background: ${theme.border.focus};
-              cursor: pointer;
-              border: 2px solid ${theme.background.panel};
-              box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-            }
-            input[type="range"][value="${maxCompletionTokens ?? 10000}"]::-ms-thumb:hover {
-              background: ${theme.button.primary.background};
-              transform: scale(1.1);
-            }
-          `}</style>
-        </label>
-      </div>
-
-      <div style={{ marginBottom: '1rem' }}>
-        <label style={{ color: theme.text.primary, display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-          Mode de génération des choix:
-        </label>
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: theme.text.primary }}>
-            <input
-              type="radio"
-              name="choicesMode"
-              value="free"
-              checked={choicesMode === 'free'}
-              onChange={() => {
-                setChoicesMode('free')
-                setIsDirty(true)
-                setSaveStatus('unsaved')
-              }}
-              style={{ marginRight: '0.5rem' }}
-            />
-            Libre
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: theme.text.primary }}>
-            <input
-              type="radio"
-              name="choicesMode"
-              value="capped"
-              checked={choicesMode === 'capped'}
-              onChange={() => {
-                setChoicesMode('capped')
-                setIsDirty(true)
-                setSaveStatus('unsaved')
-              }}
-              style={{ marginRight: '0.5rem' }}
-            />
-            Limité
-          </label>
         </div>
       </div>
 
-      <div style={{ marginBottom: '1rem', opacity: choicesMode === 'capped' ? 1 : 0.5, pointerEvents: choicesMode === 'capped' ? 'auto' : 'none' }}>
+      {/* Sliders de tokens sur une seule ligne */}
+      <div style={{ marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+          {/* Slider Max tokens contexte */}
+          <div style={{ flex: 1 }}>
+            <label style={{ color: theme.text.primary, display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: 500 }}>
+              Max tokens contexte
+            </label>
+            {validationErrors.maxContextTokens && (
+              <div style={{ fontSize: '0.85rem', color: theme.state.error.color, marginBottom: '0.25rem' }}>
+                {validationErrors.maxContextTokens}
+              </div>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <input
+                ref={maxContextSliderRef}
+                type="range"
+                className="token-slider"
+                min={CONTEXT_TOKENS_LIMITS.MIN}
+                max={CONTEXT_TOKENS_LIMITS.MAX}
+                step={CONTEXT_TOKENS_LIMITS.STEP}
+                value={maxContextTokens}
+                onChange={(e) => {
+                  setMaxContextTokens(parseInt(e.target.value))
+                  setIsDirty(true)
+                  setSaveStatus('unsaved')
+                }}
+                style={{ 
+                  flex: 1,
+                  height: '6px',
+                  borderRadius: '3px',
+                  background: theme.input.background,
+                  outline: 'none',
+                  WebkitAppearance: 'none',
+                  appearance: 'none',
+                  padding: 0,
+                  margin: 0,
+                }}
+              />
+              <span style={{ 
+                minWidth: '60px', 
+                textAlign: 'right',
+                color: theme.text.primary,
+                fontWeight: 'bold',
+              }}>
+                {maxContextTokens >= 1000 ? `${Math.round(maxContextTokens / 1000)}K` : maxContextTokens}
+              </span>
+            </div>
+          </div>
+
+          {/* Slider Max tokens génération */}
+          <div style={{ flex: 1 }}>
+            <label style={{ color: theme.text.primary, display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: 500 }}>
+              Max tokens génération
+            </label>
+            {validationErrors.maxCompletionTokens && (
+              <div style={{ fontSize: '0.85rem', color: theme.state.error.color, marginBottom: '0.25rem' }}>
+                {validationErrors.maxCompletionTokens}
+              </div>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <input
+                ref={maxCompletionSliderRef}
+                type="range"
+                className="token-slider"
+                min={100}
+                max={16000}
+                step={500}
+                value={maxCompletionTokens ?? 10000}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value)
+                  setMaxCompletionTokens(value === 10000 ? null : value) // null = valeur par défaut
+                  setIsDirty(true)
+                  setSaveStatus('unsaved')
+                }}
+                style={{ 
+                  flex: 1,
+                  height: '6px',
+                  borderRadius: '3px',
+                  background: theme.input.background,
+                  outline: 'none',
+                  WebkitAppearance: 'none',
+                  appearance: 'none',
+                  padding: 0,
+                  margin: 0,
+                }}
+              />
+              <span style={{ 
+                minWidth: '70px', 
+                textAlign: 'right',
+                color: theme.text.primary,
+                fontWeight: 'bold',
+              }}>
+                {maxCompletionTokens ? (maxCompletionTokens >= 1000 ? `${Math.round(maxCompletionTokens / 1000)}K` : maxCompletionTokens) : 'Auto (10K)'}
+              </span>
+            </div>
+          </div>
+        </div>
+        <style>{`
+          .token-slider {
+            --range-track-bg: ${theme.input.background};
+          }
+
+          .token-slider::-webkit-slider-runnable-track {
+            height: 6px;
+            border-radius: 3px;
+            background: var(--range-track-bg);
+          }
+          .token-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: ${theme.border.focus};
+            cursor: pointer;
+            border: 2px solid ${theme.background.panel};
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            margin-top: -6px;
+          }
+          .token-slider::-webkit-slider-thumb:hover {
+            background: ${theme.button.primary.background};
+            transform: scale(1.1);
+          }
+          .token-slider::-moz-range-track {
+            height: 6px;
+            border-radius: 3px;
+            background: var(--range-track-bg);
+          }
+          .token-slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: ${theme.border.focus};
+            cursor: pointer;
+            border: 2px solid ${theme.background.panel};
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+          }
+          .token-slider::-moz-range-thumb:hover {
+            background: ${theme.button.primary.background};
+            transform: scale(1.1);
+          }
+          .token-slider::-ms-track {
+            height: 6px;
+            border-radius: 3px;
+            background: var(--range-track-bg);
+            border: none;
+            color: transparent;
+          }
+          .token-slider::-ms-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: ${theme.border.focus};
+            cursor: pointer;
+            border: 2px solid ${theme.background.panel};
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+          }
+          .token-slider::-ms-thumb:hover {
+            background: ${theme.button.primary.background};
+            transform: scale(1.1);
+          }
+        `}</style>
+      </div>
+
+      <div style={{ marginBottom: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
           <label style={{ color: theme.text.primary, margin: 0 }}>
-            Nombre max de choix (si limité):
+            Nombre max de choix
           </label>
 
           <div style={{ position: 'relative', display: 'inline-block' }}>
@@ -1451,7 +1482,7 @@ export function GenerationPanel() {
                 justifyContent: 'center',
                 padding: 0,
               }}
-              title="0 = aucun choix (dialogue linéaire), 1-8 = nombre max de choix, vide = l'IA décide"
+              title="Vide = Mode Libre (l'IA décide entre 2 et 8 choix). Valeur 0-8 = Mode Limité (l'IA génère entre 1 et cette valeur). 0 = aucun choix (dialogue linéaire)."
             >
               ?
             </button>
@@ -1463,11 +1494,11 @@ export function GenerationPanel() {
           onChange={(e) => {
             const value = e.target.value
             if (value === '') {
-              setMaxChoices(null)
+              setMaxChoices(null) // Mode Libre
             } else {
               const num = parseInt(value)
               if (!isNaN(num) && num >= 0 && num <= 8) {
-                setMaxChoices(num)
+                setMaxChoices(num) // Mode Limité
               }
             }
             setIsDirty(true)
@@ -1475,7 +1506,7 @@ export function GenerationPanel() {
           }}
           min={0}
           max={8}
-          placeholder="Libre"
+          placeholder="Vide = Libre (2-8 choix)"
           style={{ 
             width: '100%', 
             padding: '0.5rem', 

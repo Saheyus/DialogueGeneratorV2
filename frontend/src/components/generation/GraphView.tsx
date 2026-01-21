@@ -26,8 +26,15 @@ interface GraphViewProps {
 
 /**
  * Convertit un dialogue Unity JSON en format ReactFlow (nodes + edges).
+ * 
+ * ⚠️ NOTE ARCHITECTURE :
+ * Cette fonction est une "projection de présentation" pour ce composant read-only.
+ * Pour la projection canonique (avec validation, gestion complète des TestNodes avec 4 résultats),
+ * utilisez l'API /load qui utilise GraphConversionService (backend).
+ * 
+ * Voir docs/architecture/graph-conversion-architecture.md pour plus de détails.
  */
-function unityJsonToGraph(jsonContent: string): { nodes: Node[]; edges: Edge[] } {
+export function unityJsonToGraph(jsonContent: string): { nodes: Node[]; edges: Edge[] } {
   try {
     const unityNodes: UnityDialogueNode[] = JSON.parse(jsonContent)
     
@@ -37,6 +44,9 @@ function unityJsonToGraph(jsonContent: string): { nodes: Node[]; edges: Edge[] }
     
     const reactflowNodes: Node[] = []
     const reactflowEdges: Edge[] = []
+    
+    // Map pour stocker les TestNodes créés par choix (pour éviter les doublons)
+    const testNodeMap = new Map<string, string>() // key: `${nodeId}-choice-${index}`, value: testNodeId
     
     const xOffset = 0
     let yOffset = 0
@@ -97,7 +107,97 @@ function unityJsonToGraph(jsonContent: string): { nodes: Node[]; edges: Edge[] }
       
       if (unityNode.choices) {
         unityNode.choices.forEach((choice, index) => {
-          if (choice.targetNode) {
+          // Si le choix a un attribut test, créer un TestNode automatiquement
+          if (choice.test) {
+            const testNodeKey = `${nodeId}-choice-${index}`
+            let testNodeId = testNodeMap.get(testNodeKey)
+            
+            // Créer le TestNode s'il n'existe pas déjà
+            if (!testNodeId) {
+              testNodeId = `test-node-${nodeId}-choice-${index}`
+              testNodeMap.set(testNodeKey, testNodeId)
+              
+              // Créer le TestNode avec les données du test
+              reactflowNodes.push({
+                id: testNodeId,
+                type: 'testNode',
+                position: { x: xOffset + 300, y: yOffset - 150 + (index * 200) },
+                data: {
+                  test: choice.test,
+                  line: choice.text,
+                  // Stocker les IDs des nœuds cibles pour créer les edges
+                  testCriticalFailureNode: choice.testCriticalFailureNode,
+                  testFailureNode: choice.testFailureNode,
+                  testSuccessNode: choice.testSuccessNode,
+                  testCriticalSuccessNode: choice.testCriticalSuccessNode,
+                },
+              })
+              
+              // Créer l'edge depuis le DialogueNode vers le TestNode (via le handle du choix)
+              const choiceText = choice.text || `Choix ${index + 1}`
+              // Tronquer le label pour l'affichage (comme pour les autres edges)
+              const truncatedLabel = choiceText.length > 30 ? `${choiceText.substring(0, 30)}...` : choiceText
+              reactflowEdges.push({
+                id: `${nodeId}-choice-${index}-to-test`,
+                source: nodeId,
+                target: testNodeId,
+                sourceHandle: `choice-${index}`,
+                type: 'smoothstep',
+                label: truncatedLabel,
+              })
+              
+              // Créer les 4 edges depuis le TestNode vers les nœuds de résultat (si ils existent)
+              const testResults = [
+                {
+                  field: 'testCriticalFailureNode',
+                  nodeId: choice.testCriticalFailureNode,
+                  label: 'Échec critique',
+                  color: '#C0392B',
+                  handleId: 'critical-failure',
+                },
+                {
+                  field: 'testFailureNode',
+                  nodeId: choice.testFailureNode,
+                  label: 'Échec',
+                  color: '#E74C3C',
+                  handleId: 'failure',
+                },
+                {
+                  field: 'testSuccessNode',
+                  nodeId: choice.testSuccessNode,
+                  label: 'Réussite',
+                  color: '#27AE60',
+                  handleId: 'success',
+                },
+                {
+                  field: 'testCriticalSuccessNode',
+                  nodeId: choice.testCriticalSuccessNode,
+                  label: 'Réussite critique',
+                  color: '#229954',
+                  handleId: 'critical-success',
+                },
+              ]
+              
+              testResults.forEach((result) => {
+                if (result.nodeId) {
+                  // Vérifier que le nœud cible existe dans le graphe
+                  const targetNodeExists = unityNodes.some((n) => n.id === result.nodeId)
+                  if (targetNodeExists) {
+                    reactflowEdges.push({
+                      id: `${testNodeId}-${result.handleId}-${result.nodeId}`,
+                      source: testNodeId,
+                      target: result.nodeId,
+                      sourceHandle: result.handleId,
+                      type: 'smoothstep',
+                      label: result.label,
+                      style: { stroke: result.color },
+                    })
+                  }
+                }
+              })
+            }
+          } else if (choice.targetNode) {
+            // Choix normal sans test
             reactflowEdges.push({
               id: `${nodeId}-choice-${index}-${choice.targetNode}`,
               source: nodeId,

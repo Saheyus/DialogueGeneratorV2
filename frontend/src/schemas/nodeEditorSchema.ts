@@ -20,6 +20,10 @@ export const choiceSchema = z.object({
   condition: z.string().optional(),
   traitRequirements: z.array(traitRequirementSchema).optional(),
   test: z.string().optional(),
+  testCriticalFailureNode: z.string().optional(),
+  testFailureNode: z.string().optional(),
+  testSuccessNode: z.string().optional(),
+  testCriticalSuccessNode: z.string().optional(),
   allowInfluenceForcing: z.boolean().optional(),
   influenceThreshold: z.number().int().optional(),
   influenceDelta: z.number().int().optional(),
@@ -44,8 +48,10 @@ export const testNodeDataSchema = z.object({
   id: z.string(),
   test: z.string().min(1, 'Le test d\'attribut est requis (format: Attribut+Compétence:DD)'),
   line: z.string().optional(),
-  successNode: z.string().optional(),
+  criticalFailureNode: z.string().optional(),
   failureNode: z.string().optional(),
+  successNode: z.string().optional(),
+  criticalSuccessNode: z.string().optional(),
 })
 
 /**

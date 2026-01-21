@@ -15,6 +15,14 @@ class UnityJsonRenderer:
     
     Le format Unity attend un tableau de nœuds à la racine : [{"id": "...", ...}, ...]
     """
+    
+    # Champs de résultats de test dans les choix (4 résultats possibles)
+    TEST_RESULT_FIELDS = [
+        "testCriticalFailureNode",
+        "testFailureNode",
+        "testSuccessNode",
+        "testCriticalSuccessNode",
+    ]
 
     # Méthodes render_interactions, render_interactions_to_string, render_interactions_to_file,
     # et _interaction_to_node supprimées - système obsolète remplacé par Unity JSON direct
@@ -88,6 +96,39 @@ class UnityJsonRenderer:
         
         return normalized
     
+    def _validate_choice_references(
+        self,
+        node_id: str,
+        choices: List[Dict[str, Any]],
+        valid_ids: Set[str],
+        errors: List[str]
+    ) -> None:
+        """Valide les références dans les choix d'un nœud.
+        
+        Args:
+            node_id: ID du nœud parent.
+            choices: Liste des choix à valider.
+            valid_ids: Ensemble des IDs de nœuds valides.
+            errors: Liste d'erreurs à laquelle ajouter les erreurs trouvées.
+        """
+        for i, choice in enumerate(choices):
+            choice_index = i + 1
+            
+            # Valider targetNode
+            target = choice.get("targetNode")
+            if target and target not in valid_ids:
+                errors.append(
+                    f"Nœud '{node_id}', choix {choice_index}: Référence invalide dans 'targetNode': '{target}'"
+                )
+            
+            # Valider les 4 résultats de test
+            for test_field in self.TEST_RESULT_FIELDS:
+                test_target = choice.get(test_field)
+                if test_target and test_target not in valid_ids:
+                    errors.append(
+                        f"Nœud '{node_id}', choix {choice_index}: Référence invalide dans '{test_field}': '{test_target}'"
+                    )
+    
     def validate_nodes(self, nodes: List[Dict[str, Any]]) -> Tuple[bool, List[str]]:
         """Valide une liste de nœuds Unity.
         
@@ -134,12 +175,7 @@ class UnityJsonRenderer:
             
             # Valider les références dans choices[]
             if "choices" in node:
-                for i, choice in enumerate(node["choices"]):
-                    target = choice.get("targetNode")
-                    if target and target not in valid_ids:
-                        errors.append(
-                            f"Nœud '{node_id}', choix {i+1}: Référence invalide dans 'targetNode': '{target}'"
-                        )
+                self._validate_choice_references(node_id, node["choices"], valid_ids, errors)
         
         return (len(errors) == 0, errors)
     

@@ -157,10 +157,145 @@ class UnityDialogueGenerationService:
         logger.info("Nœud généré avec succès")
         return result
     
+    async def generate_nodes_for_choice_with_test(
+        self,
+        llm_client: ILLMClient,
+        choice_content: UnityDialogueChoiceContent,
+        parent_node_id: str,
+        choice_index: int,
+        instructions: str,
+        parent_speaker: str = "PNJ",
+        parent_line: str = "",
+        system_prompt_override: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Génère 4 nœuds pour un choix avec attribut test.
+        
+        AC: #1, #3 - Génération de 4 réponses (échec critique, échec, réussite, réussite critique).
+        
+        Args:
+            llm_client: Client LLM pour la génération.
+            choice_content: Contenu du choix avec attribut test.
+            parent_node_id: ID du nœud parent.
+            choice_index: Index du choix dans le nœud parent.
+            instructions: Instructions pour la génération.
+            parent_speaker: Speaker du nœud parent.
+            parent_line: Ligne de dialogue du nœud parent.
+            system_prompt_override: Surcharge du system prompt (optionnel).
+            
+        Returns:
+            Dictionnaire contenant:
+            - "nodes": Liste de 4 nœuds enrichis (critical-failure, failure, success, critical-success)
+            - "connections": Liste avec une connexion contenant les 4 champs test*Node
+        """
+        if not choice_content.test:
+            raise ValueError("Le choix doit avoir un attribut test pour générer 4 nœuds")
+        
+        logger.info(f"Génération de 4 nœuds pour choix avec test: {choice_content.test}")
+        
+        # Extraire DD du test (format: Attribut+Compétence:DD)
+        try:
+            test_parts = choice_content.test.split(":")
+            if len(test_parts) != 2:
+                raise ValueError(f"Format de test invalide: {choice_content.test}")
+            dd = int(test_parts[1])
+        except (ValueError, IndexError) as e:
+            logger.warning(f"Impossible d'extraire DD du test {choice_content.test}, utilisation de DD=8 par défaut")
+            dd = 8
+        
+        # Prompts pour chaque résultat
+        result_contexts = [
+            {
+                "name": "critical-failure",
+                "label": "Échec critique",
+                "description": f"Le joueur a échoué de manière critique (score < {dd} - 5). La réponse doit être très négative avec des conséquences graves.",
+                "node_id_suffix": "CRITICAL_FAILURE"
+            },
+            {
+                "name": "failure",
+                "label": "Échec",
+                "description": f"Le joueur a échoué (score >= {dd} - 5 et < {dd}). La réponse doit être négative avec des conséquences modérées.",
+                "node_id_suffix": "FAILURE"
+            },
+            {
+                "name": "success",
+                "label": "Réussite",
+                "description": f"Le joueur a réussi (score >= {dd} et < {dd} + 5). La réponse doit être positive avec des conséquences favorables.",
+                "node_id_suffix": "SUCCESS"
+            },
+            {
+                "name": "critical-success",
+                "label": "Réussite critique",
+                "description": f"Le joueur a réussi de manière exceptionnelle (score >= {dd} + 5). La réponse doit être très positive avec des conséquences exceptionnelles.",
+                "node_id_suffix": "CRITICAL_SUCCESS"
+            }
+        ]
+        
+        # Générer les 4 nœuds
+        generated_nodes = []
+        node_ids = {}
+        
+        for result_context in result_contexts:
+            # Construire le prompt enrichi pour ce résultat
+            enriched_prompt = f"""Contexte précédent:
+{parent_speaker}: {parent_line}
+
+Réponse du joueur:
+{choice_content.text}
+
+Test d'attribut: {choice_content.test} (DD={dd})
+
+Résultat du test: {result_context["label"]}
+{result_context["description"]}
+
+Instructions pour la suite:
+{instructions}
+"""
+            
+            # Générer le nœud pour ce résultat
+            response = await self.generate_dialogue_node(
+                llm_client=llm_client,
+                prompt=enriched_prompt,
+                system_prompt_override=system_prompt_override,
+                max_choices=None
+            )
+            
+            # Générer l'ID du nœud
+            if parent_node_id.startswith("NODE_"):
+                node_id = f"{parent_node_id}_CHOICE_{choice_index}_{result_context['node_id_suffix']}"
+            else:
+                node_id = f"NODE_{parent_node_id}_CHOICE_{choice_index}_{result_context['node_id_suffix']}"
+            
+            # Enrichir avec ID
+            enriched = self.enrich_with_ids(
+                content=response,
+                start_id=node_id
+            )
+            
+            if enriched:
+                generated_nodes.extend(enriched)
+                node_ids[result_context["name"]] = node_id
+        
+        # Créer la connexion avec les 4 champs
+        connection = {
+            "from": parent_node_id,
+            "choice_index": choice_index,
+            "testCriticalFailureNode": node_ids["critical-failure"],
+            "testFailureNode": node_ids["failure"],
+            "testSuccessNode": node_ids["success"],
+            "testCriticalSuccessNode": node_ids["critical-success"]
+        }
+        
+        logger.info(f"Génération terminée: 4 nœuds créés pour choix avec test")
+        return {
+            "nodes": generated_nodes,
+            "connections": [connection]
+        }
+    
     def enrich_with_ids(
         self,
         content: UnityDialogueGenerationResponse,
-        start_id: str = "START"
+        start_id: str = "START",
+        test_result_node_ids: Optional[Dict[str, str]] = None
     ) -> List[Dict[str, Any]]:
         """Ajoute les IDs techniques et gère la navigation.
         
@@ -233,6 +368,12 @@ class UnityDialogueGenerationService:
                 # Ajouter les champs optionnels du choix (champs créatifs que l'IA peut générer)
                 if choice_content.test:
                     choice_dict["test"] = choice_content.test
+                    # Si test_result_node_ids est fourni, établir les 4 connexions
+                    if test_result_node_ids:
+                        choice_dict["testCriticalFailureNode"] = test_result_node_ids.get("critical-failure")
+                        choice_dict["testFailureNode"] = test_result_node_ids.get("failure")
+                        choice_dict["testSuccessNode"] = test_result_node_ids.get("success")
+                        choice_dict["testCriticalSuccessNode"] = test_result_node_ids.get("critical-success")
                 if choice_content.traitRequirements:
                     choice_dict["traitRequirements"] = choice_content.traitRequirements
                 if choice_content.allowInfluenceForcing is not None:

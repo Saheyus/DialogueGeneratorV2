@@ -217,6 +217,143 @@ export const ChoiceEditor = memo(function ChoiceEditor({
         </div>
       </div>
       
+      {/* Résultats de test (affichés seulement si test est défini) */}
+      {currentChoice?.test && (
+        <div style={{ marginBottom: '0.75rem', padding: '0.75rem', backgroundColor: theme.background.secondary, borderRadius: 6, border: `1px solid ${theme.border.primary}` }}>
+          <h5 style={{ margin: '0 0 0.75rem 0', fontSize: '0.85rem', fontWeight: 'bold', color: theme.text.primary }}>
+            Résultats de test
+          </h5>
+          
+          {/* Échec critique */}
+          <div style={{ marginBottom: '0.75rem' }}>
+            <label
+              htmlFor={`choice-${choiceIndex}-testCriticalFailureNode`}
+              style={{
+                display: 'block',
+                marginBottom: '0.5rem',
+                fontSize: '0.85rem',
+                fontWeight: 'bold',
+                color: theme.text.secondary,
+              }}
+            >
+              Échec critique
+            </label>
+            <input
+              id={`choice-${choiceIndex}-testCriticalFailureNode`}
+              type="text"
+              {...register(`choices.${choiceIndex}.testCriticalFailureNode` as const)}
+              placeholder="ID du nœud (ex: NODE_CRITICAL_FAILURE)"
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                border: `1px solid ${theme.border.primary}`,
+                borderRadius: 4,
+                backgroundColor: theme.background.tertiary,
+                color: theme.text.primary,
+                fontSize: '0.85rem',
+                fontFamily: 'monospace',
+              }}
+            />
+          </div>
+          
+          {/* Échec */}
+          <div style={{ marginBottom: '0.75rem' }}>
+            <label
+              htmlFor={`choice-${choiceIndex}-testFailureNode`}
+              style={{
+                display: 'block',
+                marginBottom: '0.5rem',
+                fontSize: '0.85rem',
+                fontWeight: 'bold',
+                color: theme.text.secondary,
+              }}
+            >
+              Échec
+            </label>
+            <input
+              id={`choice-${choiceIndex}-testFailureNode`}
+              type="text"
+              {...register(`choices.${choiceIndex}.testFailureNode` as const)}
+              placeholder="ID du nœud (ex: NODE_FAILURE)"
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                border: `1px solid ${theme.border.primary}`,
+                borderRadius: 4,
+                backgroundColor: theme.background.tertiary,
+                color: theme.text.primary,
+                fontSize: '0.85rem',
+                fontFamily: 'monospace',
+              }}
+            />
+          </div>
+          
+          {/* Réussite */}
+          <div style={{ marginBottom: '0.75rem' }}>
+            <label
+              htmlFor={`choice-${choiceIndex}-testSuccessNode`}
+              style={{
+                display: 'block',
+                marginBottom: '0.5rem',
+                fontSize: '0.85rem',
+                fontWeight: 'bold',
+                color: theme.text.secondary,
+              }}
+            >
+              Réussite
+            </label>
+            <input
+              id={`choice-${choiceIndex}-testSuccessNode`}
+              type="text"
+              {...register(`choices.${choiceIndex}.testSuccessNode` as const)}
+              placeholder="ID du nœud (ex: NODE_SUCCESS)"
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                border: `1px solid ${theme.border.primary}`,
+                borderRadius: 4,
+                backgroundColor: theme.background.tertiary,
+                color: theme.text.primary,
+                fontSize: '0.85rem',
+                fontFamily: 'monospace',
+              }}
+            />
+          </div>
+          
+          {/* Réussite critique */}
+          <div style={{ marginBottom: '0.75rem' }}>
+            <label
+              htmlFor={`choice-${choiceIndex}-testCriticalSuccessNode`}
+              style={{
+                display: 'block',
+                marginBottom: '0.5rem',
+                fontSize: '0.85rem',
+                fontWeight: 'bold',
+                color: theme.text.secondary,
+              }}
+            >
+              Réussite critique
+            </label>
+            <input
+              id={`choice-${choiceIndex}-testCriticalSuccessNode`}
+              type="text"
+              {...register(`choices.${choiceIndex}.testCriticalSuccessNode` as const)}
+              placeholder="ID du nœud (ex: NODE_CRITICAL_SUCCESS)"
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                border: `1px solid ${theme.border.primary}`,
+                borderRadius: 4,
+                backgroundColor: theme.background.tertiary,
+                color: theme.text.primary,
+                fontSize: '0.85rem',
+                fontFamily: 'monospace',
+              }}
+            />
+          </div>
+        </div>
+      )}
+      
       {/* Modificateurs d'influence et respect */}
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem' }}>
         <div style={{ flex: 1 }}>

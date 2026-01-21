@@ -50,7 +50,9 @@ development_status:
   0-7-cost-governance-id-003: done
   0-8-streaming-cleanup-id-004: done
   0-9-preset-validation-id-005: in-progress
-  0-10-tests-4-resultats-critiques: ready-for-dev
+  0-10-tests-4-resultats-critiques: done
+  0-11-header-refactoring-ui-consolidation: done
+  0-12-ui-refactoring-generation-panel-sliders-tooltips: done
   epic-0-retrospective: optional
   epic-1: backlog
   1-1-générer-un-nœud-de-dialogue-single-avec-llm-fr1: backlog

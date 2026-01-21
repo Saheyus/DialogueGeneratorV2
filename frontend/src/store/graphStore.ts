@@ -210,11 +210,166 @@ export const useGraphStore = create<GraphState>()(
       
       // Mettre à jour un nœud
       updateNode: (nodeId: string, updates: Partial<Node>) => {
-        set((state) => ({
-          nodes: state.nodes.map((node) =>
+        set((state) => {
+          const updatedNodes = state.nodes.map((node) =>
             node.id === nodeId ? { ...node, ...updates } : node
-          ),
-        }))
+          )
+          
+          // Trouver le nœud mis à jour
+          const updatedNode = updatedNodes.find((n) => n.id === nodeId)
+          if (!updatedNode || updatedNode.type !== 'dialogueNode') {
+            return { nodes: updatedNodes }
+          }
+          
+          // Vérifier si un choix a obtenu ou perdu un attribut test
+          const updatedData = updatedNode.data as any
+          const choices = updatedData?.choices || []
+          
+          const newNodes = [...updatedNodes]
+          const newEdges = [...state.edges]
+          
+          // Parcourir tous les choix pour détecter les changements
+          choices.forEach((choice: any, choiceIndex: number) => {
+            const testNodeId = `test-node-${nodeId}-choice-${choiceIndex}`
+            const existingTestNode = newNodes.find((n) => n.id === testNodeId)
+            const existingEdge = newEdges.find(
+              (e) => e.source === nodeId && e.target === testNodeId && e.sourceHandle === `choice-${choiceIndex}`
+            )
+            
+            if (choice.test) {
+              // Le choix a un test : créer le TestNode s'il n'existe pas
+              if (!existingTestNode) {
+                // Calculer la position du TestNode (à droite du DialogueNode)
+                const dialogueNode = updatedNode
+                const testNodePosition = {
+                  x: (dialogueNode.position?.x || 0) + 300,
+                  y: (dialogueNode.position?.y || 0) - 150 + (choiceIndex * 200),
+                }
+                
+                // Créer le TestNode
+                newNodes.push({
+                  id: testNodeId,
+                  type: 'testNode',
+                  position: testNodePosition,
+                  data: {
+                    id: testNodeId,
+                    test: choice.test,
+                    line: choice.text || '',
+                    criticalFailureNode: choice.testCriticalFailureNode,
+                    failureNode: choice.testFailureNode,
+                    successNode: choice.testSuccessNode,
+                    criticalSuccessNode: choice.testCriticalSuccessNode,
+                  },
+                })
+              } else {
+                // Mettre à jour le TestNode existant avec les nouvelles données
+                const testNodeIndex = newNodes.findIndex((n) => n.id === testNodeId)
+                if (testNodeIndex !== -1) {
+                  newNodes[testNodeIndex] = {
+                    ...newNodes[testNodeIndex],
+                    data: {
+                      ...newNodes[testNodeIndex].data,
+                      test: choice.test,
+                      line: choice.text || '',
+                      criticalFailureNode: choice.testCriticalFailureNode,
+                      failureNode: choice.testFailureNode,
+                      successNode: choice.testSuccessNode,
+                      criticalSuccessNode: choice.testCriticalSuccessNode,
+                    },
+                  }
+                }
+              }
+              
+              // Créer l'edge DialogueNode → TestNode s'il n'existe pas
+              if (!existingEdge) {
+                const choiceText = choice.text || `Choix ${choiceIndex + 1}`
+                // Tronquer le label pour l'affichage (comme pour les autres edges)
+                const truncatedLabel = choiceText.length > 30 ? `${choiceText.substring(0, 30)}...` : choiceText
+                newEdges.push({
+                  id: `${nodeId}-choice-${choiceIndex}-to-test`,
+                  source: nodeId,
+                  target: testNodeId,
+                  sourceHandle: `choice-${choiceIndex}`,
+                  type: 'smoothstep',
+                  label: truncatedLabel,
+                })
+              }
+              
+              // Créer les edges TestNode → nœuds de résultat (si les nœuds existent)
+              const testResults = [
+                { field: 'testCriticalFailureNode', handleId: 'critical-failure', color: '#C0392B', label: 'Échec critique' },
+                { field: 'testFailureNode', handleId: 'failure', color: '#E74C3C', label: 'Échec' },
+                { field: 'testSuccessNode', handleId: 'success', color: '#27AE60', label: 'Réussite' },
+                { field: 'testCriticalSuccessNode', handleId: 'critical-success', color: '#229954', label: 'Réussite critique' },
+              ]
+              
+              testResults.forEach((result) => {
+                const targetNodeId = choice[result.field]
+                if (targetNodeId) {
+                  // Vérifier que le nœud cible existe
+                  const targetNodeExists = newNodes.some((n) => n.id === targetNodeId)
+                  if (targetNodeExists) {
+                    // Vérifier que l'edge n'existe pas déjà
+                    const existingResultEdge = newEdges.find(
+                      (e) => e.source === testNodeId && e.target === targetNodeId && e.sourceHandle === result.handleId
+                    )
+                    if (!existingResultEdge) {
+                      newEdges.push({
+                        id: `${testNodeId}-${result.handleId}-${targetNodeId}`,
+                        source: testNodeId,
+                        target: targetNodeId,
+                        sourceHandle: result.handleId,
+                        type: 'smoothstep',
+                        label: result.label,
+                        style: { stroke: result.color },
+                      })
+                    }
+                  }
+                }
+              })
+              
+              // Supprimer l'edge directe vers targetNode si elle existe (choix avec test n'a pas de targetNode direct)
+              if (choice.targetNode) {
+                const directEdgeIndex = newEdges.findIndex(
+                  (e) => e.source === nodeId && e.target === choice.targetNode && e.sourceHandle === `choice-${choiceIndex}`
+                )
+                if (directEdgeIndex !== -1) {
+                  newEdges.splice(directEdgeIndex, 1)
+                }
+              }
+            } else {
+              // Le choix n'a plus de test : supprimer le TestNode et ses edges
+              if (existingTestNode) {
+                // Supprimer le TestNode
+                const testNodeIndex = newNodes.findIndex((n) => n.id === testNodeId)
+                if (testNodeIndex !== -1) {
+                  newNodes.splice(testNodeIndex, 1)
+                }
+                
+                // Supprimer toutes les edges liées au TestNode
+                const edgesToRemove = newEdges.filter(
+                  (e) => e.source === testNodeId || e.target === testNodeId
+                )
+                edgesToRemove.forEach((edge) => {
+                  const edgeIndex = newEdges.findIndex((e) => e.id === edge.id)
+                  if (edgeIndex !== -1) {
+                    newEdges.splice(edgeIndex, 1)
+                  }
+                })
+              }
+            }
+          })
+          
+          return {
+            nodes: newNodes,
+            edges: newEdges,
+            dialogueMetadata: {
+              ...state.dialogueMetadata,
+              node_count: newNodes.length,
+              edge_count: newEdges.length,
+            },
+          }
+        })
         // Marquer dirty pour auto-save draft (Task 1 - Story 0.5)
         get().markDirty()
       },
@@ -583,12 +738,20 @@ export const useGraphStore = create<GraphState>()(
       },
       
       // Exporter en Unity JSON
+      // ⚠️ ATTENTION: Cette méthode utilise une logique locale simplifiée pour le draft local uniquement.
+      // Elle NE gère PAS les TestNodes avec 4 résultats (testCriticalFailureNode, testCriticalSuccessNode).
+      // Pour un export canonique avec validation complète, utilisez saveDialogue() qui appelle l'API /save.
       exportToUnity: () => {
         const state = get()
         
         // Reconvertir les nœuds ReactFlow en Unity JSON
         const unityNodes = state.nodes.map((node) => {
           const unityNode = { ...node.data }
+          
+          // Ignorer les TestNodes (ils ne sont pas dans le JSON Unity, seulement les champs test*Node dans les choix)
+          if (node.type === 'testNode') {
+            return null
+          }
           
           // Nettoyer les champs de navigation (seront recréés depuis les edges)
           delete unityNode.nextNode
@@ -599,16 +762,19 @@ export const useGraphStore = create<GraphState>()(
             unityNode.choices = unityNode.choices.map((choice: any) => {
               const cleanChoice = { ...choice }
               delete cleanChoice.targetNode
+              // Note: Cette logique locale ne reconstruit PAS les 4 résultats de test correctement
+              // (testCriticalFailureNode, testCriticalSuccessNode ne sont pas gérés)
               return cleanChoice
             })
           }
           
           return unityNode
-        })
+        }).filter((node) => node !== null) // Filtrer les TestNodes
         
         // Reconstruire les connexions depuis les edges
+        // ⚠️ Cette logique simplifiée ne gère pas les TestNodes avec 4 résultats
         for (const edge of state.edges) {
-          const sourceNode = unityNodes.find((n) => n.id === edge.source)
+          const sourceNode = unityNodes.find((n) => n && n.id === edge.source)
           if (!sourceNode) continue
           
           const edgeType = edge.data?.edgeType

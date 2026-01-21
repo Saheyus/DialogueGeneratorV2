@@ -91,16 +91,6 @@ export const SystemPromptEditor = memo(function SystemPromptEditor({
     }
   }
 
-  const handleSceneTemplateClick = useCallback((template: configAPI.SceneInstructionTemplate) => {
-    if (selectedSceneTemplateId === template.id) {
-      setShowTemplatePreview(template.id)
-    } else {
-      setSelectedSceneTemplateId(template.id)
-      // Remplacer les instructions par le contenu du template
-      onUserInstructionsChange(template.instructions)
-    }
-  }, [selectedSceneTemplateId, onUserInstructionsChange])
-
   const handleAuthorTemplateClick = useCallback((template: configAPI.AuthorProfileTemplate) => {
     if (selectedAuthorTemplateId === template.id) {
       setShowTemplatePreview(template.id)
@@ -206,47 +196,78 @@ export const SystemPromptEditor = memo(function SystemPromptEditor({
         <div style={{ padding: '1rem' }}>
           {/* Templates de scène */}
           <div style={{ marginBottom: '1rem' }}>
-            <label
-              style={{
-                display: 'block',
-                marginBottom: '0.5rem',
-                color: theme.text.primary,
-                fontSize: '0.9rem',
-                fontWeight: 500,
-              }}
-            >
-              Templates de scène:
-            </label>
             {isLoadingTemplates ? (
               <div style={{ color: theme.text.secondary, fontSize: '0.85rem' }}>
                 Chargement des templates...
               </div>
             ) : (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                {sceneTemplates.map((template) => (
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <label
+                  htmlFor="scene-template-select"
+                  style={{
+                    color: theme.text.primary,
+                    fontSize: '0.9rem',
+                    fontWeight: 500,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Templates de scène:
+                </label>
+                <select
+                  id="scene-template-select"
+                  value={selectedSceneTemplateId || ''}
+                  onChange={(e) => {
+                    const templateId = e.target.value
+                    if (templateId) {
+                      const template = sceneTemplates.find(t => t.id === templateId)
+                      if (template) {
+                        setSelectedSceneTemplateId(template.id)
+                        // Remplacer les instructions par le contenu du template
+                        onUserInstructionsChange(template.instructions)
+                      }
+                    } else {
+                      setSelectedSceneTemplateId(null)
+                    }
+                  }}
+                  style={{
+                    width: '220px',
+                    padding: '0.5rem',
+                    border: `1px solid ${theme.input.border}`,
+                    borderRadius: '4px',
+                    backgroundColor: theme.input.background,
+                    color: theme.input.color,
+                    fontSize: '0.9rem',
+                    cursor: 'pointer',
+                  }}
+                  title={selectedSceneTemplateId 
+                    ? sceneTemplates.find(t => t.id === selectedSceneTemplateId)?.description
+                    : 'Sélectionner un template de scène'}
+                >
+                  <option value="">-- Sélectionner un template --</option>
+                  {sceneTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+                </select>
+                {selectedSceneTemplateId && (
                   <button
-                    key={template.id}
-                    onClick={() => handleSceneTemplateClick(template)}
-                    onDoubleClick={() => setShowTemplatePreview(template.id)}
+                    onClick={() => setShowTemplatePreview(selectedSceneTemplateId)}
                     style={{
                       padding: '0.5rem 1rem',
-                      border: `1px solid ${selectedSceneTemplateId === template.id ? theme.border.focus : theme.border.primary}`,
+                      border: `1px solid ${theme.border.primary}`,
                       borderRadius: '4px',
-                      backgroundColor: selectedSceneTemplateId === template.id 
-                        ? theme.button.primary.background 
-                        : theme.button.default.background,
-                      color: selectedSceneTemplateId === template.id 
-                        ? theme.button.primary.color 
-                        : theme.button.default.color,
+                      backgroundColor: theme.button.default.background,
+                      color: theme.button.default.color,
                       cursor: 'pointer',
                       fontSize: '0.85rem',
+                      whiteSpace: 'nowrap',
                     }}
-                    title={`${template.description}\n\nDouble-clic pour voir le contenu complet`}
+                    title="Voir le contenu complet du template"
                   >
-                    {template.name}
-                    {selectedSceneTemplateId === template.id && ' ✓'}
+                    Aperçu
                   </button>
-                ))}
+                )}
               </div>
             )}
           </div>
@@ -348,8 +369,8 @@ export const SystemPromptEditor = memo(function SystemPromptEditor({
               </button>
             </div>
           </div>
-          <FormField label="" htmlFor="user-instructions-textarea">
-            <div style={{ position: 'relative' }}>
+          <FormField label="" htmlFor="user-instructions-textarea" style={{ marginBottom: 0 }}>
+            <div>
               <textarea
                 id="user-instructions-textarea"
                 value={userInstructions}
@@ -359,7 +380,6 @@ export const SystemPromptEditor = memo(function SystemPromptEditor({
                 style={{
                   width: '100%',
                   padding: '0.5rem',
-                  paddingBottom: '2rem',
                   boxSizing: 'border-box',
                   backgroundColor: theme.input.background,
                   border: `1px solid ${theme.input.border}`,
@@ -372,14 +392,11 @@ export const SystemPromptEditor = memo(function SystemPromptEditor({
               />
               <div
                 style={{
-                  position: 'absolute',
-                  bottom: '0.5rem',
-                  right: '0.5rem',
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  marginTop: '0.25rem',
                   fontSize: '0.75rem',
                   color: theme.text.secondary,
-                  backgroundColor: theme.background.panel,
-                  padding: '0.25rem 0.5rem',
-                  borderRadius: '4px',
                 }}
               >
                 {userInstructions.length} caractères
