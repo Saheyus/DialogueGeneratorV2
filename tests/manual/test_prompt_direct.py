@@ -1,13 +1,13 @@
 import sys
 sys.path.insert(0, '.')
 
-from prompt_engine import PromptEngine
+from core.prompt.prompt_engine import PromptEngine, PromptInput
 
 # Créer une instance de PromptEngine
 engine = PromptEngine()
 
 # Construire le prompt avec les mêmes paramètres que le test
-prompt, tokens = engine.build_unity_dialogue_prompt(
+prompt_input = PromptInput(
     user_instructions="Test",
     npc_speaker_id="Akthar-Neth Amatru, l'Exégète",
     player_character_id="URESAIR",
@@ -21,6 +21,9 @@ prompt, tokens = engine.build_unity_dialogue_prompt(
     vocabulary_config={"Mondialement": "all"},
     include_narrative_guides=True
 )
+built = engine.build_prompt(prompt_input)
+prompt = built.raw_prompt
+tokens = built.token_count
 
 print('=== LONGUEUR DU PROMPT ===')
 print(f'Longueur: {len(prompt)} caractères')

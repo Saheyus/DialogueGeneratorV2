@@ -248,9 +248,9 @@ class OpenAIClient(ILLMClient):
                 logger.info(f"Début de la génération de la variante {i+1}/{k} pour le prompt.")
                 
                 # Choix API OpenAI:
-                # - GPT-5.2 / GPT-5.2-pro: utiliser Responses API (supporte reasoning.effort)
-                # - Autres modèles: Chat Completions API (historique)
-                use_responses_api = bool(self.model_name and self.model_name.startswith("gpt-5.2"))
+                # - Tous les modèles GPT-5 (5.2, 5.2-pro, 5-mini, 5-nano): utiliser Responses API
+                # - Autres modèles (GPT-4, GPT-3.5, etc.): Chat Completions API (legacy)
+                use_responses_api = bool(self.model_name and "gpt-5" in self.model_name)
 
                 # Paramètres pour Chat Completions (legacy)
                 chat_params: Dict[str, Any] = {
@@ -278,28 +278,49 @@ class OpenAIClient(ILLMClient):
                 # Gestion tokens: Chat completions utilise max_completion_tokens / max_tokens,
                 # Responses utilise max_output_tokens.
                 if self.model_name and "gpt-5" in self.model_name:
-                    # Les modèles "thinking" (mini, nano) peuvent nécessiter plus de tokens (reasoning + output).
-                    # Note: mini/nano restent sur Chat Completions dans ce code.
-                    if self.model_name and ("gpt-5-mini" in self.model_name or "gpt-5-nano" in self.model_name):
-                        if self.max_tokens >= 10000:
-                            max_completion_tokens = self.max_tokens
-                        else:
-                            max_completion_tokens = 10000
-                        chat_params["max_completion_tokens"] = max_completion_tokens
-                        logger.info(f"Modèle thinking détecté ({self.model_name}), utilisation de max_completion_tokens={max_completion_tokens}")
-                    else:
-                        chat_params["max_completion_tokens"] = self.max_tokens
-                    # Responses API: max_output_tokens
+                    # Tous les modèles GPT-5 utilisent Responses API avec max_output_tokens
                     responses_params["max_output_tokens"] = self.max_tokens
+                    # Pour Chat Completions (fallback si nécessaire), utiliser max_completion_tokens
+                    chat_params["max_completion_tokens"] = self.max_tokens
                 else:
+                    # Modèles legacy (GPT-4, GPT-3.5, etc.)
                     chat_params["max_tokens"] = self.max_tokens
                     responses_params["max_output_tokens"] = self.max_tokens
 
                 # Reasoning effort et summary: uniquement via Responses API
+                # Note: GPT-5 mini/nano ne supportent PAS reasoning.effort="none" (seulement "minimal", "low", "medium", "high")
+                # GPT-5.2 supporte "none" et "xhigh" en plus des autres valeurs
+                # Si reasoning_effort est None, l'API utilisera "medium" par défaut (comportement implicite)
+                reasoning_config = {}  # Déclarer avant pour utilisation dans la section temperature
                 if use_responses_api:
-                    reasoning_config = {}
+                    is_mini_or_nano = "gpt-5-mini" in self.model_name or "gpt-5-nano" in self.model_name
+                    
                     if self.reasoning_effort is not None:
-                        reasoning_config["effort"] = self.reasoning_effort
+                        # Valider que le modèle supporte la valeur demandée
+                        if self.reasoning_effort == "none":
+                            # "none" uniquement supporté par GPT-5.2/5.2-pro, pas par mini/nano
+                            if is_mini_or_nano:
+                                logger.warning(
+                                    f"reasoning.effort='none' non supporté par {self.model_name}. "
+                                    f"Utilisation de 'minimal' à la place (reasoning toujours actif pour mini/nano)."
+                                )
+                                reasoning_config["effort"] = "minimal"
+                            else:
+                                reasoning_config["effort"] = self.reasoning_effort
+                        elif self.reasoning_effort == "xhigh":
+                            # "xhigh" uniquement supporté par GPT-5.2/5.2-pro
+                            if is_mini_or_nano:
+                                logger.warning(
+                                    f"reasoning.effort='xhigh' non supporté par {self.model_name}. "
+                                    f"Utilisation de 'high' à la place."
+                                )
+                                reasoning_config["effort"] = "high"
+                            else:
+                                reasoning_config["effort"] = self.reasoning_effort
+                        else:
+                            # Autres valeurs (minimal, low, medium, high) supportées par tous les modèles GPT-5
+                            reasoning_config["effort"] = self.reasoning_effort
+                        
                         # Activer automatiquement summary="detailed" si un effort est défini et que summary n'est pas explicitement désactivé
                         # "detailed" fournit un résumé plus complet que "auto" selon la doc OpenAI
                         if self.reasoning_summary is None:
@@ -310,24 +331,51 @@ class OpenAIClient(ILLMClient):
                         # Si seulement summary est défini (sans effort)
                         reasoning_config["summary"] = self.reasoning_summary
                     
+                    # Si reasoning_config a été rempli (effort ou summary défini), l'ajouter aux paramètres
+                    # Sinon, on ne spécifie pas reasoning et l'API utilisera "medium" par défaut (implicite)
                     if reasoning_config:
                         responses_params["reasoning"] = reasoning_config
                         logger.info(
                             f"Utilisation de reasoning pour {self.model_name} (Responses API): "
-                            f"effort={self.reasoning_effort}, summary={reasoning_config.get('summary', 'None')}"
+                            f"effort={reasoning_config.get('effort', 'None (default: medium)')}, summary={reasoning_config.get('summary', 'None')}"
+                        )
+                    else:
+                        # Pas de reasoning explicite : l'API utilisera "medium" par défaut pour mini/nano
+                        logger.debug(
+                            f"Reasoning non spécifié pour {self.model_name}, l'API utilisera 'medium' par défaut."
                         )
 
-                # Temperature: Chat Completions OK; Responses API uniquement si reasoning.effort == "none" (ou non spécifié)
+                # Temperature: Gestion selon l'API utilisée
+                # - Chat Completions: Temperature toujours disponible (sauf si modèle ne la supporte pas)
+                # - Responses API: Temperature uniquement si reasoning.effort == "none" (ou non spécifié)
+                #   Note: GPT-5 mini/nano ne supportent PAS reasoning.effort="none", donc temperature jamais disponible
+                #   via Responses API pour eux (mais disponible via Chat Completions)
+                is_mini_or_nano = "gpt-5-mini" in self.model_name or "gpt-5-nano" in self.model_name
+                
                 if self.model_name and self.model_name not in ModelNames.MODELS_WITHOUT_CUSTOM_TEMPERATURE:
+                    # Chat Completions: Temperature toujours disponible
                     chat_params["temperature"] = self.temperature
-                    if use_responses_api and (self.reasoning_effort in (None, "none")):
-                        responses_params["temperature"] = self.temperature
-                    elif use_responses_api and (self.reasoning_effort not in (None, "none")):
-                        logger.debug(
-                            f"Temperature omise (Responses API) car reasoning_effort='{self.reasoning_effort}' "
-                            f"(temperature supportée uniquement avec reasoning.effort='none')."
-                        )
+                    
+                    if use_responses_api:
+                        # Responses API: Temperature uniquement si reasoning.effort == "none" (ou non spécifié)
+                        # Utiliser la valeur effective du reasoning_config (après conversion pour mini/nano)
+                        effective_effort = reasoning_config.get("effort") if reasoning_config else self.reasoning_effort
+                        
+                        # GPT-5 mini/nano: toujours exclure temperature (car pas de "none")
+                        if is_mini_or_nano:
+                            logger.debug(
+                                f"Temperature omise (Responses API) pour {self.model_name} "
+                                f"(temperature non supportée car reasoning toujours actif, utilisation de Chat Completions si nécessaire)."
+                            )
+                        elif effective_effort in (None, "none"):
+                            responses_params["temperature"] = self.temperature
+                        else:
+                            logger.debug(
+                                f"Temperature omise (Responses API) car reasoning.effort='{effective_effort}' "
+                                f"(temperature supportée uniquement avec reasoning.effort='none' ou non spécifié)."
+                            )
                 elif self.model_name and self.model_name in ModelNames.MODELS_WITHOUT_CUSTOM_TEMPERATURE:
+                    # Modèles qui ne supportent pas temperature du tout (rare, mais géré)
                     logger.debug(f"Le modèle {self.model_name} ne supporte pas le paramètre temperature. Il sera omis de la requête API.")
 
                 # Logger les paramètres API (sans prompt complet) pour debug

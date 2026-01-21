@@ -83,6 +83,12 @@ async def stream_generation(job_id: str, container: ServiceContainer) -> AsyncGe
     
     from datetime import datetime, timezone
     
+    # FIX: Vérifier le statut AVANT de mettre à "running" pour éviter les générations multiples
+    if job.get("status") == "completed":
+        logger.warning(f"Job {job_id} déjà complété, arrêt du stream")
+        yield f'data: {json.dumps({"type": "error", "message": "Job déjà complété"})}\n\n'
+        return
+    
     try:
         current_task = asyncio.current_task()
         if current_task is not None:
@@ -102,13 +108,25 @@ async def stream_generation(job_id: str, container: ServiceContainer) -> AsyncGe
         current_step = "queued"
         
         # Streamer les événements
+        event_count = 0
+        complete_count = 0
         async for event in orchestrator.generate_with_events(
             request_data,
             check_cancelled=lambda: job_manager.is_cancelled(job_id)
         ):
+            event_count += 1
+            if event.type == 'complete':
+                complete_count += 1
             # Convertir GenerationEvent en SSE
             if event.type == 'chunk':
-                yield f'data: {json.dumps({"type": "chunk", "content": event.data.get("content", "")})}\n\n'
+                chunk_content = event.data.get("content", "")
+                chunk_sequence = event.data.get("sequence", None)
+                payload = {"type": "chunk", "content": chunk_content}
+                if chunk_sequence is not None:
+                    payload["sequence"] = chunk_sequence
+                # Flush immédiat : yield avec format SSE strict
+                # Le yield dans un async generator FastAPI envoie immédiatement
+                yield f'data: {json.dumps(payload, ensure_ascii=False)}\n\n'
             elif event.type == 'step':
                 current_step = event.data.get("step", "unknown")
                 yield f'data: {json.dumps({"type": "step", "step": current_step})}\n\n'
@@ -132,6 +150,9 @@ async def stream_generation(job_id: str, container: ServiceContainer) -> AsyncGe
                         'status': 'completed'
                     }
                 )
+                # IMPORTANT: Arrêter le stream après complete pour éviter les générations multiples
+                # (Fonctionnalité de génération multiple désactivée - repoussée à la prochaine version)
+                return
             elif event.type == 'error':
                 error_code = event.data.get("code")
                 if error_code == "cancelled" or job_manager.is_cancelled(job_id):

@@ -21,8 +21,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Import des modules
-from context_builder import ContextBuilder
-from prompt_engine import PromptEngine, PromptInput
+from core.context.context_builder import ContextBuilder
+from core.prompt.prompt_engine import PromptEngine, PromptInput
 
 def main():
     print("=" * 80)

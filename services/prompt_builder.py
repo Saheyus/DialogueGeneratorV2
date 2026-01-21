@@ -12,8 +12,8 @@ from utils.xml_utils import escape_xml_text
 from services.prompt_xml_parsers import build_narrative_guides_xml, build_vocabulary_xml
 
 if TYPE_CHECKING:
-    from prompt_engine import PromptInput
-    from context_builder import ContextBuilder
+    from core.prompt.prompt_engine import PromptInput
+    from core.context.context_builder import ContextBuilder
     from services.prompt_enricher import PromptEnricher
 
 logger = logging.getLogger(__name__)

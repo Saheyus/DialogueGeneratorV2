@@ -1,7 +1,7 @@
 """Tests pour le parsing XML vers PromptStructure dans prompt_engine."""
 import pytest
 import xml.etree.ElementTree as ET
-from prompt_engine import PromptEngine, PromptInput
+from core.prompt.prompt_engine import PromptEngine, PromptInput
 from models.prompt_structure import PromptStructure, PromptSection, ContextCategory, ContextItem, ItemSection
 
 

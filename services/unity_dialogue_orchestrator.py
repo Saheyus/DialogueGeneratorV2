@@ -187,6 +187,13 @@ class UnityDialogueOrchestrator:
                 llm_client.reasoning_effort = request_data.reasoning_effort
             
             # 7. Générer via Structured Output
+            # #region agent log
+            import json
+            try:
+                with open('f:\\Projets\\Notion_Scrapper\\DialogueGenerator\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
+                    f.write(json.dumps({"id": f"log_{int(__import__('time').time() * 1000)}_before_generate", "timestamp": int(__import__('time').time() * 1000), "location": "unity_dialogue_orchestrator.py:generate_with_events:before_generate", "message": "About to call generate_dialogue_node", "data": {"request_id": self.request_id, "job_id": getattr(self, 'job_id', None)}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "F"}) + '\n')
+            except: pass
+            # #endregion
             unity_service = UnityDialogueGenerationService()
             generation_response = await unity_service.generate_dialogue_node(
                 llm_client=llm_client,
@@ -194,6 +201,12 @@ class UnityDialogueOrchestrator:
                 system_prompt_override=request_data.system_prompt_override,
                 max_choices=request_data.max_choices
             )
+            # #region agent log
+            try:
+                with open('f:\\Projets\\Notion_Scrapper\\DialogueGenerator\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
+                    f.write(json.dumps({"id": f"log_{int(__import__('time').time() * 1000)}_after_generate", "timestamp": int(__import__('time').time() * 1000), "location": "unity_dialogue_orchestrator.py:generate_with_events:after_generate", "message": "generate_dialogue_node completed", "data": {"request_id": self.request_id, "has_response": bool(generation_response)}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "F"}) + '\n')
+            except: pass
+            # #endregion
             
             # Streaming simulé du contenu généré (caractère par caractère)
             stream_text = self._build_stream_text(generation_response)
@@ -201,17 +214,23 @@ class UnityDialogueOrchestrator:
                 async for chunk_event in self._stream_text(stream_text, check_cancelled):
                     yield chunk_event
             
-            # Étape 3: Validating
-            yield GenerationEvent(type='step', data={'step': 'Validating'})
-            
             if check_cancelled():
                 yield GenerationEvent(type='error', data={'message': 'Génération annulée', 'code': 'cancelled'})
                 return
             
             # 8. Enrichir et normaliser
+            # FIX: Envoyer 'Validating' APRÈS l'enrichissement pour que l'utilisateur voie la validation en cours
+            # (Les opérations synchrones peuvent bloquer le générateur async, donc on envoie l'événement après)
             enriched_nodes = unity_service.enrich_with_ids(content=generation_response, start_id="START")
             renderer = UnityJsonRenderer()
             json_content = renderer.render_unity_nodes(nodes=enriched_nodes, normalize=True)
+            
+            # Étape 3: Validating (après enrichissement pour garantir l'ordre d'envoi)
+            yield GenerationEvent(type='step', data={'step': 'Validating'})
+            
+            if check_cancelled():
+                yield GenerationEvent(type='error', data={'message': 'Génération annulée', 'code': 'cancelled'})
+                return
             
             # 9. Extraire le titre
             dialogue_title = generation_response.title if hasattr(generation_response, 'title') else None
@@ -263,6 +282,13 @@ class UnityDialogueOrchestrator:
     
     def _build_stream_text(self, generation_response: Any) -> str:
         """Construit un texte lisible à streamer depuis la réponse Unity."""
+        # #region agent log
+        import json
+        try:
+            with open('f:\\Projets\\Notion_Scrapper\\DialogueGenerator\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
+                f.write(json.dumps({"id": f"log_{int(__import__('time').time() * 1000)}_build_start", "timestamp": int(__import__('time').time() * 1000), "location": "unity_dialogue_orchestrator.py:_build_stream_text:entry", "message": "Building stream text from generation_response", "data": {"has_node": hasattr(generation_response, 'node')}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "B"}) + '\n')
+        except: pass
+        # #endregion
         node = getattr(generation_response, 'node', None)
         if not node:
             return ''
@@ -270,6 +296,12 @@ class UnityDialogueOrchestrator:
         parts = []
         speaker = getattr(node, 'speaker', None)
         line = getattr(node, 'line', None)
+        # #region agent log
+        try:
+            with open('f:\\Projets\\Notion_Scrapper\\DialogueGenerator\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
+                f.write(json.dumps({"id": f"log_{int(__import__('time').time() * 1000)}_extracted", "timestamp": int(__import__('time').time() * 1000), "location": "unity_dialogue_orchestrator.py:_build_stream_text:extracted", "message": "Extracted speaker and line", "data": {"speaker": str(speaker)[:100] if speaker else None, "line": str(line)[:100] if line else None, "speaker_type": type(speaker).__name__, "line_type": type(line).__name__}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "B"}) + '\n')
+        except: pass
+        # #endregion
         if line:
             if speaker:
                 parts.append(f"{speaker}: {line}")
@@ -278,12 +310,31 @@ class UnityDialogueOrchestrator:
         
         choices = getattr(node, 'choices', None)
         if choices:
+            # #region agent log
+            try:
+                with open('f:\\Projets\\Notion_Scrapper\\DialogueGenerator\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
+                    f.write(json.dumps({"id": f"log_{int(__import__('time').time() * 1000)}_choices_count", "timestamp": int(__import__('time').time() * 1000), "location": "unity_dialogue_orchestrator.py:_build_stream_text:choices_start", "message": "Processing choices", "data": {"choices_count": len(choices) if choices else 0}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "B"}) + '\n')
+            except: pass
+            # #endregion
             for idx, choice in enumerate(choices, 1):
                 text = getattr(choice, 'text', None)
+                # #region agent log
+                try:
+                    with open('f:\\Projets\\Notion_Scrapper\\DialogueGenerator\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
+                        f.write(json.dumps({"id": f"log_{int(__import__('time').time() * 1000)}_choice_{idx}", "timestamp": int(__import__('time').time() * 1000), "location": "unity_dialogue_orchestrator.py:_build_stream_text:choice", "message": f"Processing choice {idx}", "data": {"choice_text": str(text) if text else None, "choice_text_length": len(str(text)) if text else 0, "choice_text_type": type(text).__name__ if text else None}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "B"}) + '\n')
+                except: pass
+                # #endregion
                 if text:
                     parts.append(f"{idx}. {text}")
         
-        return "\n".join(parts).strip()
+        result = "\n".join(parts).strip()
+        # #region agent log
+        try:
+            with open('f:\\Projets\\Notion_Scrapper\\DialogueGenerator\\.cursor\\debug.log', 'a', encoding='utf-8') as f:
+                f.write(json.dumps({"id": f"log_{int(__import__('time').time() * 1000)}_build_result", "timestamp": int(__import__('time').time() * 1000), "location": "unity_dialogue_orchestrator.py:_build_stream_text:result", "message": "Built stream text result", "data": {"result_length": len(result), "result_preview": result[:500], "result_suffix": result[-500:] if len(result) > 500 else result, "parts_count": len(parts)}, "sessionId": "debug-session", "runId": "run1", "hypothesisId": "B"}) + '\n')
+        except: pass
+        # #endregion
+        return result
     
     async def _stream_text(
         self,
@@ -291,12 +342,20 @@ class UnityDialogueOrchestrator:
         check_cancelled: Callable[[], bool],
         delay_seconds: float = 0.01
     ) -> AsyncGenerator[GenerationEvent, None]:
-        """Stream le texte caractère par caractère."""
-        for char in text:
+        """Stream le texte caractère par caractère avec séquence pour garantir l'ordre.
+        
+        TCP garantit l'ordre des chunks, mais pour être absolument sûr et gérer
+        les cas de buffering, on ajoute un numéro de séquence. Le frontend
+        peut réordonner si nécessaire (normalement pas nécessaire avec TCP).
+        
+        Le flush explicite dans StreamingResponse + headers corrects devraient
+        garantir que les chunks arrivent dans l'ordre sans buffering.
+        """
+        for seq, char in enumerate(text):
             if check_cancelled():
                 yield GenerationEvent(type='error', data={'message': 'Génération annulée', 'code': 'cancelled'})
                 return
-            yield GenerationEvent(type='chunk', data={'content': char})
+            yield GenerationEvent(type='chunk', data={'content': char, 'sequence': seq})
             await asyncio.sleep(delay_seconds)
     
     async def generate(

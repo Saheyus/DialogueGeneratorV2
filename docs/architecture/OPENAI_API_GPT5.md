@@ -1,32 +1,34 @@
-# OpenAI API pour GPT-5+ (GPT-5.2, GPT-5.2-pro)
+# OpenAI API pour GPT-5 (tous modèles)
 
-Documentation complète de l'utilisation de l'API OpenAI pour les modèles GPT-5.2 et GPT-5.2-pro dans DialogueGenerator.
+Documentation complète de l'utilisation de l'API OpenAI pour tous les modèles GPT-5 dans DialogueGenerator.
 
 ## Vue d'ensemble
 
-Les modèles GPT-5.2 et GPT-5.2-pro utilisent une **API différente** de celle utilisée par les modèles précédents (Chat Completions). Ils utilisent la **Responses API**, qui offre des fonctionnalités supplémentaires comme la phase réflexive (reasoning) et un format de réponse structuré.
+Tous les modèles GPT-5 (5.2, 5.2-pro, 5-mini, 5-nano) supportent la **Responses API**, qui offre des fonctionnalités supplémentaires comme la phase réflexive (reasoning) et un format de réponse structuré. Ils peuvent également utiliser la **Chat Completions API** (legacy) pour compatibilité.
 
-**Modèles concernés**: `gpt-5.2`, `gpt-5.2-pro`
+**Modèles concernés**: `gpt-5.2`, `gpt-5.2-pro`, `gpt-5-mini`, `gpt-5-nano`
 
-**Détermination automatique**: Le code détecte automatiquement si un modèle commence par `gpt-5.2` et utilise alors Responses API au lieu de Chat Completions.
+**Détermination automatique**: Le code détecte automatiquement si un modèle contient `gpt-5` et utilise alors Responses API par défaut. Les modèles legacy (GPT-4, GPT-3.5) utilisent Chat Completions.
 
 ## Choix de l'API
 
-### Responses API (GPT-5.2/+)
+### Responses API (Tous modèles GPT-5)
 
-Utilisée pour tous les modèles commençant par `gpt-5.2`:
+Utilisée pour **tous les modèles GPT-5** (5.2, 5.2-pro, 5-mini, 5-nano):
 - `client.responses.create(**params)`
 - Endpoint: `/v1/responses`
+- **Recommandé** : API moderne avec support du reasoning et format unifié
 
 ### Chat Completions API (Legacy)
 
-Utilisée pour tous les autres modèles (GPT-4, GPT-3.5, GPT-5 mini/nano):
+Utilisée uniquement pour les modèles legacy (GPT-4, GPT-3.5, etc.):
 - `client.chat.completions.create(**params)`
 - Endpoint: `/v1/chat/completions`
+- **Note** : Les modèles GPT-5 supportent aussi Chat Completions, mais Responses API est recommandée.
 
 **Code de détermination**:
 ```python
-use_responses_api = bool(self.model_name and self.model_name.startswith("gpt-5.2"))
+use_responses_api = bool(self.model_name and "gpt-5" in self.model_name)
 ```
 
 ## Format de requête
@@ -110,16 +112,22 @@ response = await client.chat.completions.create(**chat_params)
 
 ## Reasoning (Phase réflexive)
 
-La phase réflexive (reasoning) est une fonctionnalité exclusive aux modèles GPT-5.2/+ via Responses API. Elle permet au modèle de "réfléchir" avant de générer sa réponse.
+La phase réflexive (reasoning) est disponible pour **tous les modèles GPT-5** via Responses API. Elle permet au modèle de "réfléchir" avant de générer sa réponse.
 
 ### Paramètres
 
 - **`reasoning.effort`**: Niveau d'effort de raisonnement
-  - `"none"`: Pas de phase réflexive (rapide)
-  - `"low"`: Raisonnement léger
-  - `"medium"`: Raisonnement modéré (recommandé)
-  - `"high"`: Raisonnement approfondi
-  - `"xhigh"`: Raisonnement très approfondi (plus lent, plus coûteux)
+  - `"none"`: Pas de phase réflexive (rapide) - **Uniquement GPT-5.2/5.2-pro**
+  - `"minimal"`: Raisonnement minimal (réduit mais présent) - **GPT-5 mini/nano uniquement**
+  - `"low"`: Raisonnement léger - **Tous modèles GPT-5**
+  - `"medium"`: Raisonnement modéré (recommandé) - **Tous modèles GPT-5**
+  - `"high"`: Raisonnement approfondi - **Tous modèles GPT-5**
+  - `"xhigh"`: Raisonnement très approfondi (plus lent, plus coûteux) - **GPT-5.2/5.2-pro uniquement**
+
+### Restrictions par modèle
+
+- **GPT-5.2 / GPT-5.2-pro** : Supportent toutes les valeurs (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`)
+- **GPT-5 mini / GPT-5 nano** : Supportent uniquement `minimal`, `low`, `medium`, `high` (pas `none` ni `xhigh`)
 
 - **`reasoning.summary`**: Format du résumé de la phase réflexive
   - `None`: Pas de résumé
@@ -170,6 +178,8 @@ for item in output_items:
 **Contrainte importante**: Temperature est supportée uniquement si `reasoning.effort == "none"` (ou non spécifié).
 
 Si `reasoning.effort` est défini avec une valeur autre que `"none"`, le paramètre `temperature` est ignoré par l'API.
+
+**Impact pour GPT-5 mini/nano** : Ces modèles ne supportent pas `reasoning.effort="none"`, donc la température n'est **pas disponible** via Responses API pour eux. Si vous avez besoin de température avec mini/nano, utilisez Chat Completions API (legacy).
 
 **Code de gestion**:
 ```python
@@ -309,31 +319,38 @@ tool_choice = {
 
 ## Modèles concernés
 
-### Modèles GPT-5.2 (Responses API)
+### Tous les modèles GPT-5 (Responses API)
+
+Tous les modèles GPT-5 supportent Responses API et peuvent également utiliser Chat Completions (legacy).
+
+#### GPT-5.2 / GPT-5.2-pro
 
 - **`gpt-5.2`**: Modèle principal, bon équilibre performance/coût
 - **`gpt-5.2-pro`**: Version avec plus de compute pour raisonnement approfondi
 
 **Caractéristiques**:
-- Supportent Responses API
-- Supportent reasoning (effort, summary)
-- Supportent structured output
-- Temperature uniquement si `reasoning.effort == "none"`
-- Utilisent `max_output_tokens`
+- ✅ Supportent Responses API (recommandé)
+- ✅ Supportent Chat Completions API (legacy)
+- ✅ Supportent reasoning avec toutes les valeurs (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`)
+- ✅ Supportent structured output
+- ✅ Temperature disponible si `reasoning.effort == "none"` (ou non spécifié)
+- ✅ Utilisent `max_output_tokens` (Responses) ou `max_completion_tokens` (Chat)
 
-### Modèles GPT-5 (Chat Completions)
+#### GPT-5 mini / GPT-5 nano
 
 - **`gpt-5-mini`**: Version économique et rapide
 - **`gpt-5-nano`**: Version compacte
 
 **Caractéristiques**:
-- Utilisent Chat Completions API
-- Ne supportent **pas** reasoning
-- Supportent structured output (mais peuvent avoir des problèmes)
-- Supportent temperature
-- Utilisent `max_completion_tokens`
+- ✅ Supportent Responses API (recommandé)
+- ✅ Supportent Chat Completions API (legacy)
+- ✅ Supportent reasoning avec valeurs limitées (`minimal`, `low`, `medium`, `high` - **pas `none` ni `xhigh`**)
+- ✅ Supportent structured output
+- ❌ Temperature **non disponible** via Responses API (car pas de `reasoning.effort="none"`)
+- ✅ Temperature disponible via Chat Completions API (legacy)
+- ✅ Utilisent `max_output_tokens` (Responses) ou `max_completion_tokens` (Chat)
 
-**Note**: Les modèles GPT-5 (mini/nano) peuvent avoir des problèmes avec le structured output. Utiliser `gpt-5.2` si des erreurs surviennent.
+**Note importante** : GPT-5 mini/nano génèrent **toujours des tokens de reasoning** (même avec `minimal`), ce qui augmente les coûts. Si vous voulez éviter complètement le reasoning, utilisez Chat Completions API ou un modèle GPT-5.2 avec `reasoning.effort="none"`.
 
 ## Exemple complet
 
@@ -344,9 +361,9 @@ import os
 
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Configuration pour GPT-5.2 avec reasoning
-model_name = "gpt-5.2"
-use_responses_api = model_name.startswith("gpt-5.2")
+# Configuration pour n'importe quel modèle GPT-5 avec reasoning
+model_name = "gpt-5.2"  # ou "gpt-5-mini", "gpt-5-nano", etc.
+use_responses_api = "gpt-5" in model_name
 
 if use_responses_api:
     # Responses API

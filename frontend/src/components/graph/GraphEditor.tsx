@@ -11,7 +11,7 @@ import { AIGenerationPanel } from './AIGenerationPanel'
 import { useGraphStore } from '../../store/graphStore'
 import { exportGraphToPNG, exportGraphToSVG } from '../../utils/graphExport'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
-import { useToast, ConfirmDialog, SaveStatusIndicator } from '../shared'
+import { useToast, SaveStatusIndicator } from '../shared'
 import { theme } from '../../theme'
 import * as unityDialoguesAPI from '../../api/unityDialogues'
 import * as dialoguesAPI from '../../api/dialogues'
@@ -27,9 +27,7 @@ export function GraphEditor() {
   const dialogueListRef = useRef<UnityDialogueListRef>(null)
   const toast = useToast()
   
-  // États auto-save draft (Task 2 - Story 0.5)
-  const [showRestoreDialog, setShowRestoreDialog] = useState(false)
-  const [draftToRestore, setDraftToRestore] = useState<{json_content: string; timestamp: number} | null>(null)
+  // États auto-save draft (Task 2 - Story 0.5) - supprimés, maintenant géré automatiquement
   
   // État pour le dialogue de sélection de format d'export
   const [showExportFormatDialog, setShowExportFormatDialog] = useState(false)
@@ -69,6 +67,9 @@ export function GraphEditor() {
     markDraftSaved,
     markDraftError,
     clearDraftError,
+    autoRestoredDraft,
+    setAutoRestoredDraft,
+    clearAutoRestoredDraft,
   } = useGraphStore()
   
   // Écouter l'événement pour ouvrir le panel de génération depuis un nœud
@@ -87,6 +88,9 @@ export function GraphEditor() {
   
   // Charger le dialogue sélectionné dans le graphe + vérifier draft (Task 2 - Story 0.5)
   useEffect(() => {
+    // Réinitialiser l'état de brouillon restauré quand on change de dialogue
+    clearAutoRestoredDraft()
+    
     if (selectedDialogue) {
       setIsLoadingDialogue(true)
       
@@ -121,13 +125,30 @@ export function GraphEditor() {
                 contentIdentical = false
               }
               
-              // Si draft plus récent que le fichier → proposer restauration
+              // Si draft plus récent que le fichier → restaurer automatiquement
               // MAIS seulement si le contenu est différent (sinon c'est un faux positif)
               if (draftTimestamp > fileTimestamp && !contentIdentical) {
-                setDraftToRestore(draft)
-                setShowRestoreDialog(true)
-                setIsLoadingDialogue(false)
-                return // Attendre la décision de l'utilisateur
+                // Restaurer automatiquement le brouillon le plus récent
+                loadDialogue(draft.json_content, undefined, selectedDialogue.filename)
+                  .then(() => {
+                    // Enregistrer dans le store qu'un brouillon a été restauré automatiquement
+                    setAutoRestoredDraft({
+                      timestamp: draftTimestamp,
+                      fileTimestamp: fileTimestamp,
+                    })
+                    setIsLoadingDialogue(false)
+                    toast('Brouillon local restauré automatiquement', 'info', 3000)
+                  })
+                  .catch((err) => {
+                    console.error('Erreur lors de la restauration du brouillon:', err)
+                    toast(`Erreur lors de la restauration: ${getErrorMessage(err)}`, 'error')
+                    // Fallback : charger le fichier
+                    return loadDialogue(response.json_content, undefined, selectedDialogue.filename)
+                      .then(() => {
+                        setIsLoadingDialogue(false)
+                      })
+                  })
+                return // Ne pas charger le fichier, on a déjà chargé le brouillon
               } else {
                 // Draft obsolète OU identique → supprimer
                 localStorage.removeItem(draftKey)
@@ -154,7 +175,7 @@ export function GraphEditor() {
       // Réinitialiser le graphe si aucun dialogue sélectionné
       useGraphStore.getState().resetGraph()
     }
-  }, [selectedDialogue, loadDialogue, toast])
+  }, [selectedDialogue, loadDialogue, toast, clearAutoRestoredDraft])
   
   // Auto-save draft avec debounce (Task 2 - Story 0.5)
   // Sauvegarde immédiate lors du démontage si des changements non sauvegardés existent
@@ -299,6 +320,8 @@ export function GraphEditor() {
       const draftKey = `unity_dialogue_draft:${selectedDialogue.filename}`
       localStorage.removeItem(draftKey)
       markDraftSaved()
+      // Supprimer aussi l'état de brouillon restauré automatiquement
+      useGraphStore.getState().clearAutoRestoredDraft()
       
       // Rafraîchir la liste
       dialogueListRef.current?.refresh()
@@ -309,33 +332,11 @@ export function GraphEditor() {
     }
   }, [selectedDialogue, saveDialogue, toast, markDraftSaved])
   
-  // Handlers pour restauration draft (Task 2 - Story 0.5)
-  const handleRestoreDraft = useCallback(() => {
-    if (draftToRestore && selectedDialogue) {
-      setIsLoadingDialogue(true)
-      // Les positions seront chargées automatiquement depuis localStorage
-      // Passer le filename explicitement
-      loadDialogue(draftToRestore.json_content, undefined, selectedDialogue.filename)
-        .then(() => {
-          setShowRestoreDialog(false)
-          setDraftToRestore(null)
-          setIsLoadingDialogue(false)
-          toast('Brouillon restauré', 'success', 2000)
-        })
-        .catch((err) => {
-          console.error('Erreur lors de la restauration du brouillon:', err)
-          toast(`Erreur: ${getErrorMessage(err)}`, 'error')
-          setIsLoadingDialogue(false)
-        })
-    }
-  }, [draftToRestore, selectedDialogue, loadDialogue, toast])
-  
-  const handleDiscardDraft = useCallback(() => {
+  // Handler pour charger le fichier plus ancien (depuis le bandeau d'avertissement)
+  const handleLoadOlderFile = useCallback(() => {
     if (selectedDialogue) {
       const draftKey = `unity_dialogue_draft:${selectedDialogue.filename}`
       localStorage.removeItem(draftKey)
-      setShowRestoreDialog(false)
-      setDraftToRestore(null)
       
       // Charger le dialogue normal depuis l'API
       setIsLoadingDialogue(true)
@@ -343,7 +344,8 @@ export function GraphEditor() {
         .then((response) => loadDialogue(response.json_content, undefined, selectedDialogue.filename))
         .then(() => {
           setIsLoadingDialogue(false)
-          toast('Brouillon supprimé, dialogue du fichier chargé', 'info', 2000)
+          useGraphStore.getState().clearAutoRestoredDraft()
+          toast('Fichier plus ancien chargé', 'info', 2000)
         })
         .catch((err) => {
           console.error('Erreur lors du chargement du dialogue:', err)
@@ -352,6 +354,18 @@ export function GraphEditor() {
         })
     }
   }, [selectedDialogue, loadDialogue, toast])
+  
+  // Écouter l'événement pour charger le fichier plus ancien (depuis le bandeau d'avertissement)
+  useEffect(() => {
+    const handleLoadOlderFileEvent = () => {
+      handleLoadOlderFile()
+    }
+    
+    window.addEventListener('load-older-file', handleLoadOlderFileEvent as EventListener)
+    return () => {
+      window.removeEventListener('load-older-file', handleLoadOlderFileEvent as EventListener)
+    }
+  }, [handleLoadOlderFile])
   
   // Raccourcis clavier
   useKeyboardShortcuts(
@@ -1018,18 +1032,6 @@ export function GraphEditor() {
         )}
       </div>
       
-      {/* Dialog de restauration draft (Task 2 - Story 0.5) */}
-      {showRestoreDialog && draftToRestore && (
-        <ConfirmDialog
-          isOpen={showRestoreDialog}
-          title="Brouillon local trouvé"
-          message={`Un brouillon plus récent que le fichier a été trouvé pour ce dialogue (sauvegardé ${new Date(draftToRestore.timestamp).toLocaleString()}).\n\nVoulez-vous restaurer le brouillon ?`}
-          confirmLabel="Restaurer le brouillon"
-          cancelLabel="Charger le fichier"
-          onConfirm={handleRestoreDraft}
-          onCancel={handleDiscardDraft}
-        />
-      )}
       
       {/* Dialog de sélection de format d'export */}
       {showExportFormatDialog && (

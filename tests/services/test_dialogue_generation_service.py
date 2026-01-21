@@ -2,8 +2,8 @@
 import pytest
 from unittest.mock import MagicMock
 from services.dialogue_generation_service import DialogueGenerationService
-from context_builder import ContextBuilder
-from prompt_engine import PromptEngine
+from core.context.context_builder import ContextBuilder
+from core.prompt.prompt_engine import PromptEngine
 
 
 @pytest.fixture

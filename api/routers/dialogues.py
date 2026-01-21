@@ -468,7 +468,7 @@ async def export_unity_dialogue(
         # Créer le dossier s'il n'existe pas
         unity_dir.mkdir(parents=True, exist_ok=True)
         
-        # 2. Valider que le JSON est valide
+        # 2. Valider que le JSON est valide et conforme au schéma Unity
         try:
             json_data = json.loads(request_data.json_content)
             if not isinstance(json_data, list):
@@ -484,7 +484,21 @@ async def export_unity_dialogue(
                 request_id=request_id
             )
         
-        # 3. Générer le nom de fichier
+        # 3. Valider le schéma Unity (IDs uniques, références valides, etc.)
+        from services.json_renderer.unity_json_renderer import UnityJsonRenderer
+        renderer = UnityJsonRenderer()
+        is_valid, validation_errors = renderer.validate_nodes(json_data)
+        if not is_valid:
+            raise ValidationException(
+                message="Le dialogue Unity contient des erreurs de validation",
+                details={
+                    "validation_errors": validation_errors,
+                    "json_content": "Le JSON ne respecte pas le schéma Unity (IDs uniques, références valides, etc.)"
+                },
+                request_id=request_id
+            )
+        
+        # 4. Générer le nom de fichier
         if request_data.filename:
             # Utiliser le nom fourni (sans extension)
             filename = request_data.filename
@@ -501,7 +515,7 @@ async def export_unity_dialogue(
         
         file_path = unity_dir / filename
         
-        # 4. Écrire le fichier JSON (pretty-print avec 2 espaces)
+        # 5. Écrire le fichier JSON (pretty-print avec 2 espaces)
         json_content_formatted = json.dumps(json_data, indent=2, ensure_ascii=False)
         file_path.write_text(json_content_formatted, encoding='utf-8')
         

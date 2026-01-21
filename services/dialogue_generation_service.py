@@ -6,17 +6,6 @@ from pydantic import BaseModel
 import uuid
 import asyncio
 
-try:
-    from ..context_builder import ContextBuilder
-    from ..prompt_engine import PromptEngine
-    from ..llm_client import ILLMClient # Utiliser l'interface
-except ImportError:
-    # Support pour exécution directe ou tests unitaires hors contexte de package complet
-    import sys
-    from pathlib import Path
-    current_dir = Path(__file__).resolve().parent.parent
-    if str(current_dir) not in sys.path:
-        sys.path.insert(0, str(current_dir))
 from core.context.context_builder import ContextBuilder
 from core.prompt.prompt_engine import PromptEngine
 from core.llm.llm_client import ILLMClient

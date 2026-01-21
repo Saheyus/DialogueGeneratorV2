@@ -83,91 +83,26 @@ export const UnityDialogueEditor = memo(forwardRef<UnityDialogueEditorHandle, Un
     }
   }, [json_content])
 
-  // Validation: IDs uniques et références valides
+  // Validation légère pour UX uniquement (feedback immédiat)
+  // La validation complète est effectuée par le backend (UnityJsonRenderer.validate_nodes)
+  // Le backend rejettera avec un message clair si le dialogue est invalide
   const validationErrors = useMemo<ValidationError[]>(() => {
     const errors: ValidationError[] = []
-    const nodeIds = new Set<string>()
-
-    // Vérifier IDs uniques
+    
+    // Validation minimale pour UX uniquement :
+    // - Vérifier que les IDs sont présents (sinon impossible de sauvegarder)
+    // - Pas de validation des références (backend le fait)
     for (const node of nodes) {
-      if (!node.id) {
-        errors.push({ nodeId: node.id, message: 'ID manquant' })
-        continue
-      }
-      if (!/^[A-Z][A-Z0-9_]*$/.test(node.id)) {
-        errors.push({ nodeId: node.id, message: 'ID doit être en SCREAMING_SNAKE_CASE' })
-      }
-      if (nodeIds.has(node.id)) {
-        errors.push({ nodeId: node.id, message: 'ID dupliqué' })
-      }
-      nodeIds.add(node.id)
-    }
-
-    // Vérifier références
-    for (const node of nodes) {
-      if (node.nextNode && !nodeIds.has(node.nextNode)) {
-        errors.push({
-          nodeId: node.id,
-          message: `nextNode '${node.nextNode}' n'existe pas`,
-        })
-      }
-      if (node.successNode && !nodeIds.has(node.successNode)) {
-        errors.push({
-          nodeId: node.id,
-          message: `successNode '${node.successNode}' n'existe pas`,
-        })
-      }
-      if (node.failureNode && !nodeIds.has(node.failureNode)) {
-        errors.push({
-          nodeId: node.id,
-          message: `failureNode '${node.failureNode}' n'existe pas`,
-        })
-      }
-      if (node.choices) {
-        for (let i = 0; i < node.choices.length; i++) {
-          const choice = node.choices[i]
-          if (!choice.text || choice.text.trim() === '') {
-            errors.push({
-              nodeId: node.id,
-              choiceIndex: i,
-              message: 'Le texte du choix ne peut pas être vide',
-            })
-          }
-          if (!choice.targetNode || choice.targetNode.trim() === '') {
-            errors.push({
-              nodeId: node.id,
-              choiceIndex: i,
-              message: 'targetNode est requis',
-            })
-          } else if (choice.targetNode !== 'END' && !nodeIds.has(choice.targetNode)) {
-            // "END" est une valeur spéciale acceptée pour terminer le dialogue
-            errors.push({
-              nodeId: node.id,
-              choiceIndex: i,
-              message: `targetNode '${choice.targetNode}' n'existe pas`,
-            })
-          }
-          if (choice.testSuccessNode && !nodeIds.has(choice.testSuccessNode)) {
-            errors.push({
-              nodeId: node.id,
-              choiceIndex: i,
-              message: `testSuccessNode '${choice.testSuccessNode}' n'existe pas`,
-            })
-          }
-          if (choice.testFailureNode && !nodeIds.has(choice.testFailureNode)) {
-            errors.push({
-              nodeId: node.id,
-              choiceIndex: i,
-              message: `testFailureNode '${choice.testFailureNode}' n'existe pas`,
-            })
-          }
-        }
+      if (!node.id || node.id.trim() === '') {
+        errors.push({ nodeId: node.id || '?', message: 'ID manquant' })
       }
     }
 
     return errors
   }, [nodes])
 
+  // isValid basé uniquement sur validation UX légère
+  // Le backend validera complètement lors de la sauvegarde
   const isValid = validationErrors.length === 0
 
   // Mettre à jour un nœud (par ID, pas par index)
@@ -237,6 +172,7 @@ export const UnityDialogueEditor = memo(forwardRef<UnityDialogueEditorHandle, Un
 
   // Sauvegarder
   const handleSave = useCallback(async () => {
+    // Validation minimale côté frontend (IDs présents) - la validation complète est faite par le backend
     if (!isValid) {
       setError('Corrigez les erreurs de validation avant de sauvegarder')
       return
@@ -255,10 +191,12 @@ export const UnityDialogueEditor = memo(forwardRef<UnityDialogueEditorHandle, Un
         filename: filename, // Si on édite un fichier existant, réutiliser le filename
       }
 
+      // Le backend validera le schéma Unity (IDs uniques, références valides, etc.)
       const result = await dialoguesAPI.exportUnityDialogue(request)
       toast(`Dialogue sauvegardé: ${result.filename}`, 'success', 5000)
       onSave?.(result.filename)
     } catch (err) {
+      // Le backend retournera une ValidationException avec les détails si le dialogue est invalide
       const errorMessage = getErrorMessage(err)
       setError(errorMessage)
       toast(`Erreur lors de la sauvegarde: ${errorMessage}`, 'error')

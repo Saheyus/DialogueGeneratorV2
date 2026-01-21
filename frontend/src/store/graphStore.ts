@@ -39,6 +39,7 @@ export interface GraphState {
   hasUnsavedChanges: boolean
   lastDraftSavedAt: number | null
   lastDraftError: string | null
+  autoRestoredDraft: { timestamp: number; fileTimestamp: number } | null // Brouillon restauré automatiquement
   
   // Actions CRUD
   loadDialogue: (
@@ -99,6 +100,8 @@ export interface GraphState {
   markDraftSaved: () => void
   markDraftError: (message: string) => void
   clearDraftError: () => void
+  setAutoRestoredDraft: (draft: { timestamp: number; fileTimestamp: number } | null) => void
+  clearAutoRestoredDraft: () => void
 }
 
 const initialState = {
@@ -128,6 +131,7 @@ const initialState = {
   hasUnsavedChanges: false,
   lastDraftSavedAt: null,
   lastDraftError: null,
+  autoRestoredDraft: null,
 }
 
 export const useGraphStore = create<GraphState>()(
@@ -938,6 +942,14 @@ export const useGraphStore = create<GraphState>()(
       
       clearDraftError: () => {
         set({ lastDraftError: null })
+      },
+      
+      setAutoRestoredDraft: (draft: { timestamp: number; fileTimestamp: number } | null) => {
+        set({ autoRestoredDraft: draft })
+      },
+      
+      clearAutoRestoredDraft: () => {
+        set({ autoRestoredDraft: null })
       },
     }),
     {

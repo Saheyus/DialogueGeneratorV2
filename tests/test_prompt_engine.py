@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from typing import List, Dict, Any, Optional
 
-from prompt_engine import PromptEngine
+from core.prompt.prompt_engine import PromptEngine, PromptInput
 
 
 class TestPromptEngineInjection:
@@ -193,62 +193,57 @@ class TestPromptEngineInjection:
         assert len(result) == 2
 
 
-# TestPromptEngineBuildPrompt supprimé - build_prompt() supprimé, système texte libre obsolète, utiliser build_unity_dialogue_prompt() à la place
+# TestPromptEngineBuildPrompt - tests pour build_prompt(PromptInput) nouvelle API unifiée
 
-class TestPromptEngineBuildUnityDialoguePrompt:
-    """Tests pour build_unity_dialogue_prompt() après refactoring."""
+class TestPromptEngineBuildPrompt:
+    """Tests pour build_prompt(PromptInput) - nouvelle API unifiée."""
     
     @pytest.fixture
     def prompt_engine(self):
         """Fixture pour créer une instance de PromptEngine."""
         return PromptEngine(system_prompt_template="Test system prompt")
     
-    def test_build_unity_dialogue_prompt_uses_enricher(self, prompt_engine):
-        """Test que build_unity_dialogue_prompt() utilise PromptEnricher avec format_style='unity'."""
+    def test_build_prompt_uses_enricher(self, prompt_engine):
+        """Test que build_prompt() utilise PromptEnricher."""
         with patch.object(prompt_engine._enricher, 'enrich_with_vocabulary') as mock_enrich_vocab, \
              patch.object(prompt_engine._enricher, 'enrich_with_narrative_guides') as mock_enrich_guides:
             
             mock_enrich_vocab.return_value = []
             mock_enrich_guides.return_value = []
             
-            prompt_engine.build_unity_dialogue_prompt(
+            prompt_input = PromptInput(
                 user_instructions="Test instructions",
                 npc_speaker_id="NPC1",
                 vocabulary_config={"Mondialement": "all"},
                 include_narrative_guides=True
             )
+            prompt_engine.build_prompt(prompt_input)
             
             # enrich_with_vocabulary est appelé au moins une fois
             assert mock_enrich_vocab.call_count >= 1
-            # Vérifier que format_style="unity" est passé au moins une fois
-            calls = mock_enrich_vocab.call_args_list
-            assert any(call[1].get('format_style') == "unity" for call in calls)
-            
             # enrich_with_narrative_guides est appelé au moins une fois
             assert mock_enrich_guides.call_count >= 1
-            # Vérifier que format_style="unity" est passé au moins une fois
-            calls = mock_enrich_guides.call_args_list
-            assert any(call[1].get('format_style') == "unity" for call in calls)
     
-    def test_build_unity_dialogue_prompt_produces_valid_output(self, prompt_engine):
-        """Test que build_unity_dialogue_prompt() produit une sortie valide (format XML)."""
-        prompt, tokens = prompt_engine.build_unity_dialogue_prompt(
+    def test_build_prompt_produces_valid_output(self, prompt_engine):
+        """Test que build_prompt() produit une sortie valide (format XML)."""
+        prompt_input = PromptInput(
             user_instructions="Test instructions",
             npc_speaker_id="NPC1",
             scene_location={"lieu": "Test location"}
         )
+        built = prompt_engine.build_prompt(prompt_input)
         
-        assert isinstance(prompt, str)
-        assert isinstance(tokens, int)
-        assert tokens > 0
+        assert isinstance(built.raw_prompt, str)
+        assert isinstance(built.token_count, int)
+        assert built.token_count > 0
         # Vérifier que c'est du XML
-        assert prompt.startswith('<?xml version="1.0" encoding="UTF-8"?>')
+        assert built.raw_prompt.startswith('<?xml version="1.0" encoding="UTF-8"?>')
         # Vérifier la présence des éléments XML
-        assert "<prompt>" in prompt
-        assert "NPC1" in prompt
-        assert "Test instructions" in prompt
+        assert "<prompt>" in built.raw_prompt
+        assert "NPC1" in built.raw_prompt
+        assert "Test instructions" in built.raw_prompt
         # Le lieu est maintenant dans un élément <location> en XML
-        assert "Test location" in prompt
+        assert "Test location" in built.raw_prompt
 
 
 class TestPromptEngineCompatibility:
@@ -259,12 +254,9 @@ class TestPromptEngineCompatibility:
         """Fixture pour créer une instance de PromptEngine."""
         return PromptEngine(system_prompt_template="Test system prompt")
     
-    # test_build_prompt_backward_compatible supprimé - build_prompt() supprimé, système texte libre obsolète
-    
-    def test_build_unity_dialogue_prompt_backward_compatible(self, prompt_engine):
-        """Test que build_unity_dialogue_prompt() reste compatible avec l'API existante."""
-        # Test avec tous les paramètres optionnels
-        prompt, tokens = prompt_engine.build_unity_dialogue_prompt(
+    def test_build_prompt_with_all_optional_parameters(self, prompt_engine):
+        """Test que build_prompt(PromptInput) accepte tous les paramètres optionnels."""
+        prompt_input = PromptInput(
             user_instructions="Instructions",
             npc_speaker_id="NPC1",
             player_character_id="PLAYER",
@@ -278,9 +270,10 @@ class TestPromptEngineCompatibility:
             vocabulary_config=None,
             include_narrative_guides=False
         )
+        built = prompt_engine.build_prompt(prompt_input)
         
-        assert isinstance(prompt, str)
-        assert isinstance(tokens, int)
-        assert "NPC1" in prompt
-        assert "Instructions" in prompt
+        assert isinstance(built.raw_prompt, str)
+        assert isinstance(built.token_count, int)
+        assert "NPC1" in built.raw_prompt
+        assert "Instructions" in built.raw_prompt
 

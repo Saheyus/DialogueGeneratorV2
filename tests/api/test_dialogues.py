@@ -30,11 +30,19 @@ def mock_dialogue_service():
     
     Ce mock isole les tests des dépendances réelles (GDD, LLM, etc.).
     """
+    from core.prompt.prompt_engine import BuiltPrompt
+    
     mock_service = MagicMock(spec=DialogueGenerationService)
     mock_service.context_builder = MagicMock()
     mock_service.context_builder._count_tokens = MagicMock(return_value=100)
     mock_service.prompt_engine = MagicMock()
-    mock_service.prompt_engine.build_unity_dialogue_prompt = MagicMock(return_value=("prompt", 200))
+    mock_built = BuiltPrompt(
+        raw_prompt="prompt",
+        token_count=200,
+        sections={},
+        prompt_hash="hash123"
+    )
+    mock_service.prompt_engine.build_prompt = MagicMock(return_value=mock_built)
     mock_service.prompt_engine.system_prompt_template = "Test system prompt"
     return mock_service
 

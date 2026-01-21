@@ -83,4 +83,7 @@ ui_settings.json
 # Note: data/config/*.json peut être versionné selon besoin
 
 # BMAD artifacts (_bmad est ignoré, _bmad-output reste versionné)
-_bmad/ 
+_bmad/
+
+# Development lock files (machine-specific, transient state)
+.dev/ 

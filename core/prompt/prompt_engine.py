@@ -249,7 +249,7 @@ class PromptEngine:
         
         return "\n".join(parts)
 
-    # build_prompt() supprimé - système texte libre obsolète, utiliser build_unity_dialogue_prompt() à la place
+    # build_prompt() est la méthode principale pour construire tous les prompts
     
     # Les méthodes _build_*_section() ont été déplacées vers PromptBuilder
     # Elles sont conservées ici pour compatibilité mais déléguent à PromptBuilder
@@ -567,44 +567,4 @@ class PromptEngine:
             sections=sections_content,
             prompt_hash=prompt_hash,
             structured_prompt=final_structured_prompt
-        )
-
-    def build_unity_dialogue_prompt(
-        self,
-        user_instructions: str,
-        npc_speaker_id: str,
-        player_character_id: str = "URESAIR",
-        skills_list: Optional[List[str]] = None,
-        traits_list: Optional[List[str]] = None,
-        context_summary: Optional[str] = None,
-        scene_location: Optional[Dict[str, str]] = None,
-        max_choices: Optional[int] = None,
-        narrative_tags: Optional[List[str]] = None,
-        author_profile: Optional[str] = None,
-        vocabulary_config: Optional[Dict[str, str]] = None,
-        include_narrative_guides: bool = True
-    ) -> Tuple[str, int]:
-        """DEPRECATED: Utiliser build_prompt(PromptInput) à la place.
-        """
-        # Mapper vers PromptInput
-        prompt_input = PromptInput(
-            user_instructions=user_instructions,
-            npc_speaker_id=npc_speaker_id,
-            player_character_id=player_character_id,
-            skills_list=skills_list,
-            traits_list=traits_list,
-            context_summary=context_summary,
-            scene_location=scene_location,
-            max_choices=max_choices,
-            choices_mode="capped" if max_choices is not None else "free",
-            narrative_tags=narrative_tags,
-            author_profile=author_profile,
-            vocabulary_config=vocabulary_config,
-            include_narrative_guides=include_narrative_guides
-        )
-        
-        built = self.build_prompt(prompt_input)
-        return built.raw_prompt, built.token_count
-
-# Tests build_prompt() supprimés - système texte libre obsolète
-# Utiliser build_unity_dialogue_prompt() pour les tests à la place 
+        ) 

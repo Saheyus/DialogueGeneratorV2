@@ -113,10 +113,18 @@ def test_api_endpoint_uses_correct_llm_client(client_with_real_config):
     mock_context_builder._count_tokens = MagicMock(return_value=100)
     mock_context_builder.build_context = MagicMock(return_value="test context")
     
+    from core.prompt.prompt_engine import BuiltPrompt
+    
     mock_dialogue_service = MagicMock()
     mock_dialogue_service.context_builder = mock_context_builder
     mock_dialogue_service.prompt_engine = MagicMock()
-    mock_dialogue_service.prompt_engine.build_unity_dialogue_prompt = MagicMock(return_value=("prompt", 200))
+    mock_built = BuiltPrompt(
+        raw_prompt="prompt",
+        token_count=200,
+        sections={},
+        prompt_hash="hash123"
+    )
+    mock_dialogue_service.prompt_engine.build_prompt = MagicMock(return_value=mock_built)
     mock_dialogue_service.prompt_engine.system_prompt_template = "Test system prompt"
     mock_dialogue_service.prompt_engine._count_tokens = MagicMock(return_value=100)
     

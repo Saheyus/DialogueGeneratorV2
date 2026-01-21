@@ -36,6 +36,8 @@ interface GenerationState {
   error: string | null
   currentJobId: string | null
   isInterrupting: boolean  // Task 4 - Story 0.8
+  chunkBuffer: Map<number, string>  // Buffer pour réordonner les chunks avec séquence
+  lastProcessedSequence: number  // Dernière séquence traitée (pour réordonnancement)
   
   // Actions
   setSceneSelection: (selection: Partial<SceneSelection>) => void
@@ -50,7 +52,7 @@ interface GenerationState {
   
   // Actions streaming (Task 2 - Story 0.2)
   startGeneration: (jobId: string) => void
-  appendChunk: (chunk: string) => void
+  appendChunk: (chunk: string, sequence?: number) => void
   setStep: (step: 'Prompting' | 'Generating' | 'Validating' | 'Complete') => void
   interrupt: () => void
   minimize: () => void
@@ -91,6 +93,8 @@ export const useGenerationStore = create<GenerationState>((set) => ({
   error: null,
   currentJobId: null,
   isInterrupting: false,  // Task 4 - Story 0.8
+  chunkBuffer: new Map<number, string>(),
+  lastProcessedSequence: -1,  // Dernière séquence traitée
 
   setSceneSelection: (selection) =>
     set((state) => ({
@@ -132,12 +136,82 @@ export const useGenerationStore = create<GenerationState>((set) => ({
       isMinimized: false,
       error: null,
       currentJobId: jobId,
+      chunkBuffer: new Map<number, string>(),
+      lastProcessedSequence: -1,
     }),
 
-  appendChunk: (chunk) =>
-    set((state) => ({
-      streamingContent: state.streamingContent + chunk,
-    })),
+  appendChunk: (chunk, sequence) =>
+    set((state) => {
+      // Si pas de séquence, comportement legacy (ajout direct) - pour compatibilité
+      if (sequence === undefined) {
+        const newContent = state.streamingContent + chunk;
+        return { streamingContent: newContent };
+      }
+      
+      // Avec séquence : système de réordonnancement pour gérer les cas de buffering
+      // TCP garantit normalement l'ordre, mais on garde ce système comme sécurité
+      
+      // Détecter le début d'une nouvelle génération : si on reçoit séquence 0 alors que
+      // lastProcessedSequence > 0, c'est qu'une nouvelle génération a commencé
+      // (startGeneration n'a pas été appelé à temps ou il y a un délai)
+      if (sequence === 0 && state.lastProcessedSequence >= 0 && state.streamingContent.length > 0) {
+        // Nouvelle génération détectée : ajouter un séparateur au lieu de réinitialiser
+        // IMPORTANT: Réinitialiser complètement le buffer pour éviter les chunks en retard de l'ancienne génération
+        const separator = '\n\n---\n\n'
+        const newBuffer = new Map<number, string>()
+        newBuffer.set(0, chunk)
+        return {
+          streamingContent: state.streamingContent + separator + chunk,
+          chunkBuffer: newBuffer,
+          lastProcessedSequence: 0,
+        }
+      }
+      
+      // Si on a déjà traité ce chunk dans la détection de nouvelle génération, l'ignorer
+      // (peut arriver si le chunk arrive deux fois dans le flux)
+      if (sequence === 0 && state.lastProcessedSequence === 0 && state.chunkBuffer.has(0)) {
+        // Chunk déjà traité, ignorer
+        return state
+      }
+      
+      const newBuffer = new Map(state.chunkBuffer)
+      newBuffer.set(sequence, chunk)
+      
+      // Utiliser lastProcessedSequence au lieu de currentLength pour éviter les blocages
+      // Si des chunks arrivent dans le désordre, on peut avoir currentLength < lastProcessedSequence
+      let nextExpected = state.lastProcessedSequence + 1
+      let newContent = state.streamingContent
+      
+      // Trier les séquences disponibles
+      const sortedSequences = Array.from(newBuffer.keys()).sort((a, b) => a - b)
+      
+      // Ajouter tous les chunks consécutifs depuis nextExpected
+      // On continue tant qu'on a des chunks consécutifs disponibles
+      let lastAdded = -1
+      for (const seq of sortedSequences) {
+        if (seq === nextExpected) {
+          newContent += newBuffer.get(seq)!
+          newBuffer.delete(seq)
+          lastAdded = seq
+          nextExpected++
+        } else if (seq < nextExpected) {
+          // Chunk en retard (déjà traité ou doublon) - ignorer et nettoyer
+          newBuffer.delete(seq)
+        } else {
+          // Gap détecté (seq > nextExpected), on s'arrête ici et on attend
+          break
+        }
+      }
+      
+      // Mettre à jour lastProcessedSequence si on a ajouté des chunks
+      const newLastProcessedSequence = lastAdded >= 0 ? lastAdded : state.lastProcessedSequence
+      
+      return {
+        streamingContent: newContent,
+        chunkBuffer: newBuffer,
+        lastProcessedSequence: newLastProcessedSequence,
+      };
+    }),
 
   setStep: (step) =>
     set({ currentStep: step }),
@@ -146,10 +220,13 @@ export const useGenerationStore = create<GenerationState>((set) => ({
     set({
       isGenerating: false,
       streamingContent: '',
+      chunkBuffer: new Map<number, string>(),
+      lastProcessedSequence: -1,
       currentStep: 'Prompting',
       error: null,
       currentJobId: null,
       isInterrupting: false,  // Fix: Réinitialiser isInterrupting (Issue #4)
+      chunkBuffer: new Map<number, string>(),
     }),
 
   minimize: () =>
@@ -161,6 +238,8 @@ export const useGenerationStore = create<GenerationState>((set) => ({
     set({
       isGenerating: false,
       currentStep: 'Complete',
+      chunkBuffer: new Map<number, string>(),
+      lastProcessedSequence: -1,
     }),
 
   setError: (error) =>
@@ -178,6 +257,8 @@ export const useGenerationStore = create<GenerationState>((set) => ({
       error: null,
       currentJobId: null,
       isInterrupting: false,
+      chunkBuffer: new Map<number, string>(),
+      lastProcessedSequence: -1,
     }),
 
   setInterrupting: (isInterrupting) =>

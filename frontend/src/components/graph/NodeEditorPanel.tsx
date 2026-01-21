@@ -7,7 +7,7 @@ import { useForm, FormProvider, useFormContext, useFieldArray } from 'react-hook
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useGraphStore } from '../../store/graphStore'
 import { useContextStore } from '../../store/contextStore'
-import { useToast } from '../shared'
+import { useToast, WarningBanner } from '../shared'
 import { theme } from '../../theme'
 import { getErrorMessage } from '../../types/errors'
 import { DEFAULT_MODEL } from '../../constants'
@@ -25,7 +25,7 @@ import {
 import { ChoiceEditor } from './ChoiceEditor'
 
 export const NodeEditorPanel = memo(function NodeEditorPanel() {
-  const { selectedNodeId, nodes, updateNode, deleteNode, generateFromNode, isGenerating, setSelectedNode } = useGraphStore()
+  const { selectedNodeId, nodes, updateNode, deleteNode, generateFromNode, isGenerating, setSelectedNode, autoRestoredDraft, clearAutoRestoredDraft } = useGraphStore()
   const { selections } = useContextStore()
   const toast = useToast()
   
@@ -296,6 +296,14 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
   
   const choices = watch('choices') as Choice[] | undefined
   
+  // Handler pour charger le fichier plus ancien
+  const handleLoadOlderFile = useCallback(() => {
+    // Émettre un événement pour que GraphEditor charge le fichier plus ancien
+    const event = new CustomEvent('load-older-file')
+    window.dispatchEvent(event)
+    clearAutoRestoredDraft()
+  }, [clearAutoRestoredDraft])
+
   return (
     <FormProvider {...form}>
       <form
@@ -308,6 +316,16 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
           overflow: 'auto',
         }}
       >
+        {/* Bandeau d'avertissement pour brouillon restauré automatiquement */}
+        {autoRestoredDraft && (
+          <WarningBanner
+            message={`Un brouillon local plus récent (${new Date(autoRestoredDraft.timestamp).toLocaleString()}) a été restauré automatiquement. Le fichier sur disque est plus ancien (${new Date(autoRestoredDraft.fileTimestamp).toLocaleString()}).`}
+            actionLabel="Charger le fichier plus ancien"
+            onAction={handleLoadOlderFile}
+            onDismiss={() => clearAutoRestoredDraft()}
+          />
+        )}
+        
         {/* ID du nœud (readonly) */}
         <div>
           <label

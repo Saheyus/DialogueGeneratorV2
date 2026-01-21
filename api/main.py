@@ -572,15 +572,15 @@ async def debug_prompt_engine() -> JSONResponse:
     from core.prompt.prompt_engine import PromptEngine
 
     try:
-        src = inspect.getsource(PromptEngine.build_unity_dialogue_prompt)
+        src = inspect.getsource(PromptEngine.build_prompt)
     except Exception:
         src = ""
 
     return JSONResponse(
         content={
             "prompt_engine_module_file": getattr(pe_module, "__file__", None),
-            "has_section0_in_source": "### SECTION 0. CONTRAT GLOBAL" in src,
-            "has_old_dash_header_in_source": "--- INSTRUCTIONS DE GÉNÉRATION ---" in src,
+            "has_prompt_input_parameter": "PromptInput" in src,
+            "has_xml_format": "<prompt>" in src or 'create_xml_document' in src,
         }
     )
 

@@ -128,6 +128,16 @@ class BasePromptRequest(BaseModel):
     include_narrative_guides: bool = Field(default=True, description="Inclure les guides narratifs dans le prompt")
     previous_dialogue_preview: Optional[str] = Field(None, description="Texte formaté du dialogue précédent")
     in_game_flags: Optional[List[Dict[str, Any]]] = Field(None, description="Flags in-game sélectionnés pour la génération réactive")
+    
+    @field_validator('max_context_tokens')
+    @classmethod
+    def validate_max_context_tokens(cls, v: int) -> int:
+        """Valide que max_context_tokens est dans les limites autorisées (règle métier)."""
+        if v < 100:
+            raise ValueError(f"max_context_tokens doit être au minimum 100 (reçu: {v})")
+        if v > Defaults.MAX_CONTEXT_TOKENS:
+            raise ValueError(f"max_context_tokens ne peut pas dépasser {Defaults.MAX_CONTEXT_TOKENS} (reçu: {v})")
+        return v
 
 class EstimateTokensRequest(BasePromptRequest):
     """Requête pour estimer le nombre de tokens.
@@ -182,6 +192,30 @@ class GenerateUnityDialogueRequest(BasePromptRequest):
     llm_model_identifier: str = Field(default=ModelNames.GPT_5_MINI, description="Identifiant du modèle LLM")
     max_completion_tokens: Optional[int] = Field(None, ge=500, le=50000, description="Nombre maximum de tokens pour la génération")
     reasoning_effort: Optional[Literal["none", "low", "medium", "high", "xhigh"]] = Field(None, description="Niveau de raisonnement pour GPT-5.2 (none=rapide, xhigh=très approfondi). Disponible uniquement pour GPT-5.2 et GPT-5.2-pro.")
+    
+    @field_validator('context_selections', mode='after')
+    @classmethod
+    def validate_at_least_one_character(cls, v: ContextSelection) -> ContextSelection:
+        """Valide qu'au moins un personnage est sélectionné (règle métier Unity).
+        
+        Raises:
+            ValueError: Si aucun personnage n'est sélectionné.
+        """
+        all_characters = (v.characters_full or []) + (v.characters_excerpt or [])
+        if not all_characters:
+            raise ValueError("Au moins un personnage doit être sélectionné pour générer un dialogue Unity")
+        return v
+    
+    @field_validator('max_completion_tokens', mode='before')
+    @classmethod
+    def validate_max_completion_tokens(cls, v: Optional[int]) -> Optional[int]:
+        """Valide que max_completion_tokens est dans les limites autorisées (règle métier)."""
+        if v is not None:
+            if v < 100:
+                raise ValueError(f"max_completion_tokens doit être au minimum 100 (reçu: {v})")
+            if v > 16000:
+                raise ValueError(f"max_completion_tokens ne peut pas dépasser 16000 (reçu: {v})")
+        return v
 
 class GenerateUnityDialogueResponse(BaseModel):
     """Réponse pour la génération d'un nœud de dialogue Unity JSON.

@@ -14,4 +14,5 @@ export { CommandPalette } from './CommandPalette'
 export { SaveStatusIndicator } from './SaveStatusIndicator'
 export { ResizablePanels } from './ResizablePanels'
 export { ConfirmDialog, type ConfirmDialogProps } from './ConfirmDialog'
+export { WarningBanner, type WarningBannerProps } from './WarningBanner'
 
