@@ -10,7 +10,8 @@ import React, { useEffect, useState } from 'react';
 import { usePresetStore } from '../../store/presetStore';
 import type { Preset, PresetConfiguration } from '../../types/preset';
 import { theme } from '../../theme';
-import { useToast } from '../shared';
+import { useToast, SaveStatusIndicator } from '../shared';
+import type { SaveStatus } from '../shared/SaveStatusIndicator';
 
 export interface PresetSelectorProps {
   /** Callback appelé quand un preset est chargé */
@@ -19,12 +20,15 @@ export interface PresetSelectorProps {
   currentConfiguration?: PresetConfiguration;
   /** Getter lazy pour éviter recalculs coûteux à chaque render */
   getCurrentConfiguration?: () => PresetConfiguration;
+  /** Statut de sauvegarde */
+  saveStatus?: SaveStatus;
 }
 
 export const PresetSelector: React.FC<PresetSelectorProps> = ({
   onPresetLoaded,
   currentConfiguration,
   getCurrentConfiguration,
+  saveStatus,
 }) => {
   const {
     presets,
@@ -234,8 +238,15 @@ export const PresetSelector: React.FC<PresetSelectorProps> = ({
             whiteSpace: 'nowrap',
           }}
         >
-          💾 Sauvegarder preset...
+          💾 Sauvegarder preset
         </button>
+
+        {/* Indicateur de statut de sauvegarde */}
+        {saveStatus && (
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <SaveStatusIndicator status={saveStatus} />
+          </div>
+        )}
       </div>
 
       {/* Modal création preset */}

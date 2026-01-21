@@ -1,0 +1,4 @@
+  File "<string>", line 1
+    import json; lines = open('f:\\Projets\\Notion_Scrapper\\DialogueGenerator\\.cursor\\debug.log', 'r', encoding='utf-8').readlines(); api_call = None; api_response = None; [exec('api_call = json.loads(line)') if '\
+                                                                                                                                                                                                                       ^
+SyntaxError: unterminated string literal (detected at line 1)

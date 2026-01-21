@@ -3,7 +3,8 @@ import os
 import pytest
 from unittest.mock import patch, MagicMock
 from factories.llm_factory import LLMClientFactory
-from llm_client import DummyLLMClient, OpenAIClient
+from core.llm.llm_client import DummyLLMClient
+from core.llm.openai.client import OpenAIClient
 from core.llm.mistral_client import MistralClient
 
 

@@ -70,35 +70,6 @@ async def lifespan(app: FastAPI):
         uvicorn_log = logging.getLogger("uvicorn.error")
         uvicorn_log.warning("=== APP STARTUP - CODE LOADED ===")
     
-    # Debug Cursor optionnel (désactivé par défaut)
-    if os.getenv("CURSOR_DEBUG_LOG", "false").lower() in ("true", "1", "yes"):
-        # #region cursor debug log
-        import sys
-        import json
-        from pathlib import Path
-        import time
-        try:
-            log_path = Path(__file__).parent.parent / ".cursor" / "debug.log"
-            log_entry = {
-                "id": f"log_{int(time.time() * 1000)}",
-                "timestamp": int(time.time() * 1000),
-                "location": "api/main.py:lifespan:startup",
-                "message": "Application startup - vérification singletons",
-                "data": {
-                    "app_id": id(app),
-                    "api_dependencies_module": "api.dependencies" in sys.modules,
-                    "api_dependencies_module_id": id(sys.modules.get("api.dependencies")) if "api.dependencies" in sys.modules else None
-                },
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "A"
-            }
-            with open(log_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(log_entry) + "\n")
-        except Exception:
-            pass
-        # #endregion
-    
     # Valider la configuration de sécurité
     try:
         _validate_security_config()
@@ -233,28 +204,6 @@ async def lifespan(app: FastAPI):
         logger.info("Cleanup task des jobs de génération arrêtée")
     except Exception as e:
         logger.warning(f"Erreur lors de l'arrêt de la cleanup task: {e}")
-    if os.getenv("CURSOR_DEBUG_LOG", "false").lower() in ("true", "1", "yes"):
-        # #region cursor debug log
-        try:
-            import json
-            import time
-            from pathlib import Path
-            log_path = Path(__file__).parent.parent / ".cursor" / "debug.log"
-            log_entry = {
-                "id": f"log_{int(time.time() * 1000)}",
-                "timestamp": int(time.time() * 1000),
-                "location": "api/main.py:lifespan:shutdown",
-                "message": "Application shutdown",
-                "data": {"app_id": id(app)},
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "A",
-            }
-            with open(log_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(log_entry) + "\n")
-        except Exception:
-            pass
-        # #endregion
 
 
 # Création de l'application FastAPI
@@ -368,8 +317,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             field_path = ".".join(str(loc) for loc in err["loc"])
         details[field_path] = err["msg"]
     
-    # #region agent log
-    # Instrumentation pour debug : logger les détails de validation
+    # Logger les erreurs de validation
     error_details_full = []
     for err in errors:
         error_details_full.append({
@@ -384,26 +332,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         f"errors={error_details_full}, "
         f"path={request.url.path}"
     )
-    try:
-        import time as time_module
-        from pathlib import Path
-        log_path = Path(__file__).parent.parent / ".cursor" / "debug.log"
-        with open(log_path, "a", encoding="utf-8") as log_file:
-            log_file.write(json.dumps({
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "C",
-                "location": "api/main.py:validation_exception_handler",
-                "message": "Pydantic validation error",
-                "data": {
-                    "path": request.url.path,
-                    "details": error_details_full
-                },
-                "timestamp": int(time_module.time() * 1000)
-            }) + "\n")
-    except Exception:
-        pass
-    # #endregion agent log
     
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

@@ -75,7 +75,7 @@ so that **je réduis la friction cold start de 10+ clics à 1 clic**.
 - [x] Task 4: Créer composant PresetSelector.tsx (AC: #1, #2, #3, #5)
   - [x] Créer `frontend/src/components/generation/PresetSelector.tsx`
   - [x] Dropdown "📋 Charger preset ▼" avec liste presets (nom, icône, aperçu)
-  - [x] Bouton "💾 Sauvegarder preset..." ouvrant modal création
+  - [x] Bouton "💾 Sauvegarder preset" ouvrant modal création
   - [x] Modal création : Nom, icône emoji, aperçu lecture seule (personnages/lieux sélectionnés)
   - [x] Menu contextuel : Renommer, Supprimer (AC: #5)
   - [x] Pattern : Suivre style `GenerationOptionsModal.tsx` pour cohérence UI (overlay + header + contenu scrollable)
@@ -194,7 +194,7 @@ so that **je réduis la friction cold start de 10+ clics à 1 clic**.
   - Pattern : Immutable updates (cohérent avec `generationStore`, `llmStore`, `contextConfigStore`)
 - `frontend/src/components/generation/PresetSelector.tsx` : **NOUVEAU** - Composant sélecteur presets
   - Props : Aucune (utilise `usePresetStore` pour état global)
-  - UI : Dropdown "📋 Charger preset ▼" + Bouton "💾 Sauvegarder preset..."
+  - UI : Dropdown "📋 Charger preset ▼" + Bouton "💾 Sauvegarder preset"
   - Modal création : Nom, icône emoji, aperçu lecture seule (personnages/lieux sélectionnés)
   - Menu contextuel : Renommer, Supprimer (sur clic droit preset)
   - Pattern : Suivre style `GenerationOptionsModal.tsx` (overlay + header + contenu scrollable)

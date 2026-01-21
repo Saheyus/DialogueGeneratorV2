@@ -7,14 +7,12 @@ import hashlib
 from dataclasses import dataclass, asdict
 import xml.etree.ElementTree as ET
 from utils.xml_utils import (
-    escape_xml_text,
     parse_xml_element,
     validate_xml_content,
     indent_xml_element,
     create_xml_document,
     extract_text_from_element
 )
-from services.prompt_xml_parsers import build_narrative_guides_xml, build_vocabulary_xml
 
 # Essayer d'importer tiktoken, mais continuer si non disponible
 try:
@@ -196,34 +194,6 @@ class PromptEngine:
         return len(text.split())
 
 
-    def _escape_xml(self, text: str) -> str:
-        """Échappe les caractères spéciaux XML dans un texte.
-        
-        DEPRECATED: Utiliser utils.xml_utils.escape_xml_text() directement.
-        Cette méthode est conservée pour compatibilité mais délègue à xml_utils.
-        
-        Args:
-            text: Texte à échapper.
-            
-        Returns:
-            Texte échappé pour inclusion dans XML.
-        """
-        return escape_xml_text(text)
-
-    def _text_to_xml_content(self, text: str) -> str:
-        """Convertit un texte en contenu XML, en préservant les sauts de ligne.
-        
-        DEPRECATED: Utiliser utils.xml_utils.escape_xml_text() directement.
-        
-        Args:
-            text: Texte à convertir.
-            
-        Returns:
-            Texte échappé avec sauts de ligne préservés.
-        """
-        return escape_xml_text(text) if text else ""
-
-
     def _format_tone_section(self, generation_params: Dict[str, Any]) -> Optional[str]:
         """Formate la section ton et style en combinant tone et narrative_tags.
         
@@ -250,114 +220,6 @@ class PromptEngine:
         return "\n".join(parts)
 
     # build_prompt() est la méthode principale pour construire tous les prompts
-    
-    # Les méthodes _build_*_section() ont été déplacées vers PromptBuilder
-    # Elles sont conservées ici pour compatibilité mais déléguent à PromptBuilder
-    def _build_contract_section(self, input: PromptInput) -> Optional[ET.Element]:
-        """Construit la section <contract> (délègue à PromptBuilder).
-        
-        DEPRECATED: Utiliser PromptBuilder directement.
-        
-        Args:
-            input: Objet PromptInput contenant les paramètres.
-            
-        Returns:
-            Élément XML <contract> ou None si la section est vide.
-        """
-        return self._prompt_builder._build_contract_section(input)
-    
-    def _build_technical_section(self, input: PromptInput) -> Optional[ET.Element]:
-        """Construit la section <technical> (délègue à PromptBuilder).
-        
-        DEPRECATED: Utiliser PromptBuilder directement.
-        
-        Args:
-            input: Objet PromptInput contenant les paramètres.
-            
-        Returns:
-            Élément XML <technical> ou None si la section est vide.
-        """
-        return self._prompt_builder._build_technical_section(input)
-    
-    def _build_context_section(self, input: PromptInput) -> Optional[ET.Element]:
-        """Construit la section <context> (délègue à PromptBuilder).
-        
-        DEPRECATED: Utiliser PromptBuilder directement.
-        
-        Args:
-            input: Objet PromptInput contenant les paramètres.
-            
-        Returns:
-            Élément XML <context> ou None si la section est vide.
-        """
-        return self._prompt_builder._build_context_section(input)
-    
-    def _build_narrative_guides_xml(self, guides_text: str) -> ET.Element:
-        """Parse le texte des guides narratifs et crée une structure XML.
-        
-        DEPRECATED: Utiliser build_narrative_guides_xml() du module prompt_xml_parsers directement.
-        Cette méthode est conservée pour compatibilité mais délègue au module.
-        
-        Args:
-            guides_text: Texte formaté des guides (format Markdown simplifié).
-            
-        Returns:
-            Élément XML <narrative_guides> avec structure hiérarchique.
-        """
-        return build_narrative_guides_xml(guides_text)
-    
-    def _build_narrative_guides_section(self, input: PromptInput) -> Optional[ET.Element]:
-        """Construit la section <narrative_guides> (délègue à PromptBuilder).
-        
-        DEPRECATED: Utiliser PromptBuilder directement.
-        
-        Args:
-            input: Objet PromptInput contenant les paramètres.
-            
-        Returns:
-            Élément XML <narrative_guides> ou None si la section est vide.
-        """
-        return self._prompt_builder._build_narrative_guides_section(input)
-    
-    def _build_vocabulary_xml(self, vocab_text: str) -> ET.Element:
-        """Parse le texte du vocabulaire et crée une structure XML.
-        
-        DEPRECATED: Utiliser build_vocabulary_xml() du module prompt_xml_parsers directement.
-        Cette méthode est conservée pour compatibilité mais délègue au module.
-        
-        Args:
-            vocab_text: Texte formaté du vocabulaire (format "Terme: Définition").
-            
-        Returns:
-            Élément XML <vocabulary> avec structure hiérarchique par niveau de popularité.
-        """
-        return build_vocabulary_xml(vocab_text)
-    
-    def _build_vocabulary_section(self, input: PromptInput) -> Optional[ET.Element]:
-        """Construit la section <vocabulary> (délègue à PromptBuilder).
-        
-        DEPRECATED: Utiliser PromptBuilder directement.
-        
-        Args:
-            input: Objet PromptInput contenant les paramètres.
-            
-        Returns:
-            Élément XML <vocabulary> ou None si la section est vide.
-        """
-        return self._prompt_builder._build_vocabulary_section(input)
-    
-    def _build_scene_instructions_section(self, input: PromptInput) -> Optional[ET.Element]:
-        """Construit la section <scene_instructions> (délègue à PromptBuilder).
-        
-        DEPRECATED: Utiliser PromptBuilder directement.
-        
-        Args:
-            input: Objet PromptInput contenant les paramètres.
-            
-        Returns:
-            Élément XML <scene_instructions> ou None si la section est vide.
-        """
-        return self._prompt_builder._build_scene_instructions_section(input)
     
     def _parse_xml_to_prompt_structure(
         self, 

@@ -6,6 +6,7 @@ import { ContextSelector } from '../context/ContextSelector'
 import { GenerationPanel } from '../generation/GenerationPanel'
 import { EstimatedPromptPanel } from '../generation/EstimatedPromptPanel'
 import { UnityDialogueEditor, type UnityDialogueEditorHandle } from '../generation/UnityDialogueEditor'
+import { ReasoningTraceViewer } from '../generation/ReasoningTraceViewer'
 import { ContextDetail } from '../context/ContextDetail'
 import { ResizablePanels, type ResizablePanelsRef } from '../shared/ResizablePanels'
 import { Tabs, type Tab } from '../shared/Tabs'
@@ -56,7 +57,7 @@ export function Dashboard() {
   const [selectedDialogue, setSelectedDialogue] = useState<UnityDialogueMetadata | null>(null)
   const dialogueListRef = useRef<UnityDialogueListRef>(null)
   const unityDialogueEditorRef = useRef<UnityDialogueEditorHandle>(null)
-  const { rawPrompt, tokenCount, promptHash, isEstimating, unityDialogueResponse } = useGenerationStore()
+  const { rawPrompt, tokenCount, promptHash, isEstimating, unityDialogueResponse, setUnityDialogueResponse } = useGenerationStore()
   const generationState = useGenerationStore((state) => ({
     isEstimating: state.isEstimating,
     unityDialogueResponse: state.unityDialogueResponse,
@@ -178,6 +179,16 @@ export function Dashboard() {
       label: 'Dialogue généré',
       content: (
         <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%' }}>
+          {/* Reasoning Trace (dépliable en haut) */}
+          {unityDialogueResponse?.reasoning_trace && (
+            <div style={{ flexShrink: 0, borderBottom: `1px solid ${theme.border.primary}` }}>
+              <ReasoningTraceViewer
+                reasoningTrace={unityDialogueResponse.reasoning_trace}
+                isGenerating={false}
+              />
+            </div>
+          )}
+          
           {/* Contenu du dialogue */}
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
             {unityDialogueResponse ? (
@@ -189,6 +200,8 @@ export function Dashboard() {
                 onSave={() => {
                   // Rafraîchir la liste des dialogues après sauvegarde
                   dialogueListRef.current?.refresh()
+                  // Nettoyer le panneau "Dialogue généré" pour revenir à l'état initial
+                  setUnityDialogueResponse(null)
                 }}
               />
             ) : (

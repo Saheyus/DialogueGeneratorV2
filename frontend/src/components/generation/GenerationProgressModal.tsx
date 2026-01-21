@@ -227,13 +227,16 @@ export function GenerationProgressModal({
           </div>
         )}
 
-        {/* Content - Streaming Text */}
+        {/* Content - Streaming Text + Reasoning Trace */}
         <div
           style={{
             flex: 1,
             overflow: 'auto',
             padding: '1.5rem',
             minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1rem',
           }}
         >
           {error ? (
@@ -265,18 +268,21 @@ export function GenerationProgressModal({
               Interruption en cours...
             </div>
           ) : (
-            <pre
-              style={{
-                margin: 0,
-                fontFamily: 'monospace',
-                fontSize: '0.9rem',
-                color: theme.text.primary,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-              }}
-            >
-              {content || 'Préparation...'}
-            </pre>
+            <>
+              {/* Streaming Content */}
+              <pre
+                style={{
+                  margin: 0,
+                  fontFamily: 'monospace',
+                  fontSize: '0.9rem',
+                  color: theme.text.primary,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}
+              >
+                {content || 'Préparation...'}
+              </pre>
+            </>
           )}
         </div>
 

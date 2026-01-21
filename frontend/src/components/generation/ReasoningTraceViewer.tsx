@@ -91,7 +91,7 @@ export const ReasoningTraceViewer = memo(function ReasoningTraceViewer({
                 color: theme.text.primary,
               }}
             >
-              Phase Réflexive (GPT-5.2)
+              Phase Réflexive
             </div>
             {reasoningTrace?.effort && (
               <div

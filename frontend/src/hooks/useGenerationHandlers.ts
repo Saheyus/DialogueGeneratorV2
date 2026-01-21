@@ -138,14 +138,8 @@ export function useGenerationHandlers(
   })
 
   const handleGenerate = useCallback(async () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGenerationHandlers.ts:handleGenerate:entry',message:'handleGenerate called',data:{isGenerating:isGenerating,stackTrace:new Error().stack?.split('\n').slice(0,10).join('\n')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     // Protection contre les doubles appels
     if (isGenerating) {
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useGenerationHandlers.ts:handleGenerate:blocked',message:'handleGenerate blocked - already generating',data:{isGenerating:isGenerating},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       console.warn('handleGenerate appelé alors qu\'une génération est déjà en cours')
       return
     }

@@ -83,7 +83,7 @@ interface Preset {
 
 **Frontend:**
 - Nouveau composant `PresetBar.tsx` (barre compacte au-dessus "Scène Principale")
-- 2 boutons : "📋 Charger preset ▼" (dropdown) + "💾 Sauvegarder preset..."
+- 2 boutons : "📋 Charger preset ▼" (dropdown) + "💾 Sauvegarder preset"
 - Modal sauvegarde : nom, icône emoji, aperçu lecture seule
 - State : Zustand slice `usePresetStore`
 
@@ -518,4 +518,4 @@ async def select_context_auto(
 - ✅ Tests couvrent edge cases
 
 ---
-
+

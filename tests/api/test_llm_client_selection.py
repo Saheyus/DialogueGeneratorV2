@@ -5,7 +5,8 @@ from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 from api.main import app
 from api.dependencies import get_config_service
-from core.llm.llm_client import DummyLLMClient, OpenAIClient
+from core.llm.llm_client import DummyLLMClient
+from core.llm.openai.client import OpenAIClient
 
 
 @pytest.fixture

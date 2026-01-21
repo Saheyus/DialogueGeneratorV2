@@ -12,6 +12,10 @@ def mock_context_builder():
     mock_builder = MagicMock(spec=ContextBuilder)
     mock_builder.build_context = MagicMock(return_value="Test context")
     mock_builder.build_context_with_custom_fields = MagicMock(return_value="Test context with custom fields")
+    # Mock _context_serializer utilisé dans _build_context_summary
+    mock_serializer = MagicMock()
+    mock_serializer.serialize_to_text = MagicMock(return_value="Test context")
+    mock_builder._context_serializer = mock_serializer
     return mock_builder
 
 
@@ -54,6 +58,10 @@ class TestDialogueGenerationService:
         user_instructions = "Test instructions"
         max_tokens = 1000
         
+        # Mock build_context_json qui est maintenant utilisé au lieu de build_context
+        mock_context_structure = {"context": "structured"}
+        mock_context_builder.build_context_json = MagicMock(return_value=mock_context_structure)
+        
         result = dialogue_service._build_context_summary(
             context_selections=context_selections,
             user_instructions=user_instructions,
@@ -61,7 +69,8 @@ class TestDialogueGenerationService:
         )
         
         assert result == "Test context"
-        mock_context_builder.build_context.assert_called_once()
+        mock_context_builder.build_context_json.assert_called_once()
+        mock_context_builder._context_serializer.serialize_to_text.assert_called_once_with(mock_context_structure)
     
     def test_build_context_summary_with_field_configs(self, dialogue_service, mock_context_builder):
         """Test de construction avec field_configs."""

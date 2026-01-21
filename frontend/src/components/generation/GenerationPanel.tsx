@@ -33,7 +33,6 @@ import { useGenerationOrchestrator } from '../../hooks/useGenerationOrchestrator
 import { useGenerationDraft } from '../../hooks/useGenerationDraft'
 import { usePresetManagement } from '../../hooks/usePresetManagement'
 // Composants UI extraits
-import { GenerationPanelHeader } from './GenerationPanelHeader'
 import { GenerationPanelControls } from './GenerationPanelControls'
 import { GenerationPanelModals } from './GenerationPanelModals'
 
@@ -56,6 +55,7 @@ export function GenerationPanel() {
     error: streamingError,
     currentJobId,
     isInterrupting,
+    unityDialogueResponse,
     interrupt,
     minimize,
     resetStreamingState,
@@ -312,12 +312,11 @@ export function GenerationPanel() {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: theme.background.panel }}>
       <div style={{ padding: '1.5rem', flex: 1, overflowY: 'auto' }}>
-        <GenerationPanelHeader saveStatus={draft.saveStatus} />
-
         {/* PresetSelector (Task 6) */}
         <PresetSelector
           onPresetLoaded={presets.handlePresetLoaded}
           getCurrentConfiguration={presets.getCurrentConfiguration}
+          saveStatus={draft.saveStatus}
         />
 
             <SceneSelectionWidget />
@@ -387,7 +386,7 @@ export function GenerationPanel() {
           </div>
 
           {/* Colonne Niveau de raisonnement */}
-          {(llmModel === "gpt-5.2" || llmModel === "gpt-5.2-pro") && (
+          {(llmModel === "gpt-5.2" || llmModel === "gpt-5.2-pro" || llmModel === "gpt-5-mini" || llmModel === "gpt-5-nano") && (
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                 <label htmlFor="reasoning-effort-select" style={{ color: theme.text.primary, fontSize: '0.9rem', fontWeight: 500 }}>
@@ -411,7 +410,11 @@ export function GenerationPanel() {
                       justifyContent: 'center',
                       padding: 0,
                     }}
-                    title="Contrôle la profondeur de raisonnement du modèle. Plus élevé = meilleure qualité mais plus lent et plus coûteux."
+                    title={
+                      llmModel === "gpt-5-mini" || llmModel === "gpt-5-nano"
+                        ? "Contrôle la profondeur de raisonnement. Mini/nano supportent uniquement minimal, low, medium, high (pas 'none' ni 'xhigh'). Le reasoning est toujours actif."
+                        : "Contrôle la profondeur de raisonnement du modèle. Plus élevé = meilleure qualité mais plus lent et plus coûteux."
+                    }
                   >
                     ?
                   </button>
@@ -419,9 +422,9 @@ export function GenerationPanel() {
               </div>
               <select
                 id="reasoning-effort-select"
-                value={reasoningEffort || 'none'}
+                value={reasoningEffort || (llmModel === "gpt-5-mini" || llmModel === "gpt-5-nano" ? 'minimal' : 'none')}
                 onChange={(e) => {
-                  const newValue = e.target.value as 'none' | 'low' | 'medium' | 'high' | 'xhigh'
+                  const newValue = e.target.value as 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
                   setReasoningEffort(newValue === 'none' ? null : newValue)
                   draft.markDirty()
                 }}
@@ -436,11 +439,23 @@ export function GenerationPanel() {
                   fontSize: '0.9rem',
                 }}
               >
-                <option value="none">Aucun (rapide, latence minimale)</option>
-                <option value="low">Faible (raisonnement minimal)</option>
-                <option value="medium">Moyen (équilibré, recommandé)</option>
-                <option value="high">Élevé (raisonnement approfondi)</option>
-                <option value="xhigh">Très élevé (raisonnement maximal)</option>
+                {/* Options différentes selon le modèle */}
+                {llmModel === "gpt-5.2" || llmModel === "gpt-5.2-pro" ? (
+                  <>
+                    <option value="none">Aucun (rapide, latence minimale)</option>
+                    <option value="low">Faible (raisonnement minimal)</option>
+                    <option value="medium">Moyen (équilibré, recommandé)</option>
+                    <option value="high">Élevé (raisonnement approfondi)</option>
+                    <option value="xhigh">Très élevé (raisonnement maximal)</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="minimal">Minimal (raisonnement minimal, toujours actif)</option>
+                    <option value="low">Faible (raisonnement léger)</option>
+                    <option value="medium">Moyen (équilibré, recommandé)</option>
+                    <option value="high">Élevé (raisonnement approfondi)</option>
+                  </>
+                )}
               </select>
             </div>
           )}
@@ -497,6 +512,7 @@ export function GenerationPanel() {
         content={streamingContent}
         currentStep={currentStep}
         isMinimized={isMinimized}
+        error={streamingError}
         isInterrupting={isInterrupting}
         onInterrupt={async () => {
           // Afficher "Interruption en cours..."
@@ -549,7 +565,6 @@ export function GenerationPanel() {
           resetStreamingState()
           setIsLoading(false)
         }}
-        error={streamingError}
       />
       
       {/* Modals (reset confirm, preset validation, budget block) */}

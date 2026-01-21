@@ -258,40 +258,22 @@ class TestGenerateUnityDialogue:
     @pytest.mark.asyncio
     async def test_generate_unity_dialogue_success(self, client, mock_dialogue_service, monkeypatch):
         """Test de génération Unity dialogue avec succès."""
-        from services.unity_dialogue_generation_service import UnityDialogueGenerationService
-        from models.dialogue_structure.unity_dialogue_node import (
-            UnityDialogueGenerationResponse,
-            UnityDialogueNodeContent,
-            UnityDialogueChoiceContent
-        )
+        from api.schemas.dialogue import GenerateUnityDialogueResponse
         from unittest.mock import AsyncMock
+        import json
         
-        # Mock UnityDialogueGenerationService
-        mock_unity_service = MagicMock(spec=UnityDialogueGenerationService)
-        mock_response = UnityDialogueGenerationResponse(
-            title="Test Dialogue",
-            node=UnityDialogueNodeContent(
-                speaker="TEST_NPC",
-                line="Test dialogue line",
-                choices=[
-                    UnityDialogueChoiceContent(text="Choice 1")
-                ]
-            )
+        # Mock UnityDialogueOrchestrator qui est utilisé dans le router
+        mock_orchestrator = MagicMock()
+        mock_response = GenerateUnityDialogueResponse(
+            json_content=json.dumps({"title": "Test Dialogue", "nodes": []}),
+            raw_prompt=json.dumps({"system": "", "user": ""}),  # raw_prompt est une string JSON
+            prompt_hash="test_hash",
+            estimated_tokens=100,
+            reasoning_trace=None
         )
-        mock_unity_service.generate_dialogue_node = AsyncMock(return_value=mock_response)
-        mock_unity_service.enrich_with_ids = MagicMock(return_value=[mock_response])
+        mock_orchestrator.generate = AsyncMock(return_value=mock_response)
         
-        # Mock LLM client factory
-        mock_llm_client = MagicMock()
-        mock_llm_client.generate_variants = AsyncMock(return_value=[mock_response])
-        
-        def mock_create_client(*args, **kwargs):
-            return mock_llm_client
-        
-        monkeypatch.setattr("factories.llm_factory.LLMClientFactory.create_client", mock_create_client)
-        monkeypatch.setattr("api.routers.dialogues.UnityDialogueGenerationService", lambda: mock_unity_service)
-        monkeypatch.setattr("api.routers.dialogues.SkillCatalogService", MagicMock)
-        monkeypatch.setattr("api.routers.dialogues.TraitCatalogService", MagicMock)
+        monkeypatch.setattr("services.unity_dialogue_orchestrator.UnityDialogueOrchestrator", lambda *args, **kwargs: mock_orchestrator)
         
         request_data = {
             "context_selections": {
