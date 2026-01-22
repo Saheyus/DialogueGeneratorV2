@@ -128,6 +128,9 @@ export function Dashboard() {
   // Ref pour suivre l'ID du dernier dialogue pour lequel on a fait le basculement automatique
   const lastAutoSwitchedDialogueRef = useRef<string | null>(null)
   
+  // Ref pour suivre l'ID du dernier nœud pour lequel on a fait le basculement automatique
+  const lastAutoSwitchedNodeRef = useRef<string | null>(null)
+  
   // Basculer automatiquement vers l'onglet Dialogue quand la génération commence
   useEffect(() => {
     if (actions.isLoading && rightPanelTab !== 'dialogue') {
@@ -225,18 +228,18 @@ export function Dashboard() {
     },
     {
       id: 'node',
-      label: selectedNodeId ? `Édition de nœud (${selectedNodeId})` : 'Édition de nœud',
+      label: 'Édition de nœud',
       content: (
         <div style={{ 
           flex: 1, 
           minHeight: 0, 
           maxHeight: '100%', 
-          overflow: 'hidden', 
           display: 'flex', 
           flexDirection: 'column', 
           height: '100%',
           padding: '1rem',
           overflowY: 'auto',
+          overflowX: 'hidden',
         }}>
           <NodeEditorPanel />
         </div>
@@ -265,14 +268,24 @@ export function Dashboard() {
         </div>
       ),
     },
-  ], [unityDialogueResponse, rawPrompt, isEstimating, tokenCount, promptHash, selectedContextItem, selectedNodeId, actions.isLoading, generationState.isEstimating, isGraphGenerating])
+  ], [unityDialogueResponse, rawPrompt, isEstimating, tokenCount, promptHash, selectedContextItem, selectedNodeId, actions.isLoading, generationState.isEstimating, isGraphGenerating, setUnityDialogueResponse])
   
-  // Basculer automatiquement vers l'onglet "Édition de nœud" quand un nœud est sélectionné dans le graphe
+  // Basculer automatiquement vers l'onglet "Édition de nœud" quand un NOUVEAU nœud est sélectionné dans le graphe
+  // (seulement lors de la sélection initiale, pas à chaque changement d'onglet manuel)
   useEffect(() => {
-    if (selectedNodeId && centerPanelTab === 'graph' && rightPanelTab !== 'node') {
-      setRightPanelTab('node')
+    if (selectedNodeId && centerPanelTab === 'graph') {
+      // Basculer seulement si c'est un nouveau nœud (pas encore traité)
+      if (lastAutoSwitchedNodeRef.current !== selectedNodeId) {
+        setRightPanelTab('node')
+        lastAutoSwitchedNodeRef.current = selectedNodeId
+      }
+    } else if (!selectedNodeId) {
+      // Si aucun nœud n'est sélectionné, réinitialiser la ref
+      lastAutoSwitchedNodeRef.current = null
     }
-  }, [selectedNodeId, centerPanelTab, rightPanelTab])
+    // Ne pas inclure rightPanelTab dans les dépendances pour éviter les basculements
+    // lors des changements manuels d'onglet
+  }, [selectedNodeId, centerPanelTab])
 
   const applyCollapsedLayout = useCallback(
     (nextLeftCollapsed: boolean, nextRightCollapsed: boolean) => {

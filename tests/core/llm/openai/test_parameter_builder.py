@@ -10,6 +10,14 @@ class TestParameterModel(BaseModel):
     """Modèle de test pour structured output."""
     title: str = Field(description="Titre de l'interaction")
     content: str = Field(description="Contenu")
+    
+    class Config:
+        """Configuration Pydantic."""
+        pass
+    
+    def __init__(self, **data):
+        """Initialise le modèle de test."""
+        super().__init__(**data)
 
 
 class TestOpenAIParameterBuilder:
@@ -57,7 +65,7 @@ class TestOpenAIParameterBuilder:
         )
         
         assert config["effort"] == "medium"
-        assert config["summary"] == "detailed"
+        assert config["summary"] == "auto"  # "auto" est utilisé par défaut
 
     def test_build_reasoning_config_mini_nano_none_effort(self):
         """Test que mini/nano convertit 'none' en 'minimal'."""
@@ -128,6 +136,79 @@ class TestOpenAIParameterBuilder:
         assert params["input"] == messages
         assert params["max_output_tokens"] == 1500
         assert params["temperature"] == 0.7
+    
+    def test_build_responses_params_with_instructions(self):
+        """Test construction paramètres avec instructions séparé."""
+        messages = [{"role": "user", "content": "Test"}]
+        instructions = "Tu es un assistant expert."
+        params = OpenAIParameterBuilder.build_responses_params(
+            model_name="gpt-5.2",
+            messages=messages,
+            response_model=None,
+            max_tokens=1500,
+            temperature=0.7,
+            reasoning_effort=None,
+            reasoning_summary=None,
+            instructions=instructions,
+        )
+        
+        assert params["model"] == "gpt-5.2"
+        assert params["input"] == messages
+        assert params["instructions"] == instructions
+        assert params["max_output_tokens"] == 1500
+    
+    def test_build_responses_params_with_top_p(self):
+        """Test construction paramètres avec top_p."""
+        messages = [{"role": "user", "content": "Test"}]
+        params = OpenAIParameterBuilder.build_responses_params(
+            model_name="gpt-5.2",
+            messages=messages,
+            response_model=None,
+            max_tokens=1500,
+            temperature=0.7,
+            reasoning_effort=None,
+            reasoning_summary=None,
+            top_p=0.9,
+        )
+        
+        assert params["top_p"] == 0.9
+        # top_p et temperature peuvent coexister
+        assert params["temperature"] == 0.7
+    
+    def test_build_responses_params_with_streaming(self):
+        """Test construction paramètres avec streaming."""
+        messages = [{"role": "user", "content": "Test"}]
+        params = OpenAIParameterBuilder.build_responses_params(
+            model_name="gpt-5.2",
+            messages=messages,
+            response_model=None,
+            max_tokens=1500,
+            temperature=0.7,
+            reasoning_effort=None,
+            reasoning_summary=None,
+            stream=True,
+        )
+        
+        assert params["stream"] is True
+        assert "stream_options" in params
+        assert "reasoning" in params["stream_options"]["include"]
+    
+    def test_build_responses_params_top_p_validation(self):
+        """Test que top_p hors limites est ignoré."""
+        messages = [{"role": "user", "content": "Test"}]
+        params = OpenAIParameterBuilder.build_responses_params(
+            model_name="gpt-5.2",
+            messages=messages,
+            response_model=None,
+            max_tokens=1500,
+            temperature=0.7,
+            reasoning_effort=None,
+            reasoning_summary=None,
+            top_p=1.5,  # Hors limites
+        )
+        
+        # top_p hors limites ne doit pas être inclus
+        assert "top_p" not in params
 
     def test_build_responses_params_with_structured_output(self):
         """Test construction paramètres avec structured output."""
@@ -165,3 +246,76 @@ class TestOpenAIParameterBuilder:
         assert params["reasoning"]["summary"] == "auto"
         # Temperature ne doit pas être incluse car reasoning.effort != "none"
         assert "temperature" not in params
+    
+    def test_build_responses_params_with_instructions(self):
+        """Test construction paramètres avec instructions séparé."""
+        messages = [{"role": "user", "content": "Test"}]
+        instructions = "Tu es un assistant expert."
+        params = OpenAIParameterBuilder.build_responses_params(
+            model_name="gpt-5.2",
+            messages=messages,
+            response_model=None,
+            max_tokens=1500,
+            temperature=0.7,
+            reasoning_effort=None,
+            reasoning_summary=None,
+            instructions=instructions,
+        )
+        
+        assert params["model"] == "gpt-5.2"
+        assert params["input"] == messages
+        assert params["instructions"] == instructions
+        assert params["max_output_tokens"] == 1500
+    
+    def test_build_responses_params_with_top_p(self):
+        """Test construction paramètres avec top_p."""
+        messages = [{"role": "user", "content": "Test"}]
+        params = OpenAIParameterBuilder.build_responses_params(
+            model_name="gpt-5.2",
+            messages=messages,
+            response_model=None,
+            max_tokens=1500,
+            temperature=0.7,
+            reasoning_effort=None,
+            reasoning_summary=None,
+            top_p=0.9,
+        )
+        
+        assert params["top_p"] == 0.9
+        # top_p et temperature peuvent coexister
+        assert params["temperature"] == 0.7
+    
+    def test_build_responses_params_with_streaming(self):
+        """Test construction paramètres avec streaming."""
+        messages = [{"role": "user", "content": "Test"}]
+        params = OpenAIParameterBuilder.build_responses_params(
+            model_name="gpt-5.2",
+            messages=messages,
+            response_model=None,
+            max_tokens=1500,
+            temperature=0.7,
+            reasoning_effort=None,
+            reasoning_summary=None,
+            stream=True,
+        )
+        
+        assert params["stream"] is True
+        assert "stream_options" in params
+        assert "reasoning" in params["stream_options"]["include"]
+    
+    def test_build_responses_params_top_p_validation(self):
+        """Test que top_p hors limites est ignoré."""
+        messages = [{"role": "user", "content": "Test"}]
+        params = OpenAIParameterBuilder.build_responses_params(
+            model_name="gpt-5.2",
+            messages=messages,
+            response_model=None,
+            max_tokens=1500,
+            temperature=0.7,
+            reasoning_effort=None,
+            reasoning_summary=None,
+            top_p=1.5,  # Hors limites
+        )
+        
+        # top_p hors limites ne doit pas être inclus
+        assert "top_p" not in params

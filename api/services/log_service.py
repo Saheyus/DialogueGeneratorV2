@@ -260,7 +260,7 @@ class LogService:
                 if isinstance(data, list):
                     return data
                 return []
-        except (json.JSONDecodeError, IOError) as e:
+        except (json.JSONDecodeError, IOError, UnicodeDecodeError) as e:
             logger.warning(f"Impossible de charger le fichier de log {file_path}: {e}")
             return []
     

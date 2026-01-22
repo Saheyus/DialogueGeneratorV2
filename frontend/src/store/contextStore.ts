@@ -12,6 +12,14 @@ import type {
   CommunityResponse,
 } from '../types/api'
 
+// TTL pour le cache (30 minutes)
+const CACHE_TTL = 30 * 60 * 1000
+
+interface CachedData {
+  data: string[]
+  timestamp: number
+}
+
 interface ContextState {
   selections: ContextSelection
   selectedRegion: string | null
@@ -22,6 +30,10 @@ interface ContextState {
   items: ItemResponse[]
   species: SpeciesResponse[]
   communities: CommunityResponse[]
+  // Cache pour éviter les appels API redondants
+  cachedCharacters: CachedData | null
+  cachedRegions: CachedData | null
+  cachedSubLocations: Map<string, CachedData>
   setSelections: (selections: ContextSelection) => void
   setElementLists: (lists: {
     characters: CharacterResponse[]
@@ -43,6 +55,12 @@ interface ContextState {
   applyLinkedElements: (elements: string[]) => void
   clearSelections: () => void
   restoreState: (selections: ContextSelection, region: string | null, subLocations: string[]) => void
+  // Actions pour le cache
+  setCachedCharacters: (characters: string[]) => void
+  setCachedRegions: (regions: string[]) => void
+  setCachedSubLocations: (regionName: string, subLocations: string[]) => void
+  invalidateCache: () => void
+  isCacheValid: (cached: CachedData | null) => boolean
 }
 
 const defaultSelections: ContextSelection = {
@@ -86,6 +104,10 @@ export const useContextStore = create<ContextState>((set, get) => ({
   items: [],
   species: [],
   communities: [],
+  // Cache initial
+  cachedCharacters: null,
+  cachedRegions: null,
+  cachedSubLocations: new Map<string, CachedData>(),
 
   setSelections: (selections: ContextSelection) => {
     set({ selections: normalizeSelections(selections) })
@@ -431,6 +453,49 @@ export const useContextStore = create<ContextState>((set, get) => ({
       selectedRegion: region,
       selectedSubLocations: subLocations,
     })
+  },
+
+  // Actions pour le cache
+  setCachedCharacters: (characters: string[]) => {
+    set({
+      cachedCharacters: {
+        data: characters,
+        timestamp: Date.now(),
+      },
+    })
+  },
+
+  setCachedRegions: (regions: string[]) => {
+    set({
+      cachedRegions: {
+        data: regions,
+        timestamp: Date.now(),
+      },
+    })
+  },
+
+  setCachedSubLocations: (regionName: string, subLocations: string[]) => {
+    set((state) => {
+      const newCache = new Map(state.cachedSubLocations)
+      newCache.set(regionName, {
+        data: subLocations,
+        timestamp: Date.now(),
+      })
+      return { cachedSubLocations: newCache }
+    })
+  },
+
+  invalidateCache: () => {
+    set({
+      cachedCharacters: null,
+      cachedRegions: null,
+      cachedSubLocations: new Map<string, CachedData>(),
+    })
+  },
+
+  isCacheValid: (cached: CachedData | null) => {
+    if (!cached) return false
+    return Date.now() - cached.timestamp < CACHE_TTL
   },
 }))
 

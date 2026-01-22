@@ -3,7 +3,7 @@
 import logging
 import os
 import time
-from typing import List, Optional, Type, Union, Dict, Any, Callable, Coroutine
+from typing import List, Optional, Type, Union, Dict, Any, Callable, Coroutine, AsyncIterator
 from pydantic import BaseModel
 from openai import AsyncOpenAI, APIError
 
@@ -12,6 +12,7 @@ from core.llm.openai.parameter_builder import OpenAIParameterBuilder
 from core.llm.openai.response_parser import OpenAIResponseParser
 from core.llm.openai.reasoning_extractor import OpenAIReasoningExtractor
 from core.llm.openai.usage_tracker import OpenAIUsageTracker
+from core.llm.openai.stream_parser import OpenAIStreamParser, StreamChunk
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +56,12 @@ class OpenAIClient(ILLMClient):
         self.llm_config = config if config is not None else {}
         self.model_name = self.llm_config.get("default_model", "gpt-5.2")
         self.temperature = self.llm_config.get("temperature", 0.7)
-        self.max_tokens = self.llm_config.get("max_tokens", 1500)
+        # Recommandation OpenAI: 25000 tokens minimum pour reasoning summary
+        # Utiliser 32000 par défaut pour avoir une marge de sécurité
+        self.max_tokens = self.llm_config.get("max_tokens", 32000)
         self.reasoning_effort = self.llm_config.get("reasoning_effort", None)
         self.reasoning_summary = self.llm_config.get("reasoning_summary", None)
+        self.top_p = self.llm_config.get("top_p", None)
         
         self.system_prompt_template = self.llm_config.get(
             "system_prompt_template",
@@ -116,7 +120,7 @@ class OpenAIClient(ILLMClient):
         """
         generated_results = []
         
-        # Construire les messages
+        # Construire les instructions système (séparées de input)
         system_message_content = (
             user_system_prompt_override if user_system_prompt_override else self.system_prompt_template
         )
@@ -125,12 +129,15 @@ class OpenAIClient(ILLMClient):
                 " Tu DOIS utiliser la fonction 'generate_interaction' pour formater ta réponse."
             )
         
-        messages = [{"role": "system", "content": system_message_content}]
+        # Construire les messages (sans system message si on utilise instructions séparé)
+        # Le system message sera passé via le paramètre instructions
+        messages: List[Dict[str, Any]] = []
         if previous_dialogue_context:
             messages.extend(previous_dialogue_context)
         messages.append({"role": "user", "content": prompt})
         
-        logger.debug(f"Messages envoyés au LLM (avant tool): {messages}")
+        logger.debug(f"Messages envoyés au LLM (input, sans system): {messages}")
+        logger.debug(f"Instructions système (séparées): {system_message_content[:100]}...")
         
         # Construire les paramètres pour Responses API
         responses_params = OpenAIParameterBuilder.build_responses_params(
@@ -141,6 +148,8 @@ class OpenAIClient(ILLMClient):
             temperature=self.temperature,
             reasoning_effort=self.reasoning_effort,
             reasoning_summary=self.reasoning_summary,
+            instructions=system_message_content,
+            top_p=self.top_p,
         )
         
         # Générer k variantes
@@ -231,6 +240,195 @@ class OpenAIClient(ILLMClient):
         
         return generated_results
 
+    async def generate_variants_streaming(
+        self,
+        prompt: str,
+        k: int = 1,
+        response_model: Optional[Type[BaseModel]] = None,
+        previous_dialogue_context: Optional[List[Dict[str, Any]]] = None,
+        user_system_prompt_override: Optional[str] = None,
+        chunk_callback: Optional[Callable[[StreamChunk], Coroutine[Any, Any, None]]] = None,
+    ) -> AsyncIterator[Union[StreamChunk, BaseModel, str]]:
+        """Génère k variantes avec streaming natif.
+        
+        Args:
+            prompt: Le prompt à envoyer au LLM.
+            k: Le nombre de variantes à générer.
+            response_model: Le modèle Pydantic attendu pour la sortie structurée.
+            previous_dialogue_context: Contexte de dialogue précédent.
+            user_system_prompt_override: Pour surcharger le system prompt.
+            chunk_callback: Callback appelé pour chaque chunk streaming (optionnel, déprécié - utiliser les chunks yieldés).
+            
+        Yields:
+            Chunks de streaming (StreamChunk) pendant la génération, puis les résultats finaux (BaseModel ou str).
+        """
+        # Construire les instructions système (séparées de input)
+        system_message_content = (
+            user_system_prompt_override if user_system_prompt_override else self.system_prompt_template
+        )
+        if response_model:
+            system_message_content += (
+                " Tu DOIS utiliser la fonction 'generate_interaction' pour formater ta réponse."
+            )
+        
+        # Construire les messages (sans system message)
+        messages: List[Dict[str, Any]] = []
+        if previous_dialogue_context:
+            messages.extend(previous_dialogue_context)
+        messages.append({"role": "user", "content": prompt})
+        
+        logger.debug(f"Messages envoyés au LLM (input, sans system): {messages}")
+        logger.debug(f"Instructions système (séparées): {system_message_content[:100]}...")
+        
+        # Construire les paramètres pour Responses API avec streaming
+        responses_params = OpenAIParameterBuilder.build_responses_params(
+            model_name=self.model_name,
+            messages=messages,
+            response_model=response_model,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+            reasoning_effort=self.reasoning_effort,
+            reasoning_summary=self.reasoning_summary,
+            instructions=system_message_content,
+            top_p=self.top_p,
+            stream=True,
+        )
+        
+        # Générer k variantes avec streaming
+        for i in range(k):
+            start_time = time.time()
+            success = False
+            error_message = None
+            parsed_output: Optional[Union[BaseModel, str]] = None
+            
+            try:
+                logger.info(f"Début de la génération streaming de la variante {i+1}/{k} pour le prompt.")
+                
+                # Appel API avec streaming
+                stream = await self._make_api_call_streaming(responses_params)
+                
+                # Parser le stream
+                stream_parser = OpenAIStreamParser(reasoning_callback=self.reasoning_callback)
+                function_call_arguments: Optional[str] = None
+                item_id: Optional[str] = None
+                completed_response: Optional[Any] = None
+                
+                async for chunk in stream_parser.parse_stream(stream):
+                    # Yielder le chunk pour feedback temps réel (priorité sur callback)
+                    yield chunk
+                    
+                    # Appeler le callback si fourni (pour compatibilité)
+                    if chunk_callback:
+                        try:
+                            await chunk_callback(chunk)
+                        except Exception as e:
+                            logger.warning(f"Erreur dans chunk_callback: {e}")
+                    
+                    # Accumuler les function call arguments
+                    if chunk.event_type == "response.function_call_arguments.delta":
+                        item_id = chunk.data.get("item_id")
+                        if item_id:
+                            function_call_arguments = stream_parser.get_completed_function_call_arguments(item_id)
+                    
+                    elif chunk.event_type == "response.function_call_arguments.done":
+                        item_id = chunk.data.get("item_id")
+                        if item_id:
+                            function_call_arguments = stream_parser.get_completed_function_call_arguments(item_id)
+                            if not function_call_arguments:
+                                # Utiliser arguments fourni dans l'événement done
+                                function_call_arguments = chunk.data.get("arguments")
+                    
+                    elif chunk.event_type == "response.completed":
+                        # Réponse complète reçue
+                        completed_response = chunk.data.get("response")
+                        if completed_response:
+                            # Extraire les métriques d'utilisation
+                            usage_metrics = OpenAIUsageTracker.extract_usage_metrics(completed_response)
+                            prompt_tokens = usage_metrics["prompt_tokens"]
+                            completion_tokens = usage_metrics["completion_tokens"]
+                            total_tokens = usage_metrics["total_tokens"]
+                            
+                            # Extraire le reasoning trace
+                            self.reasoning_trace = await OpenAIReasoningExtractor.extract_and_notify_reasoning(
+                                completed_response, i + 1, self.reasoning_callback, self.model_name
+                            )
+                            
+                            # Parser la réponse finale
+                            if function_call_arguments and response_model:
+                                # Utiliser les arguments accumulés pour parser
+                                try:
+                                    parsed_output = response_model.model_validate_json(function_call_arguments)
+                                    success = True
+                                    logger.info(f"Variante {i+1} générée et validée avec succès (streaming, structured).")
+                                except Exception as e:
+                                    logger.error(f"Erreur de validation Pydantic pour la variante {i+1}: {e}", exc_info=True)
+                                    error_message = f"Validation error: {e}"
+                            else:
+                                # Parser normalement depuis la réponse complète
+                                parsed_output, error_message, success = OpenAIResponseParser.parse_response(
+                                    completed_response, response_model, self.model_name, i + 1
+                                )
+                    
+                    elif chunk.event_type == "response.failed":
+                        error_data = chunk.data.get("error", {})
+                        error_message = str(error_data)
+                        logger.error(f"Erreur API OpenAI (streaming) pour la variante {i+1}: {error_message}")
+                
+                # Yielder le résultat final
+                if success and parsed_output is not None:
+                    yield parsed_output
+                else:
+                    error_str = f"Erreur: {error_message}" if error_message else f"Erreur: Réponse vide ou inattendue pour la variante {i+1}"
+                    logger.error(f"Yielding erreur: {error_str}")
+                    yield error_str
+                    
+            except APIError as e:
+                logger.error(f"Erreur API OpenAI lors de la génération streaming de la variante {i+1}: {e}")
+                yield f"Erreur API: {e}"
+                error_message = str(e)
+            except Exception as e:
+                logger.error(
+                    f"Erreur inattendue lors de la génération streaming de la variante {i+1}: {e}",
+                    exc_info=True
+                )
+                yield f"Erreur: {e}"
+                error_message = str(e)
+            finally:
+                # Calculer la durée
+                duration_ms = int((time.time() - start_time) * 1000)
+                
+                # Enregistrer l'utilisation si le service est disponible
+                if self.usage_service:
+                    try:
+                        # Récupérer les métriques depuis completed_response si disponible
+                        prompt_tokens = 0
+                        completion_tokens = 0
+                        total_tokens = 0
+                        
+                        if completed_response:
+                            usage_metrics = OpenAIUsageTracker.extract_usage_metrics(completed_response)
+                            prompt_tokens = usage_metrics["prompt_tokens"]
+                            completion_tokens = usage_metrics["completion_tokens"]
+                            total_tokens = usage_metrics["total_tokens"]
+                        
+                        self.usage_service.track_usage(
+                            request_id=self.request_id,
+                            model_name=self.model_name,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            total_tokens=total_tokens,
+                            duration_ms=duration_ms,
+                            success=success,
+                            endpoint=self.endpoint,
+                            k_variants=k,
+                            error_message=error_message,
+                        )
+                    except Exception as tracking_error:
+                        logger.error(
+                            f"Erreur lors du tracking de l'usage LLM: {tracking_error}",
+                            exc_info=True
+                        )
+
     async def _make_api_call_with_protection(self, responses_params: Dict[str, Any]) -> Any:
         """Effectue l'appel API avec retry et circuit breaker si disponibles.
         
@@ -254,6 +452,27 @@ class OpenAIClient(ILLMClient):
             return await self._retry_with_backoff(_make_api_call)
         else:
             return await _make_api_call()
+    
+    async def _make_api_call_streaming(self, responses_params: Dict[str, Any]) -> Any:
+        """Effectue l'appel API avec streaming.
+        
+        Args:
+            responses_params: Paramètres pour Responses API (avec stream=True).
+            
+        Returns:
+            Stream async d'événements depuis Responses API.
+        """
+        async def _make_streaming_call():
+            # Le SDK OpenAI retourne un stream async quand stream=True
+            return await self.client.responses.create(**responses_params)
+        
+        # Appliquer retry et circuit breaker si disponibles
+        # Note: Pour le streaming, on ne peut pas utiliser retry facilement car le stream est déjà ouvert
+        # On laisse le circuit breaker gérer les erreurs avant l'appel
+        if self._circuit_breaker:
+            return await self._circuit_breaker.call_async(_make_streaming_call)
+        else:
+            return await _make_streaming_call()
 
     def get_max_tokens(self) -> int:
         """Retourne le nombre maximum de tokens que le modèle peut gérer pour un prompt.

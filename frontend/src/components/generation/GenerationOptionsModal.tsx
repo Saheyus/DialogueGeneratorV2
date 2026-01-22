@@ -571,7 +571,7 @@ function GeneralTab({
   previewTokens: number
   isLoadingPreview: boolean
   onPreview: () => void
-  onBudgetUpdated?: (budget: any) => void
+  onBudgetUpdated?: (budget: { allowed: boolean; message?: string; [key: string]: unknown }) => void
 }) {
   return (
     <div>

@@ -75,7 +75,7 @@ describe('SaveStatusIndicator', () => {
 
     it('should update relative time every 10 seconds', async () => {
       const now = Date.now()
-      const { rerender } = render(<SaveStatusIndicator status="saved" lastSavedAt={now - 10000} />)
+      render(<SaveStatusIndicator status="saved" lastSavedAt={now - 10000} />)
       
       // Vérifier initial
       expect(screen.getByText(/Sauvegardé il y a \d+s/)).toBeInTheDocument()

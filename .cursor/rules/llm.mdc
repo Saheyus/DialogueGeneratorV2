@@ -21,9 +21,10 @@ alwaysApply: false
 
 **Reasoning (phase réflexive)**:
 - Disponible pour tous les modèles GPT-5 via Responses API
-- Paramètres: `reasoning.effort` (valeurs dépendent du modèle), `reasoning.summary` (None/"auto"/"detailed")
+- Paramètres: `reasoning.effort` (valeurs dépendent du modèle), `reasoning.summary` (None/"auto" uniquement)
 - **GPT-5.2/5.2-pro** : Supportent `none`, `minimal`, `low`, `medium`, `high`, `xhigh`
 - **GPT-5 mini/nano** : Supportent uniquement `minimal`, `low`, `medium`, `high` (pas `none` ni `xhigh`)
+- **reasoning.summary** : Uniquement `"auto"` supporté (les résumés `"detailed"` nécessitent une organisation OpenAI vérifiée Tier 2/3, non disponible actuellement)
 - Si `reasoning.effort` défini sans `summary`, `summary="auto"` activé automatiquement
 - Réponse: `reasoning_trace` extrait depuis `response.reasoning` et `response.output` (item `type="reasoning"`)
 

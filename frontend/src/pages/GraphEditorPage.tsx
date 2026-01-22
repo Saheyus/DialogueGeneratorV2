@@ -7,6 +7,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { ReactFlowProvider } from 'reactflow'
 import { GraphCanvas } from '../components/graph/GraphCanvas'
 import { NodeEditorPanel } from '../components/graph/NodeEditorPanel'
+import { DeleteNodeConfirmModal } from '../components/graph/DeleteNodeConfirmModal'
 import { useGraphStore, undo, redo } from '../store/graphStore'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { useToast } from '../components/shared'
@@ -29,6 +30,8 @@ export const GraphEditorPage = memo(function GraphEditorPage() {
     nodes,
     edges,
     applyAutoLayout,
+    selectedNodeId,
+    setShowDeleteNodeConfirm,
   } = useGraphStore()
   
   const [showNodeEditor, setShowNodeEditor] = useState(true)
@@ -49,8 +52,9 @@ export const GraphEditorPage = memo(function GraphEditorPage() {
     try {
       const response = await saveDialogue()
       toast(`Dialogue sauvegardé: ${response.filename}`, 'success', 3000)
-    } catch (error: any) {
-      toast(`Erreur lors de la sauvegarde: ${error.message}`, 'error')
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Erreur inconnue'
+      toast(`Erreur lors de la sauvegarde: ${message}`, 'error')
     }
   }, [saveDialogue, toast])
   
@@ -129,8 +133,17 @@ export const GraphEditorPage = memo(function GraphEditorPage() {
         description: 'Valider le graphe',
         enabled: true,
       },
+      {
+        key: 'delete',
+        handler: (e: KeyboardEvent) => {
+          e.preventDefault()
+          if (selectedNodeId) setShowDeleteNodeConfirm(true)
+        },
+        description: 'Supprimer le nœud sélectionné',
+        enabled: !!selectedNodeId,
+      },
     ],
-    [handleSave, handleAutoLayout, handleValidate, isSaving]
+    [handleSave, handleAutoLayout, handleValidate, isSaving, selectedNodeId, setShowDeleteNodeConfirm]
   )
   
   return (
@@ -508,6 +521,8 @@ export const GraphEditorPage = memo(function GraphEditorPage() {
           </div>
         </div>
       )}
+
+      <DeleteNodeConfirmModal />
     </div>
   )
 })

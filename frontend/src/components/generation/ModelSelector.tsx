@@ -11,7 +11,6 @@ export interface ModelSelectorProps {
 
 export const ModelSelector: React.FC<ModelSelectorProps> = ({ style }) => {
   const {
-    provider,
     model,
     availableModels,
     setProvider,
@@ -21,7 +20,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ style }) => {
 
   useEffect(() => {
     loadModels();
-  }, []);
+  }, [loadModels]);
 
   // Grouper les modèles par provider
   const modelsByProvider = availableModels.reduce((acc, m) => {

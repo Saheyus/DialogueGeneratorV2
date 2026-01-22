@@ -157,6 +157,91 @@ describe('useGraphStore - Auto-save draft state', () => {
       expect(state.hasUnsavedChanges).toBe(true)
     })
 
+    it('should delete associated TestNodes when deleting a DialogueNode', () => {
+      const { addNode, deleteNode } = useGraphStore.getState()
+      
+      // Créer un DialogueNode avec des choix ayant des tests
+      const dialogueNode: Node = {
+        id: 'dialogue-node-1',
+        type: 'dialogueNode',
+        position: { x: 0, y: 0 },
+        data: {
+          choices: [
+            { text: 'Choix 1', test: 'Raison+Diplomatie:8' },
+            { text: 'Choix 2', test: 'Force+Combat:10' },
+          ],
+        },
+      }
+      addNode(dialogueNode)
+      
+      // Créer les TestNodes associés (simulant la création automatique)
+      const testNode1: Node = {
+        id: 'test-node-dialogue-node-1-choice-0',
+        type: 'testNode',
+        position: { x: 300, y: 0 },
+        data: { test: 'Raison+Diplomatie:8' },
+      }
+      const testNode2: Node = {
+        id: 'test-node-dialogue-node-1-choice-1',
+        type: 'testNode',
+        position: { x: 300, y: 200 },
+        data: { test: 'Force+Combat:10' },
+      }
+      addNode(testNode1)
+      addNode(testNode2)
+      
+      // Vérifier que les nodes existent
+      let state = useGraphStore.getState()
+      expect(state.nodes.length).toBe(3)
+      expect(state.nodes.find(n => n.id === 'dialogue-node-1')).toBeDefined()
+      expect(state.nodes.find(n => n.id === 'test-node-dialogue-node-1-choice-0')).toBeDefined()
+      expect(state.nodes.find(n => n.id === 'test-node-dialogue-node-1-choice-1')).toBeDefined()
+      
+      // Supprimer le DialogueNode
+      deleteNode('dialogue-node-1')
+      
+      // Vérifier que le DialogueNode et tous les TestNodes associés sont supprimés
+      state = useGraphStore.getState()
+      expect(state.nodes.length).toBe(0)
+      expect(state.nodes.find(n => n.id === 'dialogue-node-1')).toBeUndefined()
+      expect(state.nodes.find(n => n.id === 'test-node-dialogue-node-1-choice-0')).toBeUndefined()
+      expect(state.nodes.find(n => n.id === 'test-node-dialogue-node-1-choice-1')).toBeUndefined()
+    })
+
+    it('should only delete the TestNode when deleting a TestNode directly (not the parent)', () => {
+      const { addNode, deleteNode } = useGraphStore.getState()
+      
+      // Créer un DialogueNode et un TestNode associé
+      const dialogueNode: Node = {
+        id: 'dialogue-node-1',
+        type: 'dialogueNode',
+        position: { x: 0, y: 0 },
+        data: {
+          choices: [
+            { text: 'Choix 1', test: 'Raison+Diplomatie:8' },
+          ],
+        },
+      }
+      addNode(dialogueNode)
+      
+      const testNode: Node = {
+        id: 'test-node-dialogue-node-1-choice-0',
+        type: 'testNode',
+        position: { x: 300, y: 0 },
+        data: { test: 'Raison+Diplomatie:8' },
+      }
+      addNode(testNode)
+      
+      // Supprimer directement le TestNode
+      deleteNode('test-node-dialogue-node-1-choice-0')
+      
+      // Vérifier que seul le TestNode est supprimé, pas le DialogueNode parent
+      const state = useGraphStore.getState()
+      expect(state.nodes.length).toBe(1)
+      expect(state.nodes.find(n => n.id === 'dialogue-node-1')).toBeDefined()
+      expect(state.nodes.find(n => n.id === 'test-node-dialogue-node-1-choice-0')).toBeUndefined()
+    })
+
     it('should mark dirty when connectNodes is called', () => {
       const { addNode, connectNodes, markDraftSaved } = useGraphStore.getState()
       

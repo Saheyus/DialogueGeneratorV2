@@ -8,7 +8,6 @@
  */
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useGenerationStore } from '../store/generationStore'
-import { useGraphStore } from '../store/graphStore'
 
 export interface UseSSEStreamingOptions {
   /** Callback appelé lors de l'événement 'complete' avec le résultat */

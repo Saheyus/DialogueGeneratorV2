@@ -64,7 +64,7 @@ export interface GraphState {
   generateFromNode: (
     parentNodeId: string,
     instructions: string,
-    options: any
+    options: Record<string, unknown>
   ) => Promise<{ nodeId: string | null; batchInfo?: {
     generatedChoices: number
     connectedChoices: number
@@ -102,6 +102,10 @@ export interface GraphState {
   clearDraftError: () => void
   setAutoRestoredDraft: (draft: { timestamp: number; fileTimestamp: number } | null) => void
   clearAutoRestoredDraft: () => void
+
+  // Modale confirmation suppression nœud (Supr.)
+  showDeleteNodeConfirm: boolean
+  setShowDeleteNodeConfirm: (show: boolean) => void
 }
 
 const initialState = {
@@ -132,6 +136,7 @@ const initialState = {
   lastDraftSavedAt: null,
   lastDraftError: null,
   autoRestoredDraft: null,
+  showDeleteNodeConfirm: false,
 }
 
 export const useGraphStore = create<GraphState>()(
@@ -152,7 +157,7 @@ export const useGraphStore = create<GraphState>()(
           
           // Convertir les nœuds en format ReactFlow
           // Priorité : positions localStorage > positions draft (savedPositions) > positions backend
-          const nodes: Node[] = response.nodes.map((node: any) => {
+          const nodes: Node[] = response.nodes.map((node: { id: string; type: string; position: { x: number; y: number }; data: unknown }) => {
             const position = persistedPositions?.[node.id] || savedPositions?.[node.id] || node.position
             return {
               id: node.id,
@@ -163,7 +168,7 @@ export const useGraphStore = create<GraphState>()(
           })
           
           // Convertir les edges
-          const edges: Edge[] = response.edges.map((edge: any) => ({
+          const edges: Edge[] = response.edges.map((edge: { id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string; label?: string }) => ({
             id: edge.id,
             source: edge.source,
             target: edge.target,
@@ -226,14 +231,14 @@ export const useGraphStore = create<GraphState>()(
           }
           
           // Vérifier si un choix a obtenu ou perdu un attribut test
-          const updatedData = updatedNode.data as any
+          const updatedData = updatedNode.data as { choices?: Array<{ test?: string; [key: string]: unknown }>; [key: string]: unknown }
           const choices = updatedData?.choices || []
           
           const newNodes = [...updatedNodes]
           const newEdges = [...state.edges]
           
           // Parcourir tous les choix pour détecter les changements
-          choices.forEach((choice: any, choiceIndex: number) => {
+          choices.forEach((choice: { test?: string; [key: string]: unknown }, choiceIndex: number) => {
             const testNodeId = `test-node-${nodeId}-choice-${choiceIndex}`
             const existingTestNode = newNodes.find((n) => n.id === testNodeId)
             const existingEdge = newEdges.find(
@@ -381,16 +386,29 @@ export const useGraphStore = create<GraphState>()(
       // Supprimer un nœud
       deleteNode: (nodeId: string) => {
         const state = get()
-        const newNodes = state.nodes.filter((n) => n.id !== nodeId)
-        // Supprimer aussi les edges liés
+        
+        // Identifier les TestNodes associés (format: test-node-{nodeId}-choice-{index})
+        const testNodePrefix = `test-node-${nodeId}-`
+        const associatedTestNodeIds = state.nodes
+          .filter((n) => n.id.startsWith(testNodePrefix))
+          .map((n) => n.id)
+        
+        // Supprimer le nœud principal et tous les TestNodes associés
+        const nodesToDelete = [nodeId, ...associatedTestNodeIds]
+        const newNodes = state.nodes.filter((n) => !nodesToDelete.includes(n.id))
+        
+        // Supprimer aussi les edges liés (source ou target = nodeId ou TestNode associé)
         const newEdges = state.edges.filter(
-          (e) => e.source !== nodeId && e.target !== nodeId
+          (e) => !nodesToDelete.includes(e.source) && !nodesToDelete.includes(e.target)
         )
+        
+        // Mettre à jour le selectedNodeId si le nœud supprimé ou un TestNode associé était sélectionné
+        const selectedNodeToRemove = nodesToDelete.includes(state.selectedNodeId || '')
         
         set({
           nodes: newNodes,
           edges: newEdges,
-          selectedNodeId: state.selectedNodeId === nodeId ? null : state.selectedNodeId,
+          selectedNodeId: selectedNodeToRemove ? null : state.selectedNodeId,
           dialogueMetadata: {
             ...state.dialogueMetadata,
             node_count: newNodes.length,
@@ -406,15 +424,23 @@ export const useGraphStore = create<GraphState>()(
         sourceId: string,
         targetId: string,
         choiceIndex?: number,
-        connectionType: string = 'default'
+        connectionType: string = 'default',
+        sourceHandle?: string
       ) => {
         const state = get()
         
+        // Extraire le sourceHandle depuis connectionType si c'est un type de test
+        let actualSourceHandle = sourceHandle
+        if (!actualSourceHandle && connectionType.startsWith('test-')) {
+          actualSourceHandle = connectionType.replace('test-', '')
+        }
+        
         // Générer un ID unique pour l'edge
-        const edgeId =
-          choiceIndex !== undefined
-            ? `${sourceId}-choice${choiceIndex}->${targetId}`
-            : `${sourceId}->${targetId}`
+        const edgeId = actualSourceHandle
+          ? `${sourceId}-${actualSourceHandle}-${targetId}`
+          : choiceIndex !== undefined
+          ? `${sourceId}-choice${choiceIndex}->${targetId}`
+          : `${sourceId}->${targetId}`
         
         // Vérifier si l'edge existe déjà
         if (state.edges.some((e) => e.id === edgeId)) {
@@ -426,7 +452,8 @@ export const useGraphStore = create<GraphState>()(
           id: edgeId,
           source: sourceId,
           target: targetId,
-          ...(choiceIndex !== undefined && { sourceHandle: `choice-${choiceIndex}` }), // Correspond à l'ID du handle dans DialogueNode
+          ...(actualSourceHandle && { sourceHandle: actualSourceHandle }), // Utiliser sourceHandle si fourni (pour TestNodes)
+          ...(!actualSourceHandle && choiceIndex !== undefined && { sourceHandle: `choice-${choiceIndex}` }), // Correspond à l'ID du handle dans DialogueNode
           type: 'default',
           data: {
             edgeType: connectionType,
@@ -436,19 +463,41 @@ export const useGraphStore = create<GraphState>()(
         
         const newEdges = [...state.edges, newEdge]
         
-        // Mettre à jour targetNode dans le parent si connexion via choix
+        // Mettre à jour les nœuds selon le type de connexion
         const updatedNodes = [...state.nodes]
-        if (choiceIndex !== undefined) {
-          const sourceNodeIndex = updatedNodes.findIndex((n) => n.id === sourceId)
-          if (sourceNodeIndex !== -1) {
-            const sourceNode = updatedNodes[sourceNodeIndex]
+        const sourceNodeIndex = updatedNodes.findIndex((n) => n.id === sourceId)
+        
+        if (sourceNodeIndex !== -1) {
+          const sourceNode = updatedNodes[sourceNodeIndex]
+          
+          // Gérer les connexions depuis un TestNode (avec sourceHandle pour les 4 résultats)
+          if (actualSourceHandle && (actualSourceHandle === 'critical-failure' || actualSourceHandle === 'failure' || actualSourceHandle === 'success' || actualSourceHandle === 'critical-success')) {
+            // Mettre à jour le champ correspondant dans le TestNode
+            const fieldMapping: Record<string, string> = {
+              'critical-failure': 'criticalFailureNode',
+              'failure': 'failureNode',
+              'success': 'successNode',
+              'critical-success': 'criticalSuccessNode',
+            }
+            const fieldName = fieldMapping[actualSourceHandle]
+            if (fieldName) {
+              updatedNodes[sourceNodeIndex] = {
+                ...sourceNode,
+                data: {
+                  ...sourceNode.data,
+                  [fieldName]: targetId,
+                },
+              }
+            }
+          } else if (choiceIndex !== undefined) {
+            // Connexion via choix (DialogueNode)
             if (sourceNode.data?.choices && sourceNode.data.choices[choiceIndex]) {
               // Mettre à jour targetNode dans le choix
               updatedNodes[sourceNodeIndex] = {
                 ...sourceNode,
                 data: {
                   ...sourceNode.data,
-                  choices: sourceNode.data.choices.map((choice: any, idx: number) =>
+                  choices: (sourceNode.data.choices as Array<{ targetNode?: string; [key: string]: unknown }>).map((choice, idx: number) =>
                     idx === choiceIndex
                       ? { ...choice, targetNode: targetId }
                       : choice
@@ -456,12 +505,8 @@ export const useGraphStore = create<GraphState>()(
                 },
               }
             }
-          }
-        } else if (connectionType === 'nextNode') {
-          // Mettre à jour nextNode dans le parent pour navigation linéaire
-          const sourceNodeIndex = updatedNodes.findIndex((n) => n.id === sourceId)
-          if (sourceNodeIndex !== -1) {
-            const sourceNode = updatedNodes[sourceNodeIndex]
+          } else if (connectionType === 'nextNode') {
+            // Mettre à jour nextNode dans le parent pour navigation linéaire
             updatedNodes[sourceNodeIndex] = {
               ...sourceNode,
               data: {
@@ -541,7 +586,7 @@ export const useGraphStore = create<GraphState>()(
       generateFromNode: async (
         parentNodeId: string,
         instructions: string,
-        options: any
+        options: Record<string, unknown>
       ) => {
         set({ isGenerating: true })
         try {
@@ -552,10 +597,30 @@ export const useGraphStore = create<GraphState>()(
             throw new Error(`Nœud parent ${parentNodeId} introuvable`)
           }
           
+          // Si on génère depuis un TestNode, trouver le DialogueNode parent
+          let parentNodeContent = parentNode.data
+          if (parentNode.type === 'testNode' || parentNodeId.startsWith('test-node-')) {
+            // Format: test-node-{parent_id}-choice-{index}
+            const parts = parentNodeId.replace('test-node-', '').split('-choice-')
+            if (parts.length === 2) {
+              const parentDialogueId = parts[0]
+              const parentDialogueNode = state.nodes.find((n) => n.id === parentDialogueId)
+              if (parentDialogueNode) {
+                // Enrichir les données du TestNode avec les données du DialogueNode parent
+                parentNodeContent = {
+                  ...parentNode.data,
+                  type: 'testNode',
+                  parent_speaker: parentDialogueNode.data?.speaker || 'PNJ',
+                  parent_line: parentDialogueNode.data?.line || '',
+                }
+              }
+            }
+          }
+          
           // Appeler l'API pour générer le nœud
           const response = await graphAPI.generateNode({
             parent_node_id: parentNodeId,
-            parent_node_content: parentNode.data,
+            parent_node_content: parentNodeContent,
             user_instructions: instructions,
             context_selections: options.context_selections || {},
             max_choices: options.max_choices,
@@ -568,40 +633,78 @@ export const useGraphStore = create<GraphState>()(
           })
           
           // Gérer génération batch (si generate_all_choices, l'API retourne une liste)
-          // Utiliser response.nodes si disponible (batch), sinon response.node (backward compatibility)
-          const generatedNodes = response.nodes && response.nodes.length > 0 
+          // OU si TestNode (génère toujours 4 nœuds pour les résultats de test)
+          // Utiliser response.nodes si disponible (batch ou TestNode), sinon response.node (backward compatibility)
+          const isTestNode = parentNodeId.startsWith('test-node-')
+          const isBatch = options.generate_all_choices ?? false
+          const hasMultipleNodes = response.nodes && response.nodes.length > 0
+          
+          const generatedNodes = hasMultipleNodes
             ? response.nodes 
             : (response.node ? [response.node] : [])
           
           // Ajouter les nouveaux nœuds avec positionnement en cascade pour batch
           const generatedNodeIds: string[] = []
           
-          // Créer un map pour associer chaque connexion à son nœud généré
-          const connectionMap = new Map<number, { node: any, conn: any }>()
+          // Pour TestNodes, les connexions utilisent connection_type au lieu de via_choice_index
+          // Pour batch normal, utiliser via_choice_index
+          const connectionMap = new Map<number | string, { node: Record<string, unknown>, conn: { to: string; via_choice_index?: number; connection_type?: string; [key: string]: unknown } }>()
           for (const conn of response.suggested_connections) {
             const node = generatedNodes.find((n) => n.id === conn.to)
-            if (node && conn.via_choice_index !== undefined) {
-              connectionMap.set(conn.via_choice_index, { node, conn })
+            if (node) {
+              // Pour TestNodes, utiliser connection_type comme clé
+              // Pour batch normal, utiliser via_choice_index
+              const mapKey = isTestNode && conn.connection_type 
+                ? conn.connection_type 
+                : (conn.via_choice_index !== undefined ? conn.via_choice_index : `conn-${conn.to}`)
+              connectionMap.set(mapKey, { node, conn })
             }
           }
           
-          // Trier les connexions par via_choice_index pour positionnement cascade
-          const sortedConnections = Array.from(connectionMap.entries()).sort((a, b) => a[0] - b[0])
+          // Trier les connexions pour positionnement cascade
+          // Pour TestNodes, ordre fixe: critical-failure, failure, success, critical-success
+          // Pour batch normal, trier par via_choice_index
+          let nodesToAdd: Array<{ node: Record<string, unknown>, choiceIndex: number }>
+          if (isTestNode) {
+            // Ordre fixe pour TestNodes
+            const testOrder = ['test-critical-failure', 'test-failure', 'test-success', 'test-critical-success']
+            nodesToAdd = testOrder
+              .map((connType, index) => {
+                const entry = connectionMap.get(connType)
+                return entry ? { node: entry.node, choiceIndex: index } : null
+              })
+              .filter((item): item is { node: Record<string, unknown>, choiceIndex: number } => item !== null)
+            // Ajouter les nœuds non mappés
+            const mappedNodeIds = new Set(nodesToAdd.map(({ node }) => node.id))
+            for (const node of generatedNodes) {
+              if (!mappedNodeIds.has(node.id)) {
+                nodesToAdd.push({ node, choiceIndex: nodesToAdd.length })
+              }
+            }
+          } else {
+            // Pour batch normal, trier par via_choice_index
+            const sortedConnections = Array.from(connectionMap.entries())
+              .filter(([key]) => typeof key === 'number')
+              .sort((a, b) => (a[0] as number) - (b[0] as number))
+            nodesToAdd = sortedConnections.length > 0
+              ? sortedConnections.map(([choiceIndex, { node }]) => ({ node, choiceIndex: choiceIndex as number }))
+              : generatedNodes.map((node, index) => ({ node, choiceIndex: index }))
+          }
           
-          // Si pas de connexions avec via_choice_index, utiliser l'ordre des nœuds
-          const nodesToAdd = sortedConnections.length > 0
-            ? sortedConnections.map(([choiceIndex, { node }]) => ({ node, choiceIndex }))
-            : generatedNodes.map((node, index) => ({ node, choiceIndex: index }))
           const totalToAdd = nodesToAdd.length
           
-          if (options.generate_all_choices && typeof options.onBatchProgress === 'function' && totalToAdd > 0) {
+          // Initialiser la progression si batch ou TestNode avec plusieurs nœuds
+          if ((isBatch || (isTestNode && totalToAdd > 1)) && typeof options.onBatchProgress === 'function' && totalToAdd > 0) {
             options.onBatchProgress(0, totalToAdd)
           }
           
+          // Ajouter les nœuds et mettre à jour la progression
+          // Utiliser un batch update pour éviter les re-renders multiples
+          const nodesToAddBatch: Node[] = []
           nodesToAdd.forEach(({ node: generatedNode, choiceIndex }, index) => {
-            const isBatch = options.generate_all_choices
-            const isChoiceSpecific = !isBatch && options.target_choice_index !== undefined && options.target_choice_index !== null
-            const verticalOffset = isBatch
+            const isBatchOrTestNode = isBatch || (isTestNode && totalToAdd > 1)
+            const isChoiceSpecific = !isBatchOrTestNode && options.target_choice_index !== undefined && options.target_choice_index !== null
+            const verticalOffset = isBatchOrTestNode
               ? 150 * choiceIndex
               : (isChoiceSpecific ? (60 * choiceIndex) + 60 : 0)
             const newNode: Node = {
@@ -615,12 +718,24 @@ export const useGraphStore = create<GraphState>()(
               data: generatedNode,
             }
             
-            get().addNode(newNode)
+            nodesToAddBatch.push(newNode)
             generatedNodeIds.push(generatedNode.id)
             
-            if (isBatch && typeof options.onBatchProgress === 'function' && totalToAdd > 0) {
+            // Mettre à jour la progression (appelé pour chaque nœud pour feedback progressif)
+            if (isBatchOrTestNode && typeof options.onBatchProgress === 'function' && totalToAdd > 0) {
               options.onBatchProgress(index + 1, totalToAdd)
             }
+          })
+          
+          // Ajouter tous les nœuds en une seule opération pour un re-render unique
+          const currentState = get()
+          const newNodes = [...currentState.nodes, ...nodesToAddBatch]
+          set({
+            nodes: newNodes,
+            dialogueMetadata: {
+              ...currentState.dialogueMetadata,
+              node_count: newNodes.length,
+            },
           })
 
           // Créer les connexions suggérées (appliquer automatiquement)
@@ -634,6 +749,8 @@ export const useGraphStore = create<GraphState>()(
             )
           }
 
+          // Marquer la génération comme terminée APRÈS avoir ajouté tous les nœuds
+          // Cela permet à la modale de se fermer et aux nœuds d'être visibles immédiatement
           set({ isGenerating: false })
           
           // Retourner le nodeId du premier nouveau nœud pour feedback visuel
@@ -652,7 +769,7 @@ export const useGraphStore = create<GraphState>()(
           }
           
           return { nodeId: firstNodeId ?? null, batchInfo }
-        } catch (error) {
+        } catch (error: any) {
           console.error('Erreur lors de la génération de nœud:', error)
           set({ isGenerating: false })
           throw error
@@ -763,7 +880,7 @@ export const useGraphStore = create<GraphState>()(
           delete unityNode.failureNode
           
           if (unityNode.choices) {
-            unityNode.choices = unityNode.choices.map((choice: any) => {
+            unityNode.choices = (unityNode.choices as Array<{ targetNode?: string; [key: string]: unknown }>).map((choice) => {
               const cleanChoice = { ...choice }
               delete cleanChoice.targetNode
               // Note: Cette logique locale ne reconstruit PAS les 4 résultats de test correctement
@@ -845,7 +962,7 @@ export const useGraphStore = create<GraphState>()(
           // Mettre à jour les positions
           set((state) => ({
             nodes: state.nodes.map((node) => {
-              const layoutedNode = response.nodes.find((n: any) => n.id === node.id)
+              const layoutedNode = response.nodes.find((n: { id: string; position: { x: number; y: number }; [key: string]: unknown }) => n.id === node.id)
               return layoutedNode
                 ? { ...node, position: layoutedNode.position }
                 : node
@@ -951,19 +1068,24 @@ export const useGraphStore = create<GraphState>()(
       clearAutoRestoredDraft: () => {
         set({ autoRestoredDraft: null })
       },
+
+      setShowDeleteNodeConfirm: (show: boolean) => {
+        set({ showDeleteNodeConfirm: show })
+      },
     }),
     {
       // Configuration du middleware temporal (undo/redo)
       limit: 50, // Historique de 50 actions
       equality: (a, b) => a === b,
       // Partialiser pour ne pas historiser certains champs UI transitoires
-      partialize: (state): any => {
+      partialize: (state): Partial<GraphState> => {
         const {
-          isGenerating,
-          isLoading,
-          isSaving,
-          validationErrors,
-          highlightedNodeIds,
+          isGenerating: _isGenerating,
+          isLoading: _isLoading,
+          isSaving: _isSaving,
+          validationErrors: _validationErrors,
+          highlightedNodeIds: _highlightedNodeIds,
+          showDeleteNodeConfirm: _showDeleteNodeConfirm,
           ...rest
         } = state
         return rest

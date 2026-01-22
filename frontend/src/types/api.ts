@@ -202,6 +202,7 @@ export interface GenerateUnityDialogueRequest extends BasePromptRequest {
   llm_model_identifier: string
   max_completion_tokens?: number | null
   reasoning_effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null
+  top_p?: number | null
 }
 
 export interface ReasoningTrace {

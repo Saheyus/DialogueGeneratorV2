@@ -25,7 +25,8 @@ export const GraphCanvas = memo(function GraphCanvas() {
     nodes: storeNodes,
     edges: storeEdges,
     validationErrors,
-    selectedNodeId,
+    // selectedNodeId non utilisé - gardé pour usage futur
+    // selectedNodeId,
     highlightedNodeIds,
     highlightedCycleNodes,
     setSelectedNode,
@@ -168,7 +169,7 @@ export const GraphCanvas = memo(function GraphCanvas() {
   // Handler pour synchroniser les changements de position depuis ReactFlow vers le store
   // Cela capture tous les changements de position, y compris pendant le drag
   const handleNodesChange = useCallback(
-    (changes: any[]) => {
+    (changes: Array<{ type: string; id?: string; position?: { x: number; y: number }; [key: string]: unknown }>) => {
       // Appeler le handler ReactFlow par défaut
       onNodesChange(changes)
       

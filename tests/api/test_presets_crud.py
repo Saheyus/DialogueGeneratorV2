@@ -151,7 +151,7 @@ class TestPresetsCreate:
                 "instructions": "Test instructions"
             }
         }
-        mock_preset_service.create_preset.return_value = sample_preset
+        mock_preset_service.create_preset.return_value = (sample_preset, None)
         
         # WHEN
         response = client.post("/api/v1/presets", json=create_data)
@@ -291,7 +291,7 @@ class TestPresetsUpdate:
             metadata=sample_preset.metadata,
             configuration=sample_preset.configuration
         )
-        mock_preset_service.update_preset.return_value = updated_preset
+        mock_preset_service.update_preset.return_value = (updated_preset, None)
         
         # WHEN
         response = client.put(f"/api/v1/presets/{sample_preset.id}", json=update_data)
@@ -318,7 +318,7 @@ class TestPresetsUpdate:
             metadata=sample_preset.metadata,
             configuration=sample_preset.configuration
         )
-        mock_preset_service.update_preset.return_value = updated_preset
+        mock_preset_service.update_preset.return_value = (updated_preset, None)
         
         # WHEN
         response = client.put(f"/api/v1/presets/{sample_preset.id}", json=update_data)
@@ -499,7 +499,12 @@ class TestPresetsAutoCleanup:
         # THEN
         assert response.status_code == 201
         assert "X-Preset-Cleanup-Message" in response.headers
-        assert response.headers["X-Preset-Cleanup-Message"] == cleanup_message
+        assert "X-Preset-Cleanup-Message-Encoding" in response.headers
+        assert response.headers["X-Preset-Cleanup-Message-Encoding"] == "base64"
+        # Décoder le message pour vérifier son contenu
+        import base64
+        decoded_message = base64.b64decode(response.headers["X-Preset-Cleanup-Message"]).decode('utf-8')
+        assert decoded_message == cleanup_message
         data = response.json()
         assert data["id"] == sample_preset.id
         assert "ObsoleteChar" not in data["configuration"]["characters"]
@@ -569,7 +574,12 @@ class TestPresetsAutoCleanup:
         # THEN
         assert response.status_code == 200
         assert "X-Preset-Cleanup-Message" in response.headers
-        assert response.headers["X-Preset-Cleanup-Message"] == cleanup_message
+        assert "X-Preset-Cleanup-Message-Encoding" in response.headers
+        assert response.headers["X-Preset-Cleanup-Message-Encoding"] == "base64"
+        # Décoder le message pour vérifier son contenu
+        import base64
+        decoded_message = base64.b64decode(response.headers["X-Preset-Cleanup-Message"]).decode('utf-8')
+        assert decoded_message == cleanup_message
         data = response.json()
         assert data["name"] == "Updated Preset"
         assert "ObsoleteChar" not in data["configuration"]["characters"]

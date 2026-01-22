@@ -60,8 +60,9 @@ class OpenAIReasoningExtractor:
                 except Exception:
                     reasoning_trace_dict["items"] = [str(item) for item in reasoning_items]
             
-            # IMPORTANT: Si summary est "detailed" (config) mais qu'on a des items, 
-            # on peut construire un résumé depuis les items
+            # NOTE: Ce code gère le cas où l'API retournerait "detailed" dans la réponse
+            # (protection défensive), même si nous ne demandons jamais "detailed" car notre organisation
+            # n'est pas vérifiée. Si l'API retourne "detailed" avec des items, on construit un résumé.
             # Pour GPT-5.2, les items peuvent contenir le contenu réel du reasoning
             if reasoning_summary == "detailed" and reasoning_items and len(reasoning_items) > 0:
                 # Construire un résumé textuel depuis les items
@@ -209,8 +210,8 @@ class OpenAIReasoningExtractor:
                     # Pour mini/nano, si le summary est vide, c'est un bug connu de l'API
                     reasoning_summary_text = "Thinking output non disponible"
                 else:
-                    # Pour GPT-5.2, si le summary est vide avec "detailed", c'est aussi un problème
-                    # On indique que le contenu n'est pas disponible
+                    # Pour GPT-5.2, si le summary est vide, le contenu n'est pas disponible
+                    # (Note: nous n'utilisons jamais "detailed" car notre organisation n'est pas vérifiée)
                     reasoning_summary_text = "Thinking output non disponible"
             
             # Fallback sur content ou text si summary est toujours vide
@@ -248,8 +249,8 @@ class OpenAIReasoningExtractor:
                     reasoning_summary_text = "Thinking output non disponible"
             
             # Remplacer le summary par le vrai texte si disponible
-            # IMPORTANT: Pour GPT-5.2, si on a un vrai contenu, on remplace toujours "detailed"
-            # Pour mini/nano, on affiche "Thinking output non disponible" si le contenu est vide/court
+            # NOTE: Protection défensive - si l'API retourne "detailed" (ne devrait pas arriver car on ne le demande pas),
+            # on gère quand même le cas. Pour mini/nano, on affiche "Thinking output non disponible" si le contenu est vide/court.
             is_mini_or_nano = model_name and ("mini" in model_name.lower() or "nano" in model_name.lower())
             
             if reasoning_summary_text:
@@ -257,15 +258,15 @@ class OpenAIReasoningExtractor:
                 if (reasoning_summary_text != "detailed" 
                     and reasoning_summary_text != "Thinking output non disponible"
                     and not reasoning_summary_text.startswith("[")):
-                    # C'est un vrai contenu, on remplace toujours (même si existing_trace.summary == "detailed")
+                    # C'est un vrai contenu, on remplace toujours
                     reasoning_trace["summary"] = reasoning_summary_text
                 # Si le texte extrait est un message d'info/erreur ou "Thinking output non disponible", on l'utilise pour informer l'utilisateur
                 elif (reasoning_summary_text.startswith("[") 
                       or reasoning_summary_text == "Thinking output non disponible"):
-                    # On remplace seulement si on avait "detailed" avant (config) ou si on n'avait rien
-                    if not existing_trace or existing_trace.get("summary") == "detailed" or not existing_trace.get("summary"):
+                    # On remplace seulement si on n'avait rien avant
+                    if not existing_trace or not existing_trace.get("summary"):
                         reasoning_trace["summary"] = reasoning_summary_text
-                # Si le texte extrait est "detailed" mais qu'on n'avait pas de summary avant, on le garde quand même (fallback)
+                # Si le texte extrait est "detailed" (ne devrait pas arriver), on le garde comme fallback
                 elif not existing_trace or not existing_trace.get("summary"):
                     reasoning_trace["summary"] = reasoning_summary_text
             

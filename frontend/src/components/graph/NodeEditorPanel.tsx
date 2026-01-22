@@ -25,7 +25,7 @@ import {
 import { ChoiceEditor } from './ChoiceEditor'
 
 export const NodeEditorPanel = memo(function NodeEditorPanel() {
-  const { selectedNodeId, nodes, updateNode, deleteNode, generateFromNode, isGenerating, setSelectedNode, autoRestoredDraft, clearAutoRestoredDraft } = useGraphStore()
+  const { selectedNodeId, nodes, updateNode, generateFromNode, isGenerating, setSelectedNode, autoRestoredDraft, clearAutoRestoredDraft, setShowDeleteNodeConfirm } = useGraphStore()
   const { selections } = useContextStore()
   const toast = useToast()
   
@@ -127,10 +127,7 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
   
   const handleDelete = () => {
     if (!selectedNodeId) return
-    
-    if (confirm(`Supprimer le nœud ${selectedNodeId} ?`)) {
-      deleteNode(selectedNodeId)
-    }
+    setShowDeleteNodeConfirm(true)
   }
   
   // Handler pour générer la suite (nextNode)
@@ -280,6 +277,14 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
     }
   }, [selectedNodeId, userInstructions, selections, llmModel, generateFromNode, setSelectedNode, toast])
   
+  // Handler pour charger le fichier plus ancien (doit être avant le return conditionnel)
+  const handleLoadOlderFile = useCallback(() => {
+    // Émettre un événement pour que GraphEditor charge le fichier plus ancien
+    const event = new CustomEvent('load-older-file')
+    window.dispatchEvent(event)
+    clearAutoRestoredDraft()
+  }, [clearAutoRestoredDraft])
+  
   if (!selectedNode) {
     return (
       <div
@@ -295,14 +300,6 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
   }
   
   const choices = watch('choices') as Choice[] | undefined
-  
-  // Handler pour charger le fichier plus ancien
-  const handleLoadOlderFile = useCallback(() => {
-    // Émettre un événement pour que GraphEditor charge le fichier plus ancien
-    const event = new CustomEvent('load-older-file')
-    window.dispatchEvent(event)
-    clearAutoRestoredDraft()
-  }, [clearAutoRestoredDraft])
 
   return (
     <FormProvider {...form}>
@@ -319,7 +316,7 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
         {/* Bandeau d'avertissement pour brouillon restauré automatiquement */}
         {autoRestoredDraft && (
           <WarningBanner
-            message={`Un brouillon local plus récent (${new Date(autoRestoredDraft.timestamp).toLocaleString()}) a été restauré automatiquement. Le fichier sur disque est plus ancien (${new Date(autoRestoredDraft.fileTimestamp).toLocaleString()}).`}
+            message={`Brouillon local plus récent (${new Date(autoRestoredDraft.timestamp).toLocaleString()}) restauré automatiquement. Fichier sur disque plus ancien (${new Date(autoRestoredDraft.fileTimestamp).toLocaleString()}).`}
             actionLabel="Charger le fichier plus ancien"
             onAction={handleLoadOlderFile}
             onDismiss={() => clearAutoRestoredDraft()}
@@ -803,7 +800,7 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
               fontWeight: 'bold',
             }}
           >
-            💾 Enregistrer
+            💾
           </button>
           
           <button
@@ -842,7 +839,8 @@ function ChoicesEditor({ onGenerateForChoice }: ChoicesEditorProps) {
     name: 'choices',
   })
   
-  const choices = watch('choices') || []
+  // choices non utilisé directement - gardé pour usage futur si nécessaire
+  // const choices = watch('choices') || []
   
   return (
     <div>

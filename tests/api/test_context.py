@@ -346,7 +346,8 @@ class TestEstimateTokens:
         """Test d'estimation avec sélection vide."""
         request_data = {
             "context_selections": {},
-            "max_tokens": 1000
+            "user_instructions": "Test instructions",
+            "max_context_tokens": 1000
         }
         
         response = client.post("/api/v1/context/estimate-tokens", json=request_data)

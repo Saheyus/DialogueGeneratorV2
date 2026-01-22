@@ -46,7 +46,7 @@ describe('GraphView - 4 résultats de test', () => {
     ])
 
     // WHEN: Conversion en graphe ReactFlow
-    const { nodes, edges } = unityJsonToGraph(unityJson)
+    const { nodes } = unityJsonToGraph(unityJson)
 
     // THEN: Un TestNode doit être créé automatiquement
     const testNode = nodes.find((n) => n.type === 'testNode')
@@ -96,7 +96,7 @@ describe('GraphView - 4 résultats de test', () => {
     ])
 
     // WHEN: Conversion en graphe ReactFlow
-    const { nodes, edges } = unityJsonToGraph(unityJson)
+    const { nodes } = unityJsonToGraph(unityJson)
 
     // THEN: 4 edges doivent être créés depuis le TestNode vers les 4 nœuds de résultat
     const testNode = nodes.find((n) => n.type === 'testNode')
@@ -148,7 +148,7 @@ describe('GraphView - 4 résultats de test', () => {
     ])
 
     // WHEN: Conversion en graphe ReactFlow
-    const { nodes, edges } = unityJsonToGraph(unityJson)
+    const { nodes } = unityJsonToGraph(unityJson)
 
     // THEN: Un TestNode doit quand même être créé (avec 4 handles, même sans connexions)
     const testNode = nodes.find((n) => n.type === 'testNode')
@@ -201,7 +201,7 @@ describe('GraphView - 4 résultats de test', () => {
     ])
 
     // WHEN: Conversion en graphe ReactFlow
-    const { nodes, edges } = unityJsonToGraph(unityJson)
+    const { nodes } = unityJsonToGraph(unityJson)
 
     // THEN: Un edge doit être créé depuis START (via le handle du choix) vers le TestNode
     const testNode = nodes.find((n) => n.type === 'testNode')

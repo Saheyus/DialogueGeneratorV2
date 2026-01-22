@@ -17,8 +17,8 @@ export interface KeyboardShortcut {
   preventDefault?: boolean
   /** Si true, le handler peut empêcher la propagation à d'autres listeners */
   stopPropagation?: boolean
-  /** Condition pour activer le raccourci (ex: si un modal est ouvert) */
-  enabled?: boolean
+  /** Condition pour activer le raccourci (ex: si un modal est ouvert). Peut être une fonction pour évaluation dynamique */
+  enabled?: boolean | (() => boolean)
   /** ID interne (généré automatiquement) */
   id?: string
 }
@@ -67,6 +67,8 @@ function matchesShortcut(event: KeyboardEvent, parsed: ReturnType<typeof parseSh
   if (parsed.key === 'escape' && eventKey !== 'escape') return false
   if (parsed.key === 'space' && eventKey !== ' ') return false
   if (parsed.key === 'tab' && eventKey !== 'tab') return false
+  if (parsed.key === 'delete' && eventKey !== 'delete') return false
+  if (parsed.key === 'backspace' && eventKey !== 'backspace') return false
   
   // Pour les touches normales, comparer directement
   if (parsed.key.length === 1 && eventKey === parsed.key) return true
@@ -157,7 +159,12 @@ export function useKeyboardShortcuts(
         if (matchesShortcut(event, parsed)) {
           // Trouver le premier raccourci activé et prioritaire
           for (const shortcut of registeredShortcuts) {
-            if (shortcut.enabled !== false) {
+            // Évaluer enabled dynamiquement si c'est une fonction, sinon utiliser la valeur statique
+            const isEnabled = typeof shortcut.enabled === 'function' 
+              ? shortcut.enabled() 
+              : shortcut.enabled !== false
+            
+            if (isEnabled) {
               if (shortcut.preventDefault !== false) {
                 event.preventDefault()
               }

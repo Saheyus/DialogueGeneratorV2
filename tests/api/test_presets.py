@@ -36,10 +36,11 @@ def mock_preset_service(tmp_path: Path) -> MagicMock:
     )
     
     # Mock méthodes
-    service.create_preset = MagicMock(return_value=test_preset)
+    # create_preset et update_preset retournent un tuple (preset, cleanup_message)
+    service.create_preset = MagicMock(return_value=(test_preset, None))
     service.list_presets = MagicMock(return_value=[test_preset])
     service.load_preset = MagicMock(return_value=test_preset)
-    service.update_preset = MagicMock(return_value=test_preset)
+    service.update_preset = MagicMock(return_value=(test_preset, None))
     service.delete_preset = MagicMock(return_value=None)
     service.validate_preset_references = MagicMock(return_value=PresetValidationResult(
         valid=True,

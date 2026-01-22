@@ -1,5 +1,6 @@
 """Parsing des réponses OpenAI Responses API."""
 
+import json
 import logging
 from typing import List, Optional, Type, Union, Any, Tuple
 from pydantic import BaseModel
@@ -62,12 +63,49 @@ class OpenAIResponseParser:
                 f"Arguments bruts de la fonction reçus (Responses API): {function_args_raw}"
             )
             try:
-                parsed_output = response_model.model_validate_json(function_args_raw)
-                logger.info(
-                    f"Variante {variant_index} générée et validée avec succès "
-                    f"(structured, Responses API)."
-                )
-                return parsed_output, None, True
+                # Normaliser node.consequences si c'est une liste (comme pour Mistral)
+                # Certains modèles OpenAI (ex: gpt-5-mini) retournent parfois une liste au lieu d'un objet
+                normalized_ok = False
+                try:
+                    if isinstance(function_args_raw, str):
+                        raw_obj = json.loads(function_args_raw)
+                        # Cas observé: node.consequences renvoyé comme liste d'objets
+                        # alors que le schéma attend un objet unique.
+                        if getattr(response_model, "__name__", "") == "UnityDialogueGenerationResponse":
+                            node = raw_obj.get("node")
+                            if isinstance(node, dict):
+                                cons = node.get("consequences")
+                                if isinstance(cons, list) and len(cons) == 1 and isinstance(cons[0], dict):
+                                    node["consequences"] = cons[0]
+                                    parsed_output = response_model.model_validate(raw_obj)
+                                    logger.info(
+                                        f"Variante {variant_index} validée après normalisation "
+                                        f"(node.consequences list→object, Responses API)."
+                                    )
+                                    normalized_ok = True
+                                    return parsed_output, None, True
+                                elif isinstance(cons, list) and len(cons) > 0:
+                                    # Si plusieurs éléments, prendre le premier
+                                    node["consequences"] = cons[0]
+                                    parsed_output = response_model.model_validate(raw_obj)
+                                    logger.info(
+                                        f"Variante {variant_index} validée après normalisation "
+                                        f"(node.consequences list[{len(cons)}]→object, premier élément, Responses API)."
+                                    )
+                                    normalized_ok = True
+                                    return parsed_output, None, True
+                except Exception as norm_error:
+                    logger.debug(f"Tentative de normalisation échouée: {norm_error}")
+                    normalized_ok = False
+                
+                # Si normalisation n'a pas réussi, essayer validation directe
+                if not normalized_ok:
+                    parsed_output = response_model.model_validate_json(function_args_raw)
+                    logger.info(
+                        f"Variante {variant_index} générée et validée avec succès "
+                        f"(structured, Responses API)."
+                    )
+                    return parsed_output, None, True
             except Exception as e:
                 logger.error(
                     f"Erreur de validation Pydantic pour la variante {variant_index} "

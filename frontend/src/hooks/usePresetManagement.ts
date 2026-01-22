@@ -43,6 +43,26 @@ export interface UsePresetManagementOptions {
   setSaveStatus: (status: 'saved' | 'unsaved' | 'saving' | 'error') => void
   /** Toast function */
   toast: (message: string, type?: 'success' | 'error' | 'info' | 'warning', duration?: number) => void
+  /** Top_p (nucleus sampling) - optionnel */
+  topP?: number | null
+  /** Setter pour topP - optionnel */
+  setTopP?: (value: number | null) => void
+  /** Reasoning effort - optionnel */
+  reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null
+  /** Setter pour reasoningEffort - optionnel */
+  setReasoningEffort?: (value: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null) => void
+  /** Max completion tokens - optionnel */
+  maxCompletionTokens?: number | null
+  /** Setter pour maxCompletionTokens - optionnel */
+  setMaxCompletionTokens?: (value: number | null) => void
+  /** Max choices - optionnel */
+  maxChoices?: number | null
+  /** Setter pour maxChoices - optionnel */
+  setMaxChoices?: (value: number | null) => void
+  /** LLM model - optionnel */
+  llmModel?: string
+  /** Setter pour llmModel - optionnel */
+  setLlmModel?: (value: string) => void
 }
 
 /**
@@ -61,6 +81,16 @@ export function usePresetManagement(
     setIsDirty,
     setSaveStatus,
     toast,
+    topP,
+    setTopP,
+    reasoningEffort,
+    setReasoningEffort,
+    maxCompletionTokens,
+    setMaxCompletionTokens,
+    maxChoices,
+    setMaxChoices,
+    llmModel,
+    setLlmModel,
   } = options
 
   const [isValidationModalOpen, setIsValidationModalOpen] = useState(false)
@@ -72,31 +102,10 @@ export function usePresetManagement(
     setSceneSelection,
     setDialogueStructure,
     setSystemPromptOverride,
-    setUnityDialogueResponse,
+    // setUnityDialogueResponse non utilisé - gardé pour usage futur
+    // setUnityDialogueResponse,
   } = useGenerationStore()
 
-  const handlePresetLoaded = useCallback(async (preset: Preset) => {
-    try {
-      // Validation du preset
-      const validation = await fetch(`/api/v1/presets/${preset.id}/validate`)
-      const validationResult = await validation.json()
-      
-      if (!validationResult.valid) {
-        // Afficher modal de validation si références obsolètes
-        setValidationResult(validationResult)
-        setPendingPreset(preset)
-        setIsValidationModalOpen(true)
-      } else {
-        // Appliquer directement si valide
-        applyPreset(preset)
-        toast('Preset chargé avec succès', 'success')
-      }
-    } catch (err) {
-      const message = getErrorMessage(err)
-      toast(`Erreur lors de la validation du preset: ${message}`, 'error')
-    }
-  }, [toast])
-  
   const applyPreset = useCallback((preset: Preset) => {
     const config = preset.configuration
 
@@ -120,7 +129,7 @@ export function usePresetManagement(
         contextState.toggleSubLocation(config.subLocation)
       }
     }
-    
+
     // Pré-remplir sceneSelection
     setSceneSelection({
       characterA: config.characters?.[0] || null,
@@ -128,10 +137,10 @@ export function usePresetManagement(
       sceneRegion: (config.selectedRegion ?? config.region) || null,
       subLocation: (Array.isArray(config.selectedSubLocations) ? config.selectedSubLocations[0] : config.subLocation) || null,
     })
-    
+
     // Pré-remplir instructions
     setUserInstructions(config.instructions || '')
-    
+
     // Pré-remplir fieldConfigs si sauvegardé
     if (config.fieldConfigs) {
       const { setFieldConfig } = useContextConfigStore.getState()
@@ -139,10 +148,49 @@ export function usePresetManagement(
         setFieldConfig(category, fields as string[])
       })
     }
-    
+
+    // Pré-remplir les paramètres optionnels LLM si présents dans le preset
+    if (config.topP !== undefined && setTopP) {
+      setTopP(config.topP)
+    }
+    if (config.reasoningEffort !== undefined && setReasoningEffort) {
+      setReasoningEffort(config.reasoningEffort)
+    }
+    if (config.maxCompletionTokens !== undefined && setMaxCompletionTokens) {
+      setMaxCompletionTokens(config.maxCompletionTokens)
+    }
+    if (config.maxChoices !== undefined && setMaxChoices) {
+      setMaxChoices(config.maxChoices)
+    }
+    if (config.llmModel !== undefined && setLlmModel) {
+      setLlmModel(config.llmModel)
+    }
+
     setIsDirty(true)
     setSaveStatus('unsaved')
-  }, [setSceneSelection, setUserInstructions, setIsDirty, setSaveStatus])
+  }, [setSceneSelection, setUserInstructions, setIsDirty, setSaveStatus, setTopP, setReasoningEffort, setMaxCompletionTokens, setMaxChoices, setLlmModel])
+
+  const handlePresetLoaded = useCallback(async (preset: Preset) => {
+    try {
+      // Validation du preset
+      const validation = await fetch(`/api/v1/presets/${preset.id}/validate`)
+      const validationResult = await validation.json()
+
+      if (!validationResult.valid) {
+        // Afficher modal de validation si références obsolètes
+        setValidationResult(validationResult)
+        setPendingPreset(preset)
+        setIsValidationModalOpen(true)
+      } else {
+        // Appliquer directement si valide
+        applyPreset(preset)
+        toast('Preset chargé avec succès', 'success')
+      }
+    } catch (err) {
+      const message = getErrorMessage(err)
+      toast(`Erreur lors de la validation du preset: ${message}`, 'error')
+    }
+  }, [applyPreset, toast])
   
   const handleValidationConfirm = useCallback(() => {
     if (pendingPreset && validationResult) {
@@ -191,6 +239,7 @@ export function usePresetManagement(
       ...(Array.isArray(selectedSubLocations) ? selectedSubLocations : []),
     ])
     
+    const topPSpreadValue = options.topP !== undefined && options.topP !== null ? { topP: options.topP } : {};
     const config = {
       characters: allCharacters,
       locations: allLocations,
@@ -202,10 +251,16 @@ export function usePresetManagement(
       contextSelections: selections,
       selectedRegion,
       selectedSubLocations,
+      // Inclure les paramètres optionnels LLM s'ils sont définis
+      ...topPSpreadValue,
+      ...(options.reasoningEffort !== undefined && options.reasoningEffort !== null ? { reasoningEffort: options.reasoningEffort } : {}),
+      ...(options.maxCompletionTokens !== undefined && options.maxCompletionTokens !== null ? { maxCompletionTokens: options.maxCompletionTokens } : {}),
+      ...(options.maxChoices !== undefined && options.maxChoices !== null ? { maxChoices: options.maxChoices } : {}),
+      ...(options.llmModel !== undefined ? { llmModel: options.llmModel } : {}),
     }
     
     return config
-  }, [sceneSelection, options.userInstructions])
+  }, [sceneSelection, options.userInstructions, options.topP, options.reasoningEffort, options.maxCompletionTokens, options.maxChoices, options.llmModel])
 
   return {
     handlePresetLoaded,

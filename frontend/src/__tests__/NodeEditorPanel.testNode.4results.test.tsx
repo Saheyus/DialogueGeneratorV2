@@ -51,6 +51,7 @@ describe('NodeEditorPanel - TestNode avec 4 résultats', () => {
       generateFromNode: vi.fn(),
       isGenerating: false,
       setSelectedNode: vi.fn(),
+      setShowDeleteNodeConfirm: vi.fn(),
     } as any)
 
     vi.mocked(useContextStore).mockReturnValue({
@@ -117,6 +118,7 @@ describe('NodeEditorPanel - TestNode avec 4 résultats', () => {
       generateFromNode: vi.fn(),
       isGenerating: false,
       setSelectedNode: vi.fn(),
+      setShowDeleteNodeConfirm: vi.fn(),
     } as any)
 
     // WHEN: Rendu du NodeEditorPanel

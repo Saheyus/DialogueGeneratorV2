@@ -190,8 +190,26 @@ class PreviewPromptResponse(BaseModel):
 class GenerateUnityDialogueRequest(BasePromptRequest):
     """Requête pour générer un nœud de dialogue au format Unity JSON."""
     llm_model_identifier: str = Field(default=ModelNames.GPT_5_MINI, description="Identifiant du modèle LLM")
-    max_completion_tokens: Optional[int] = Field(None, ge=500, le=50000, description="Nombre maximum de tokens pour la génération")
+    max_completion_tokens: Optional[int] = Field(None, ge=500, le=50000, description="Nombre maximum de tokens pour la génération. Recommandation OpenAI: 25000+ tokens pour reasoning summary.")
     reasoning_effort: Optional[Literal["none", "low", "medium", "high", "xhigh"]] = Field(None, description="Niveau de raisonnement pour GPT-5.2 (none=rapide, xhigh=très approfondi). Disponible uniquement pour GPT-5.2 et GPT-5.2-pro.")
+    reasoning_summary: Optional[Literal["auto"]] = Field(None, description="Format du résumé de reasoning (thinking summary). Uniquement 'auto' disponible (les résumés 'detailed' nécessitent une organisation OpenAI vérifiée Tier 2/3, non disponible actuellement). Si None, 'auto' est utilisé par défaut.")
+    top_p: Optional[float] = Field(None, ge=0.0, le=1.0, description="Nucleus sampling (0.0-1.0). Alternative/complément à temperature. 0.0=focalisé, 1.0=diversifié.")
+    
+    @field_validator('reasoning_summary', mode='before')
+    @classmethod
+    def validate_reasoning_summary(cls, v: Optional[str]) -> Optional[str]:
+        """Valide que reasoning_summary est uniquement 'auto' (detailed nécessite organisation vérifiée).
+        
+        Note: Les résumés 'detailed' nécessitent une organisation OpenAI vérifiée (Tier 2/3).
+        Notre organisation n'étant pas vérifiée, nous nous limitons à 'auto' pour éviter
+        les échecs silencieux où l'API ignore la demande de résumé détaillé.
+        """
+        if v is not None and v != "auto":
+            raise ValueError(
+                f"reasoning_summary='{v}' non supporté. "
+                f"Uniquement 'auto' disponible (les résumés 'detailed' nécessitent une organisation OpenAI vérifiée Tier 2/3)."
+            )
+        return v or "auto"  # Par défaut, utiliser "auto"
     
     @field_validator('context_selections', mode='after')
     @classmethod
@@ -209,12 +227,16 @@ class GenerateUnityDialogueRequest(BasePromptRequest):
     @field_validator('max_completion_tokens', mode='before')
     @classmethod
     def validate_max_completion_tokens(cls, v: Optional[int]) -> Optional[int]:
-        """Valide que max_completion_tokens est dans les limites autorisées (règle métier)."""
+        """Valide que max_completion_tokens est dans les limites autorisées (règle métier).
+        
+        Recommandation OpenAI: 25000 tokens minimum pour reasoning summary.
+        Limite max alignée avec le Field (50000) pour permettre les cas d'usage avancés.
+        """
         if v is not None:
             if v < 100:
                 raise ValueError(f"max_completion_tokens doit être au minimum 100 (reçu: {v})")
-            if v > 16000:
-                raise ValueError(f"max_completion_tokens ne peut pas dépasser 16000 (reçu: {v})")
+            if v > 50000:
+                raise ValueError(f"max_completion_tokens ne peut pas dépasser 50000 (reçu: {v})")
         return v
 
 class GenerateUnityDialogueResponse(BaseModel):

@@ -2,7 +2,7 @@
  * Panel pour générer un nœud de dialogue avec l'IA depuis un nœud parent.
  * Permet de générer une suite ou une branche alternative.
  */
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useGraphStore } from '../../store/graphStore'
 import { useContextStore } from '../../store/contextStore'
 import { useToast } from '../shared'
@@ -92,40 +92,49 @@ export function AIGenerationPanel({
       return
     }
     
+    // Déterminer le speaker NPC (premier personnage sélectionné en full ou excerpt)
+    const allCharacters = [
+      ...(selections.characters_full || []),
+      ...(selections.characters_excerpt || []),
+    ]
+    const npcSpeakerId = allCharacters.length > 0 ? allCharacters[0] : undefined
+    
+    // Si les instructions sont vides, on utilisera un texte par défaut côté backend
+    const finalInstructions = userInstructions.trim() || "Ecris la réponse du PNJ à ce que dit le PJ"
+    
+    // Initialiser la progression si génération batch OU TestNode (génère toujours 4 nœuds)
+    const isTestNode = parentNodeId?.startsWith('test-node-') ?? false
+    if (generateAllChoices || isTestNode) {
+      const totalChoices = isTestNode 
+        ? 4  // TestNodes génèrent toujours 4 nœuds (critical-failure, failure, success, critical-success)
+        : (parentNode?.data?.choices || []).filter((c: any) => !c.targetNode || c.targetNode === 'END').length
+      setBatchProgress({ current: 0, total: totalChoices })
+    }
+    
     try {
-      // Déterminer le speaker NPC (premier personnage sélectionné en full ou excerpt)
-      const allCharacters = [
-        ...(selections.characters_full || []),
-        ...(selections.characters_excerpt || []),
-      ]
-      const npcSpeakerId = allCharacters.length > 0 ? allCharacters[0] : undefined
+        const generationResult = await generateFromNode(
+          parentNodeId,
+          finalInstructions,
+          {
+            context_selections: selections,
+            max_choices: maxChoices,
+            npc_speaker_id: npcSpeakerId,
+            narrative_tags: narrativeTags.length > 0 ? narrativeTags : undefined,
+            llm_model_identifier: llmModel,
+            target_choice_index: targetChoiceIndex ?? null,
+            generate_all_choices: generateAllChoices,
+            onBatchProgress: (current: number, total: number) => {
+              setBatchProgress({ current, total })
+            },
+          }
+        )
       
-      // Si les instructions sont vides, on utilisera un texte par défaut côté backend
-      const finalInstructions = userInstructions.trim() || "Ecris la réponse du PNJ à ce que dit le PJ"
-      
-      const generationResult = await generateFromNode(
-        parentNodeId,
-        finalInstructions,
-        {
-          context_selections: selections,
-          max_choices: maxChoices,
-          npc_speaker_id: npcSpeakerId,
-          narrative_tags: narrativeTags.length > 0 ? narrativeTags : undefined,
-          llm_model_identifier: llmModel,
-          target_choice_index: targetChoiceIndex ?? null,
-          generate_all_choices: generateAllChoices,
-          onBatchProgress: (current: number, total: number) => {
-            setBatchProgress({ current, total })
-          },
-        }
-      )
-      
-      // Message de succès adapté selon le mode de génération
-      if (generateAllChoices) {
-        const batchInfo = generationResult.batchInfo
-        const connectedCount = batchInfo?.connectedChoices ?? 0
-        const generatedCount = batchInfo?.generatedChoices ?? 0
-        const failedCount = batchInfo?.failedChoices ?? 0
+        // Message de succès adapté selon le mode de génération
+        if (generateAllChoices || isTestNode) {
+          const batchInfo = generationResult.batchInfo
+          const connectedCount = batchInfo?.connectedChoices ?? 0
+          const generatedCount = batchInfo?.generatedChoices ?? 0
+          const failedCount = batchInfo?.failedChoices ?? 0
         const totalChoices = batchInfo?.totalChoices ?? 0
         const failedSuffix = failedCount > 0 ? ` (${failedCount} échec(s))` : ''
         const totalSuffix = totalChoices > 0 ? ` / ${totalChoices} choix` : ''
@@ -196,8 +205,85 @@ export function AIGenerationPanel({
     return false
   }
   
+  // Détecter si c'est un TestNode (pour afficher la modal même si generateAllChoices est false)
+  const isTestNode = parentNodeId?.startsWith('test-node-') ?? false
+  const shouldShowProgressModal = isGenerating && (generateAllChoices || isTestNode) && batchProgress
+  
+  // Fermer la modale quand la génération se termine
+  useEffect(() => {
+    if (!isGenerating && batchProgress) {
+      // Délai court pour laisser le temps de voir "4/4" avant fermeture
+      const timer = setTimeout(() => {
+        setBatchProgress(null)
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [isGenerating, batchProgress])
+  
   return (
-    <div style={{ 
+    <>
+      {/* Modal de progression pour génération batch OU TestNode */}
+      {shouldShowProgressModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: theme.background.panel,
+              borderRadius: '8px',
+              width: '90%',
+              maxWidth: '500px',
+              padding: '2rem',
+              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1.5rem',
+            }}
+          >
+            <div style={{ fontSize: '1.2rem', fontWeight: 600, color: theme.text.primary }}>
+              Génération en cours (parallèle)
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ fontSize: '0.9rem', color: theme.text.secondary }}>
+                Génération de {batchProgress.total} nœud(s) en parallèle...
+              </div>
+              <div
+                style={{
+                  width: '100%',
+                  height: '8px',
+                  backgroundColor: theme.border.primary,
+                  borderRadius: '4px',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${(batchProgress.current / batchProgress.total) * 100}%`,
+                    height: '100%',
+                    backgroundColor: theme.button.primary.background,
+                    transition: 'width 0.3s ease',
+                  }}
+                />
+              </div>
+              <div style={{ fontSize: '0.85rem', color: theme.text.secondary, textAlign: 'center' }}>
+                {batchProgress.current} / {batchProgress.total} nœud(s) généré(s)
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      <div style={{ 
       display: 'flex', 
       flexDirection: 'column', 
       flex: 1,
@@ -373,7 +459,7 @@ export function AIGenerationPanel({
               Choix disponibles
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {parentNode.data.choices.map((choice: any, index: number) => {
+              {(parentNode.data.choices as Array<{ text: string; targetNode?: string; [key: string]: unknown }>).map((choice, index: number) => {
                 const isConnected = choice.targetNode && choice.targetNode !== 'END'
                 return (
                   <div
@@ -418,8 +504,8 @@ export function AIGenerationPanel({
           
           {/* Bouton "Générer pour tous les choix" */}
           {(() => {
-            const unconnectedChoices = parentNode.data.choices.filter(
-              (choice: any) => !choice.targetNode || choice.targetNode === 'END'
+            const unconnectedChoices = (parentNode.data.choices as Array<{ targetNode?: string; [key: string]: unknown }>).filter(
+              (choice) => !choice.targetNode || choice.targetNode === 'END'
             )
             return unconnectedChoices.length > 1 ? (
               <button
@@ -642,5 +728,6 @@ export function AIGenerationPanel({
         onCancel={() => setShowBudgetBlockModal(false)}
       />
     </div>
+    </>
   )
 }

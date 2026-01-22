@@ -23,7 +23,7 @@ interface LLMStore {
   loadModels: () => Promise<void>;
 }
 
-export const useLLMStore = create<LLMStore>((set, get) => ({
+export const useLLMStore = create<LLMStore>((set) => ({
   // État initial
   provider: (localStorage.getItem('llm-provider') as 'openai' | 'mistral') || 'openai',
   model: localStorage.getItem('llm-model') || 'gpt-5.2',
@@ -54,7 +54,7 @@ export const useLLMStore = create<LLMStore>((set, get) => ({
       // L'endpoint /api/v1/config/llm/models retourne {models: [...], total: ...}
       // Il faut transformer les modèles du format API vers le format du store
       const apiModels = data.models || [];
-      const models = apiModels.map((m: any) => ({
+      const models = apiModels.map((m: { model_identifier: string; display_name: string; client_type: string; max_tokens?: number }) => ({
         api_identifier: m.model_identifier,
         display_name: m.display_name,
         client_type: m.client_type as 'openai' | 'mistral',

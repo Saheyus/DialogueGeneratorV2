@@ -70,6 +70,301 @@ responses_params = {
 response = await client.responses.create(**responses_params)
 ```
 
+## Schéma complet de la requête
+
+Cette section documente tous les paramètres possibles envoyés à l'API OpenAI Responses, avec leurs types, valeurs par défaut, et exemples concrets.
+
+### Schéma JSON de la requête
+
+```json
+{
+  "model": "string (requis)",
+  "input": "array[object] (requis)",
+  "instructions": "string (optionnel)",
+  "tools": "array[object] (optionnel, pour structured output)",
+  "tool_choice": "object (optionnel, requis si tools présent)",
+  "max_output_tokens": "integer (requis)",
+  "reasoning": "object (optionnel)",
+  "temperature": "float (optionnel, conditionnel)",
+  "top_p": "float (optionnel)",
+  "stream": "boolean (optionnel, défaut: false)"
+}
+```
+
+### Détail des paramètres
+
+#### `model` (requis)
+- **Type**: `string`
+- **Description**: Identifiant du modèle GPT-5 à utiliser
+- **Valeurs possibles**:
+  - `"gpt-5.2"` - Modèle principal (recommandé)
+  - `"gpt-5.2-pro"` - Version avec plus de compute
+  - `"gpt-5-mini"` - Version économique
+  - `"gpt-5-nano"` - Version compacte
+- **Exemple**: `"gpt-5.2"`
+
+#### `input` (requis)
+- **Type**: `array[object]`
+- **Description**: Liste des messages de conversation (sans system message si `instructions` est fourni)
+- **Structure de chaque message**:
+  ```json
+  {
+    "role": "user" | "assistant" | "system",
+    "content": "string"
+  }
+  ```
+- **Valeurs courantes**:
+  - Si `instructions` est fourni: `[{"role": "user", "content": "..."}]`
+  - Si `instructions` n'est pas fourni: `[{"role": "system", "content": "..."}, {"role": "user", "content": "..."}]`
+- **Exemple**:
+  ```json
+  [
+    {
+      "role": "user",
+      "content": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><prompt>...</prompt>"
+    }
+  ]
+  ```
+
+#### `instructions` (optionnel)
+- **Type**: `string`
+- **Description**: Instructions système séparées du champ `input`. Utilisé pour les modèles GPT-5.2+ qui supportent ce paramètre dédié.
+- **Valeurs courantes**: Instructions système complètes (profil d'auteur, règles de style, etc.)
+- **Exemple**: `"Tu es un assistant expert en écriture de dialogues pour jeux de rôle (RPG). Tu DOIS utiliser la fonction 'generate_interaction' pour formater ta réponse."`
+- **Note**: Si fourni, le system message ne doit **pas** être dans `input`
+
+#### `tools` (optionnel, requis pour structured output)
+- **Type**: `array[object]`
+- **Description**: Définition des fonctions disponibles pour structured output
+- **Structure**:
+  ```json
+  [
+    {
+      "type": "function",
+      "name": "generate_interaction",
+      "description": "Génère une interaction de dialogue structurée.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Titre descriptif du dialogue"
+          },
+          "node": {
+            "type": "object",
+            "properties": {
+              "speaker": {"type": "string"},
+              "line": {"type": "string"},
+              "choices": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "text": {"type": "string"},
+                    "test": {"type": "string"},
+                    "condition": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "required": ["title", "node"],
+        "additionalProperties": false
+      }
+    }
+  ]
+  ```
+- **Valeurs courantes**: Toujours présent pour structured output, contient la définition de `generate_interaction`
+- **Note**: Si absent, l'API retournera du texte libre (non structuré)
+
+#### `tool_choice` (optionnel, requis si `tools` présent)
+- **Type**: `object`
+- **Description**: Force l'utilisation d'un tool spécifique
+- **Structure**:
+  ```json
+  {
+    "type": "allowed_tools",
+    "mode": "required",
+    "tools": [
+      {
+        "type": "function",
+        "name": "generate_interaction"
+      }
+    ]
+  }
+  ```
+- **Valeurs courantes**: Toujours `{"type": "allowed_tools", "mode": "required", "tools": [{"type": "function", "name": "generate_interaction"}]}` pour forcer structured output
+
+#### `max_output_tokens` (requis)
+- **Type**: `integer`
+- **Description**: Nombre maximum de tokens pour la génération
+- **Valeurs courantes**:
+  - Par défaut: `32000` (recommandation OpenAI pour reasoning summary)
+  - Minimum: `500`
+  - Maximum: `50000`
+- **Exemple**: `32000`
+- **Note**: Recommandation OpenAI: 25000+ tokens pour reasoning summary
+
+#### `reasoning` (optionnel)
+- **Type**: `object`
+- **Description**: Configuration de la phase réflexive (thinking)
+- **Structure**:
+  ```json
+  {
+    "effort": "none" | "minimal" | "low" | "medium" | "high" | "xhigh",
+    "summary": "auto"
+  }
+  ```
+- **Valeurs courantes**:
+  - `effort`: `"medium"` (recommandé), `"low"`, `"high"`, `"xhigh"` (GPT-5.2 uniquement), `"none"` (GPT-5.2 uniquement), `"minimal"` (mini/nano uniquement)
+  - `summary`: `"auto"` (recommandé, seule valeur supportée actuellement)
+- **Exemple**:
+  ```json
+  {
+    "effort": "medium",
+    "summary": "auto"
+  }
+  ```
+- **Note**: `"detailed"` pour `summary` nécessite une organisation OpenAI vérifiée (Tier 2/3), non disponible actuellement
+
+#### `temperature` (optionnel, conditionnel)
+- **Type**: `float`
+- **Description**: Contrôle la créativité (0.0-2.0). Plus élevé = plus créatif
+- **Valeurs courantes**: `0.7` (par défaut)
+- **Contraintes**:
+  - Uniquement disponible si `reasoning.effort == "none"` (ou non spécifié)
+  - **Non disponible** pour GPT-5 mini/nano (car ils ne supportent pas `reasoning.effort="none"`)
+- **Exemple**: `0.7`
+- **Note**: Ignoré par l'API si `reasoning.effort` est défini avec une valeur autre que `"none"`
+
+#### `top_p` (optionnel)
+- **Type**: `float`
+- **Description**: Nucleus sampling (0.0-1.0). Alternative/complément à `temperature`. 0.0=focalisé, 1.0=diversifié
+- **Valeurs courantes**: `null` (non défini par défaut), `0.0` à `1.0`
+- **Exemple**: `0.9`
+- **Note**: Peut coexister avec `temperature` (contrairement à Chat Completions)
+
+#### `stream` (optionnel)
+- **Type**: `boolean`
+- **Description**: Active le streaming natif (tokens en temps réel)
+- **Valeurs courantes**: `true` (activé pour feedback temps réel), `false` (désactivé)
+- **Exemple**: `true`
+- **Note**: Responses API n'utilise pas `stream_options` (c'est pour Chat Completions API uniquement). Le streaming fonctionne simplement avec `stream=true`.
+
+### Exemple complet de requête (avec tous les paramètres)
+
+```json
+{
+  "model": "gpt-5.2",
+  "instructions": "Tu es un assistant expert en écriture de dialogues pour jeux de rôle (RPG). Tu DOIS utiliser la fonction 'generate_interaction' pour formater ta réponse.",
+  "input": [
+    {
+      "role": "user",
+      "content": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><prompt>...</prompt>"
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "name": "generate_interaction",
+      "description": "Génère une interaction de dialogue structurée.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Titre descriptif du dialogue"
+          },
+          "node": {
+            "type": "object",
+            "properties": {
+              "speaker": {"type": "string"},
+              "line": {"type": "string"},
+              "choices": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "text": {"type": "string"},
+                    "test": {"type": "string"},
+                    "condition": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "required": ["title", "node"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "tool_choice": {
+    "type": "allowed_tools",
+    "mode": "required",
+    "tools": [
+      {
+        "type": "function",
+        "name": "generate_interaction"
+      }
+    ]
+  },
+  "max_output_tokens": 32000,
+  "reasoning": {
+    "effort": "medium",
+    "summary": "auto"
+  },
+  "top_p": 0.9,
+  "stream": true
+}
+```
+
+### Exemple minimal (sans reasoning, sans streaming)
+
+```json
+{
+  "model": "gpt-5.2",
+  "input": [
+    {
+      "role": "system",
+      "content": "Tu es un assistant expert..."
+    },
+    {
+      "role": "user",
+      "content": "Génère un dialogue..."
+    }
+  ],
+  "tools": [...],
+  "tool_choice": {...},
+  "max_output_tokens": 1500,
+  "temperature": 0.7
+}
+```
+
+### Matrice de compatibilité des paramètres
+
+| Modèle | `reasoning.effort` | `temperature` | `top_p` | `stream` |
+|--------|-------------------|---------------|---------|----------|
+| GPT-5.2 | `none`, `minimal`, `low`, `medium`, `high`, `xhigh` | ✅ (si `effort=none`) | ✅ | ✅ |
+| GPT-5.2-pro | `none`, `minimal`, `low`, `medium`, `high`, `xhigh` | ✅ (si `effort=none`) | ✅ | ✅ |
+| GPT-5-mini | `minimal`, `low`, `medium`, `high` | ❌ | ✅ | ✅ |
+| GPT-5-nano | `minimal`, `low`, `medium`, `high` | ❌ | ✅ | ✅ |
+
+### Notes importantes
+
+1. **`instructions` vs `input` avec system**: Pour GPT-5.2+, préférer `instructions` séparé plutôt qu'un message system dans `input`
+2. **`reasoning.summary`**: Uniquement `"auto"` supporté actuellement (les résumés `"detailed"` nécessitent une organisation OpenAI vérifiée Tier 2/3)
+3. **`temperature`**: Ignoré si `reasoning.effort` est défini (sauf si `effort="none"`)
+4. **`top_p`**: Peut coexister avec `temperature` (contrairement à Chat Completions)
+5. **`stream`**: Active le streaming natif (pas de simulation côté client)
+
+### Référence du code
+
+- Construction des paramètres: `core/llm/openai/parameter_builder.py::build_responses_params()`
+- Appel API: `core/llm/openai/client.py::generate_variants()` ou `generate_variants_streaming()`
+- Schéma structured output: `models/dialogue_structure/unity_dialogue_node.py::UnityDialogueGenerationResponse`
+
 
 ## Reasoning (Phase réflexive)
 

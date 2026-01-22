@@ -20,27 +20,93 @@ import * as configAPI from '../../../api/config'
 
 // Mock des stores et hooks
 vi.mock('../../../store/generationStore')
-vi.mock('../../../store/generationActionsStore')
+vi.mock('../../../store/generationActionsStore', () => ({
+  useGenerationActionsStore: vi.fn(() => ({
+    handleGenerate: vi.fn(),
+    handleResetAll: vi.fn(),
+    handleEstimateTokens: vi.fn(),
+  })),
+}))
 vi.mock('../../../store/contextStore')
 vi.mock('../../../store/contextConfigStore')
-vi.mock('../../../store/vocabularyStore')
-vi.mock('../../../store/narrativeGuidesStore')
+vi.mock('../../../store/vocabularyStore', () => ({
+  useVocabularyStore: vi.fn(() => ({
+    vocabulary: [],
+    loadVocabulary: vi.fn(),
+  })),
+}))
+vi.mock('../../../store/narrativeGuidesStore', () => ({
+  useNarrativeGuidesStore: vi.fn(() => ({
+    guides: [],
+    loadGuides: vi.fn(),
+  })),
+}))
 vi.mock('../../../store/graphStore')
 vi.mock('../../../store/llmStore')
-vi.mock('../../../store/flagsStore')
+vi.mock('../../../store/flagsStore', () => ({
+  useFlagsStore: vi.fn(() => ({
+    flags: [],
+    loadFlags: vi.fn(),
+  })),
+}))
 vi.mock('../../../hooks/useAuthorProfile')
 vi.mock('../../../hooks/useCostGovernance')
 vi.mock('../../../hooks/useKeyboardShortcuts', () => ({
   useKeyboardShortcuts: vi.fn(),
+}))
+vi.mock('../../../hooks/useGenerationDraft', () => ({
+  useGenerationDraft: vi.fn(() => ({
+    markDirty: vi.fn(),
+    saveDraft: vi.fn(),
+    loadDraft: vi.fn(),
+    clearDraft: vi.fn(),
+    saveStatus: 'saved' as const,
+  })),
+}))
+vi.mock('../../../hooks/usePresetManagement', () => ({
+  usePresetManagement: vi.fn(() => ({
+    loadPreset: vi.fn(),
+    savePreset: vi.fn(),
+    validatePreset: vi.fn(),
+    getCurrentConfiguration: vi.fn(() => ({})),
+  })),
+}))
+vi.mock('../../../hooks/useGenerationOrchestrator', () => ({
+  useGenerationOrchestrator: vi.fn(() => ({
+    handleGenerate: vi.fn(),
+    handleEstimateTokens: vi.fn(),
+    connectSSE: vi.fn(),
+    disconnectSSE: vi.fn(),
+  })),
 }))
 
 // Mock des APIs
 vi.mock('../../../api/dialogues')
 vi.mock('../../../api/config')
 
+// Types pour les props des composants mockés
+interface DialogueStructureWidgetProps {
+  value: string[]
+  onChange: (value: string[]) => void
+}
+
+interface SystemPromptEditorProps {
+  onUserInstructionsChange?: (value: string) => void
+  onSystemPromptChange?: (value: string) => void
+}
+
+interface PresetSelectorProps {
+  onPresetLoaded?: (preset: { id: string; configuration: Record<string, unknown> }) => void
+  getCurrentConfiguration?: () => Record<string, unknown>
+}
+
+interface SaveStatusIndicatorProps {
+  status: string
+}
+
 // Mock des composants enfants pour simplifier les tests
 vi.mock('../DialogueStructureWidget', () => ({
-  DialogueStructureWidget: ({ value, onChange }: any) => (
+  DialogueStructureWidget: ({ value, onChange }: DialogueStructureWidgetProps) => (
     <div data-testid="dialogue-structure-widget">
       <input
         data-testid="dialogue-structure-input"
@@ -52,7 +118,7 @@ vi.mock('../DialogueStructureWidget', () => ({
 }))
 
 vi.mock('../SystemPromptEditor', () => ({
-  SystemPromptEditor: ({ onUserInstructionsChange, onSystemPromptChange }: any) => (
+  SystemPromptEditor: ({ onUserInstructionsChange, onSystemPromptChange }: SystemPromptEditorProps) => (
     <div data-testid="system-prompt-editor">
       <input
         data-testid="user-instructions-input"
@@ -83,7 +149,7 @@ vi.mock('../ModelSelector', () => ({
 }))
 
 vi.mock('../PresetSelector', () => ({
-  PresetSelector: ({ onPresetLoaded, getCurrentConfiguration }: any) => (
+  PresetSelector: ({ onPresetLoaded, getCurrentConfiguration }: PresetSelectorProps) => (
     <div data-testid="preset-selector">
       <button
         data-testid="load-preset-btn"
@@ -109,7 +175,7 @@ vi.mock('../shared', () => ({
   useToast: () => ({
     toast: vi.fn(),
   }),
-  SaveStatusIndicator: ({ status }: any) => (
+  SaveStatusIndicator: ({ status }: SaveStatusIndicatorProps) => (
     <div data-testid="save-status-indicator">{status}</div>
   ),
   ConfirmDialog: () => null,
@@ -157,7 +223,7 @@ class MockEventSource {
 }
 
 // Remplacer EventSource global
-global.EventSource = MockEventSource as any
+global.EventSource = MockEventSource as unknown as typeof EventSource
 
 const mockUseGenerationStore = vi.mocked(useGenerationStore)
 const mockUseContextStore = vi.mocked(useContextStore)
@@ -185,7 +251,7 @@ describe('GenerationPanel - Tests Baseline', () => {
         sceneRegion: null,
         subLocation: null,
       },
-      dialogueStructure: ['PNJ', 'PJ', 'Stop', '', '', ''] as any,
+      dialogueStructure: ['PNJ', 'PJ', 'Stop', '', '', ''] as string[],
       systemPromptOverride: null,
       promptHash: null,
       tokenCount: 0,
@@ -238,7 +304,7 @@ describe('GenerationPanel - Tests Baseline', () => {
           })
         }
       }),
-    } as any)
+    } as ReturnType<typeof useGenerationStore>)
 
     mockUseContextStore.mockReturnValue({
       selections: {
@@ -260,52 +326,52 @@ describe('GenerationPanel - Tests Baseline', () => {
       toggleCharacter: vi.fn(),
       setRegion: vi.fn(),
       toggleSubLocation: vi.fn(),
-    } as any)
+    } as ReturnType<typeof useContextStore>)
 
     mockUseGraphStore.mockReturnValue({
       loadDialogue: vi.fn().mockResolvedValue(undefined),
-    } as any)
+    } as Partial<ReturnType<typeof useGraphStore>>)
 
     mockUseLLMStore.mockReturnValue({
       model: 'gpt-4o-mini',
       provider: 'openai',
-    } as any)
+    } as ReturnType<typeof useLLMStore>)
 
     mockUseAuthorProfile.mockReturnValue({
       authorProfile: null,
       updateProfile: vi.fn(),
-    } as any)
+    } as ReturnType<typeof useAuthorProfile>)
 
     mockUseCostGovernance.mockReturnValue({
       checkBudget: vi.fn().mockResolvedValue({ allowed: true }),
-    } as any)
+    } as ReturnType<typeof useCostGovernance>)
 
     // Mock APIs
     mockConfigAPI.listLLMModels.mockResolvedValue({
       models: [
         { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openai' },
       ],
-    } as any)
+    } as Awaited<ReturnType<typeof configAPI.listLLMModels>>)
 
     mockDialoguesAPI.startGenerationJob.mockResolvedValue({
       job_id: 'job-123',
-    } as any)
+    } as Awaited<ReturnType<typeof dialoguesAPI.createGenerationJob>>)
 
     mockDialoguesAPI.estimateTokens.mockResolvedValue({
       token_count: 1000,
-    } as any)
+    } as Awaited<ReturnType<typeof dialoguesAPI.estimateTokens>>)
 
     mockDialoguesAPI.previewPrompt.mockResolvedValue({
       token_count: 800,
-    } as any)
+    } as Awaited<ReturnType<typeof dialoguesAPI.previewPrompt>>)
 
     // Intercepter EventSource pour capturer les instances
     const originalEventSource = global.EventSource
     global.EventSource = vi.fn((url: string) => {
-      const instance = new originalEventSource(url) as any
+      const instance = new originalEventSource(url) as MockEventSource
       eventSourceInstances.push(instance)
       return instance
-    }) as any
+    }) as typeof EventSource
   })
 
   afterEach(() => {
@@ -331,7 +397,7 @@ describe('GenerationPanel - Tests Baseline', () => {
           sceneRegion: null,
           subLocation: null,
         },
-      } as any)
+      } as Partial<ReturnType<typeof useGenerationStore>>)
 
       mockUseContextStore.mockReturnValue({
         ...mockUseContextStore(),
@@ -339,7 +405,7 @@ describe('GenerationPanel - Tests Baseline', () => {
           ...mockUseContextStore().selections,
           characters_full: ['personnage-1'],
         },
-      } as any)
+      } as Partial<ReturnType<typeof useGenerationStore>>)
 
       // Trouver et cliquer sur le bouton de génération
       // (nécessite d'examiner la structure exacte du composant)
@@ -410,7 +476,7 @@ describe('GenerationPanel - Tests Baseline', () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({ valid: true }),
-      } as any)
+      } as Response)
 
       render(<GenerationPanel />)
 
@@ -434,7 +500,7 @@ describe('GenerationPanel - Tests Baseline', () => {
           valid: false,
           obsoleteRefs: ['personnage-1'],
         }),
-      } as any)
+      } as Response)
 
       render(<GenerationPanel />)
 

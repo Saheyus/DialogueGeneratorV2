@@ -291,13 +291,27 @@ class TestPresetValidation:
         When: validate_preset_references est appelé
         Then: validation échoue avec warning spécifique
         """
-        # Créer preset avec référence invalide
-        invalid_data = {**sample_preset_data}
-        invalid_data["configuration"]["characters"] = ["Akthar", "Inconnu-999"]
+        # Créer preset avec référence invalide directement (sans passer par create_preset qui nettoie)
+        from api.schemas.preset import Preset, PresetMetadata, PresetConfiguration
+        from datetime import datetime, timezone
+        from uuid import uuid4
         
-        preset, _ = preset_service.create_preset(invalid_data)
+        invalid_preset = Preset(
+            id=str(uuid4()),
+            name="Test Preset",
+            icon="🎭",
+            metadata=PresetMetadata(created=datetime.now(timezone.utc), modified=datetime.now(timezone.utc)),
+            configuration=PresetConfiguration(
+                characters=["Akthar", "Inconnu-999"],
+                locations=sample_preset_data["configuration"]["locations"],
+                region=sample_preset_data["configuration"]["region"],
+                subLocation=sample_preset_data["configuration"]["subLocation"],
+                sceneType=sample_preset_data["configuration"]["sceneType"],
+                instructions=sample_preset_data["configuration"]["instructions"]
+            )
+        )
         
-        result = preset_service.validate_preset_references(preset)
+        result = preset_service.validate_preset_references(invalid_preset)
         
         assert result.valid is False
         assert len(result.warnings) == 1
@@ -309,12 +323,27 @@ class TestPresetValidation:
         When: validate_preset_references est appelé
         Then: validation échoue avec warning spécifique
         """
-        invalid_data = {**sample_preset_data}
-        invalid_data["configuration"]["locations"] = ["Lieu-Inconnu-999"]
+        # Créer preset avec référence invalide directement (sans passer par create_preset qui nettoie)
+        from api.schemas.preset import Preset, PresetMetadata, PresetConfiguration
+        from datetime import datetime, timezone
+        from uuid import uuid4
         
-        preset, _ = preset_service.create_preset(invalid_data)
+        invalid_preset = Preset(
+            id=str(uuid4()),
+            name="Test Preset",
+            icon="🎭",
+            metadata=PresetMetadata(created=datetime.now(timezone.utc), modified=datetime.now(timezone.utc)),
+            configuration=PresetConfiguration(
+                characters=sample_preset_data["configuration"]["characters"],
+                locations=["Lieu-Inconnu-999"],
+                region=sample_preset_data["configuration"]["region"],
+                subLocation=sample_preset_data["configuration"]["subLocation"],
+                sceneType=sample_preset_data["configuration"]["sceneType"],
+                instructions=sample_preset_data["configuration"]["instructions"]
+            )
+        )
         
-        result = preset_service.validate_preset_references(preset)
+        result = preset_service.validate_preset_references(invalid_preset)
         
         assert result.valid is False
         assert "Lieu-Inconnu-999" in result.warnings[0]
@@ -325,13 +354,27 @@ class TestPresetValidation:
         When: validate_preset_references est appelé
         Then: tous les obsolètes détectés
         """
-        invalid_data = {**sample_preset_data}
-        invalid_data["configuration"]["characters"] = ["Inconnu-999", "Inconnu-888"]
-        invalid_data["configuration"]["locations"] = ["Lieu-Inconnu-999"]
+        # Créer preset avec références invalides directement (sans passer par create_preset qui nettoie)
+        from api.schemas.preset import Preset, PresetMetadata, PresetConfiguration
+        from datetime import datetime, timezone
+        from uuid import uuid4
         
-        preset, _ = preset_service.create_preset(invalid_data)
+        invalid_preset = Preset(
+            id=str(uuid4()),
+            name="Test Preset",
+            icon="🎭",
+            metadata=PresetMetadata(created=datetime.now(timezone.utc), modified=datetime.now(timezone.utc)),
+            configuration=PresetConfiguration(
+                characters=["Inconnu-999", "Inconnu-888"],
+                locations=["Lieu-Inconnu-999"],
+                region=sample_preset_data["configuration"]["region"],
+                subLocation=sample_preset_data["configuration"]["subLocation"],
+                sceneType=sample_preset_data["configuration"]["sceneType"],
+                instructions=sample_preset_data["configuration"]["instructions"]
+            )
+        )
         
-        result = preset_service.validate_preset_references(preset)
+        result = preset_service.validate_preset_references(invalid_preset)
         
         assert result.valid is False
         assert len(result.warnings) == 3

@@ -47,8 +47,9 @@ export function useGenerationValidation(
   const { maxContextTokens, maxCompletionTokens, tokenCount } = options
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   
-  const { selections } = useContextStore()
-  const { buildContextSelections } = useGenerationRequest()
+  // selections et buildContextSelections non utilisés dans cette validation - gardés pour usage futur
+  // const { selections } = useContextStore()
+  // const { buildContextSelections } = useGenerationRequest()
 
   // Validation en temps réel des tokens
   useEffect(() => {

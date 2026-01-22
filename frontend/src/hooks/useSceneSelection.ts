@@ -57,26 +57,72 @@ export function useSceneSelection() {
   const lastStoreSceneSelectionRef = useRef<SceneSelection | null>(null)
 
   const loadCharacters = useCallback(async () => {
-    try {
-      const response = await contextAPI.listCharacters()
+    const contextStore = useContextStore.getState()
+    
+    // Vérifier le cache avant l'appel API
+    if (contextStore.isCacheValid(contextStore.cachedCharacters)) {
       setData((prev) => ({
         ...prev,
-        characters: response.characters.map((c) => c.name).sort(),
+        characters: contextStore.cachedCharacters!.data,
+      }))
+      return
+    }
+    
+    try {
+      const response = await contextAPI.listCharacters()
+      const characterNames = response.characters.map((c) => c.name).sort()
+      
+      // Mettre à jour le cache
+      contextStore.setCachedCharacters(characterNames)
+      
+      setData((prev) => ({
+        ...prev,
+        characters: characterNames,
       }))
     } catch (err) {
       console.error('Erreur lors du chargement des personnages:', err)
+      // En cas d'erreur, utiliser le cache même s'il est expiré si disponible
+      if (contextStore.cachedCharacters) {
+        setData((prev) => ({
+          ...prev,
+          characters: contextStore.cachedCharacters!.data,
+        }))
+      }
     }
   }, [])
 
   const loadRegions = useCallback(async () => {
-    try {
-      const response = await contextAPI.listRegions()
+    const contextStore = useContextStore.getState()
+    
+    // Vérifier le cache avant l'appel API
+    if (contextStore.isCacheValid(contextStore.cachedRegions)) {
       setData((prev) => ({
         ...prev,
-        regions: response.regions.sort(),
+        regions: contextStore.cachedRegions!.data,
+      }))
+      return
+    }
+    
+    try {
+      const response = await contextAPI.listRegions()
+      const regionNames = response.regions.sort()
+      
+      // Mettre à jour le cache
+      contextStore.setCachedRegions(regionNames)
+      
+      setData((prev) => ({
+        ...prev,
+        regions: regionNames,
       }))
     } catch (err) {
       console.error('Erreur lors du chargement des régions:', err)
+      // En cas d'erreur, utiliser le cache même s'il est expiré si disponible
+      if (contextStore.cachedRegions) {
+        setData((prev) => ({
+          ...prev,
+          regions: contextStore.cachedRegions!.data,
+        }))
+      }
     }
   }, [])
 
@@ -86,15 +132,40 @@ export function useSceneSelection() {
       return
     }
 
-    try {
-      const response = await contextAPI.getSubLocations(regionName)
+    const contextStore = useContextStore.getState()
+    const cached = contextStore.cachedSubLocations.get(regionName)
+    
+    // Vérifier le cache avant l'appel API
+    if (cached && contextStore.isCacheValid(cached)) {
       setData((prev) => ({
         ...prev,
-        subLocations: response.sub_locations.sort(),
+        subLocations: cached.data,
+      }))
+      return
+    }
+
+    try {
+      const response = await contextAPI.getSubLocations(regionName)
+      const subLocationNames = response.sub_locations.sort()
+      
+      // Mettre à jour le cache pour cette région
+      contextStore.setCachedSubLocations(regionName, subLocationNames)
+      
+      setData((prev) => ({
+        ...prev,
+        subLocations: subLocationNames,
       }))
     } catch (err) {
       console.error('Erreur lors du chargement des sous-lieux:', err)
-      setData((prev) => ({ ...prev, subLocations: [] }))
+      // En cas d'erreur, utiliser le cache même s'il est expiré si disponible
+      if (cached) {
+        setData((prev) => ({
+          ...prev,
+          subLocations: cached.data,
+        }))
+      } else {
+        setData((prev) => ({ ...prev, subLocations: [] }))
+      }
     }
   }, [])
 
@@ -134,7 +205,8 @@ export function useSceneSelection() {
     // - Toujours refléter les changements venant du store (ex: chargement preset),
     //   sinon l'UI reste "bloquée" sur l'état local.
     setSelection((prevSelection) => {
-      const hasLocalSelection = prevSelection.characterA || prevSelection.characterB || prevSelection.sceneRegion
+      // hasLocalSelection non utilisé - gardé pour usage futur
+      // const hasLocalSelection = prevSelection.characterA || prevSelection.characterB || prevSelection.sceneRegion
       const storeChanged =
         !prevStoreSelection ||
         prevStoreSelection.characterA !== storeSceneSelection.characterA ||

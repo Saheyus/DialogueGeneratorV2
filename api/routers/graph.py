@@ -1,5 +1,4 @@
 """Router API pour la gestion de graphes de dialogues."""
-import json
 import logging
 from typing import Annotated
 from fastapi import APIRouter, Depends, status
@@ -27,6 +26,7 @@ from services.graph_generation_service import GraphGenerationService
 from core.llm.llm_client import ILLMClient
 from core.context.context_builder import ContextBuilder
 from api.container import ServiceContainer
+from models.dialogue_structure.unity_dialogue_node import UnityDialogueChoiceContent
 
 logger = logging.getLogger(__name__)
 
@@ -206,15 +206,17 @@ async def generate_node(
             if not user_instructions:
                 user_instructions = "Ecris la réponse du PNJ à ce que dit le PJ"
             
-            # Utiliser le service batch pour générer tous les choix
+            # Utiliser le service batch pour générer tous les choix (en parallèle)
             graph_generation_service = GraphGenerationService(generation_service)
+            # Note: progress_callback pourrait être ajouté si on veut du streaming SSE
             batch_result = await graph_generation_service.generate_nodes_for_all_choices(
                 parent_node=parent_content,
                 instructions=user_instructions,
                 context=request_data.context_selections,
                 llm_client=llm_client,
                 system_prompt_override=request_data.system_prompt_override,
-                max_choices=request_data.max_choices
+                max_choices=request_data.max_choices,
+                progress_callback=None  # Pourrait être utilisé avec SSE dans le futur
             )
             
             # Retourner tous les nœuds générés en batch
@@ -282,7 +284,102 @@ async def generate_node(
         if not user_instructions:
             user_instructions = "Ecris la réponse du PNJ à ce que dit le PJ"
         
-        # Si target_choice_index est fourni, inclure le texte du choix correspondant
+        # Vérifier si on génère depuis un TestNode (détection par type ou données)
+        is_test_node = (
+            parent_content.get("type") == "testNode" or
+            (not parent_choices and parent_content.get("test") is not None) or
+            request_data.parent_node_id.startswith("test-node-")
+        )
+        
+        # Si on génère depuis un TestNode, extraire le DialogueNode parent et le choice_index
+        if is_test_node and not parent_choices:
+            # Format de l'ID TestNode: test-node-{parent_id}-choice-{index}
+            # Exemple: test-node-NODE_START-choice-0
+            test_node_id = request_data.parent_node_id
+            if test_node_id.startswith("test-node-"):
+                # Extraire le parent_id et choice_index depuis l'ID du TestNode
+                parts = test_node_id.replace("test-node-", "").split("-choice-")
+                if len(parts) == 2:
+                    parent_dialogue_id = parts[0]
+                    choice_index_str = parts[1]
+                    try:
+                        choice_index = int(choice_index_str)
+                        # Extraire le test depuis les données du TestNode
+                        test_value = parent_content.get("test")
+                        if test_value:
+                            # Récupérer le speaker et line depuis les données du TestNode
+                            # (le frontend devrait les stocker dans le TestNode ou les envoyer)
+                            parent_speaker = parent_content.get("parent_speaker") or parent_content.get("speaker") or "PNJ"
+                            parent_line = parent_content.get("parent_line") or parent_content.get("line") or ""
+                            
+                            # Créer un choix factice avec le test pour appeler generate_nodes_for_choice_with_test
+                            # Le texte du choix n'est pas nécessaire pour la génération, seul le test compte
+                            choice_data = {"text": "", "test": test_value}
+                            choice_content = UnityDialogueChoiceContent.model_validate(choice_data)
+                            
+                            # Normaliser l'ID du parent DialogueNode
+                            normalized_parent_id = (
+                                parent_dialogue_id
+                                if parent_dialogue_id.startswith("NODE_")
+                                else f"NODE_{parent_dialogue_id}"
+                            )
+                            
+                            # Générer les 4 nœuds pour les 4 résultats de test
+                            result = await generation_service.generate_nodes_for_choice_with_test(
+                                llm_client=llm_client,
+                                choice_content=choice_content,
+                                parent_node_id=normalized_parent_id,
+                                choice_index=choice_index,
+                                instructions=user_instructions,
+                                parent_speaker=parent_speaker,
+                                parent_line=parent_line,
+                                system_prompt_override=request_data.system_prompt_override
+                            )
+                            
+                            generated_nodes = result["nodes"]
+                            connection_data = result["connections"][0]
+                            
+                            # Créer les connexions suggérées pour les 4 résultats depuis le TestNode
+                            suggested_connections = []
+                            
+                            test_result_mappings = [
+                                ("testCriticalFailureNode", "critical-failure"),
+                                ("testFailureNode", "failure"),
+                                ("testSuccessNode", "success"),
+                                ("testCriticalSuccessNode", "critical-success")
+                            ]
+                            
+                            for field_name, handle_id in test_result_mappings:
+                                target_node_id = connection_data.get(field_name)
+                                if target_node_id:
+                                    suggested_connections.append(
+                                        SuggestedConnection(
+                                            **{
+                                                "from": test_node_id,
+                                                "to": target_node_id,
+                                                "via_choice_index": None,
+                                                "connection_type": f"test-{handle_id}"
+                                            }
+                                        )
+                                    )
+                            
+                            logger.info(
+                                f"4 nœuds générés depuis TestNode: {test_node_id}, "
+                                f"parent DialogueNode: {normalized_parent_id}, choice_index: {choice_index} "
+                                f"(request_id: {request_id})"
+                            )
+                            
+                            return GenerateNodeResponse(
+                                node=generated_nodes[0] if generated_nodes else None,
+                                nodes=generated_nodes,
+                                suggested_connections=suggested_connections,
+                                parent_node_id=request_data.parent_node_id
+                            )
+                    except (ValueError, IndexError) as e:
+                        logger.warning(f"Impossible d'extraire parent_id et choice_index depuis TestNode ID {test_node_id}: {e}")
+                        # Continuer avec la génération normale
+        
+        # Si target_choice_index est fourni, vérifier si le choix a un test
         if request_data.target_choice_index is not None and parent_choices:
             choice_index = request_data.target_choice_index
             if not (0 <= choice_index < len(parent_choices)):
@@ -291,7 +388,88 @@ async def generate_node(
                     request_id=request_id
                 )
             
-            choice_text = parent_choices[choice_index].get("text", "")
+            choice_data = parent_choices[choice_index]
+            choice_has_test = choice_data.get("test") is not None
+            
+            # Si le choix a un test, générer 4 nœuds pour les 4 résultats
+            if choice_has_test:
+                try:
+                    # Convertir le choix en UnityDialogueChoiceContent pour validation
+                    choice_content = UnityDialogueChoiceContent.model_validate(choice_data)
+                    
+                    # Normaliser l'ID du parent
+                    normalized_parent_id = (
+                        request_data.parent_node_id
+                        if request_data.parent_node_id.startswith("NODE_")
+                        else f"NODE_{request_data.parent_node_id}"
+                    )
+                    
+                    # Générer les 4 nœuds pour les 4 résultats de test
+                    result = await generation_service.generate_nodes_for_choice_with_test(
+                        llm_client=llm_client,
+                        choice_content=choice_content,
+                        parent_node_id=normalized_parent_id,
+                        choice_index=choice_index,
+                        instructions=user_instructions,
+                        parent_speaker=parent_speaker,
+                        parent_line=parent_line,
+                        system_prompt_override=request_data.system_prompt_override
+                    )
+                    
+                    generated_nodes = result["nodes"]
+                    connection_data = result["connections"][0]
+                    
+                    # Créer les connexions suggérées pour les 4 résultats
+                    # Le TestNode est créé automatiquement par le frontend, on doit créer les connexions
+                    # depuis le TestNode vers les 4 nœuds avec les bons sourceHandle
+                    suggested_connections = []
+                    
+                    # Trouver l'ID du TestNode (format: test-node-{parent_id}-choice-{index})
+                    test_node_id = f"test-node-{normalized_parent_id}-choice-{choice_index}"
+                    
+                    # Créer 4 connexions depuis le TestNode vers les 4 nœuds avec les handles appropriés
+                    test_result_mappings = [
+                        ("testCriticalFailureNode", "critical-failure"),
+                        ("testFailureNode", "failure"),
+                        ("testSuccessNode", "success"),
+                        ("testCriticalSuccessNode", "critical-success")
+                    ]
+                    
+                    for field_name, handle_id in test_result_mappings:
+                        target_node_id = connection_data.get(field_name)
+                        if target_node_id:
+                            suggested_connections.append(
+                                SuggestedConnection(
+                                    **{
+                                        "from": test_node_id,
+                                        "to": target_node_id,
+                                        "via_choice_index": None,
+                                        "connection_type": f"test-{handle_id}"
+                                    }
+                                )
+                            )
+                    
+                    logger.info(
+                        f"4 nœuds générés pour choix avec test: {choice_content.test}, "
+                        f"parent: {request_data.parent_node_id} (request_id: {request_id})"
+                    )
+                    
+                    return GenerateNodeResponse(
+                        node=generated_nodes[0] if generated_nodes else None,
+                        nodes=generated_nodes,
+                        suggested_connections=suggested_connections,
+                        parent_node_id=request_data.parent_node_id
+                    )
+                except Exception as e:
+                    logger.error(f"Erreur lors de la génération de 4 nœuds pour choix avec test: {e}")
+                    raise InternalServerException(
+                        message=f"Erreur lors de la génération de 4 nœuds pour choix avec test: {str(e)}",
+                        details={"error": str(e)},
+                        request_id=request_id
+                    )
+            
+            # Sinon, génération normale pour un choix sans test
+            choice_text = choice_data.get("text", "")
             enriched_instructions = f"""Contexte précédent:
 {parent_speaker}: {parent_line}
 

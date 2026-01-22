@@ -8,6 +8,7 @@ import type { ReactFlowInstance } from 'reactflow'
 import { UnityDialogueList, type UnityDialogueListRef } from '../unityDialogues/UnityDialogueList'
 import { GraphCanvas } from './GraphCanvas'
 import { AIGenerationPanel } from './AIGenerationPanel'
+import { DeleteNodeConfirmModal } from './DeleteNodeConfirmModal'
 import { useGraphStore } from '../../store/graphStore'
 import { exportGraphToPNG, exportGraphToSVG } from '../../utils/graphExport'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
@@ -31,6 +32,9 @@ export function GraphEditor() {
   
   // État pour le dialogue de sélection de format d'export
   const [showExportFormatDialog, setShowExportFormatDialog] = useState(false)
+  
+  // Panneau d'avertissements/erreurs de validation (affiché via clic sur le badge)
+  const [showValidationPanel, setShowValidationPanel] = useState(false)
   
   // Écouter l'événement pour obtenir l'instance ReactFlow
   useEffect(() => {
@@ -70,6 +74,7 @@ export function GraphEditor() {
     autoRestoredDraft,
     setAutoRestoredDraft,
     clearAutoRestoredDraft,
+    setShowDeleteNodeConfirm,
   } = useGraphStore()
   
   // Écouter l'événement pour ouvrir le panel de génération depuis un nœud
@@ -130,7 +135,14 @@ export function GraphEditor() {
               if (draftTimestamp > fileTimestamp && !contentIdentical) {
                 // Restaurer automatiquement le brouillon le plus récent
                 loadDialogue(draft.json_content, undefined, selectedDialogue.filename)
-                  .then(() => {
+                  .then(async () => {
+                    // Validation automatique après chargement du brouillon
+                    try {
+                      await validateGraph()
+                    } catch (err) {
+                      console.error('Erreur lors de la validation automatique au chargement:', err)
+                      // Ne pas bloquer le chargement en cas d'erreur de validation
+                    }
                     // Enregistrer dans le store qu'un brouillon a été restauré automatiquement
                     setAutoRestoredDraft({
                       timestamp: draftTimestamp,
@@ -144,7 +156,14 @@ export function GraphEditor() {
                     toast(`Erreur lors de la restauration: ${getErrorMessage(err)}`, 'error')
                     // Fallback : charger le fichier
                     return loadDialogue(response.json_content, undefined, selectedDialogue.filename)
-                      .then(() => {
+                      .then(async () => {
+                        // Validation automatique après chargement
+                        try {
+                          await validateGraph()
+                        } catch (err) {
+                          console.error('Erreur lors de la validation automatique au chargement:', err)
+                          // Ne pas bloquer le chargement en cas d'erreur de validation
+                        }
                         setIsLoadingDialogue(false)
                       })
                   })
@@ -163,7 +182,14 @@ export function GraphEditor() {
           // Passer le filename explicitement pour que le store puisse sauvegarder/charger les positions
           return loadDialogue(response.json_content, undefined, selectedDialogue.filename)
         })
-        .then(() => {
+        .then(async () => {
+          // Validation automatique après chargement
+          try {
+            await validateGraph()
+          } catch (err) {
+            console.error('Erreur lors de la validation automatique au chargement:', err)
+            // Ne pas bloquer le chargement en cas d'erreur de validation
+          }
           setIsLoadingDialogue(false)
         })
         .catch((err) => {
@@ -175,7 +201,7 @@ export function GraphEditor() {
       // Réinitialiser le graphe si aucun dialogue sélectionné
       useGraphStore.getState().resetGraph()
     }
-  }, [selectedDialogue, loadDialogue, toast, clearAutoRestoredDraft])
+  }, [selectedDialogue, loadDialogue, validateGraph, toast, clearAutoRestoredDraft, setAutoRestoredDraft])
   
   // Auto-save draft avec debounce (Task 2 - Story 0.5)
   // Sauvegarde immédiate lors du démontage si des changements non sauvegardés existent
@@ -224,27 +250,6 @@ export function GraphEditor() {
       }
     }
   }, [selectedDialogue, hasUnsavedChanges, isGraphLoading, isGraphSaving, isLoadingDialogue, isGenerating, nodes, exportToUnity, markDraftSaved, markDraftError, clearDraftError])
-  
-  // Handler pour valider le graphe
-  const handleValidate = useCallback(async () => {
-    try {
-      await validateGraph()
-      // Récupérer les erreurs après validation (mise à jour du store)
-      const state = useGraphStore.getState()
-      const errors = state.validationErrors.filter((e) => e.severity === 'error')
-      const warnings = state.validationErrors.filter((e) => e.severity === 'warning')
-      
-      if (errors.length === 0 && warnings.length === 0) {
-        toast('Graphe valide', 'success', 2000)
-      } else if (errors.length > 0) {
-        toast(`${errors.length} erreur(s) et ${warnings.length} avertissement(s) trouvés`, 'error', 3000)
-      } else {
-        toast(`${warnings.length} avertissement(s) trouvé(s)`, 'warning', 3000)
-      }
-    } catch (err) {
-      toast(`Erreur lors de la validation: ${getErrorMessage(err)}`, 'error')
-    }
-  }, [validateGraph, toast])
   
   // Handler pour auto-layout
   const handleAutoLayout = useCallback(async () => {
@@ -314,7 +319,26 @@ export function GraphEditor() {
         title: selectedDialogue.title || selectedDialogue.filename,
         filename: selectedDialogue.filename.replace('.json', ''), // Enlever l'extension
       })
-      toast(`Dialogue sauvegardé: ${response.filename}`, 'success', 3000)
+      
+      // Validation automatique après sauvegarde
+      try {
+        await validateGraph()
+        const state = useGraphStore.getState()
+        const errors = state.validationErrors.filter((e) => e.severity === 'error')
+        const warnings = state.validationErrors.filter((e) => e.severity === 'warning')
+        
+        if (errors.length === 0 && warnings.length === 0) {
+          toast(`Dialogue sauvegardé: ${response.filename} - Graphe valide`, 'success', 3000)
+        } else if (errors.length > 0) {
+          toast(`Dialogue sauvegardé: ${response.filename} - ${errors.length} erreur(s) et ${warnings.length} avertissement(s)`, 'warning', 4000)
+        } else {
+          toast(`Dialogue sauvegardé: ${response.filename} - ${warnings.length} avertissement(s)`, 'warning', 4000)
+        }
+      } catch (validationErr) {
+        // En cas d'erreur de validation, on affiche quand même le succès de sauvegarde
+        console.error('Erreur lors de la validation automatique:', validationErr)
+        toast(`Dialogue sauvegardé: ${response.filename}`, 'success', 3000)
+      }
       
       // Supprimer le draft après sauvegarde réussie (Task 2 - Story 0.5)
       const draftKey = `unity_dialogue_draft:${selectedDialogue.filename}`
@@ -330,7 +354,7 @@ export function GraphEditor() {
     } finally {
       setIsLoadingDialogue(false)
     }
-  }, [selectedDialogue, saveDialogue, toast, markDraftSaved])
+  }, [selectedDialogue, saveDialogue, validateGraph, toast, markDraftSaved])
   
   // Handler pour charger le fichier plus ancien (depuis le bandeau d'avertissement)
   const handleLoadOlderFile = useCallback(() => {
@@ -342,7 +366,14 @@ export function GraphEditor() {
       setIsLoadingDialogue(true)
       unityDialoguesAPI.getUnityDialogue(selectedDialogue.filename)
         .then((response) => loadDialogue(response.json_content, undefined, selectedDialogue.filename))
-        .then(() => {
+        .then(async () => {
+          // Validation automatique après chargement
+          try {
+            await validateGraph()
+          } catch (err) {
+            console.error('Erreur lors de la validation automatique au chargement:', err)
+            // Ne pas bloquer le chargement en cas d'erreur de validation
+          }
           setIsLoadingDialogue(false)
           useGraphStore.getState().clearAutoRestoredDraft()
           toast('Fichier plus ancien chargé', 'info', 2000)
@@ -353,7 +384,7 @@ export function GraphEditor() {
           setIsLoadingDialogue(false)
         })
     }
-  }, [selectedDialogue, loadDialogue, toast])
+  }, [selectedDialogue, loadDialogue, validateGraph, toast])
   
   // Écouter l'événement pour charger le fichier plus ancien (depuis le bandeau d'avertissement)
   useEffect(() => {
@@ -410,8 +441,20 @@ export function GraphEditor() {
         description: 'Générer un nœud avec l\'IA',
         enabled: !!selectedNodeId && !isGraphLoading && !isLoadingDialogue && !!selectedDialogue,
       },
+      {
+        key: 'delete',
+        handler: (e) => {
+          e.preventDefault()
+          const currentSelectedNodeId = useGraphStore.getState().selectedNodeId
+          if (currentSelectedNodeId) {
+            setShowDeleteNodeConfirm(true)
+          }
+        },
+        description: 'Supprimer le nœud sélectionné',
+        enabled: () => !!useGraphStore.getState().selectedNodeId,
+      },
     ],
-    [selectedDialogue, isGraphSaving, handleSave, selectedNodeId, isGraphLoading, isLoadingDialogue]
+    [selectedDialogue, isGraphSaving, handleSave, selectedNodeId, isGraphLoading, isLoadingDialogue, setShowDeleteNodeConfirm]
   )
   
   return (
@@ -463,79 +506,64 @@ export function GraphEditor() {
             display: 'flex',
             gap: '0.5rem',
             alignItems: 'center',
-            justifyContent: 'space-between',
+            justifyContent: 'flex-end',
             flexWrap: 'wrap',
           }}
         >
-          <div style={{ minWidth: 0 }}>
-            <div
-              style={{
-                margin: 0,
-                color: theme.text.primary,
-                fontSize: '1rem',
-                fontWeight: 700,
-                lineHeight: 1.2,
-                wordBreak: 'break-word',
-              }}
-            >
-              {selectedDialogue 
-                ? `Éditeur de Graphe - ${selectedDialogue.title || selectedDialogue.filename}`
-                : 'Éditeur de Graphe Narratif'}
-            </div>
-            {selectedDialogue && (
-              <div style={{ fontSize: '0.85rem', color: theme.text.secondary, marginTop: '0.25rem' }}>
-                {selectedDialogue.filename}
-              </div>
-            )}
-          </div>
-          
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* Badge de santé global du graphe */}
+          <div style={{ 
+            flex: 1, 
+            minWidth: 0, 
+            display: 'flex', 
+            gap: '0.5rem', 
+            alignItems: 'center', 
+            flexWrap: 'wrap',
+            justifyContent: 'flex-start',
+          }}>
+            {/* Badge de santé global du graphe (validation automatique à chaque sauvegarde) */}
             {(() => {
               const errors = graphValidationErrors.filter((e) => e.severity === 'error')
               const warnings = graphValidationErrors.filter((e) => e.severity === 'warning')
               const hasErrors = errors.length > 0
               const hasWarnings = warnings.length > 0 && !hasErrors
               const isValid = !hasErrors && !hasWarnings
+              const canToggle = hasErrors || hasWarnings
+              const badgeStyle = {
+                padding: '0.4rem 0.75rem',
+                borderRadius: '6px',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                backgroundColor: isValid 
+                  ? theme.state.success.background 
+                  : hasErrors 
+                  ? theme.state.error.background 
+                  : theme.state.warning.background,
+                color: isValid 
+                  ? theme.state.success.color 
+                  : hasErrors 
+                  ? theme.state.error.color 
+                  : theme.state.warning.color,
+                border: `1px solid ${isValid 
+                  ? theme.state.success.color 
+                  : hasErrors 
+                  ? theme.state.error.border 
+                  : theme.state.warning.color}`,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                ...(canToggle && { cursor: 'pointer' }),
+              } as React.CSSProperties
+              const title = isValid 
+                ? 'Graphe valide (validation automatique à chaque sauvegarde)' 
+                : canToggle 
+                ? (showValidationPanel 
+                  ? 'Cliquer pour masquer les détails' 
+                  : 'Cliquer pour afficher les détails')
+                : hasErrors 
+                ? `${errors.length} erreur(s) détectée(s)` 
+                : `${warnings.length} avertissement(s) détecté(s)`
               
-              return (
-                <div
-                  onClick={() => {
-                    if (graphValidationErrors.length > 0) {
-                      handleValidate()
-                    }
-                  }}
-                  style={{
-                    padding: '0.4rem 0.75rem',
-                    borderRadius: '6px',
-                    fontSize: '0.85rem',
-                    fontWeight: 600,
-                    cursor: graphValidationErrors.length > 0 ? 'pointer' : 'default',
-                    backgroundColor: isValid 
-                      ? theme.state.success.background 
-                      : hasErrors 
-                      ? theme.state.error.background 
-                      : theme.state.warning.background,
-                    color: isValid 
-                      ? theme.state.success.color 
-                      : hasErrors 
-                      ? theme.state.error.color 
-                      : theme.state.warning.color,
-                    border: `1px solid ${isValid 
-                      ? theme.state.success.color 
-                      : hasErrors 
-                      ? theme.state.error.border 
-                      : theme.state.warning.color}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                  }}
-                  title={isValid 
-                    ? 'Graphe valide' 
-                    : hasErrors 
-                    ? `${errors.length} erreur(s) - Cliquer pour valider` 
-                    : `${warnings.length} avertissement(s) - Cliquer pour valider`}
-                >
+              const content = (
+                <>
                   <span>{isValid ? '✓' : hasErrors ? '✗' : '⚠'}</span>
                   <span>
                     {isValid 
@@ -544,6 +572,30 @@ export function GraphEditor() {
                       ? `${errors.length} erreur${errors.length > 1 ? 's' : ''}` 
                       : `${warnings.length} avertissement${warnings.length > 1 ? 's' : ''}`}
                   </span>
+                </>
+              )
+              
+              if (canToggle) {
+                return (
+                  <button
+                    type="button"
+                    style={{
+                      ...badgeStyle,
+                      margin: 0,
+                      appearance: 'none',
+                      WebkitAppearance: 'none',
+                      font: 'inherit',
+                    }}
+                    title={title}
+                    onClick={() => setShowValidationPanel((v) => !v)}
+                  >
+                    {content}
+                  </button>
+                )
+              }
+              return (
+                <div style={badgeStyle} title={title}>
+                  {content}
                 </div>
               )
             })()}
@@ -566,23 +618,7 @@ export function GraphEditor() {
                 />
               )
             })()}
-            <button
-              onClick={handleValidate}
-              disabled={isGraphLoading || isLoadingDialogue || !selectedDialogue}
-              style={{
-                padding: '0.5rem 1rem',
-                border: `1px solid ${theme.border.primary}`,
-                borderRadius: '6px',
-                backgroundColor: theme.button.default.background,
-                color: theme.button.default.color,
-                cursor: (isGraphLoading || isLoadingDialogue || !selectedDialogue) ? 'not-allowed' : 'pointer',
-                opacity: (isGraphLoading || isLoadingDialogue || !selectedDialogue) ? 0.6 : 1,
-                fontSize: '0.9rem',
-              }}
-              title="Valider le graphe"
-            >
-              ✓ Valider
-            </button>
+            {/* Direction layout + Auto-layout */}
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <select
                 value={layoutDirection}
@@ -727,8 +763,8 @@ export function GraphEditor() {
                 </ReactFlowProvider>
               </div>
             )}
-            {/* Panel d'erreurs de validation (overlay) */}
-            {graphValidationErrors.length > 0 && (() => {
+            {/* Panel d'erreurs de validation (overlay) — affiché via clic sur le badge */}
+            {showValidationPanel && graphValidationErrors.length > 0 && (() => {
               const errors = graphValidationErrors.filter((e) => e.severity === 'error')
               // Filtrer les cycles intentionnels des warnings (ne pas afficher si marqués intentionnels)
               const warnings = graphValidationErrors
@@ -1126,6 +1162,8 @@ export function GraphEditor() {
           </div>
         </div>
       )}
+
+      <DeleteNodeConfirmModal />
     </div>
   )
 }

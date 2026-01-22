@@ -83,6 +83,10 @@ class TestDialogueGenerationService:
             }
         }
         
+        # Mock build_context_json qui est maintenant utilisé au lieu de build_context_with_custom_fields
+        mock_context_structure = {"context": "structured"}
+        mock_context_builder.build_context_json = MagicMock(return_value=mock_context_structure)
+        
         result = dialogue_service._build_context_summary(
             context_selections=context_selections,
             user_instructions="Test",
@@ -90,11 +94,12 @@ class TestDialogueGenerationService:
             field_configs=field_configs
         )
         
-        # Si build_context_with_custom_fields existe, il devrait être appelé
-        if hasattr(mock_context_builder, 'build_context_with_custom_fields'):
-            assert result == "Test context with custom fields"
-        else:
-            assert result == "Test context"
+        # Le service utilise maintenant build_context_json qui accepte field_configs
+        assert result == "Test context"
+        mock_context_builder.build_context_json.assert_called_once()
+        # Vérifier que field_configs est passé à build_context_json
+        call_kwargs = mock_context_builder.build_context_json.call_args[1]
+        assert call_kwargs.get("field_configs") == field_configs
     
     def test_build_context_summary_with_organization_mode(self, dialogue_service, mock_context_builder):
         """Test de construction avec organization_mode."""
@@ -124,6 +129,10 @@ class TestDialogueGenerationService:
             "characters": ["Test Character"]
         }
         
+        # Mock build_context_json qui est maintenant utilisé
+        mock_context_structure = {"context": "structured"}
+        mock_context_builder.build_context_json = MagicMock(return_value=mock_context_structure)
+        
         result = dialogue_service._build_context_summary(
             context_selections=context_selections,
             user_instructions="Test",
@@ -132,8 +141,8 @@ class TestDialogueGenerationService:
         )
         
         # Vérifier que max_tokens élevé est utilisé
-        call_args = mock_context_builder.build_context.call_args
-        assert call_args[1]["max_tokens"] == 999999
+        call_kwargs = mock_context_builder.build_context_json.call_args[1]
+        assert call_kwargs["max_tokens"] == 999999
     
     def test_restore_prompt_on_error(self, dialogue_service, mock_prompt_engine):
         """Test de restauration du prompt après erreur."""

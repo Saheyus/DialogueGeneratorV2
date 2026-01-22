@@ -177,6 +177,7 @@ class TestContextBuilderGDDLoading:
         cb = ContextBuilder(
             config_file_path=dummy_context_config_file,
             gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+            gdd_import_path=mock_gdd_project_root / "import" / "Bible_Narrative",
         )
         cb.load_gdd_files()
 
@@ -200,15 +201,17 @@ class TestContextBuilderGDDLoading:
         cb = ContextBuilder(
             config_file_path=dummy_context_config_file,
             gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+            gdd_import_path=mock_gdd_project_root / "import" / "Bible_Narrative",
         )
         cb.load_gdd_files()
 
         assert cb.items == [] # Should be an empty list
-        # The log message includes the full path and more details
-        expected_warning_part = f"Fichier objets.json non trouvé dans {mock_gdd_project_root / 'GDD' / 'categories'}"
-        # Check if the specific warning part is in any of the log messages
-        assert any(expected_warning_part in record.message for record in caplog.records if record.levelname == 'WARNING'), \
-               f"Expected warning substring '{expected_warning_part}' not found in warnings: {caplog.text}"
+        # GDDLoader uses DEBUG level for missing files, not WARNING
+        # The log message includes the filename
+        expected_debug_part = "objets.json non trouvé"
+        # Check if the specific debug message is in any of the log messages
+        assert any(expected_debug_part in record.message for record in caplog.records if record.levelname == 'DEBUG'), \
+               f"Expected debug substring '{expected_debug_part}' not found in logs: {caplog.text}"
         # Ensure other files were loaded
         assert len(cb.characters) == 1 
 
@@ -221,6 +224,7 @@ class TestContextBuilderGDDLoading:
         cb = ContextBuilder(
             config_file_path=dummy_context_config_file,
             gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+            gdd_import_path=mock_gdd_project_root / "import" / "Bible_Narrative",
         )
         cb.load_gdd_files()
 
@@ -240,6 +244,7 @@ class TestContextBuilderGDDLoading:
         cb = ContextBuilder(
             config_file_path=dummy_context_config_file,
             gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+            gdd_import_path=mock_gdd_project_root / "import" / "Bible_Narrative",
         )
         cb.load_gdd_files()
         
@@ -267,6 +272,7 @@ class TestContextBuilderGDDLoading:
         cb = ContextBuilder(
             config_file_path=dummy_context_config_file,
             gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+            gdd_import_path=mock_gdd_project_root / "import" / "Bible_Narrative",
         )
         cb.load_gdd_files()
 
@@ -336,6 +342,7 @@ class TestContextBuilderDataAccess:
         cb = ContextBuilder(
             config_file_path=dummy_context_config_file,
             gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+            gdd_import_path=mock_gdd_project_root / "import" / "Bible_Narrative",
         )
         cb.load_gdd_files()
         return cb
@@ -436,6 +443,7 @@ class TestContextBuilderDataAccess:
         cb = ContextBuilder(
             config_file_path=dummy_context_config_file,
             gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+            gdd_import_path=mock_gdd_project_root / "import" / "Bible_Narrative",
         )
         cb.load_gdd_files() # Reload with objets.json potentially missing or empty
         
@@ -454,6 +462,7 @@ class TestContextBuilderDataAccess:
         cb = ContextBuilder(
             config_file_path=dummy_context_config_file,
             gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+            gdd_import_path=mock_gdd_project_root / "import" / "Bible_Narrative",
         )
         cb.load_gdd_files()
         assert cb.get_macro_structure() == macro_data
@@ -465,6 +474,7 @@ class TestContextBuilderDataAccess:
         cb = ContextBuilder(
             config_file_path=dummy_context_config_file,
             gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+            gdd_import_path=mock_gdd_project_root / "import" / "Bible_Narrative",
         )
         cb.load_gdd_files()
         assert cb.get_micro_structure() == micro_data
@@ -857,6 +867,7 @@ class TestContextBuilderLinkedElements:
         cb = ContextBuilder(
             config_file_path=dummy_context_config_file,
             gdd_categories_path=mock_gdd_project_root / "GDD" / "categories",
+            gdd_import_path=mock_gdd_project_root / "import" / "Bible_Narrative",
         )
         cb.load_gdd_files()
         return cb

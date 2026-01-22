@@ -52,7 +52,7 @@ export const PresetSelector: React.FC<PresetSelectorProps> = ({
   // Charger presets au montage
   useEffect(() => {
     loadPresets();
-  }, []);
+  }, [loadPresets]);
 
   const handlePresetSelect = (preset: Preset) => {
     setSelectedPreset(preset);

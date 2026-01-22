@@ -226,7 +226,6 @@ export const useGenerationStore = create<GenerationState>((set) => ({
       error: null,
       currentJobId: null,
       isInterrupting: false,  // Fix: Réinitialiser isInterrupting (Issue #4)
-      chunkBuffer: new Map<number, string>(),
     }),
 
   minimize: () =>

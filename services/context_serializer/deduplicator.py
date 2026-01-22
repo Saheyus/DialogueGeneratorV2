@@ -168,7 +168,8 @@ class FieldDeduplicator:
         
         # ÉTAPE 1 : Supprimer les chemins parents si leurs enfants sont présents
         # Ex: Si "Caractérisation.Faiblesse" est présent, supprimer "Caractérisation"
-        paths_to_keep = set(fields_to_include)
+        # Utiliser une liste pour préserver l'ordre
+        paths_to_remove = set()
         
         for path in fields_to_include:
             # Vérifier si ce chemin a des enfants dans la liste
@@ -179,11 +180,12 @@ class FieldDeduplicator:
             )
             
             if has_children:
-                # Ce chemin est un parent avec des enfants inclus, le supprimer
-                paths_to_keep.discard(path)
+                # Ce chemin est un parent avec des enfants inclus, le marquer pour suppression
+                paths_to_remove.add(path)
                 logger.debug(f"Suppression parent '{path}' car enfants présents")
         
-        fields_to_include = list(paths_to_keep)
+        # Filtrer en préservant l'ordre
+        fields_to_include = [p for p in fields_to_include if p not in paths_to_remove]
         
         # ÉTAPE 2 : Détecter les doublons de valeurs
         duplicates = self.detect_duplicates(element_data)
@@ -224,7 +226,7 @@ class FieldDeduplicator:
                 f"Déduplication: conservé '{best_path}', supprimé {[p for p in relevant_paths if p != best_path]}"
             )
         
-        # Appliquer la déduplication
+        # Appliquer la déduplication en préservant l'ordre
         deduplicated = [
             field for field in fields_to_include 
             if field not in paths_to_remove

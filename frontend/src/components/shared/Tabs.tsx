@@ -89,10 +89,24 @@ export function Tabs({ tabs, activeTabId, onTabChange, style, contentStyle }: Ta
           flex: 1,
           minHeight: 0,
           height: contentStyle?.height !== undefined ? contentStyle.height : '100%',
-          overflow: contentStyle?.overflow !== undefined ? contentStyle.overflow : 'auto',
           backgroundColor: theme.background.panel,
           display: contentStyle?.display !== undefined ? contentStyle.display : 'block',
-          ...contentStyle,
+          // Éviter les conflits entre overflow (shorthand) et overflowY/overflowX (non-shorthand)
+          // Si contentStyle définit overflowY ou overflowX, utiliser ces propriétés au lieu de overflow
+          ...(contentStyle?.overflowY !== undefined || contentStyle?.overflowX !== undefined
+            ? {
+                overflowY: contentStyle.overflowY ?? 'auto',
+                overflowX: contentStyle.overflowX ?? 'hidden',
+              }
+            : {
+                overflow: contentStyle?.overflow ?? 'auto',
+              }),
+          // Appliquer les autres propriétés de contentStyle (sauf celles déjà gérées ci-dessus)
+          ...Object.fromEntries(
+            Object.entries(contentStyle || {}).filter(
+              ([key]) => !['overflow', 'overflowY', 'overflowX', 'height', 'display'].includes(key)
+            )
+          ),
         }}
       >
         {activeTab?.content}

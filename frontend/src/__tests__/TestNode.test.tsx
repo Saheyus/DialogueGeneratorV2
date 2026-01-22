@@ -2,7 +2,7 @@
  * Tests unitaires pour le composant TestNode avec 4 résultats.
  */
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render } from '@testing-library/react'
 import { ReactFlowProvider } from 'reactflow'
 import { TestNode } from '../components/graph/nodes/TestNode'
 
@@ -24,13 +24,6 @@ describe('TestNode - 4 résultats de test', () => {
     }
 
     render(<TestNodeWrapper data={testNodeData} />)
-    
-    // Vérifier que les 4 handles existent avec les bons IDs
-    // ReactFlow utilise data-handleid ou data-handlepos selon la version
-    const criticalFailureHandle = document.querySelector('[data-handleid="critical-failure"], [data-handlepos="bottom"]')
-    const failureHandle = document.querySelector('[data-handleid="failure"]')
-    const successHandle = document.querySelector('[data-handleid="success"]')
-    const criticalSuccessHandle = document.querySelector('[data-handleid="critical-success"]')
     
     // Vérifier que les handles existent (au moins 4 handles source)
     const sourceHandles = document.querySelectorAll('[data-handlepos="bottom"]')

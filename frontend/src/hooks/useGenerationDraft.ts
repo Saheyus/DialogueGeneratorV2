@@ -26,6 +26,7 @@ interface DraftData {
   maxCompletionTokens: number | null
   llmModel: string
   reasoningEffort: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null
+  topP: number | null
   maxChoices: number | null
   choicesMode: 'free' | 'capped'
   narrativeTags: string[]
@@ -61,6 +62,8 @@ export interface UseGenerationDraftOptions {
   llmModel: string
   /** Reasoning effort */
   reasoningEffort: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null
+  /** Top_p (nucleus sampling) */
+  topP: number | null
   /** Nombre max de choix */
   maxChoices: number | null
   /** Mode de choix */
@@ -77,6 +80,8 @@ export interface UseGenerationDraftOptions {
   setLlmModel: (value: string) => void
   /** Callback pour mettre à jour reasoningEffort */
   setReasoningEffort: (value: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null) => void
+  /** Callback pour mettre à jour topP */
+  setTopP: (value: number | null) => void
   /** Callback pour mettre à jour maxChoices */
   setMaxChoices: (value: number | null) => void
   /** Callback pour mettre à jour narrativeTags */
@@ -102,6 +107,7 @@ export function useGenerationDraft(
     maxCompletionTokens,
     llmModel,
     reasoningEffort,
+    topP,
     maxChoices,
     choicesMode,
     narrativeTags,
@@ -110,6 +116,7 @@ export function useGenerationDraft(
     setMaxCompletionTokens,
     setLlmModel,
     setReasoningEffort,
+    setTopP,
     setMaxChoices,
     setNarrativeTags,
     updateAuthorProfile,
@@ -146,6 +153,7 @@ export function useGenerationDraft(
       maxCompletionTokens,
       llmModel,
       reasoningEffort,
+      topP,
       maxChoices,
       choicesMode,
       narrativeTags,
@@ -171,6 +179,7 @@ export function useGenerationDraft(
     maxCompletionTokens,
     llmModel,
     reasoningEffort,
+    topP,
     maxChoices,
     choicesMode,
     narrativeTags,
@@ -216,6 +225,9 @@ export function useGenerationDraft(
         }
         if (draft.reasoningEffort !== undefined) {
           setReasoningEffort(draft.reasoningEffort)
+        }
+        if (draft.topP !== undefined) {
+          setTopP(draft.topP)
         }
         if (draft.maxChoices !== undefined) {
           setMaxChoices(draft.maxChoices)

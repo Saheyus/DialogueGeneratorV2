@@ -29,7 +29,7 @@ export const EstimatedPromptPanel = memo(function EstimatedPromptPanel({
   raw_prompt,
   isEstimating = false,
   tokenCount,
-  promptHash: _promptHash,
+  promptHash: _promptHash, // Préfixé avec _ car intentionnellement non utilisé
   structuredPrompt: structuredPromptProp,
 }: EstimatedPromptPanelProps) {
   const [viewMode, setViewMode] = useState<'raw' | 'structured'>('structured')

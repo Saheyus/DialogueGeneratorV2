@@ -45,11 +45,11 @@ export const ResizablePanels = forwardRef<ResizablePanelsRef, ResizablePanelsPro
   const containerRef = useRef<HTMLDivElement>(null)
   
   // Helper pour normaliser les tailles
-  const normalizeSizesHelper = (newSizes: number[]): number[] => {
+  const normalizeSizesHelper = useCallback((newSizes: number[]): number[] => {
     const total = newSizes.reduce((sum, size) => sum + size, 0)
     if (total === 0) return newSizes
     return newSizes.map((size) => (size / total) * 100)
-  }
+  }, [])
   
   const [sizes, setSizes] = useState<number[]>(() => {
     let initialSizes = defaultSizes

@@ -6,13 +6,10 @@
 import { useCallback } from 'react'
 import { useGenerationStore } from '../store/generationStore'
 import { useContextStore } from '../store/contextStore'
-import { useGraphStore } from '../store/graphStore'
 import * as dialoguesAPI from '../api/dialogues'
 import * as configAPI from '../api/config'
 import { getErrorMessage } from '../types/errors'
 import { useGenerationRequest } from './useGenerationRequest'
-import { useTokenEstimation } from './useTokenEstimation'
-import { useGenerationValidation } from './useGenerationValidation'
 import { useCostGovernance } from './useCostGovernance'
 import { CONTEXT_TOKENS_LIMITS } from '../constants'
 import type { LLMModelResponse } from '../types/api'
@@ -28,6 +25,8 @@ export interface UseGenerationHandlersOptions {
   llmModel: string
   /** Reasoning effort */
   reasoningEffort: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null
+  /** Top_p (nucleus sampling) */
+  topP: number | null
   /** Nombre max de choix */
   maxChoices: number | null
   /** Mode de choix */
@@ -96,6 +95,7 @@ export function useGenerationHandlers(
     maxCompletionTokens,
     llmModel,
     reasoningEffort,
+    topP,
     maxChoices,
     choicesMode,
     narrativeTags,
@@ -121,7 +121,6 @@ export function useGenerationHandlers(
     setSystemPromptOverride,
     setSceneSelection,
     setUnityDialogueResponse,
-    setTokensUsed,
     startGeneration,
     resetStreamingState,
     isGenerating,  // Utiliser isGenerating du store au lieu de isLoading
@@ -130,12 +129,7 @@ export function useGenerationHandlers(
   const { clearSelections } = useContextStore()
   const { checkBudget } = useCostGovernance()
   
-  const { buildContextSelections, buildGenerationRequest, validateModel } = useGenerationRequest()
-  const { validate: validateTokens } = useGenerationValidation({
-    maxContextTokens,
-    maxCompletionTokens,
-    tokenCount,
-  })
+  const { buildContextSelections, buildGenerationRequest } = useGenerationRequest()
 
   const handleGenerate = useCallback(async () => {
     // Protection contre les doubles appels
@@ -187,6 +181,7 @@ export function useGenerationHandlers(
         maxCompletionTokens,
         llmModel,
         reasoningEffort,
+        topP,
         maxChoices,
         choicesMode,
         narrativeTags,
@@ -204,8 +199,10 @@ export function useGenerationHandlers(
       connectSSE(job.job_id)
     } catch (err) {
       const errorMsg = getErrorMessage(err)
-      setError(errorMsg)
-      toast(errorMsg, 'error')
+      const errorDetails = err instanceof Error ? `\n\n${err.message}${err.stack ? `\n\nStack trace:\n${err.stack}` : ''}` : ''
+      const fullErrorMessage = `${errorMsg}${errorDetails}`
+      setError(fullErrorMessage)
+      toast(fullErrorMessage, 'error')
       // Si la création du job échoue, on peut reset le streaming
       resetStreamingState()
     } finally {
@@ -242,7 +239,7 @@ export function useGenerationHandlers(
     setIsDirty(false)
     setUnityDialogueResponse(null)
     toast('Formulaire réinitialisé', 'info')
-  }, [setError, setIsDirty, setUnityDialogueResponse, toast])
+  }, [setUserInstructions, setError, setIsDirty, setUnityDialogueResponse, toast])
 
   const handleResetAll = useCallback(() => {
     setUserInstructions('')
@@ -278,7 +275,7 @@ export function useGenerationHandlers(
     setUserInstructions('')
     setIsDirty(true)
     toast('Instructions réinitialisées', 'info')
-  }, [setIsDirty, toast])
+  }, [setUserInstructions, setIsDirty, toast])
 
   const handleResetSelections = useCallback(() => {
     clearSelections()

@@ -4,6 +4,7 @@ from unittest.mock import Mock, AsyncMock, patch
 from services.unity_dialogue_orchestrator import UnityDialogueOrchestrator, GenerationEvent
 from api.schemas.dialogue import GenerateUnityDialogueRequest, GenerateUnityDialogueResponse, ContextSelection
 from api.exceptions import ValidationException, InternalServerException
+from models.dialogue_structure.unity_dialogue_node import UnityDialogueGenerationResponse
 
 
 @pytest.fixture
@@ -87,10 +88,34 @@ async def test_orchestrator_generate_with_events_sequence(orchestrator, sample_r
     ]
     
     # Mock LLM client factory
-    mock_llm_client = Mock()
+    mock_llm_client = AsyncMock()
     mock_llm_client.reasoning_trace = None
     mock_llm_client.warning = None
     mock_llm_client.last_call_cost = 0.001
+    
+    # Créer un async generator pour generate_variants_streaming
+    # Le streaming peut retourner soit des StreamChunk, soit le résultat final
+    async def mock_stream_generator(*args, **kwargs):
+        from core.llm.openai.stream_parser import StreamChunk
+        from models.dialogue_structure.unity_dialogue_node import UnityDialogueNodeContent
+        # Simuler quelques chunks de streaming
+        yield StreamChunk(
+            event_type="response.output_text.delta",
+            data={"text": "Test"},
+            sequence=0
+        )
+        # Puis le résultat final
+        yield UnityDialogueGenerationResponse(
+            title="Test Dialogue",
+            node=UnityDialogueNodeContent(
+                speaker="NPC",
+                line="Hello",
+                choices=[]
+            )
+        )
+    
+    # Utiliser side_effect pour que chaque appel retourne un nouveau generator
+    mock_llm_client.generate_variants_streaming = mock_stream_generator
     
     with patch('services.unity_dialogue_orchestrator.LLMClientFactory') as mock_factory:
         mock_factory.create_client.return_value = mock_llm_client
@@ -122,13 +147,19 @@ async def test_orchestrator_generate_with_events_sequence(orchestrator, sample_r
                 
                 # Vérifier séquence des événements
                 assert len(events) >= 4
-                assert events[0].type == 'step' and events[0].data['step'] == 'Prompting'
-                assert events[1].type == 'step' and events[1].data['step'] == 'Generating'
-                assert events[2].type == 'step' and events[2].data['step'] == 'Validating'
+                # Les premiers événements doivent être 'step' pour Prompting et Generating
+                step_events = [e for e in events if e.type == 'step']
+                assert len(step_events) >= 2
+                assert step_events[0].data['step'] == 'Prompting'
+                assert step_events[1].data['step'] == 'Generating'
+                # Validating peut venir après des chunks de streaming
+                validating_events = [e for e in events if e.type == 'step' and e.data.get('step') == 'Validating']
+                assert len(validating_events) > 0
                 
                 # Vérifier metadata
                 metadata_events = [e for e in events if e.type == 'metadata']
                 assert len(metadata_events) > 0
+                # Le token_count vient de built.token_count (mock_built.token_count = 100)
                 assert metadata_events[0].data['tokens'] == 100
                 
                 # Vérifier complete

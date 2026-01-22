@@ -43,11 +43,18 @@ export async function saveGraph(request: SaveGraphRequest): Promise<SaveGraphRes
 export async function generateNode(
   request: GenerateNodeRequest
 ): Promise<GenerateNodeResponse> {
-  const response = await apiClient.post<GenerateNodeResponse>(
-    `/api/v1/unity-dialogues/graph/generate-node`,
-    request
-  )
-  return response.data
+  try {
+    // Timeout adaptatif : 4 minutes pour batch (parallélisé, mais sécurité), 2 minutes pour single
+    const timeout = request.generate_all_choices ? 240000 : 120000
+    const response = await apiClient.post<GenerateNodeResponse>(
+      `/api/v1/unity-dialogues/graph/generate-node`,
+      request,
+      { timeout }
+    )
+    return response.data
+  } catch (error: any) {
+    throw error;
+  }
 }
 
 /**

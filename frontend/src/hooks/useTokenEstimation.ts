@@ -15,6 +15,7 @@ import * as dialoguesAPI from '../api/dialogues'
 // NOTE: estimateTokensUtil supprimé - utiliser uniquement token_count du backend
 import { getErrorMessage } from '../types/errors'
 import { useGenerationRequest } from './useGenerationRequest'
+import { computeStateHash, type PromptStateParams } from '../utils/hashUtils'
 export interface UseTokenEstimationOptions {
   /** Instructions utilisateur */
   userInstructions: string
@@ -70,7 +71,7 @@ export function useTokenEstimation(options: UseTokenEstimationOptions): UseToken
   const [estimationError, setEstimationError] = useState<string | null>(null)
 
   const { selections } = useContextStore()
-  const { sceneSelection, dialogueStructure, systemPromptOverride, promptHash, setRawPrompt, tokenCount } = useGenerationStore()
+  const { sceneSelection, dialogueStructure, systemPromptOverride, promptHash, tokenCount, setRawPrompt } = useGenerationStore()
   const { vocabularyConfig } = useVocabularyStore()
   const { includeNarrativeGuides } = useNarrativeGuidesStore()
   const { authorProfile } = useAuthorProfile()
@@ -100,51 +101,62 @@ export function useTokenEstimation(options: UseTokenEstimationOptions): UseToken
       return
     }
 
-    // Récupérer le hash actuel pour comparaison après l'appel API
-    const currentState = useGenerationStore.getState()
-    const currentHash = currentState.promptHash
+    // Construire les paramètres pour le calcul du hash
+    const contextSelections = buildContextSelections()
+    
+    // Récupérer les fieldConfigs et organization depuis le store
+    const { fieldConfigs, essentialFields, organization } = useContextConfigStore.getState()
+    
+    // Inclure les champs essentiels dans la config
+    const fieldConfigsWithEssential: Record<string, string[]> = {}
+    for (const [elementType, fields] of Object.entries(fieldConfigs)) {
+      const essential = essentialFields[elementType] || []
+      fieldConfigsWithEssential[elementType] = [...new Set([...essential, ...fields])]
+    }
+    
+    // Récupérer les flags sélectionnés
+    const { getSelectedFlagsArray } = useFlagsStore.getState()
+    const inGameFlags = getSelectedFlagsArray()
+    
+    // Utiliser une valeur par défaut si userInstructions est vide (backend exige min_length=1)
+    const userInstructionsValue = userInstructions.trim() || ' '
+    
+    // Construire les paramètres pour le hash
+    const promptParams: PromptStateParams = {
+      user_instructions: userInstructionsValue,
+      context_selections: contextSelections,
+      npc_speaker_id: sceneSelection.characterB || undefined,
+      max_context_tokens: maxContextTokens,
+      system_prompt_override: systemPromptOverride || undefined,
+      author_profile: authorProfile || undefined,
+      max_choices: maxChoices ?? undefined,
+      choices_mode: choicesMode,
+      narrative_tags: narrativeTags.length > 0 ? narrativeTags : undefined,
+      vocabulary_config: vocabularyConfig ? (vocabularyConfig as unknown as Record<string, string>) : undefined,
+      include_narrative_guides: includeNarrativeGuides,
+      previous_dialogue_preview: previousDialoguePreview || undefined,
+      field_configs: Object.keys(fieldConfigsWithEssential).length > 0 ? fieldConfigsWithEssential : undefined,
+      organization_mode: organization,
+      in_game_flags: inGameFlags.length > 0 ? inGameFlags : undefined,
+    }
+    
+    // Calculer le hash AVANT l'appel API pour vérifier le cache
+    const computedHash = await computeStateHash(promptParams)
+    const currentHash = promptHash
+    
+    // Si le hash est identique et qu'on a déjà un tokenCount, skip l'appel API
+    if (computedHash === currentHash && tokenCount !== null) {
+      // Cache hit: pas besoin d'appeler l'API
+      return
+    }
     
     // Ne pas effacer le prompt existant pendant l'estimation
     setIsEstimating(true)
     setEstimationError(null)
     
     try {
-      const contextSelections = buildContextSelections()
-      
-      // Récupérer les fieldConfigs et organization depuis le store
-      const { fieldConfigs, essentialFields, organization } = useContextConfigStore.getState()
-      
-      // Inclure les champs essentiels dans la config
-      const fieldConfigsWithEssential: Record<string, string[]> = {}
-      for (const [elementType, fields] of Object.entries(fieldConfigs)) {
-        const essential = essentialFields[elementType] || []
-        fieldConfigsWithEssential[elementType] = [...new Set([...essential, ...fields])]
-      }
-      
-      // Récupérer les flags sélectionnés
-      const { getSelectedFlagsArray } = useFlagsStore.getState()
-      const inGameFlags = getSelectedFlagsArray()
-      
-      // Utiliser previewPrompt pour la prévisualisation
-      // Utiliser une valeur par défaut si userInstructions est vide (backend exige min_length=1)
-      const userInstructionsValue = userInstructions.trim() || ' '
-      const response = await dialoguesAPI.previewPrompt({
-        user_instructions: userInstructionsValue,
-        context_selections: contextSelections,
-        npc_speaker_id: sceneSelection.characterB || undefined,
-        max_context_tokens: maxContextTokens,
-        system_prompt_override: systemPromptOverride || undefined,
-        author_profile: authorProfile || undefined,
-        max_choices: maxChoices ?? undefined,
-        choices_mode: choicesMode,
-        narrative_tags: narrativeTags.length > 0 ? narrativeTags : undefined,
-        vocabulary_config: vocabularyConfig ? (vocabularyConfig as unknown as Record<string, string>) : undefined,
-        include_narrative_guides: includeNarrativeGuides,
-        previous_dialogue_preview: previousDialoguePreview || undefined,
-        field_configs: Object.keys(fieldConfigsWithEssential).length > 0 ? fieldConfigsWithEssential : undefined,
-        organization_mode: organization,
-        in_game_flags: inGameFlags.length > 0 ? inGameFlags : undefined,
-      })
+      // Appel API seulement si le hash a changé
+      const response = await dialoguesAPI.previewPrompt(promptParams)
       
       // Utiliser token_count du backend (source de vérité, utilise le vrai PromptEngine)
       // Note: previewPrompt ne retourne pas token_count dans PreviewPromptResponse
@@ -154,6 +166,12 @@ export function useTokenEstimation(options: UseTokenEstimationOptions): UseToken
       
       // Mettre à jour le prompt seulement si le hash a changé ou si on n'avait pas de prompt
       // Cela évite de reconstruire l'affichage si le prompt est identique
+      // Note: response.prompt_hash devrait correspondre à computedHash, mais on utilise celui du backend comme source de vérité
+      if (computedHash !== response.prompt_hash) {
+        // Log warning si les hashs ne correspondent pas (devrait être rare)
+        console.warn('Hash mismatch: computed', computedHash, 'vs backend', response.prompt_hash)
+      }
+      
       if (currentHash !== response.prompt_hash || currentHash === null) {
         setRawPrompt(response.raw_prompt, estimatedTokenCount, response.prompt_hash, false, response.structured_prompt || null)
       }
@@ -192,6 +210,8 @@ export function useTokenEstimation(options: UseTokenEstimationOptions): UseToken
     sceneSelection.characterB,
     toast,
     choicesMode,
+    promptHash,
+    tokenCount,
   ])
 
   // Debounce automatique de l'estimation (500ms)

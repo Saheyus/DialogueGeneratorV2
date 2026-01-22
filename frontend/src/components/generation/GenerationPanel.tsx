@@ -6,15 +6,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import * as configAPI from '../../api/config'
 import * as dialoguesAPI from '../../api/dialogues'
-import { useContextStore } from '../../store/contextStore'
 import { useGenerationStore } from '../../store/generationStore'
 import { useGenerationActionsStore } from '../../store/generationActionsStore'
 import { useLLMStore } from '../../store/llmStore'
 import { useAuthorProfile } from '../../hooks/useAuthorProfile'
-import { useGraphStore } from '../../store/graphStore'
-import { useVocabularyStore } from '../../store/vocabularyStore'
-import { useNarrativeGuidesStore } from '../../store/narrativeGuidesStore'
-import { useCostGovernance } from '../../hooks/useCostGovernance'
 import { theme } from '../../theme'
 import type { LLMModelResponse } from '../../types/api'
 import { DialogueStructureWidget } from './DialogueStructureWidget'
@@ -39,14 +34,11 @@ import { GenerationPanelModals } from './GenerationPanelModals'
 
 export function GenerationPanel() {
   // Stores
-  const { clearSelections } = useContextStore()
   const {
-    sceneSelection,
     dialogueStructure,
     systemPromptOverride,
     setDialogueStructure,
     setSystemPromptOverride,
-    setSceneSelection,
     // État streaming (Story 0.2)
     isGenerating,
     streamingContent,
@@ -55,7 +47,6 @@ export function GenerationPanel() {
     error: streamingError,
     currentJobId,
     isInterrupting,
-    unityDialogueResponse,
     interrupt,
     minimize,
     resetStreamingState,
@@ -68,7 +59,7 @@ export function GenerationPanel() {
   
   // État local UI
   const [showBudgetBlockModal, setShowBudgetBlockModal] = useState(false)
-  const [budgetBlockMessage, setBudgetBlockMessage] = useState<string>('')
+  const [budgetBlockMessage] = useState<string>('')
   
   // État local UI
   const [userInstructions, setUserInstructions] = useState('')
@@ -76,6 +67,7 @@ export function GenerationPanel() {
   const [maxCompletionTokens, setMaxCompletionTokens] = useState<number | null>(null)
   const [llmModel, setLlmModel] = useState<string>(DEFAULT_MODEL)
   const [reasoningEffort, setReasoningEffort] = useState<'none' | 'low' | 'medium' | 'high' | 'xhigh' | null>(null)
+  const [topP, setTopP] = useState<number | null>(null)
   const [maxChoices, setMaxChoices] = useState<number | null>(null)
   const choicesMode: 'free' | 'capped' = maxChoices !== null ? 'capped' : 'free'
   const [availableModels, setAvailableModels] = useState<LLMModelResponse[]>([])
@@ -97,6 +89,7 @@ export function GenerationPanel() {
     maxCompletionTokens,
     llmModel,
     reasoningEffort,
+    topP,
     maxChoices,
     choicesMode,
     narrativeTags,
@@ -105,6 +98,7 @@ export function GenerationPanel() {
     setMaxCompletionTokens,
     setLlmModel,
     setReasoningEffort,
+    setTopP,
     setMaxChoices,
     setNarrativeTags,
     updateAuthorProfile,
@@ -118,6 +112,16 @@ export function GenerationPanel() {
       // Draft hook gère saveStatus en interne - on peut appeler markDirty qui met à jour saveStatus
     },
     toast,
+    topP,
+    setTopP,
+    reasoningEffort,
+    setReasoningEffort,
+    maxCompletionTokens,
+    setMaxCompletionTokens,
+    maxChoices,
+    setMaxChoices,
+    llmModel,
+    setLlmModel,
   })
   
   // Synchroniser l'état local llmModel avec useLLMStore (Story 0.3)
@@ -134,6 +138,7 @@ export function GenerationPanel() {
     maxCompletionTokens,
     llmModel,
     reasoningEffort,
+    topP,
     maxChoices,
     choicesMode,
     narrativeTags,
@@ -166,10 +171,37 @@ export function GenerationPanel() {
   // Draft hook gère la sauvegarde automatique et le chargement
   // (logique extraite dans useGenerationDraft)
 
+  // Cache pour les modèles LLM (TTL: 5 minutes)
+  const modelsCacheRef = useRef<{ models: LLMModelResponse[], timestamp: number } | null>(null)
+  const MODELS_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
   // Chargement des modèles LLM disponibles
   const loadModels = useCallback(async () => {
+    // Vérifier le cache avant l'appel API
+    if (modelsCacheRef.current && Date.now() - modelsCacheRef.current.timestamp < MODELS_CACHE_TTL) {
+      setAvailableModels(modelsCacheRef.current.models)
+      // Valider que le modèle actuel existe dans la liste
+      if (modelsCacheRef.current.models.length > 0) {
+        const currentModelExists = llmModel && modelsCacheRef.current.models.some(m => m.model_identifier === llmModel && m.model_identifier !== "unknown")
+        if (!currentModelExists) {
+          const firstModel = modelsCacheRef.current.models.find(m => m.model_identifier && m.model_identifier !== "unknown") || modelsCacheRef.current.models[0]
+          if (firstModel && firstModel.model_identifier && firstModel.model_identifier !== "unknown") {
+            setLlmModel(firstModel.model_identifier)
+          }
+        }
+      }
+      return
+    }
+
     try {
       const response = await configAPI.listLLMModels()
+      
+      // Mettre à jour le cache
+      modelsCacheRef.current = {
+        models: response.models,
+        timestamp: Date.now(),
+      }
+      
       setAvailableModels(response.models)
       // Valider que le modèle actuel existe dans la liste
       if (response.models.length > 0) {
@@ -183,6 +215,10 @@ export function GenerationPanel() {
       }
     } catch (err) {
       console.error('Erreur lors du chargement des modèles:', err)
+      // En cas d'erreur, utiliser le cache même s'il est expiré si disponible
+      if (modelsCacheRef.current) {
+        setAvailableModels(modelsCacheRef.current.models)
+      }
     }
   }, [llmModel])
 
@@ -459,6 +495,106 @@ export function GenerationPanel() {
               </select>
             </div>
           )}
+          
+          {/* Contrôle Top_p */}
+          <div style={{ marginTop: '1rem' }}>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '0.5rem', 
+              fontSize: '0.9rem',
+              color: theme.text.secondary,
+              fontWeight: 500
+            }}>
+              Top_p (Nucleus Sampling)
+              <span style={{ 
+                marginLeft: '0.5rem', 
+                fontSize: '0.8rem', 
+                color: theme.text.tertiary,
+                fontWeight: 'normal'
+              }}>
+                {topP !== null && topP !== undefined ? `(${topP.toFixed(1)})` : '(non utilisé)'}
+              </span>
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={topP ?? 0.5}
+                onChange={(e) => {
+                  const value = parseFloat(e.target.value)
+                  setTopP(value === 0.5 ? null : value)
+                  draft.markDirty()
+                }}
+                style={{ 
+                  flex: 1,
+                  height: '6px',
+                  borderRadius: '3px',
+                  background: theme.input.background,
+                  outline: 'none',
+                }}
+              />
+              <input
+                type="number"
+                min="0"
+                max="1"
+                step="0.1"
+                value={topP ?? ''}
+                placeholder="Auto"
+                onChange={(e) => {
+                  const value = e.target.value === '' ? null : parseFloat(e.target.value)
+                  if (value === null || (value >= 0 && value <= 1)) {
+                    setTopP(value)
+                    draft.markDirty()
+                  }
+                }}
+                style={{ 
+                  width: '80px', 
+                  padding: '0.5rem', 
+                  boxSizing: 'border-box',
+                  backgroundColor: theme.input.background,
+                  border: `1px solid ${theme.input.border}`,
+                  color: theme.input.color,
+                  borderRadius: '4px',
+                  fontSize: '0.9rem',
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setTopP(null)
+                  draft.markDirty()
+                }}
+                style={{
+                  padding: '0.5rem 1rem',
+                  backgroundColor: theme.button.secondary.background,
+                  color: theme.button.secondary.color,
+                  border: `1px solid ${theme.button.secondary.border}`,
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                }}
+              >
+                Réinitialiser
+              </button>
+            </div>
+            <div style={{ 
+              marginTop: '0.25rem', 
+              fontSize: '0.75rem', 
+              color: theme.text.tertiary 
+            }}>
+              {topP === null ? (
+                'Non utilisé (temperature sera utilisée si disponible)'
+              ) : topP < 0.3 ? (
+                'Focalisé (réponses plus déterministes)'
+              ) : topP > 0.7 ? (
+                'Diversifié (réponses plus créatives)'
+              ) : (
+                'Équilibré'
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

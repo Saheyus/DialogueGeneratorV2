@@ -254,8 +254,9 @@ export const GraphView = memo(function GraphView({
   )
   
   const onNodeClick = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
+    (_event: React.MouseEvent, _node: Node) => {
       // TODO: Ouvrir le panneau d'édition
+      // _event et _node préfixés avec _ car intentionnellement non utilisés pour l'instant
     },
     []
   )

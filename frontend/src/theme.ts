@@ -42,6 +42,11 @@ export const theme = {
         background: '#0056b3',
       },
     },
+    secondary: {
+      background: '#404040',
+      color: 'rgba(255, 255, 255, 0.87)',
+      border: '#505050',
+    },
     selected: {
       background: '#1a3a5a',
       color: '#ffffff',

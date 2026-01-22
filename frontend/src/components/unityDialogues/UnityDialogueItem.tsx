@@ -43,6 +43,9 @@ export const UnityDialogueItem = memo(function UnityDialogueItem({
     return formatted.charAt(0).toUpperCase() + formatted.slice(1)
   }
 
+  // Utiliser le nom du fichier formaté comme titre
+  const titleText = formatFilename(dialogue.filename)
+
   return (
     <div
       onClick={onClick}
@@ -66,12 +69,16 @@ export const UnityDialogueItem = memo(function UnityDialogueItem({
       }}
     >
       <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>
-        {highlightText(formatFilename(dialogue.filename), searchQuery)}
-        {dialogue.title && dialogue.title !== formatFilename(dialogue.filename) && (
-          <div style={{ fontSize: '0.85rem', color: theme.text.secondary, marginTop: '0.25rem' }}>
-            {highlightText(dialogue.title, searchQuery)}
-          </div>
-        )}
+        {highlightText(titleText, searchQuery)}
+      </div>
+      <div
+        style={{
+          fontSize: '0.75rem',
+          color: theme.text.tertiary,
+          marginBottom: '0.25rem',
+        }}
+      >
+        {highlightText(dialogue.filename, searchQuery)}
       </div>
       <div
         style={{

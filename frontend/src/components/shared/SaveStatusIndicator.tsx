@@ -73,6 +73,7 @@ export function SaveStatusIndicator({ status, lastSavedAt, errorMessage, style }
         color: config.color,
         ...style,
       }}
+      title={tooltipText}
     >
       <div
         style={{
@@ -84,8 +85,8 @@ export function SaveStatusIndicator({ status, lastSavedAt, errorMessage, style }
           animation: status === 'saving' ? 'pulse 1.5s ease-in-out infinite' : 'none',
           cursor: 'default',
         }}
-        title={tooltipText}
       />
+      <span>{label}</span>
       <style>
         {`
           @keyframes pulse {

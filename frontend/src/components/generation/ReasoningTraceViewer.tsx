@@ -19,7 +19,8 @@ export const ReasoningTraceViewer = memo(function ReasoningTraceViewer({
 }: ReasoningTraceViewerProps) {
   const toast = useToast()
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set())
-  const [viewMode, setViewMode] = useState<'summary' | 'items'>('summary')
+  // viewMode et setViewMode non utilisés pour l'instant - gardés pour usage futur
+  // const [viewMode, setViewMode] = useState<'summary' | 'items'>('summary')
 
   const toggleItemExpanded = useCallback((index: number) => {
     setExpandedItems((prev) => {

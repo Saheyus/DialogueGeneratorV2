@@ -23,6 +23,16 @@ export interface PresetConfiguration {
   selectedRegion?: string | null;
   /** Sous-lieux sélectionnés dans le ContextSelector */
   selectedSubLocations?: string[];
+  /** Top_p (nucleus sampling) - optionnel */
+  topP?: number | null;
+  /** Reasoning effort - optionnel */
+  reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null;
+  /** Max completion tokens - optionnel */
+  maxCompletionTokens?: number | null;
+  /** Max choices - optionnel */
+  maxChoices?: number | null;
+  /** LLM model identifier - optionnel */
+  llmModel?: string;
 }
 
 export interface Preset {

@@ -26,6 +26,7 @@ export interface UseGenerationRequestReturn {
     maxCompletionTokens: number | null
     llmModel: string
     reasoningEffort: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null
+    topP: number | null
     maxChoices: number | null
     choicesMode: 'free' | 'capped'
     narrativeTags: string[]
@@ -45,9 +46,8 @@ export interface UseGenerationRequestReturn {
  * @returns Fonctions pour construire ContextSelection et GenerateUnityDialogueRequest
  */
 export function useGenerationRequest(): UseGenerationRequestReturn {
-  const { selections, selectedRegion, selectedSubLocations } = useContextStore()
+  const { selections } = useContextStore()
   const { sceneSelection, dialogueStructure, systemPromptOverride } = useGenerationStore()
-  const { model: selectedLLMModel } = useLLMStore()
   const { authorProfile } = useAuthorProfile()
   const { vocabularyConfig } = useVocabularyStore()
   const { includeNarrativeGuides } = useNarrativeGuidesStore()
@@ -120,6 +120,7 @@ export function useGenerationRequest(): UseGenerationRequestReturn {
       maxCompletionTokens: number | null
       llmModel: string
       reasoningEffort: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null
+      topP: number | null
       maxChoices: number | null
       choicesMode: 'free' | 'capped'
       narrativeTags: string[]
@@ -162,6 +163,7 @@ export function useGenerationRequest(): UseGenerationRequestReturn {
       author_profile: authorProfile || undefined,
       llm_model_identifier: modelToUse,
       reasoning_effort: params.reasoningEffort ?? undefined,
+      top_p: params.topP ?? undefined,
       max_choices: params.maxChoices ?? undefined,
       choices_mode: params.choicesMode,
       narrative_tags: params.narrativeTags.length > 0 ? params.narrativeTags : undefined,

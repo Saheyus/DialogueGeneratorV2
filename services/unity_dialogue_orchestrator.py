@@ -19,6 +19,7 @@ from services.json_renderer.unity_json_renderer import UnityJsonRenderer
 from api.schemas.dialogue import GenerateUnityDialogueRequest, GenerateUnityDialogueResponse
 from api.exceptions import InternalServerException, ValidationException
 from factories.llm_factory import LLMClientFactory
+from models.dialogue_structure.unity_dialogue_node import UnityDialogueGenerationResponse
 
 logger = logging.getLogger(__name__)
 
@@ -186,20 +187,107 @@ class UnityDialogueOrchestrator:
             if request_data.reasoning_effort is not None:
                 llm_client.reasoning_effort = request_data.reasoning_effort
             
-            # 7. Générer via Structured Output
-            unity_service = UnityDialogueGenerationService()
-            generation_response = await unity_service.generate_dialogue_node(
-                llm_client=llm_client,
-                prompt=prompt,
-                system_prompt_override=request_data.system_prompt_override,
-                max_choices=request_data.max_choices
-            )
+            # Configurer le reasoning summary si fourni (uniquement "auto" supporté)
+            if request_data.reasoning_summary is not None:
+                llm_client.reasoning_summary = request_data.reasoning_summary
             
-            # Streaming simulé du contenu généré (caractère par caractère)
-            stream_text = self._build_stream_text(generation_response)
-            if stream_text:
-                async for chunk_event in self._stream_text(stream_text, check_cancelled):
-                    yield chunk_event
+            # Configurer top_p si fourni
+            if request_data.top_p is not None:
+                llm_client.top_p = request_data.top_p
+            
+            # 7. Générer via Structured Output avec streaming natif
+            unity_service = UnityDialogueGenerationService()
+            
+            # Vérifier si le client supporte le streaming natif
+            has_streaming = hasattr(llm_client, 'generate_variants_streaming')
+            
+            if has_streaming:
+                # Utiliser le streaming natif
+                logger.info("Utilisation du streaming natif Responses API")
+                generation_response = None
+                sequence_counter = 0
+                
+                # Importer StreamChunk pour le type checking
+                from core.llm.openai.stream_parser import StreamChunk
+                
+                # Générer avec streaming - les chunks sont yieldés directement
+                async for item in llm_client.generate_variants_streaming(
+                    prompt=prompt,
+                    k=1,
+                    response_model=UnityDialogueGenerationResponse,
+                    user_system_prompt_override=request_data.system_prompt_override,
+                ):
+                    if check_cancelled():
+                        yield GenerationEvent(type='error', data={'message': 'Génération annulée', 'code': 'cancelled'})
+                        return
+                    
+                    # Vérifier si c'est un chunk de streaming ou le résultat final
+                    if isinstance(item, StreamChunk):
+                        # Convertir les chunks du stream parser en GenerationEvent
+                        if item.event_type == "response.output_text.delta":
+                            # Chunk de texte
+                            text_delta = item.data.get("text", "")
+                            if text_delta:
+                                yield GenerationEvent(
+                                    type='chunk',
+                                    data={'content': text_delta, 'sequence': sequence_counter}
+                                )
+                                sequence_counter += 1
+                        
+                        elif item.event_type == "response.function_call_arguments.delta":
+                            # Chunk de function call (structured output) - streamer le delta JSON brut caractère par caractère
+                            delta = item.data.get("delta", "")
+                            if delta:
+                                # Streamer le delta JSON pour feedback visuel (caractère par caractère)
+                                yield GenerationEvent(
+                                    type='chunk',
+                                    data={'content': delta, 'sequence': sequence_counter, 'type': 'function_call_delta'}
+                                )
+                                sequence_counter += 1
+                        
+                        elif item.event_type == "response.reasoning_text.delta":
+                            # Chunk de reasoning - optionnel, peut être ignoré ou streamé séparément
+                            delta = item.data.get("delta", "")
+                            if delta:
+                                # Streamer le reasoning pour feedback (optionnel)
+                                logger.debug(f"Reasoning delta: {delta[:50]}...")
+                        
+                        elif item.event_type == "response.completed":
+                            # Réponse complète - sera traitée après le stream
+                            pass
+                        
+                        elif item.event_type == "response.failed":
+                            # Erreur
+                            error_data = item.data.get("error", {})
+                            yield GenerationEvent(type='error', data={'message': str(error_data), 'code': 'api_error'})
+                            return
+                    
+                    elif isinstance(item, UnityDialogueGenerationResponse):
+                        # Le résultat final arrive à la fin du stream
+                        generation_response = item
+                    elif isinstance(item, str):
+                        # Vérifier si c'est une erreur
+                        if item.startswith("Erreur:") or item.startswith("Erreur "):
+                            logger.error(f"Erreur dans la génération: {item}")
+                            yield GenerationEvent(type='error', data={'message': item, 'code': 'generation_error'})
+                            return
+                        else:
+                            # Chaîne inattendue
+                            logger.warning(f"Chaîne inattendue reçue du stream: {item[:200]}")
+                
+                if not generation_response:
+                    logger.error("Aucune réponse générée après le stream complet")
+                    yield GenerationEvent(type='error', data={'message': 'Aucune réponse générée', 'code': 'no_response'})
+                    return
+            else:
+                # Fallback vers méthode non-streaming (pour DummyLLMClient, MistralClient, etc.)
+                logger.info("Client ne supporte pas le streaming natif, utilisation de la méthode standard")
+                generation_response = await unity_service.generate_dialogue_node(
+                    llm_client=llm_client,
+                    prompt=prompt,
+                    system_prompt_override=request_data.system_prompt_override,
+                    max_choices=request_data.max_choices
+                )
             
             if check_cancelled():
                 yield GenerationEvent(type='error', data={'message': 'Génération annulée', 'code': 'cancelled'})
@@ -266,53 +354,6 @@ class UnityDialogueOrchestrator:
         except Exception as e:
             logger.exception(f"Erreur génération Unity (request_id: {self.request_id}): {e}")
             yield GenerationEvent(type='error', data={'message': str(e)})
-    
-    def _build_stream_text(self, generation_response: Any) -> str:
-        """Construit un texte lisible à streamer depuis la réponse Unity."""
-        node = getattr(generation_response, 'node', None)
-        if not node:
-            return ''
-        
-        parts = []
-        speaker = getattr(node, 'speaker', None)
-        line = getattr(node, 'line', None)
-        if line:
-            if speaker:
-                parts.append(f"{speaker}: {line}")
-            else:
-                parts.append(line)
-        
-        choices = getattr(node, 'choices', None)
-        if choices:
-            for idx, choice in enumerate(choices, 1):
-                text = getattr(choice, 'text', None)
-                if text:
-                    parts.append(f"{idx}. {text}")
-        
-        result = "\n".join(parts).strip()
-        return result
-    
-    async def _stream_text(
-        self,
-        text: str,
-        check_cancelled: Callable[[], bool],
-        delay_seconds: float = 0.01
-    ) -> AsyncGenerator[GenerationEvent, None]:
-        """Stream le texte caractère par caractère avec séquence pour garantir l'ordre.
-        
-        TCP garantit l'ordre des chunks, mais pour être absolument sûr et gérer
-        les cas de buffering, on ajoute un numéro de séquence. Le frontend
-        peut réordonner si nécessaire (normalement pas nécessaire avec TCP).
-        
-        Le flush explicite dans StreamingResponse + headers corrects devraient
-        garantir que les chunks arrivent dans l'ordre sans buffering.
-        """
-        for seq, char in enumerate(text):
-            if check_cancelled():
-                yield GenerationEvent(type='error', data={'message': 'Génération annulée', 'code': 'cancelled'})
-                return
-            yield GenerationEvent(type='chunk', data={'content': char, 'sequence': seq})
-            await asyncio.sleep(delay_seconds)
     
     async def generate(
         self,

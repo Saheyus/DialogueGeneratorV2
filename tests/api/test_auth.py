@@ -27,7 +27,16 @@ def test_login_failure(client: TestClient):
 def test_get_current_user_without_auth(client: TestClient):
     """Test d'accès à /me sans authentification."""
     response = client.get("/api/v1/auth/me")
-    assert response.status_code == 401  # HTTPBearer retourne 401 si pas de token
+    # En développement, l'auth est désactivée (retourne 200 avec user mock)
+    # En production, retourne 401
+    from api.config.security_config import get_security_config
+    security_config = get_security_config()
+    if security_config.is_development:
+        assert response.status_code == 200
+        data = response.json()
+        assert data["username"] == "admin"  # User mock
+    else:
+        assert response.status_code == 401  # HTTPBearer retourne 401 si pas de token
 
 
 def test_get_current_user_with_auth(client: TestClient):

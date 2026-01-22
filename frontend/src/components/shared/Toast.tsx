@@ -28,7 +28,9 @@ interface ToastProps {
 
 function ToastComponent({ toast, onRemove }: ToastProps) {
   useEffect(() => {
-    const duration = toast.duration ?? 5000
+    // Les erreurs durent plus longtemps (30 secondes) pour être bien visibles
+    const defaultDuration = toast.type === 'error' ? 30000 : 5000
+    const duration = toast.duration ?? defaultDuration
     const timer = setTimeout(() => {
       onRemove(toast.id)
     }, duration)
@@ -64,6 +66,9 @@ function ToastComponent({ toast, onRemove }: ToastProps) {
           backgroundColor: theme.state.error.background,
           color: theme.state.error.color,
           borderLeft: `4px solid ${theme.state.error.border}`,
+          border: `2px solid ${theme.state.error.border}`,
+          minWidth: '400px',
+          maxWidth: '600px',
         }
       case 'warning':
         return {
@@ -86,7 +91,17 @@ function ToastComponent({ toast, onRemove }: ToastProps) {
   return (
     <div style={getStyles()}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        <span>{toast.message}</span>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+          {toast.type === 'error' && (
+            <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>⚠️</span>
+          )}
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: toast.type === 'error' ? 'bold' : 'normal', marginBottom: toast.type === 'error' ? '0.25rem' : 0 }}>
+              {toast.type === 'error' ? 'Erreur' : toast.type === 'warning' ? 'Avertissement' : ''}
+            </div>
+            <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{toast.message}</span>
+          </div>
+        </div>
         {toast.actions && toast.actions.length > 0 && (
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
             {toast.actions.map((action, index) => (

@@ -5,7 +5,7 @@ import { memo } from 'react'
 import { useFormContext, Controller } from 'react-hook-form'
 import { theme } from '../../theme'
 import { useGraphStore } from '../../store/graphStore'
-import type { Choice, DialogueNodeData } from '../../schemas/nodeEditorSchema'
+import type { DialogueNodeData } from '../../schemas/nodeEditorSchema'
 
 export interface ChoiceEditorProps {
   choiceIndex: number

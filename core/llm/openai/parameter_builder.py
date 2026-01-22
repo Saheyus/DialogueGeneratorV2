@@ -85,7 +85,9 @@ class OpenAIParameterBuilder:
         Args:
             model_name: Nom du modèle (ex: "gpt-5.2", "gpt-5-mini").
             reasoning_effort: Niveau d'effort (none, minimal, low, medium, high, xhigh).
-            reasoning_summary: Format du résumé (None, "auto", "detailed").
+            reasoning_summary: Format du résumé (None ou "auto" uniquement).
+                Note: "detailed" n'est pas supporté car nécessite une organisation OpenAI vérifiée (Tier 2/3).
+                Si "detailed" est fourni, il sera rejeté par la validation du schéma API.
             
         Returns:
             Dictionnaire avec la configuration reasoning, ou vide si pas de reasoning.
@@ -120,17 +122,34 @@ class OpenAIParameterBuilder:
                 reasoning_config["effort"] = reasoning_effort
             
             # Activer automatiquement summary selon le modèle
-            # Pour GPT-5.2/5.2-pro: utiliser "auto" (plus fiable pour obtenir le contenu)
-            # Pour mini/nano: utiliser "auto" aussi (car "detailed" ne fonctionne pas)
-            # "detailed" peut ne pas retourner le contenu directement selon les modèles
+            # IMPORTANT: Nous utilisons uniquement "auto" car "detailed" nécessite une organisation OpenAI vérifiée (Tier 2/3).
+            # Si "detailed" est demandé, l'API peut l'ignorer silencieusement si l'organisation n'est pas vérifiée,
+            # ce qui entraîne un échec silencieux ("Silent Failure") où aucun résumé n'est retourné.
+            # "auto" est plus fiable et fonctionne pour toutes les organisations.
             if reasoning_summary is None:
-                # Utiliser "auto" par défaut car plus fiable pour obtenir le contenu
+                # Utiliser "auto" par défaut (recommandation OpenAI pour organisations non vérifiées)
                 reasoning_config["summary"] = "auto"
-            elif reasoning_summary is not None:
-                reasoning_config["summary"] = reasoning_summary
+            elif reasoning_summary == "auto":
+                reasoning_config["summary"] = "auto"
+            else:
+                # Si une autre valeur est fournie (ne devrait pas arriver grâce à la validation du schéma),
+                # on log un avertissement et on utilise "auto" par sécurité
+                logger.warning(
+                    f"reasoning_summary='{reasoning_summary}' non supporté pour {model_name}. "
+                    f"Utilisation de 'auto' à la place (les résumés 'detailed' nécessitent une organisation OpenAI vérifiée)."
+                )
+                reasoning_config["summary"] = "auto"
         elif reasoning_summary is not None:
             # Si seulement summary est défini (sans effort)
-            reasoning_config["summary"] = reasoning_summary
+            # Valider que c'est "auto" (seule valeur supportée)
+            if reasoning_summary == "auto":
+                reasoning_config["summary"] = "auto"
+            else:
+                logger.warning(
+                    f"reasoning_summary='{reasoning_summary}' non supporté pour {model_name}. "
+                    f"Utilisation de 'auto' à la place (les résumés 'detailed' nécessitent une organisation OpenAI vérifiée)."
+                )
+                reasoning_config["summary"] = "auto"
         
         if reasoning_config:
             logger.info(
@@ -201,17 +220,24 @@ class OpenAIParameterBuilder:
         temperature: float,
         reasoning_effort: Optional[str],
         reasoning_summary: Optional[str],
+            instructions: Optional[str] = None,
+            top_p: Optional[float] = None,
+            stream: bool = False,
     ) -> Dict[str, Any]:
         """Construit les paramètres complets pour Responses API.
         
         Args:
             model_name: Nom du modèle.
-            messages: Liste des messages (system, user, etc.).
+            messages: Liste des messages (user, assistant, etc.) - sans system message si instructions fourni.
             response_model: Modèle Pydantic pour structured output (optionnel).
             max_tokens: Nombre maximum de tokens de sortie.
             temperature: Température (0.0-2.0).
             reasoning_effort: Effort de reasoning (optionnel).
             reasoning_summary: Format du résumé reasoning (optionnel).
+            instructions: Instructions système (system prompt) séparées de input (optionnel).
+            top_p: Nucleus sampling (0.0-1.0). Alternative/complément à temperature (optionnel).
+            stream: Si True, active le streaming natif (optionnel, défaut: False).
+            Note: Responses API n'utilise pas stream_options (c'est pour Chat Completions API uniquement).
             
         Returns:
             Dictionnaire avec tous les paramètres pour Responses API.
@@ -221,6 +247,11 @@ class OpenAIParameterBuilder:
             "model": model_name,
             "input": messages,
         }
+        
+        # Instructions séparées (si fourni, utilise le paramètre instructions au lieu du system message dans input)
+        if instructions is not None:
+            responses_params["instructions"] = instructions
+            logger.debug(f"Utilisation du paramètre 'instructions' séparé pour {model_name}")
         
         # Tool definition pour structured output
         tool_definition = OpenAIParameterBuilder.build_tool_definition(response_model)
@@ -250,6 +281,23 @@ class OpenAIParameterBuilder:
             model_name, reasoning_config, reasoning_effort
         ):
             responses_params["temperature"] = temperature
+        
+        # Top_p (nucleus sampling) - peut coexister avec temperature
+        if top_p is not None:
+            if not (0.0 <= top_p <= 1.0):
+                logger.warning(
+                    f"top_p={top_p} hors limites (0.0-1.0), sera ignoré pour {model_name}"
+                )
+            else:
+                responses_params["top_p"] = top_p
+                logger.debug(f"Utilisation de top_p={top_p} pour {model_name}")
+        
+        # Streaming
+        # NOTE: Responses API n'utilise pas stream_options (c'est pour Chat Completions API uniquement)
+        # Le streaming fonctionne simplement avec stream=True
+        if stream:
+            responses_params["stream"] = True
+            logger.info(f"Streaming natif activé pour {model_name}")
         
         # Logger les paramètres (sans prompt complet) pour debug
         safe_params = {

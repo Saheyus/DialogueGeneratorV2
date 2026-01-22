@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from typing import List
 import logging
+import base64
 
 from api.schemas.preset import Preset, PresetCreate, PresetUpdate, PresetValidationResult
 from api.dependencies import get_preset_service
@@ -54,8 +55,11 @@ def create_preset(
         logger.info(f"Preset créé: {preset.name} (ID: {preset.id})")
         
         # Ajouter message auto-cleanup dans header si présent
+        # Encoder le message en base64 pour éviter les problèmes d'encodage dans les headers HTTP
         if cleanup_message:
-            response.headers["X-Preset-Cleanup-Message"] = cleanup_message
+            encoded_message = base64.b64encode(cleanup_message.encode('utf-8')).decode('ascii')
+            response.headers["X-Preset-Cleanup-Message"] = encoded_message
+            response.headers["X-Preset-Cleanup-Message-Encoding"] = "base64"
         
         return preset
     except PermissionError as e:
@@ -144,8 +148,11 @@ def update_preset(
         logger.info(f"Preset mis à jour: {preset.name} (ID: {preset_id})")
         
         # Ajouter message auto-cleanup dans header si présent
+        # Encoder le message en base64 pour éviter les problèmes d'encodage dans les headers HTTP
         if cleanup_message:
-            response.headers["X-Preset-Cleanup-Message"] = cleanup_message
+            encoded_message = base64.b64encode(cleanup_message.encode('utf-8')).decode('ascii')
+            response.headers["X-Preset-Cleanup-Message"] = encoded_message
+            response.headers["X-Preset-Cleanup-Message-Encoding"] = "base64"
         
         return preset
     except FileNotFoundError:

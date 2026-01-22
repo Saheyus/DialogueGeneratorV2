@@ -23,6 +23,8 @@ export interface UseGenerationOrchestratorOptions {
   llmModel: string
   /** Reasoning effort */
   reasoningEffort: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null
+  /** Top_p (nucleus sampling) */
+  topP: number | null
   /** Nombre max de choix */
   maxChoices: number | null
   /** Mode de choix */
@@ -139,6 +141,7 @@ export function useGenerationOrchestrator(
     maxCompletionTokens: options.maxCompletionTokens,
     llmModel: options.llmModel,
     reasoningEffort: options.reasoningEffort,
+    topP: options.topP,
     maxChoices: options.maxChoices,
     choicesMode: options.choicesMode,
     narrativeTags: options.narrativeTags,

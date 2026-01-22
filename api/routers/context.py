@@ -24,11 +24,19 @@ from api.schemas.dialogue import EstimateTokensRequest, EstimateTokensResponse
 from api.dependencies import (
     get_context_builder,
     get_linked_selector_service,
-    get_request_id
+    get_request_id,
+    get_dialogue_generation_service,
+    get_prompt_engine,
+    get_skill_catalog_service,
+    get_trait_catalog_service
 )
-from api.exceptions import NotFoundException, InternalServerException
+from api.exceptions import NotFoundException, InternalServerException, ValidationException
 from core.context.context_builder import ContextBuilder
 from services.linked_selector import LinkedSelectorService
+from services.dialogue_generation_service import DialogueGenerationService
+from core.prompt.prompt_engine import PromptEngine
+from services.skill_catalog_service import SkillCatalogService
+from services.trait_catalog_service import TraitCatalogService
 
 logger = logging.getLogger(__name__)
 
@@ -415,6 +423,10 @@ async def estimate_context_tokens(
     request_data: EstimateTokensRequest,
     request: Request,
     context_builder: Annotated[ContextBuilder, Depends(get_context_builder)],
+    dialogue_service: Annotated[DialogueGenerationService, Depends(get_dialogue_generation_service)],
+    prompt_engine: Annotated[PromptEngine, Depends(get_prompt_engine)],
+    skill_service: Annotated[SkillCatalogService, Depends(get_skill_catalog_service)],
+    trait_service: Annotated[TraitCatalogService, Depends(get_trait_catalog_service)],
     request_id: Annotated[str, Depends(get_request_id)]
 ) -> EstimateTokensResponse:
     """Estime le nombre de tokens pour un contexte donné.
@@ -423,34 +435,59 @@ async def estimate_context_tokens(
         request_data: Données de la requête (sélections, instructions).
         request: La requête HTTP.
         context_builder: ContextBuilder injecté.
+        dialogue_service: DialogueGenerationService injecté.
+        prompt_engine: PromptEngine injecté.
+        skill_service: SkillCatalogService injecté.
+        trait_service: TraitCatalogService injecté.
         request_id: ID de la requête.
         
     Returns:
         Estimation du nombre de tokens.
     """
     try:
-        # Convertir ContextSelection en dict pour le service
-        context_selections_dict = request_data.context_selections.to_service_dict()
+        # Utiliser la même fonction que dialogues.py pour construire le prompt complet
+        from api.routers.dialogues import _build_prompt_from_request
+        built = _build_prompt_from_request(
+            request_data,
+            dialogue_service,
+            prompt_engine,
+            skill_service,
+            trait_service
+        )
         
-        # Construire le contexte JSON (obligatoire, plus de fallback)
+        # Calculer les tokens du contexte seul
+        context_selections_dict = request_data.context_selections.to_service_dict()
         structured_context = context_builder.build_context_json(
             selected_elements=context_selections_dict,
             scene_instruction=request_data.user_instructions,
-            field_configs=None,
-            organization_mode="narrative",
-            max_tokens=request_data.max_tokens,
+            field_configs=request_data.field_configs,
+            organization_mode=request_data.organization_mode or "narrative",
+            max_tokens=request_data.max_context_tokens,
             include_dialogue_type=True,
             element_modes=context_selections_dict.get("_element_modes")
         )
-        # Sérialiser en texte
         context_text = context_builder._context_serializer.serialize_to_text(structured_context)
-        token_count = context_builder._count_tokens(context_text)
+        context_tokens = context_builder._count_tokens(context_text)
+        
+        # Convertir structured_prompt en dict pour la réponse
+        structured_prompt_dict = None
+        if built.structured_prompt:
+            try:
+                structured_prompt_dict = built.structured_prompt.model_dump()
+            except Exception as e:
+                logger.warning(f"Erreur lors de la conversion du structured_prompt en dict: {e}")
         
         return EstimateTokensResponse(
-            context_tokens=token_count,
-            total_estimated_tokens=token_count  # Pour le contexte seul
+            context_tokens=context_tokens,
+            token_count=built.token_count,
+            raw_prompt=built.raw_prompt,
+            prompt_hash=built.prompt_hash,
+            structured_prompt=structured_prompt_dict
         )
         
+    except ValidationException:
+        # Re-raise les ValidationException telles quelles
+        raise
     except Exception as e:
         logger.exception(f"Erreur lors de l'estimation de tokens (request_id: {request_id})")
         raise InternalServerException(

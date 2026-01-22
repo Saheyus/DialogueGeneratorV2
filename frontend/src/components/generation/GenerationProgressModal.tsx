@@ -4,8 +4,219 @@
  * Affiche le texte généré en temps réel, la progression par étapes,
  * et permet l'interruption ou la réduction de la modal.
  */
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { theme } from '../../theme'
+
+/**
+ * Extrait une valeur de chaîne JSON partielle en gérant les échappements.
+ * 
+ * Parse caractère par caractère pour gérer correctement \n, \", \\, etc.
+ * Accepte les chaînes non fermées (texte partiel).
+ * 
+ * @param content - Contenu JSON partiel
+ * @param fieldName - Nom du champ à extraire (ex: "title", "line", "speaker")
+ * @param contextAfter - Chaîne qui doit apparaître avant le champ (pour vérifier le contexte)
+ * @returns Valeur extraite ou null si non trouvée
+ */
+function extractPartialStringValue(
+  content: string,
+  fieldName: string,
+  contextAfter?: string
+): string | null {
+  // Chercher le champ dans le bon contexte
+  let searchStart = 0
+  if (contextAfter) {
+    const contextIndex = content.indexOf(contextAfter)
+    if (contextIndex === -1) return null
+    searchStart = contextIndex + contextAfter.length
+  }
+  
+  const fieldPattern = `"${fieldName}"\\s*:\\s*"`
+  const fieldRegex = new RegExp(fieldPattern, 'g')
+  fieldRegex.lastIndex = searchStart
+  
+  const match = fieldRegex.exec(content)
+  if (!match) return null
+  
+  // Position après le guillemet d'ouverture
+  let i = match.index + match[0].length
+  let text = ''
+  let escaped = false
+  
+  // Parser caractère par caractère jusqu'à la fin ou un guillemet non échappé
+  while (i < content.length) {
+    const char = content[i]
+    
+    if (escaped) {
+      // Gérer les séquences d'échappement
+      if (char === 'n') {
+        text += '\n'
+      } else if (char === '\\') {
+        text += '\\'
+      } else if (char === '"') {
+        text += '"'
+      } else if (char === 't') {
+        text += '\t'
+      } else if (char === 'r') {
+        text += '\r'
+      } else {
+        // Autre séquence d'échappement (u pour unicode, etc.) - garder tel quel pour l'instant
+        text += char
+      }
+      escaped = false
+    } else if (char === '\\') {
+      // Backslash trouvé - prochain caractère est échappé
+      escaped = true
+    } else if (char === '"') {
+      // Guillemet fermant trouvé - chaîne complète
+      break
+    } else {
+      // Caractère normal
+      text += char
+    }
+    i++
+  }
+  
+  // Si on arrive à la fin sans guillemet fermant, c'est du texte partiel (OK)
+  // Si le texte se termine par un backslash isolé, l'enlever (échappement incomplet)
+  if (text.endsWith('\\') && !text.endsWith('\\\\')) {
+    text = text.slice(0, -1)
+  }
+  
+  return text || null
+}
+
+/**
+ * Parse le JSON partiel et formate l'affichage pour le streaming.
+ * 
+ * Utilise un mini-parser qui vérifie le contexte et gère les échappements
+ * pour extraire les valeurs même si le JSON n'est pas complet.
+ */
+function formatStreamingContent(rawContent: string): {
+  title?: string
+  speaker?: string
+  line?: string
+  choices?: Array<{ text: string; test?: string }>
+  rawJson: string
+} {
+  if (!rawContent || !rawContent.trim()) {
+    return { rawJson: rawContent }
+  }
+
+  // Essayer d'abord de parser le JSON complet (plus rapide si disponible)
+  try {
+    let jsonStr = rawContent.trim()
+    
+    // Compter les accolades pour compléter si nécessaire
+    const openBraces = (jsonStr.match(/{/g) || []).length
+    const closeBraces = (jsonStr.match(/}/g) || []).length
+    const openBrackets = (jsonStr.match(/\[/g) || []).length
+    const closeBrackets = (jsonStr.match(/\]/g) || []).length
+    
+    // Compléter le JSON partiel si nécessaire (seulement si on a assez de contenu)
+    if (openBraces > closeBraces && jsonStr.length > 50) {
+      jsonStr += '}'.repeat(openBraces - closeBraces)
+    }
+    if (openBrackets > closeBrackets && jsonStr.length > 50) {
+      jsonStr += ']'.repeat(openBrackets - closeBrackets)
+    }
+    
+    const data = JSON.parse(jsonStr)
+    
+    return {
+      title: data.title,
+      speaker: data.node?.speaker,
+      line: data.node?.line,
+      choices: data.node?.choices,
+      rawJson: rawContent,
+    }
+  } catch (e) {
+    // Si le parsing échoue, utiliser le mini-parser pour extraire les valeurs partiellement
+    
+    // 1. Extraire title (à la racine)
+    const title = extractPartialStringValue(rawContent, 'title')
+    
+    // 2. Vérifier qu'on a un node avant d'extraire speaker et line
+    const nodeIndex = rawContent.indexOf('"node"')
+    let speaker: string | null = null
+    let line: string | null = null
+    
+    if (nodeIndex !== -1) {
+      // Extraire speaker et line dans le contexte de node
+      const nodeContext = rawContent.substring(nodeIndex)
+      speaker = extractPartialStringValue(nodeContext, 'speaker')
+      line = extractPartialStringValue(nodeContext, 'line')
+    }
+    
+    // 3. Extraire les choix (chercher "text" dans le contexte de "choices")
+    const choices: Array<{ text: string; test?: string }> = []
+    if (nodeIndex !== -1) {
+      const nodeContext = rawContent.substring(nodeIndex)
+      const choicesIndex = nodeContext.indexOf('"choices"')
+      if (choicesIndex !== -1) {
+        const choicesContext = nodeContext.substring(choicesIndex)
+        
+        // Chercher toutes les occurrences de "text" dans le contexte des choix
+        // (chaque choix a un champ "text")
+        let searchIndex = 0
+        while (true) {
+          const textValue = extractPartialStringValue(choicesContext.substring(searchIndex), 'text')
+          if (!textValue) break
+          
+          // Trouver la position de ce "text" pour chercher "test" après
+          const textFieldPos = choicesContext.indexOf(`"text"`, searchIndex)
+          if (textFieldPos === -1) break
+          
+          // Chercher "test" après ce "text" (dans le même objet choix)
+          const afterText = choicesContext.substring(textFieldPos)
+          const testValue = extractPartialStringValue(afterText, 'test')
+          
+          choices.push({
+            text: textValue,
+            test: testValue || undefined,
+          })
+          
+          // Continuer la recherche après ce choix
+          searchIndex = textFieldPos + `"text"`.length + textValue.length + 10 // Approximatif
+          if (searchIndex >= choicesContext.length) break
+        }
+      }
+    }
+    
+    // Si on a extrait au moins un champ, retourner le résultat formaté
+    if (title || speaker || line || choices.length > 0) {
+      return {
+        title: title || undefined,
+        speaker: speaker || undefined,
+        line: line || undefined,
+        choices: choices.length > 0 ? choices : undefined,
+        rawJson: rawContent,
+      }
+    }
+    
+    // Si tout échoue, retourner le contenu brut
+    return { rawJson: rawContent }
+  }
+}
+
+/**
+ * Interprète le markdown basique et les séquences d'échappement.
+ */
+function interpretMarkdown(text: string): string {
+  if (!text) return ''
+  
+  // Remplacer \n par de vrais sauts de ligne
+  let result = text.replace(/\\n/g, '\n')
+  
+  // Interpréter le markdown basique
+  // *text* → italique (on utilise _ pour éviter les conflits avec les astérisques)
+  result = result.replace(/\*([^*]+)\*/g, '_$1_')
+  
+  // **text** → gras
+  result = result.replace(/\*\*([^*]+)\*\*/g, '**$1**')
+  
+  return result
+}
 
 export interface GenerationProgressModalProps {
   /** Contrôle l'affichage de la modal */
@@ -59,12 +270,30 @@ export function GenerationProgressModal({
     }
   }, [currentStep, isMinimized, error, onClose])
 
-  if (!isOpen) return null
+  // Parser et formater le contenu streaming (AVANT tout return conditionnel pour respecter les règles des hooks)
+  const formattedContent = useMemo(() => {
+    if (!content || content.trim().length === 0) {
+      return null
+    }
+    
+    // Tenter de parser le JSON partiel
+    const parsed = formatStreamingContent(content)
+    
+    // Si on a réussi à extraire des champs structurés, afficher formaté
+    if (parsed.title || parsed.speaker || parsed.line || parsed.choices) {
+      return parsed
+    }
+    
+    // Sinon, retourner null pour afficher le contenu brut (fallback)
+    return null
+  }, [content])
 
   // Mapping des étapes pour la barre de progression
   const steps = ['Prompting', 'Generating', 'Validating', 'Complete']
   const currentStepIndex = steps.indexOf(currentStep)
   const progressPercentage = ((currentStepIndex + 1) / steps.length) * 100
+
+  if (!isOpen) return null
 
   // Badge réduit (coin écran)
   if (isMinimized) {
@@ -269,19 +498,152 @@ export function GenerationProgressModal({
             </div>
           ) : (
             <>
-              {/* Streaming Content */}
-              <pre
-                style={{
-                  margin: 0,
-                  fontFamily: 'monospace',
-                  fontSize: '0.9rem',
-                  color: theme.text.primary,
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                }}
-              >
-                {content || 'Préparation...'}
-              </pre>
+              {/* Streaming Content - Formaté si JSON valide, sinon brut */}
+              {formattedContent ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '1.5rem',
+                    fontFamily: 'system-ui, -apple-system, sans-serif',
+                    fontSize: '0.95rem',
+                    lineHeight: '1.6',
+                    color: theme.text.primary,
+                  }}
+                >
+                  {/* Titre */}
+                  {formattedContent.title && (
+                    <div>
+                      <h3
+                        style={{
+                          margin: 0,
+                          fontSize: '1.1rem',
+                          fontWeight: 'bold',
+                          color: theme.text.primary,
+                          borderBottom: `2px solid ${theme.border.primary}`,
+                          paddingBottom: '0.5rem',
+                        }}
+                      >
+                        {formattedContent.title}
+                      </h3>
+                    </div>
+                  )}
+
+                  {/* Dialogue (Speaker + Line) */}
+                  {(formattedContent.speaker || formattedContent.line) && (
+                    <div
+                      style={{
+                        padding: '1rem',
+                        backgroundColor: theme.background.secondary,
+                        borderRadius: '6px',
+                        borderLeft: `4px solid ${theme.border.focus}`,
+                      }}
+                    >
+                      {formattedContent.speaker && (
+                        <div
+                          style={{
+                            fontWeight: 'bold',
+                            color: theme.border.focus,
+                            marginBottom: '0.5rem',
+                            fontSize: '0.9rem',
+                          }}
+                        >
+                          {formattedContent.speaker}
+                        </div>
+                      )}
+                      {formattedContent.line && (
+                        <div
+                          style={{
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                            color: theme.text.primary,
+                          }}
+                          dangerouslySetInnerHTML={{
+                            __html: interpretMarkdown(formattedContent.line)
+                              .replace(/\n/g, '<br/>')
+                              .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                              .replace(/_([^_]+)_/g, '<em>$1</em>'),
+                          }}
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  {/* Choix */}
+                  {formattedContent.choices && formattedContent.choices.length > 0 && (
+                    <div>
+                      <div
+                        style={{
+                          fontSize: '0.85rem',
+                          fontWeight: 'bold',
+                          color: theme.text.secondary,
+                          marginBottom: '0.75rem',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                        }}
+                      >
+                        Choix du joueur :
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.75rem',
+                        }}
+                      >
+                        {formattedContent.choices.map((choice, index) => (
+                          <div
+                            key={index}
+                            style={{
+                              padding: '0.75rem 1rem',
+                              backgroundColor: theme.background.panel,
+                              border: `1px solid ${theme.border.primary}`,
+                              borderRadius: '6px',
+                              borderLeft: `4px solid ${theme.border.focus}`,
+                            }}
+                          >
+                            <div
+                              style={{
+                                color: theme.text.primary,
+                                marginBottom: choice.test ? '0.5rem' : 0,
+                              }}
+                            >
+                              {choice.text}
+                            </div>
+                            {choice.test && (
+                              <div
+                                style={{
+                                  fontSize: '0.8rem',
+                                  color: theme.text.tertiary,
+                                  fontStyle: 'italic',
+                                  marginTop: '0.5rem',
+                                }}
+                              >
+                                Test: {choice.test}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // Fallback : afficher le contenu brut (JSON partiel ou autre)
+                <pre
+                  style={{
+                    margin: 0,
+                    fontFamily: 'monospace',
+                    fontSize: '0.85rem',
+                    color: theme.text.secondary,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    opacity: 0.7,
+                  }}
+                >
+                  {content || 'Préparation...'}
+                </pre>
+              )}
             </>
           )}
         </div>

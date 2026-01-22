@@ -54,7 +54,7 @@ describe('usePresetStore', () => {
         },
       ];
 
-      (global.fetch as any).mockResolvedValueOnce({
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
         json: async () => mockPresets,
       });
@@ -71,7 +71,7 @@ describe('usePresetStore', () => {
     });
 
     it('should set loading state while loading presets', async () => {
-      (global.fetch as any).mockImplementationOnce(
+      (global.fetch as ReturnType<typeof vi.fn>).mockImplementationOnce(
         () => new Promise((resolve) => setTimeout(() => resolve({ ok: true, json: async () => [] }), 100))
       );
 
@@ -89,7 +89,7 @@ describe('usePresetStore', () => {
     });
 
     it('should handle error when loading presets fails', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: false,
         status: 500,
       });
@@ -105,7 +105,7 @@ describe('usePresetStore', () => {
     });
 
     it('should handle network error when loading presets', async () => {
-      (global.fetch as any).mockRejectedValueOnce(new Error('Network error'));
+      (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Network error'));
 
       const { result } = renderHook(() => usePresetStore());
 
@@ -138,7 +138,7 @@ describe('usePresetStore', () => {
         metadata: { created: '2026-01-17T10:00:00Z', modified: '2026-01-17T10:00:00Z' },
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
         json: async () => createdPreset,
       });
@@ -166,7 +166,7 @@ describe('usePresetStore', () => {
         },
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: false,
         status: 500,
       });
@@ -174,7 +174,11 @@ describe('usePresetStore', () => {
       const { result } = renderHook(() => usePresetStore());
 
       await act(async () => {
-        await result.current.createPreset(newPresetData);
+        try {
+          await result.current.createPreset(newPresetData);
+        } catch (error) {
+          // L'erreur est lancée, ce qui est le comportement attendu
+        }
       });
 
       expect(result.current.error).toContain('Failed to create preset');
@@ -203,7 +207,7 @@ describe('usePresetStore', () => {
         metadata: { ...existingPreset.metadata, modified: '2026-01-17T11:00:00Z' },
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
         json: async () => updatedPreset,
       });
@@ -224,7 +228,7 @@ describe('usePresetStore', () => {
     });
 
     it('should handle error when updating preset fails', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: false,
         status: 404,
       });
@@ -232,7 +236,11 @@ describe('usePresetStore', () => {
       const { result } = renderHook(() => usePresetStore());
 
       await act(async () => {
-        await result.current.updatePreset('non-existent', { name: 'Test' });
+        try {
+          await result.current.updatePreset('non-existent', { name: 'Test' });
+        } catch (error) {
+          // L'erreur est lancée, ce qui est le comportement attendu
+        }
       });
 
       expect(result.current.error).toContain('Failed to update preset');
@@ -255,7 +263,7 @@ describe('usePresetStore', () => {
         },
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
       });
 
@@ -289,7 +297,7 @@ describe('usePresetStore', () => {
         },
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
       });
 
@@ -309,7 +317,7 @@ describe('usePresetStore', () => {
     });
 
     it('should handle error when deleting preset fails', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: false,
         status: 404,
       });
@@ -340,7 +348,7 @@ describe('usePresetStore', () => {
         },
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
         json: async () => preset,
       });
@@ -356,7 +364,7 @@ describe('usePresetStore', () => {
     });
 
     it('should handle error when loading preset fails', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: false,
         status: 404,
       });
@@ -380,7 +388,7 @@ describe('usePresetStore', () => {
         obsoleteRefs: [],
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
         json: async () => validationResult,
       });
@@ -403,7 +411,7 @@ describe('usePresetStore', () => {
         obsoleteRefs: ['char-999'],
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
         json: async () => validationResult,
       });
@@ -419,7 +427,7 @@ describe('usePresetStore', () => {
     });
 
     it('should handle error when validating preset fails', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: false,
         status: 404,
       });
@@ -429,7 +437,7 @@ describe('usePresetStore', () => {
       await act(async () => {
         try {
           await result.current.validatePreset('non-existent');
-        } catch (error: any) {
+        } catch (error: unknown) {
           expect(error.message).toContain('Failed to validate preset');
         }
       });
