@@ -3,6 +3,9 @@
 - **Epic 0**: [Infrastructure & Setup (Brownfield Adjustments)](epic-00.md)  
   Les utilisateurs peuvent travailler sur une application stable avec l'infrastructure technique nécessaire. Le système configure ADR-001 à ADR-004 (Progress Modal SSE, Presets, Graph Fixes, Multi-Provider LLM), ID-001 à ID-005 (Auto-save, Validation cycles, Cost governance, Streaming cleanup, Preset validation).
 
+- **Epic 0.9**: [Production Readiness (Pre-Launch Polish)](epic-00-9.md)  
+  Les utilisateurs peuvent utiliser une application stable, fluide et prête pour la production. Le système élimine les derniers bugs de comportement, optimise l'expérience utilisateur, et s'assure que l'application est organisée et prête pour le déploiement.
+
 - **Epic 1**: [Génération de dialogues assistée par IA](epic-01.md)  
   Les utilisateurs peuvent générer des nœuds de dialogue de qualité professionnelle avec assistance LLM, gérer les coûts et itérer rapidement. Le système permet la génération single/batch, l'édition manuelle, l'auto-link, et fournit transparence complète sur les coûts et prompts utilisés.
 

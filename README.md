@@ -26,7 +26,7 @@ L'application utilise **l'interface web** (React + FastAPI) comme interface prin
 L'application est en cours de développement actif. Les fonctionnalités suivantes sont implémentées :
 
 *   **Chargement des Données du GDD (`ContextBuilder`)** :
-    *   Lecture des fichiers JSON générés par les scripts `filter.py` et `main.py` (situés dans `../GDD/categories/`).
+    *   Lecture des fichiers JSON depuis `data/GDD_categories/` (maintenance manuelle requise - voir `docs/deployment/DATA_MAINTENANCE.md`).
     *   Chargement de `Vision.json` depuis `../import/Bible_Narrative/`.
     *   Les données (personnages, lieux, objets, espèces, communautés, dialogues exemples, structures narratives/macro/micro) sont stockées en mémoire.
 *   **Interface Web (React + FastAPI)** :
@@ -260,6 +260,12 @@ Au démarrage, vous pouvez voir des warnings concernant la validation des champs
 - Fichiers GDD manquants (normal si certains fichiers sont optionnels)
 
 Ces warnings sont informatifs et n'empêchent pas l'application de fonctionner. Pour plus de détails, utilisez `STARTUP_REPORT=full npm run dev`.
+
+## Maintenance des Données GDD
+
+⚠️ **Important** : Les dossiers `data/GDD_categories/` et `data/UnityData/` ne sont **plus des liens symboliques** mais des dossiers réels. Ils doivent être **maintenus manuellement**.
+
+Pour plus de détails sur la mise à jour des données GDD, consultez : [`docs/deployment/DATA_MAINTENANCE.md`](docs/deployment/DATA_MAINTENANCE.md)
 
 ## Dépannage
 

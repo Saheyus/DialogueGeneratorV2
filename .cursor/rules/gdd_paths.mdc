@@ -8,6 +8,8 @@ alwaysApply: false
 
 # Chemins GDD
 
-- **Catégories GDD** : `DialogueGenerator/data/GDD_categories/` (lien symbolique)
+- **Catégories GDD** : `DialogueGenerator/data/GDD_categories/` (dossier réel, maintenance manuelle requise - voir `docs/deployment/DATA_MAINTENANCE.md`)
 - **Vision.json** : `PROJECT_ROOT_DIR/import/Bible_Narrative/Vision.json`
 - **PROJECT_ROOT_DIR** : Répertoire parent de DialogueGenerator
+
+⚠️ **Note** : Le dossier `data/GDD_categories/` n'est plus un lien symbolique mais un dossier réel qui doit être maintenu manuellement.

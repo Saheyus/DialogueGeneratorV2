@@ -1,0 +1,24 @@
+[
+  {
+    "id": "START",
+    "speaker": "Voknir Esh'Maradel",
+    "line": "Tu marches sans masque et pourtant tu ne t'effaces pas. C'est… rare, ici.\n*Il lisse une peau-mémoire tendue sur un cadre d’os. Des lignes s’y déplacent comme des veines.*\nJ’ai reconnu ton pas avant de te voir. La tempête où tu m’as rendu un Nœud de convergence, je la redessine chaque nuit, pour vérifier qu’elle n’a pas eu lieu ailleurs.\nDis-moi, Uresaïr. Tu viens chercher une route, ou une preuve que les routes mentent ?",
+    "choices": [
+      {
+        "text": "Je viens chercher une route. Une qui n’appartient ni au Culte, ni à l’Exégète.",
+        "test": "Raison+Diplomatie:9",
+        "respectDelta": 1
+      },
+      {
+        "text": "Ta carte bouge. Tu la laisses te corriger, ou tu la combats ?",
+        "test": "Esprit+Archéologie:10",
+        "influenceDelta": 1
+      },
+      {
+        "text": "Je viens pour une preuve. Dis-moi ce que tu sais de l’Ensevelie, sans prières et sans détour.",
+        "test": "Volonté+Intimidation:11",
+        "respectDelta": -1
+      }
+    ]
+  }
+]
