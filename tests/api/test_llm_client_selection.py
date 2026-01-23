@@ -5,7 +5,8 @@ from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 from api.main import app
 from api.dependencies import get_config_service
-from llm_client import DummyLLMClient, OpenAIClient
+from core.llm.llm_client import DummyLLMClient
+from core.llm.openai.client import OpenAIClient
 
 
 @pytest.fixture
@@ -13,22 +14,20 @@ def client_with_real_config():
     """Fixture avec configuration réelle pour tester la sélection du client."""
     from api.dependencies import (
         get_dialogue_generation_service,
-        get_interaction_service,
+# get_interaction_service supprimé - système obsolète
         get_config_service
     )
     from services.dialogue_generation_service import DialogueGenerationService
-    from services.interaction_service import InteractionService
+    # InteractionService supprimé - système obsolète
     from services.configuration_service import ConfigurationService
     
     # Utiliser le vrai ConfigurationService
     real_config_service = ConfigurationService()
     
-    # Mock des services de dialogue et interaction pour éviter les dépendances complexes
+    # Mock des services de dialogue pour éviter les dépendances complexes
     mock_dialogue_service = MagicMock(spec=DialogueGenerationService)
-    mock_interaction_service = MagicMock(spec=InteractionService)
     
     app.dependency_overrides[get_dialogue_generation_service] = lambda: mock_dialogue_service
-    app.dependency_overrides[get_interaction_service] = lambda: mock_interaction_service
     app.dependency_overrides[get_config_service] = lambda: real_config_service
     
     yield TestClient(app)
@@ -87,7 +86,7 @@ def test_llm_factory_creates_dummy_when_api_key_missing():
     }
     available_models = [
         {
-            "api_identifier": "gpt-4o-mini",
+            "api_identifier": "gpt-5.2-mini",
             "display_name": "GPT-4o Mini",
             "client_type": "openai"
         }
@@ -96,7 +95,7 @@ def test_llm_factory_creates_dummy_when_api_key_missing():
     # Simuler l'absence de clé API
     with patch.dict(os.environ, {}, clear=True):
         client = LLMClientFactory.create_client(
-            model_id="gpt-4o-mini",
+            model_id="gpt-5.2-mini",
             config=config,
             available_models=available_models
         )
@@ -115,10 +114,20 @@ def test_api_endpoint_uses_correct_llm_client(client_with_real_config):
     mock_context_builder._count_tokens = MagicMock(return_value=100)
     mock_context_builder.build_context = MagicMock(return_value="test context")
     
+    from core.prompt.prompt_engine import BuiltPrompt
+    
     mock_dialogue_service = MagicMock()
     mock_dialogue_service.context_builder = mock_context_builder
     mock_dialogue_service.prompt_engine = MagicMock()
-    mock_dialogue_service.prompt_engine.build_prompt = MagicMock(return_value=("prompt", 200))
+    mock_built = BuiltPrompt(
+        raw_prompt="prompt",
+        token_count=200,
+        sections={},
+        prompt_hash="hash123"
+    )
+    mock_dialogue_service.prompt_engine.build_prompt = MagicMock(return_value=mock_built)
+    mock_dialogue_service.prompt_engine.system_prompt_template = "Test system prompt"
+    mock_dialogue_service.prompt_engine._count_tokens = MagicMock(return_value=100)
     
     app.dependency_overrides[get_dialogue_generation_service] = lambda: mock_dialogue_service
     
@@ -156,7 +165,7 @@ def test_llm_factory_handles_model_without_client_type():
     }
     available_models = [
         {
-            "api_identifier": "gpt-4o-mini",
+            "api_identifier": "gpt-5.2-mini",
             "display_name": "GPT-4o Mini"
             # Pas de client_type
         }
@@ -167,11 +176,72 @@ def test_llm_factory_handles_model_without_client_type():
             mock_openai.return_value = MagicMock(spec=OpenAIClient)
             
             client = LLMClientFactory.create_client(
-                model_id="gpt-4o-mini",
+                model_id="gpt-5.2-mini",
                 config=config,
                 available_models=available_models
             )
     
     # Vérifier que OpenAIClient a été appelé (client_type="openai" par défaut)
     assert mock_openai.called, "OpenAIClient devrait être créé avec client_type='openai' par défaut"
+
+
+def test_llm_factory_creates_openai_for_gpt_5_2():
+    """Test spécifique que LLMClientFactory crée un OpenAIClient pour 'gpt-5.2' quand la clé API est présente."""
+    from factories.llm_factory import LLMClientFactory
+    
+    config = {
+        "api_key_env_var": "OPENAI_API_KEY"
+    }
+    available_models = [
+        {
+            "display_name": "GPT-5.2 (Recommandé)",
+            "api_identifier": "gpt-5.2",
+            "notes": "Modèle le plus récent et le plus capable, bon équilibre performance/coût."
+        }
+    ]
+    
+    with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key-123"}):
+        with patch('factories.llm_factory.OpenAIClient') as mock_openai:
+            mock_openai.return_value = MagicMock(spec=OpenAIClient)
+            
+            client = LLMClientFactory.create_client(
+                model_id="gpt-5.2",
+                config=config,
+                available_models=available_models
+            )
+    
+    # Vérifier que OpenAIClient a été appelé (pas DummyLLMClient)
+    assert mock_openai.called, "OpenAIClient devrait être créé pour 'gpt-5.2'"
+    assert not isinstance(client, DummyLLMClient), "DummyLLMClient ne devrait pas être utilisé pour 'gpt-5.2'"
+    
+    # Vérifier les paramètres d'appel
+    call_kwargs = mock_openai.call_args[1]
+    assert call_kwargs["api_key"] == "test-key-123"
+    assert call_kwargs["config"]["default_model"] == "gpt-5.2"
+
+
+def test_llm_factory_uses_dummy_for_gpt_5_2_when_api_key_missing():
+    """Test que LLMClientFactory utilise DummyLLMClient pour 'gpt-5.2' quand la clé API est absente."""
+    from factories.llm_factory import LLMClientFactory
+    
+    config = {
+        "api_key_env_var": "OPENAI_API_KEY"
+    }
+    available_models = [
+        {
+            "display_name": "GPT-5.2 (Recommandé)",
+            "api_identifier": "gpt-5.2",
+            "notes": "Modèle le plus récent et le plus capable, bon équilibre performance/coût."
+        }
+    ]
+    
+    # Simuler l'absence de clé API
+    with patch.dict(os.environ, {}, clear=True):
+        client = LLMClientFactory.create_client(
+            model_id="gpt-5.2",
+            config=config,
+            available_models=available_models
+        )
+    
+    assert isinstance(client, DummyLLMClient), "DummyLLMClient devrait être utilisé quand la clé API est absente"
 

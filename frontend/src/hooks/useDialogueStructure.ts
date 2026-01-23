@@ -7,9 +7,9 @@ import type { DialogueStructure, DialogueStructureElement } from '../types/gener
 const DEFAULT_STRUCTURE: DialogueStructure = ['PNJ', 'PJ', 'Stop', '', '', '']
 
 export function useDialogueStructure(
-  initialStructure: DialogueStructure = DEFAULT_STRUCTURE
+  initialStructure?: DialogueStructure
 ) {
-  const [structure, setStructure] = useState<DialogueStructure>(initialStructure)
+  const [structure, setStructure] = useState<DialogueStructure>(initialStructure ?? DEFAULT_STRUCTURE)
 
   const updateElement = useCallback(
     (index: number, value: DialogueStructureElement) => {
@@ -43,8 +43,8 @@ export function useDialogueStructure(
     }
 
     const descriptions: Record<string, string> = {
-      PNJ: 'le personnage B parle directement',
-      PJ: 'le personnage A (joueur) fait un choix parmi plusieurs options',
+      PNJ: 'le PNJ parle directement',
+      PJ: 'le PJ fait un choix parmi plusieurs options',
       Stop: 'fin de l\'interaction',
     }
 
@@ -78,4 +78,6 @@ export function useDialogueStructure(
     setStructure: setStructure as (structure: DialogueStructure) => void,
   }
 }
+
+
 

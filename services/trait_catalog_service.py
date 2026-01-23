@@ -19,12 +19,12 @@ class TraitCatalogService:
         
         Args:
             csv_path: Chemin vers le fichier CSV. Si None, utilise le chemin par défaut
-                     (Assets/Data/TraitCatalog.csv).
+                     (data/UnityData/TraitCatalog.csv).
         """
         if csv_path is None:
             # Chemin par défaut relatif à la racine du projet
             project_root = Path(__file__).resolve().parent.parent
-            csv_path = project_root / "Assets" / "Data" / "TraitCatalog.csv"
+            csv_path = project_root / "data" / "UnityData" / "TraitCatalog.csv"
         
         self.csv_path = csv_path
         self._traits: Optional[List[Dict[str, str]]] = None

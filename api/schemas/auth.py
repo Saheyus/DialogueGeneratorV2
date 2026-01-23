@@ -48,3 +48,5 @@ class RefreshTokenRequest(BaseModel):
     """
     refresh_token: Optional[str] = Field(None, description="Token de rafraîchissement (peut être dans cookie)")
 
+
+

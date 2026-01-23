@@ -16,3 +16,5 @@ if (!fs.existsSync(distPath) || !fs.existsSync(indexHtml)) {
 console.log('✓ Build frontend présent');
 process.exit(0);
 
+
+

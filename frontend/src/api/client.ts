@@ -17,15 +17,21 @@ const apiClient: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // 30 secondes
+  timeout: 30000, // 30 secondes par défaut (sera surchargé pour les requêtes LLM)
   withCredentials: true, // Nécessaire pour envoyer/recevoir les cookies (refresh_token)
 })
 
 /**
  * Intercepteur pour ajouter le token d'authentification.
+ * En développement, on n'envoie pas de token (l'auth est désactivée côté serveur).
  */
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    // En développement, ne pas envoyer de token (auth désactivée)
+    if (import.meta.env.DEV) {
+      return config
+    }
+    
     const token = localStorage.getItem('access_token')
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
@@ -51,6 +57,11 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+
+    // En développement, ignorer les erreurs 401 (auth désactivée)
+    if (import.meta.env.DEV) {
+      return Promise.reject(error)
+    }
 
     // Si erreur 401 et pas déjà retenté
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -78,8 +89,17 @@ apiClient.interceptors.response.use(
         refreshTokenPromise = (async () => {
           try {
             // Le refresh token est maintenant dans un cookie httpOnly, pas besoin de le passer dans le body
-            // Utiliser apiClient pour bénéficier du proxy Vite en dev
-            const response = await apiClient.post(
+            // IMPORTANT: Utiliser axios directement pour éviter que l'intercepteur ne déclenche un autre refresh
+            // (ce qui créerait une boucle infinie si le refresh échoue)
+            const axiosInstance = axios.create({
+              baseURL: API_BASE_URL,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              timeout: 30000,
+              withCredentials: true,
+            })
+            const response = await axiosInstance.post(
               '/api/v1/auth/refresh',
               {} // Body vide, le cookie est envoyé automatiquement avec withCredentials
             )

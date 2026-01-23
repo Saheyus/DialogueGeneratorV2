@@ -13,7 +13,7 @@ except ImportError:
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
     
-    from context_builder import ContextBuilder
+    from core.context.context_builder import ContextBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class LinkedSelectorService:
     def get_all_character_names(self) -> List[str]:
         """Retrieves all character names from the ContextBuilder."""
         # Example method - will implement others based on GenerationPanel needs
-        return self.context_builder.get_all_character_names()
+        return self.context_builder.get_characters_names()
 
     # ------------------------------------------------------------------
     # Helper (interne)

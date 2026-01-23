@@ -1,7 +1,7 @@
 /**
  * Composant principal de sélection de contexte avec onglets pour personnages, lieux et objets.
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import * as contextAPI from '../../api/context'
 import type { 
   CharacterResponse, 
@@ -42,14 +42,13 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
     toggleItem, 
     toggleSpecies,
     toggleCommunity,
-    clearSelections 
+    clearSelections,
+    setElementLists,
+    getElementMode,
+    setElementMode,
   } = useContextStore()
 
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     try {
@@ -65,12 +64,25 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
       setItems(itemsRes.items)
       setSpecies(speciesRes.species)
       setCommunities(communitiesRes.communities)
+      
+      // Mettre à jour le store avec les listes pour qu'elles soient accessibles partout
+      setElementLists({
+        characters: charsRes.characters,
+        locations: locsRes.locations,
+        items: itemsRes.items,
+        species: speciesRes.species,
+        communities: communitiesRes.communities,
+      })
     } catch (err) {
       setError(getErrorMessage(err))
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [setElementLists])
+
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
 
   const handleItemClick = async (name: string) => {
     try {
@@ -126,13 +138,93 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
     return []
   }
 
+  const getSelectedCount = (): number => {
+    if (activeTab === 'characters') {
+      return (Array.isArray(selections.characters_full) ? selections.characters_full.length : 0) +
+        (Array.isArray(selections.characters_excerpt) ? selections.characters_excerpt.length : 0)
+    }
+    if (activeTab === 'locations') {
+      return (Array.isArray(selections.locations_full) ? selections.locations_full.length : 0) +
+        (Array.isArray(selections.locations_excerpt) ? selections.locations_excerpt.length : 0)
+    }
+    if (activeTab === 'items') {
+      return (Array.isArray(selections.items_full) ? selections.items_full.length : 0) +
+        (Array.isArray(selections.items_excerpt) ? selections.items_excerpt.length : 0)
+    }
+    if (activeTab === 'species') {
+      return (Array.isArray(selections.species_full) ? selections.species_full.length : 0) +
+        (Array.isArray(selections.species_excerpt) ? selections.species_excerpt.length : 0)
+    }
+    if (activeTab === 'communities') {
+      return (Array.isArray(selections.communities_full) ? selections.communities_full.length : 0) +
+        (Array.isArray(selections.communities_excerpt) ? selections.communities_excerpt.length : 0)
+    }
+    return 0
+  }
+
   const getSelectedItems = (): string[] => {
-    if (activeTab === 'characters') return selections.characters
-    if (activeTab === 'locations') return selections.locations
-    if (activeTab === 'items') return selections.items
-    if (activeTab === 'species') return selections.species
-    if (activeTab === 'communities') return selections.communities
+    // Fusionner les listes full et excerpt pour chaque type
+    // Sécurité: s'assurer que les propriétés sont toujours des tableaux
+    if (activeTab === 'characters') {
+      return [
+        ...(Array.isArray(selections.characters_full) ? selections.characters_full : []),
+        ...(Array.isArray(selections.characters_excerpt) ? selections.characters_excerpt : [])
+      ]
+    }
+    if (activeTab === 'locations') {
+      return [
+        ...(Array.isArray(selections.locations_full) ? selections.locations_full : []),
+        ...(Array.isArray(selections.locations_excerpt) ? selections.locations_excerpt : [])
+      ]
+    }
+    if (activeTab === 'items') {
+      return [
+        ...(Array.isArray(selections.items_full) ? selections.items_full : []),
+        ...(Array.isArray(selections.items_excerpt) ? selections.items_excerpt : [])
+      ]
+    }
+    if (activeTab === 'species') {
+      return [
+        ...(Array.isArray(selections.species_full) ? selections.species_full : []),
+        ...(Array.isArray(selections.species_excerpt) ? selections.species_excerpt : [])
+      ]
+    }
+    if (activeTab === 'communities') {
+      return [
+        ...(Array.isArray(selections.communities_full) ? selections.communities_full : []),
+        ...(Array.isArray(selections.communities_excerpt) ? selections.communities_excerpt : [])
+      ]
+    }
     return []
+  }
+
+  const handleModeChange = (name: string, mode: 'full' | 'excerpt') => {
+    if (activeTab === 'characters') {
+      setElementMode('characters', name, mode)
+    } else if (activeTab === 'locations') {
+      setElementMode('locations', name, mode)
+    } else if (activeTab === 'items') {
+      setElementMode('items', name, mode)
+    } else if (activeTab === 'species') {
+      setElementMode('species', name, mode)
+    } else if (activeTab === 'communities') {
+      setElementMode('communities', name, mode)
+    }
+  }
+
+  const getElementModeForList = (name: string): 'full' | 'excerpt' | null => {
+    if (activeTab === 'characters') {
+      return getElementMode('characters', name)
+    } else if (activeTab === 'locations') {
+      return getElementMode('locations', name)
+    } else if (activeTab === 'items') {
+      return getElementMode('items', name)
+    } else if (activeTab === 'species') {
+      return getElementMode('species', name)
+    } else if (activeTab === 'communities') {
+      return getElementMode('communities', name)
+    }
+    return null
   }
 
   return (
@@ -167,7 +259,7 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
             fontWeight: activeTab === 'characters' ? 'bold' : 'normal',
           }}
         >
-          Personnages ({characters.length})
+          Personnages {activeTab === 'characters' && getSelectedCount() > 0 ? `(${getSelectedCount()}/${characters.length})` : `(${characters.length})`}
         </button>
         <button
           onClick={() => {
@@ -186,7 +278,7 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
             fontWeight: activeTab === 'locations' ? 'bold' : 'normal',
           }}
         >
-          Lieux ({locations.length})
+          Lieux {activeTab === 'locations' && getSelectedCount() > 0 ? `(${getSelectedCount()}/${locations.length})` : `(${locations.length})`}
         </button>
         <button
           onClick={() => {
@@ -205,7 +297,7 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
             fontWeight: activeTab === 'items' ? 'bold' : 'normal',
           }}
         >
-          Objets ({items.length})
+          Objets {activeTab === 'items' && getSelectedCount() > 0 ? `(${getSelectedCount()}/${items.length})` : `(${items.length})`}
         </button>
         <button
           onClick={() => {
@@ -224,7 +316,7 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
             fontWeight: activeTab === 'species' ? 'bold' : 'normal',
           }}
         >
-          Espèces ({species.length})
+          Espèces {activeTab === 'species' && getSelectedCount() > 0 ? `(${getSelectedCount()}/${species.length})` : `(${species.length})`}
         </button>
         <button
           onClick={() => {
@@ -243,7 +335,7 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
             fontWeight: activeTab === 'communities' ? 'bold' : 'normal',
           }}
         >
-          Communautés ({communities.length})
+          Communautés {activeTab === 'communities' && getSelectedCount() > 0 ? `(${getSelectedCount()}/${communities.length})` : `(${communities.length})`}
         </button>
       </div>
 
@@ -268,10 +360,18 @@ export function ContextSelector({ onItemSelected }: ContextSelectorProps = {}) {
           selectedDetail={selectedDetail}
           onSelectDetail={setSelectedDetail}
           isLoading={isLoading}
+          getElementMode={getElementModeForList}
+          onModeChange={handleModeChange}
+          tabId={activeTab}
         />
       </div>
       <div style={{ flex: '0 0 auto' }}>
-        <SelectedContextSummary selections={selections} onClear={clearSelections} />
+        <SelectedContextSummary 
+          selections={selections} 
+          onClear={clearSelections}
+          onError={(err) => setError(err)}
+          onSuccess={() => setError(null)}
+        />
       </div>
     </div>
   )

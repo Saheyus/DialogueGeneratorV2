@@ -44,6 +44,25 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "`n=== Build du frontend ===" -ForegroundColor Cyan
+
+# Vérifier si VITE_API_BASE_URL est défini dans l'environnement
+$viteApiBaseUrl = [Environment]::GetEnvironmentVariable("VITE_API_BASE_URL", "Process")
+if (-not $viteApiBaseUrl) {
+    $viteApiBaseUrl = [Environment]::GetEnvironmentVariable("VITE_API_BASE_URL", "User")
+}
+if (-not $viteApiBaseUrl) {
+    $viteApiBaseUrl = [Environment]::GetEnvironmentVariable("VITE_API_BASE_URL", "Machine")
+}
+
+if ($viteApiBaseUrl) {
+    Write-Host "  Configuration détectée: VITE_API_BASE_URL=$viteApiBaseUrl" -ForegroundColor Yellow
+    Write-Host "  Le frontend sera configuré pour utiliser cette URL pour l'API" -ForegroundColor Gray
+    $env:VITE_API_BASE_URL = $viteApiBaseUrl
+} else {
+    Write-Host "  VITE_API_BASE_URL non défini" -ForegroundColor Gray
+    Write-Host "  Le frontend utilisera des URLs relatives (/api) ou localhost:4242 par défaut" -ForegroundColor Gray
+}
+
 npm run build
 
 if ($LASTEXITCODE -ne 0) {

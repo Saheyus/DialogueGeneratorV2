@@ -1,12 +1,24 @@
 import os
+import json
+import time
 import logging
-from llm_client import ILLMClient, OpenAIClient, DummyLLMClient
+from typing import Optional, Any
+from core.llm.llm_client import ILLMClient, DummyLLMClient
+from core.llm.openai.client import OpenAIClient
+from core.llm.mistral_client import MistralClient
 
 logger = logging.getLogger(__name__)
 
 class LLMClientFactory:
     @staticmethod
-    def create_client(model_id: str, config: dict, available_models: list[dict]) -> ILLMClient:
+    def create_client(
+        model_id: str,
+        config: dict,
+        available_models: list[dict],
+        usage_service: Optional[Any] = None,
+        request_id: Optional[str] = None,
+        endpoint: Optional[str] = None
+    ) -> ILLMClient:
         """
         Crée un client LLM basé sur model_id et la configuration.
 
@@ -22,11 +34,16 @@ class LLMClientFactory:
             Retourne DummyLLMClient si le modèle n'est pas trouvé,
             si la clé API est manquante pour OpenAI, ou en cas d'erreur.
         """
-        logger.info(f"Tentative de création d'un client LLM pour model_id: {model_id}")
-
         if model_id == "dummy":
-            logger.info("Création d'un DummyLLMClient (demandé explicitement).")
             return DummyLLMClient()
+
+        # Mapper les anciens identifiants vers les nouveaux (compatibilité)
+        model_id_mapping = {
+            "gpt-5.2-thinking": "gpt-5.2-pro"  # Ancien identifiant inexistant → nouveau identifiant valide
+        }
+        if model_id in model_id_mapping:
+            logger.warning(f"Modèle '{model_id}' est déprécié. Utilisation de '{model_id_mapping[model_id]}' à la place.")
+            model_id = model_id_mapping[model_id]
 
         # Chercher le modèle par api_identifier (champ dans llm_config.json) ou model_identifier (compatibilité)
         model_config = next(
@@ -66,9 +83,50 @@ class LLMClientFactory:
                     if "max_tokens" in model_config["parameters"]:
                         client_config["max_tokens"] = model_config["parameters"]["max_tokens"]
                 logger.info(f"Création d'un OpenAIClient pour model_id: {model_id} (default_model: {model_identifier})")
-                return OpenAIClient(api_key=api_key, config=client_config)
+                return OpenAIClient(
+                    api_key=api_key,
+                    config=client_config,
+                    usage_service=usage_service,
+                    request_id=request_id,
+                    endpoint=endpoint
+                )
             except Exception as e:
                 logger.error(f"Erreur lors de la création de OpenAIClient pour '{model_id}': {e}. Utilisation de DummyLLMClient.")
+                return DummyLLMClient()
+        
+        elif client_type == "mistral":
+            # Support Mistral AI via MistralClient
+            mistral_api_key_env_var = config.get("mistral_api_key_env_var")
+            if not mistral_api_key_env_var:
+                logger.warning(f"Variable d'environnement pour la clé API Mistral non spécifiée pour le modèle '{model_id}'. Utilisation de DummyLLMClient.")
+                return DummyLLMClient()
+            
+            api_key = os.getenv(mistral_api_key_env_var)
+            if not api_key:
+                logger.warning(f"Clé API Mistral non trouvée dans l'environnement (variable: {mistral_api_key_env_var}) pour le modèle '{model_id}'. Utilisation de DummyLLMClient.")
+                return DummyLLMClient()
+            
+            try:
+                # La config passée à MistralClient doit contenir default_model avec l'identifiant du modèle
+                model_identifier = model_config.get("api_identifier") or model_config.get("model_identifier") or model_id
+                client_config = config.copy()  # Commencer avec la config globale
+                client_config["default_model"] = model_identifier  # Définir le modèle spécifique
+                # Ajouter les paramètres du modèle s'ils existent
+                if "parameters" in model_config:
+                    if "default_temperature" in model_config["parameters"]:
+                        client_config["temperature"] = model_config["parameters"]["default_temperature"]
+                    if "max_tokens" in model_config["parameters"]:
+                        client_config["max_tokens"] = model_config["parameters"]["max_tokens"]
+                logger.info(f"Création d'un MistralClient pour model_id: {model_id} (default_model: {model_identifier})")
+                return MistralClient(
+                    api_key=api_key,
+                    config=client_config,
+                    usage_service=usage_service,
+                    request_id=request_id,
+                    endpoint=endpoint
+                )
+            except Exception as e:
+                logger.error(f"Erreur lors de la création de MistralClient pour '{model_id}': {e}. Utilisation de DummyLLMClient.")
                 return DummyLLMClient()
         
         # Ajouter d'autres types de clients ici si nécessaire (ex: Anthropic, Cohere)

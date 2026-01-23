@@ -1,0 +1,13 @@
+Rôle narratif : Première rencontre in-game, établissement de la relation, présentation du personnage.
+
+Objectifs :
+- Créer une première impression mémorable du personnage
+- Établir le ton de la relation future (amical, hostile, neutre, etc.)
+- Présenter la personnalité, les motivations ou le contexte du personnage
+- Donner envie au joueur d'interagir à nouveau avec ce personnage
+- Adapter le dialogue selon qu'une relation préexistante existe ou non (même si c'est la première rencontre in-game)
+
+Tensions : Variables selon le contexte. Peut aller de la curiosité bienveillante à la méfiance, en passant par la neutralité.
+
+Ce qui doit s'y produire : Établissement de la relation, révélation de la personnalité du PNJ, création d'un moment marquant qui donne envie de revenir interagir avec ce personnage. Le dialogue doit s'adapter au contexte : si le joueur et le PNJ se connaissent déjà (hors jeu), la première rencontre in-game peut faire référence à cette relation tout en restant une première interaction dans le jeu.
+

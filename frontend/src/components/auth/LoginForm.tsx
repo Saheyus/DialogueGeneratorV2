@@ -39,10 +39,13 @@ export function LoginForm() {
       <h2 style={{ color: theme.text.primary }}>Connexion</h2>
       {error && <div style={{ color: theme.state.error.color, marginBottom: '1rem' }}>{error}</div>}
       <div style={{ marginBottom: '1rem' }}>
-        <label style={{ color: theme.text.primary }}>
+        <label htmlFor="username" style={{ color: theme.text.primary }}>
           Nom d'utilisateur:
           <input
+            id="username"
+            name="username"
             type="text"
+            autoComplete="username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             required
@@ -58,10 +61,13 @@ export function LoginForm() {
         </label>
       </div>
       <div style={{ marginBottom: '1rem' }}>
-        <label style={{ color: theme.text.primary }}>
+        <label htmlFor="password" style={{ color: theme.text.primary }}>
           Mot de passe:
           <input
+            id="password"
+            name="password"
             type="password"
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required

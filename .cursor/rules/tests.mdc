@@ -1,18 +1,99 @@
 ---
-alwaysApply: true
+alwaysApply: false
+description: Structure et bonnes pratiques pour les tests pytest
 ---
-- Utiliser uniquement pytest et plugins (pytest-qt, pytest-asyncio, pytest-mock). Ne pas utiliser `unittest`.
-- Les tests vivent dans `tests/`. Pour tout nouveau sous-package de tests : ajouter `__init__.py`.
-- Pour tout test/fixture modifié/ajouté : annotations de types + docstrings.
-- Éviter réseau/IO externes par défaut : mock/monkeypatch (OpenAI, env vars, filesystem hors `tmp_path`).
-- UI/Qt : préférer `qtbot`, `qtbot.addWidget`, timeouts explicites; éviter dépendances GDD non garanties.
-- Si `TYPE_CHECKING` : importer les types de fixtures selon le standard du projet (_pytest/pytest-mock).
-- **Quand tester** :
-  - Après modification backend : `pytest tests/` (tous les tests backend)
-  - Après modification API : `pytest tests/api/` (tests API rapides)
-  - Après modification services/core : `pytest tests/ -k "not api"` (tests unitaires)
-  - Avant commit : `pytest tests/` (tous les tests backend)
-- **Exécution automatique** :
-  - Avant chaque commit (via pre-commit hook si configuré) : `pytest tests/`
-  - Dans CI/CD : `pytest tests/ --cov=api --cov=services --cov-report=html`
-- **Configuration**: `pytest.ini` définit les options par défaut. Respecter les markers (`@pytest.mark.asyncio`, etc.).
+# Tests — Structure et bonnes pratiques
+
+## Framework et structure
+
+- **Framework** : pytest uniquement (pytest-asyncio, pytest-mock). Pas `unittest`.
+- **Structure** : Tests dans `tests/`. Miroir de la structure du code (`tests/api/`, `tests/services/`, etc.).
+- **Configuration** : `pytest.ini` définit asyncio_mode, testpaths. Fixtures globales dans `tests/conftest.py`.
+
+## Créer un nouveau test
+
+### Test API (endpoint FastAPI)
+
+1. Créer `tests/api/test_<nom_endpoint>.py`
+2. Utiliser `TestClient` de FastAPI (fixture `client` disponible dans `conftest.py`)
+3. Mock des dépendances : `app.dependency_overrides` ou `monkeypatch.setattr("api.dependencies.<fonction>", mock)`
+4. **Référence** : Voir `tests/api/test_config_field_validation.py` pour exemple complet
+
+### Test service (logique métier)
+
+1. Créer `tests/services/test_<nom_service>.py`
+2. Utiliser `@pytest.mark.asyncio` et `AsyncMock` pour méthodes async
+3. **Référence** : Voir `tests/services/test_unity_dialogue_generation_service.py` pour exemple complet
+
+### Test utilitaire
+
+1. Créer `tests/utils/test_<nom_utilitaire>.py`
+2. Même structure que test service, sans dépendances complexes
+
+## Bonnes pratiques
+
+- **Annotations de types** : Toutes les fixtures et fonctions de test doivent avoir des types
+- **Docstrings** : Chaque test doit avoir une docstring expliquant ce qu'il teste
+- **Isolation** : Chaque test est indépendant. Pas de dépendances entre tests
+- **Mock réseau/IO** : Toujours mocker OpenAI, fichiers GDD, variables d'env (sauf `tmp_path`)
+- **Markers** : 
+  - `@pytest.mark.asyncio` : Pour les tests async (obligatoire)
+  - `@pytest.mark.skip(reason="...")` : Pour désactiver temporairement (toujours documenter)
+  - `@pytest.mark.parametrize` : Pour tester plusieurs valeurs
+- **tmp_path** : Fixture pytest pour fichiers temporaires (auto-nettoyage)
+- **Nommage** : `test_<scenario>` pour les fonctions, `Test<Classe>` pour les classes
+
+## ⚠️ INTERDICTIONS — Tests hardcodés sur entités spécifiques
+
+**JAMAIS de tests hardcodés sur des entités GDD spécifiques** (personnages, lieux, objets) :
+
+- ❌ **INTERDIT** : `test_akthar_extraction()`, `test_character_<nom_specifique>()`
+- ❌ **INTERDIT** : Recherche par nom hardcodé (`if "Akthar" in name`)
+- ❌ **INTERDIT** : Assertions dépendant d'un nom spécifique
+- ✅ **CORRECT** : Utiliser le premier élément disponible (`all_characters[0]` si non vide)
+- ✅ **CORRECT** : Utiliser une fixture qui sélectionne dynamiquement une entité
+- ✅ **CORRECT** : Tester la logique, pas des données spécifiques
+
+**Raison** : Les tests doivent tester la **fonctionnalité**, pas des données spécifiques.
+
+## Commandes de test
+
+- **Tous les tests** : `pytest tests/` ou `python -m pytest tests/`
+- **Tests API uniquement** : `pytest tests/api/`
+- **Tests unitaires (hors API)** : `pytest tests/ -k "not api"`
+- **Test spécifique** : `pytest tests/path/to/test_file.py::TestClass::test_method`
+- **Avec couverture** : `pytest tests/ --cov=api --cov=services --cov-report=html`
+- **Mode verbose** : `pytest tests/ -v`
+- **Arrêt au premier échec** : `pytest tests/ -x`
+
+## Quand tester
+
+- **Après modification backend** : `pytest tests/` (tous)
+- **Après modification API** : `pytest tests/api/` (rapide)
+- **Après modification service** : `pytest tests/services/` ou `pytest tests/ -k "<nom_service>"`
+- **Avant commit** : `pytest tests/` (tous)
+- **Nouveau code** : Créer les tests en même temps que le code
+
+## Workflow "teste X"
+
+1. **Identifier X** : Service, endpoint, fonction, composant ?
+2. **Vérifier existence** : Chercher `tests/<module>/test_<X>.py`
+3. **Si existe** : Exécuter `pytest tests/<module>/test_<X>.py -v`
+4. **Si manquant** : Créer selon structure appropriée (voir exemples dans références)
+5. **Résultat** : Tous les tests passent, code coverage acceptable
+
+## Maintenance
+
+- **Test manquant** : Si un composant/service/endpoint n'a pas de test, le créer immédiatement
+- **Test cassé** : Corriger avant de continuer. Ne pas skip sauf raison documentée
+- **Refactoring** : Mettre à jour les tests en même temps que le code
+- **Nouvelle fonctionnalité** : Tests requis pour validation, edge cases, erreurs
+- **Couverture** : Viser >80% pour code critique (services, API)
+
+## Références
+
+- **Patterns de mock** : Voir `.cursor/rules/tests_patterns.mdc`
+- **Tests d'intégration** : Voir `.cursor/rules/tests_integration.mdc`
+- **Fixtures communes** : `tests/conftest.py`
+- **Exemples API** : `tests/api/test_config_field_validation.py`, `tests/api/test_dialogues.py`
+- **Exemples services** : `tests/services/test_unity_dialogue_generation_service.py`, `tests/services/test_context_field_validator.py`

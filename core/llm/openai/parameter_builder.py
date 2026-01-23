@@ -1,0 +1,313 @@
+"""Construction des paramètres pour l'API OpenAI Responses."""
+
+import json
+import logging
+from typing import Dict, Any, List, Optional, Type
+from pydantic import BaseModel
+from openai import NOT_GIVEN
+
+try:
+    from openai._types import NotGiven  # type: ignore
+except Exception:  # pragma: no cover
+    class NotGiven:  # type: ignore
+        """Fallback type used when openai._types.NotGiven is unavailable."""
+        pass
+
+from constants import ModelNames
+
+logger = logging.getLogger(__name__)
+
+
+class OpenAIParameterBuilder:
+    """Construit les paramètres pour l'API OpenAI Responses.
+    
+    Gère la construction des tool definitions (structured output),
+    la validation et l'adaptation des paramètres selon le modèle
+    (reasoning, temperature, tokens).
+    """
+
+    @staticmethod
+    def build_tool_definition(response_model: Type[BaseModel]) -> Optional[Dict[str, Any]]:
+        """Construit la définition du tool pour Responses API.
+        
+        Args:
+            response_model: Modèle Pydantic pour le structured output.
+            
+        Returns:
+            Dictionnaire avec la définition du tool pour Responses API, ou None si pas de response_model.
+        """
+        if not response_model:
+            return None
+        
+        model_schema_for_tool = response_model.model_json_schema()
+        
+        # S'assurer que additionalProperties est False
+        model_schema_for_tool["additionalProperties"] = False
+        
+        tool_definition_responses = {
+            "type": "function",
+            "name": "generate_interaction",
+            "description": "Génère une interaction de dialogue structurée.",
+            "parameters": model_schema_for_tool,
+        }
+        
+        logger.debug(
+            f"Schéma de la fonction 'generate_interaction' envoyé à OpenAI: \n"
+            f"{json.dumps(model_schema_for_tool, indent=2, ensure_ascii=False)}"
+        )
+        
+        return tool_definition_responses
+
+    @staticmethod
+    def build_tool_choice(tool_name: str = "generate_interaction") -> Dict[str, Any]:
+        """Construit le tool_choice pour forcer l'appel du tool.
+        
+        Args:
+            tool_name: Nom du tool à forcer.
+            
+        Returns:
+            Dictionnaire avec la configuration tool_choice pour Responses API.
+        """
+        return {
+            "type": "allowed_tools",
+            "mode": "required",
+            "tools": [{"type": "function", "name": tool_name}],
+        }
+
+    @staticmethod
+    def build_reasoning_config(
+        model_name: str,
+        reasoning_effort: Optional[str],
+        reasoning_summary: Optional[str],
+    ) -> Dict[str, Any]:
+        """Construit la configuration du reasoning selon le modèle.
+        
+        Args:
+            model_name: Nom du modèle (ex: "gpt-5.2", "gpt-5-mini").
+            reasoning_effort: Niveau d'effort (none, minimal, low, medium, high, xhigh).
+            reasoning_summary: Format du résumé (None ou "auto" uniquement).
+                Note: "detailed" n'est pas supporté car nécessite une organisation OpenAI vérifiée (Tier 2/3).
+                Si "detailed" est fourni, il sera rejeté par la validation du schéma API.
+            
+        Returns:
+            Dictionnaire avec la configuration reasoning, ou vide si pas de reasoning.
+        """
+        reasoning_config = {}
+        is_mini_or_nano = "gpt-5-mini" in model_name or "gpt-5-nano" in model_name
+        
+        if reasoning_effort is not None:
+            # Valider que le modèle supporte la valeur demandée
+            if reasoning_effort == "none":
+                # "none" uniquement supporté par GPT-5.2/5.2-pro, pas par mini/nano
+                if is_mini_or_nano:
+                    logger.warning(
+                        f"reasoning.effort='none' non supporté par {model_name}. "
+                        f"Utilisation de 'minimal' à la place (reasoning toujours actif pour mini/nano)."
+                    )
+                    reasoning_config["effort"] = "minimal"
+                else:
+                    reasoning_config["effort"] = reasoning_effort
+            elif reasoning_effort == "xhigh":
+                # "xhigh" uniquement supporté par GPT-5.2/5.2-pro
+                if is_mini_or_nano:
+                    logger.warning(
+                        f"reasoning.effort='xhigh' non supporté par {model_name}. "
+                        f"Utilisation de 'high' à la place."
+                    )
+                    reasoning_config["effort"] = "high"
+                else:
+                    reasoning_config["effort"] = reasoning_effort
+            else:
+                # Autres valeurs (minimal, low, medium, high) supportées par tous les modèles GPT-5
+                reasoning_config["effort"] = reasoning_effort
+            
+            # Activer automatiquement summary selon le modèle
+            # IMPORTANT: Nous utilisons uniquement "auto" car "detailed" nécessite une organisation OpenAI vérifiée (Tier 2/3).
+            # Si "detailed" est demandé, l'API peut l'ignorer silencieusement si l'organisation n'est pas vérifiée,
+            # ce qui entraîne un échec silencieux ("Silent Failure") où aucun résumé n'est retourné.
+            # "auto" est plus fiable et fonctionne pour toutes les organisations.
+            if reasoning_summary is None:
+                # Utiliser "auto" par défaut (recommandation OpenAI pour organisations non vérifiées)
+                reasoning_config["summary"] = "auto"
+            elif reasoning_summary == "auto":
+                reasoning_config["summary"] = "auto"
+            else:
+                # Si une autre valeur est fournie (ne devrait pas arriver grâce à la validation du schéma),
+                # on log un avertissement et on utilise "auto" par sécurité
+                logger.warning(
+                    f"reasoning_summary='{reasoning_summary}' non supporté pour {model_name}. "
+                    f"Utilisation de 'auto' à la place (les résumés 'detailed' nécessitent une organisation OpenAI vérifiée)."
+                )
+                reasoning_config["summary"] = "auto"
+        elif reasoning_summary is not None:
+            # Si seulement summary est défini (sans effort)
+            # Valider que c'est "auto" (seule valeur supportée)
+            if reasoning_summary == "auto":
+                reasoning_config["summary"] = "auto"
+            else:
+                logger.warning(
+                    f"reasoning_summary='{reasoning_summary}' non supporté pour {model_name}. "
+                    f"Utilisation de 'auto' à la place (les résumés 'detailed' nécessitent une organisation OpenAI vérifiée)."
+                )
+                reasoning_config["summary"] = "auto"
+        
+        if reasoning_config:
+            logger.info(
+                f"Utilisation de reasoning pour {model_name} (Responses API): "
+                f"effort={reasoning_config.get('effort', 'None (default: medium)')}, "
+                f"summary={reasoning_config.get('summary', 'None')}"
+            )
+        else:
+            # Pas de reasoning explicite : l'API utilisera "medium" par défaut pour mini/nano
+            logger.debug(
+                f"Reasoning non spécifié pour {model_name}, l'API utilisera 'medium' par défaut."
+            )
+        
+        return reasoning_config
+
+    @staticmethod
+    def should_include_temperature(
+        model_name: str,
+        reasoning_config: Dict[str, Any],
+        reasoning_effort: Optional[str],
+    ) -> bool:
+        """Détermine si la temperature doit être incluse dans les paramètres.
+        
+        Args:
+            model_name: Nom du modèle.
+            reasoning_config: Configuration du reasoning (peut être vide).
+            reasoning_effort: Effort de reasoning original (avant adaptation).
+            
+        Returns:
+            True si temperature doit être incluse, False sinon.
+        """
+        # Modèles qui ne supportent pas temperature du tout
+        if model_name in ModelNames.MODELS_WITHOUT_CUSTOM_TEMPERATURE:
+            logger.debug(
+                f"Le modèle {model_name} ne supporte pas le paramètre temperature. "
+                f"Il sera omis de la requête API."
+            )
+            return False
+        
+        is_mini_or_nano = "gpt-5-mini" in model_name or "gpt-5-nano" in model_name
+        
+        # GPT-5 mini/nano: toujours exclure temperature (car pas de "none")
+        if is_mini_or_nano:
+            logger.debug(
+                f"Temperature omise (Responses API) pour {model_name} "
+                f"(temperature non supportée car reasoning toujours actif)."
+            )
+            return False
+        
+        # Responses API: Temperature uniquement si reasoning.effort == "none" (ou non spécifié)
+        effective_effort = reasoning_config.get("effort") if reasoning_config else reasoning_effort
+        
+        if effective_effort in (None, "none"):
+            return True
+        else:
+            logger.debug(
+                f"Temperature omise (Responses API) car reasoning.effort='{effective_effort}' "
+                f"(temperature supportée uniquement avec reasoning.effort='none' ou non spécifié)."
+            )
+            return False
+
+    @staticmethod
+    def build_responses_params(
+        model_name: str,
+        messages: List[Dict[str, Any]],
+        response_model: Optional[Type[BaseModel]],
+        max_tokens: int,
+        temperature: float,
+        reasoning_effort: Optional[str],
+        reasoning_summary: Optional[str],
+            instructions: Optional[str] = None,
+            top_p: Optional[float] = None,
+            stream: bool = False,
+    ) -> Dict[str, Any]:
+        """Construit les paramètres complets pour Responses API.
+        
+        Args:
+            model_name: Nom du modèle.
+            messages: Liste des messages (user, assistant, etc.) - sans system message si instructions fourni.
+            response_model: Modèle Pydantic pour structured output (optionnel).
+            max_tokens: Nombre maximum de tokens de sortie.
+            temperature: Température (0.0-2.0).
+            reasoning_effort: Effort de reasoning (optionnel).
+            reasoning_summary: Format du résumé reasoning (optionnel).
+            instructions: Instructions système (system prompt) séparées de input (optionnel).
+            top_p: Nucleus sampling (0.0-1.0). Alternative/complément à temperature (optionnel).
+            stream: Si True, active le streaming natif (optionnel, défaut: False).
+            Note: Responses API n'utilise pas stream_options (c'est pour Chat Completions API uniquement).
+            
+        Returns:
+            Dictionnaire avec tous les paramètres pour Responses API.
+        """
+        # Paramètres de base
+        responses_params: Dict[str, Any] = {
+            "model": model_name,
+            "input": messages,
+        }
+        
+        # Instructions séparées (si fourni, utilise le paramètre instructions au lieu du system message dans input)
+        if instructions is not None:
+            responses_params["instructions"] = instructions
+            logger.debug(f"Utilisation du paramètre 'instructions' séparé pour {model_name}")
+        
+        # Tool definition pour structured output
+        tool_definition = OpenAIParameterBuilder.build_tool_definition(response_model)
+        if tool_definition:
+            responses_params["tools"] = [tool_definition]
+            responses_params["tool_choice"] = OpenAIParameterBuilder.build_tool_choice()
+            logger.info(f"Utilisation du structured output avec le modèle: {response_model.__name__}")
+            logger.info(
+                f"Configuration structured output pour {model_name}: "
+                f"tool_definition présent, tool_choice forcé"
+            )
+        else:
+            responses_params["tools"] = NOT_GIVEN
+        
+        # Max output tokens
+        responses_params["max_output_tokens"] = max_tokens
+        
+        # Reasoning config
+        reasoning_config = OpenAIParameterBuilder.build_reasoning_config(
+            model_name, reasoning_effort, reasoning_summary
+        )
+        if reasoning_config:
+            responses_params["reasoning"] = reasoning_config
+        
+        # Temperature (uniquement si compatible avec reasoning)
+        if OpenAIParameterBuilder.should_include_temperature(
+            model_name, reasoning_config, reasoning_effort
+        ):
+            responses_params["temperature"] = temperature
+        
+        # Top_p (nucleus sampling) - peut coexister avec temperature
+        if top_p is not None:
+            if not (0.0 <= top_p <= 1.0):
+                logger.warning(
+                    f"top_p={top_p} hors limites (0.0-1.0), sera ignoré pour {model_name}"
+                )
+            else:
+                responses_params["top_p"] = top_p
+                logger.debug(f"Utilisation de top_p={top_p} pour {model_name}")
+        
+        # Streaming
+        # NOTE: Responses API n'utilise pas stream_options (c'est pour Chat Completions API uniquement)
+        # Le streaming fonctionne simplement avec stream=True
+        if stream:
+            responses_params["stream"] = True
+            logger.info(f"Streaming natif activé pour {model_name}")
+        
+        # Logger les paramètres (sans prompt complet) pour debug
+        safe_params = {
+            k: v
+            for k, v in responses_params.items()
+            if k not in ("input",) and not isinstance(v, NotGiven)
+        }
+        logger.info(
+            f"Paramètres API (Responses) pour {model_name}: "
+            f"{json.dumps(safe_params, indent=2, ensure_ascii=False, default=str)}"
+        )
+        
+        return responses_params

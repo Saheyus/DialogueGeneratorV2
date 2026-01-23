@@ -1,0 +1,52 @@
+# Implementation Status Details
+
+### ✅ Fully Implemented (~35-40%)
+
+- FR1, FR3, FR5-8: Dialogue authoring (UnityDialogueGenerationService)
+- FR11-12, FR17: Context management (ContextSelector, ContextDetail)
+- FR22, FR24-27: Graph editor basic (GraphEditor.tsx, React Flow)
+- FR36-37, FR40-41, FR48: Validation structure (GraphValidationService)
+- FR49-54: Export Unity (unity_dialogues router, UnityDialogueViewer)
+- FR64-65: Auth basic (auth router, LoginForm)
+- FR72-78: Cost tracking (LLMUsageService, UsageDashboard)
+- FR80-84, FR86: Database & search basic (unity_dialogues list/filter)
+- FR89, FR92-93: Variables basic (InGameFlagsModal, catalogs)
+- FR97, FR99: Session management (save, unsaved warning)
+- FR103, FR105: Documentation & samples (docs/, GDD samples)
+
+### ⚠️ Partially Implemented (~25-30%)
+
+- FR2, FR4, FR9-10: Batch generation (service exists, UI integration partial)
+- FR13-15: Auto-suggest context (V2.0, needs rules system)
+- FR18-19: Notion sync (service exists, workflow partial)
+- FR20-21: Context budget (NEW, not implemented)
+- FR28-30: Graph nav advanced (search exists, jump/filter partial)
+- FR31-35: Bulk ops & UX (NEW, not implemented)
+- FR42-45: Quality LLM judge (NarrativeValidator partial, V1.5)
+- FR55-59: Templates (PromptsTab exists, full system V1.5)
+- FR66-71: RBAC (auth exists, roles not implemented V1.5)
+- FR85: Search advanced (basic exists, index V1.0)
+- FR90-91: Conditions/effects advanced (partial, V1.0+)
+- FR95-96, FR100-101: Auto-save & history (SaveStatusIndicator partial, history V2.0)
+
+### ❌ Not Implemented (~35-40%)
+
+- FR20-21: Context budget management (NEW V2.0)
+- FR31-33: Bulk selection & contextual menu (NEW MVP-V1.0)
+- FR38-39: Lore contradiction detection (NEW V1.5)
+- FR42-45: Context dropping detection (NEW V1.5)
+- FR46-47: Simulation flow (NEW V1.0)
+- FR57: Anti-context-dropping templates (NEW V1.5)
+- FR60-63: Template marketplace (NEW V1.5-V2.5)
+- FR66-71: RBAC complete (NEW V1.5)
+- FR79: Fallback LLM provider (NEW V1.0)
+- FR85, FR87-88: Index & batch ops (NEW V1.0)
+- FR94: Game stats integration (NEW V3.0)
+- FR100-101: Dialogue history (NEW MVP basic, V2.0 detailed)
+- FR102, FR106-108: Wizard onboarding & mode detection (NEW V1.0-V1.5)
+- FR109-111: UX patterns (preview, comparison, shortcuts) (NEW V1.0)
+- FR112-113: Performance monitoring dashboard (NEW V1.5)
+- FR117: Screen readers (NEW V2.0)
+
+---
+

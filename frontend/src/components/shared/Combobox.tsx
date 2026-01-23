@@ -140,6 +140,14 @@ export function Combobox({
     }
   }, [isOpen])
 
+  const handleSelect = useCallback((optionValue: string) => {
+    onChange(optionValue)
+    updateRecent(optionValue)
+    setIsOpen(false)
+    setSearchTerm('')
+    setHighlightedIndex(-1)
+  }, [onChange, updateRecent])
+
   // Navigation clavier
   useEffect(() => {
     if (!isOpen) return
@@ -169,7 +177,7 @@ export function Combobox({
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, highlightedIndex, displayedOptions])
+  }, [isOpen, highlightedIndex, displayedOptions, handleSelect])
 
   // Scroll vers l'option highlightée
   useEffect(() => {
@@ -183,14 +191,6 @@ export function Combobox({
       }
     }
   }, [highlightedIndex])
-
-  const handleSelect = (optionValue: string) => {
-    onChange(optionValue)
-    updateRecent(optionValue)
-    setIsOpen(false)
-    setSearchTerm('')
-    setHighlightedIndex(-1)
-  }
 
   const handleClear = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -361,4 +361,6 @@ export function Combobox({
     </div>
   )
 }
+
+
 

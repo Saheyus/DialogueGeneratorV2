@@ -1,0 +1,49 @@
+{
+  "models": {
+    "gpt-5.2": {
+      "input_price_per_1M": 2.50,
+      "output_price_per_1M": 10.00,
+      "description": "GPT-5.2 - Modèle le plus récent et performant, bon équilibre performance/coût"
+    },
+    "gpt-5-mini": {
+      "input_price_per_1M": 0.15,
+      "output_price_per_1M": 0.60,
+      "description": "GPT-5 Mini - Version économique et rapide"
+    },
+    "gpt-5-nano": {
+      "input_price_per_1M": 0.10,
+      "output_price_per_1M": 0.40,
+      "description": "GPT-5 Nano - Version compacte et très économique"
+    },
+    "gpt-5.2-pro": {
+      "input_price_per_1M": 5.00,
+      "output_price_per_1M": 20.00,
+      "description": "GPT-5.2 Pro - Modèle avec plus de compute pour raisonnement approfondi, plus cher"
+    },
+    "gpt-5.2-thinking": {
+      "input_price_per_1M": 5.00,
+      "output_price_per_1M": 20.00,
+      "description": "GPT-5.2 Thinking - Alias pour gpt-5.2-pro (déprécié, utiliser gpt-5.2-pro)"
+    },
+    "gpt-4o": {
+      "input_price_per_1M": 2.50,
+      "output_price_per_1M": 10.00,
+      "description": "GPT-4 Optimized - Modèle le plus récent et performant (obsolète, utiliser gpt-5.2)"
+    },
+    "gpt-4-turbo": {
+      "input_price_per_1M": 10.00,
+      "output_price_per_1M": 30.00,
+      "description": "GPT-4 Turbo - Version haute performance"
+    },
+    "gpt-3.5-turbo": {
+      "input_price_per_1M": 0.50,
+      "output_price_per_1M": 1.50,
+      "description": "GPT-3.5 Turbo - Modèle économique"
+    }
+  },
+  "last_updated": "2025-01-15",
+  "note": "Les prix sont en USD par million de tokens. Les prix peuvent varier selon les mises à jour d'OpenAI. Les prix pour GPT-5.2 sont estimés et doivent être vérifiés avec la documentation officielle OpenAI."
+}
+
+
+

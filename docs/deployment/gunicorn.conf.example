@@ -1,0 +1,51 @@
+# Configuration Gunicorn pour DialogueGenerator
+# 
+# Instructions:
+# 1. Installer Gunicorn: pip install gunicorn
+# 2. Copier ce fichier vers gunicorn.conf.py à la racine de l'application
+# 3. Lancer avec: gunicorn -c gunicorn.conf.py api.main:app
+#
+# Note: Gunicorn est principalement pour Linux. Sur Windows, utiliser uvicorn directement.
+
+# Nombre de workers (ajuster selon les ressources CPU)
+# Formule recommandée: (2 x CPU cores) + 1
+workers = 2
+
+# Classe de worker (utiliser uvicorn.workers.UvicornWorker pour FastAPI)
+worker_class = "uvicorn.workers.UvicornWorker"
+
+# Adresse et port d'écoute
+bind = "0.0.0.0:4242"
+
+# Timeout pour les requêtes (augmenter pour les requêtes LLM longues)
+timeout = 300
+
+# Nombre de requêtes avant redémarrage d'un worker (pour éviter les fuites mémoire)
+max_requests = 1000
+max_requests_jitter = 50
+
+# Logging
+accesslog = "-"  # stdout
+errorlog = "-"  # stderr
+loglevel = "info"
+
+# Nom du processus (visible dans ps)
+proc_name = "dialogue-generator-api"
+
+# Utilisateur et groupe (si lancé en root, décommenter)
+# user = "www-data"
+# group = "www-data"
+
+# Répertoire de travail
+chdir = "/chemin/vers/DialogueGenerator"
+
+# Préchargement de l'application (améliore les performances)
+preload_app = True
+
+# Mode daemon (décommenter pour lancer en arrière-plan)
+# daemon = True
+# pidfile = "/var/run/dialogue-generator.pid"
+
+
+
+

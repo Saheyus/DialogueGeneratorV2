@@ -2,126 +2,367 @@
  * Store Zustand pour gérer les sélections de contexte.
  */
 import { create } from 'zustand'
-import type { ContextSelection } from '../types/api'
+import type { 
+  ContextSelection,
+  ElementMode,
+  CharacterResponse,
+  LocationResponse,
+  ItemResponse,
+  SpeciesResponse,
+  CommunityResponse,
+} from '../types/api'
+
+// TTL pour le cache (30 minutes)
+const CACHE_TTL = 30 * 60 * 1000
+
+interface CachedData {
+  data: string[]
+  timestamp: number
+}
 
 interface ContextState {
   selections: ContextSelection
   selectedRegion: string | null
   selectedSubLocations: string[]
+  // Listes des éléments disponibles (chargées depuis ContextSelector)
+  characters: CharacterResponse[]
+  locations: LocationResponse[]
+  items: ItemResponse[]
+  species: SpeciesResponse[]
+  communities: CommunityResponse[]
+  // Cache pour éviter les appels API redondants
+  cachedCharacters: CachedData | null
+  cachedRegions: CachedData | null
+  cachedSubLocations: Map<string, CachedData>
   setSelections: (selections: ContextSelection) => void
-  toggleCharacter: (name: string) => void
-  toggleLocation: (name: string) => void
-  toggleItem: (name: string) => void
-  toggleSpecies: (name: string) => void
-  toggleCommunity: (name: string) => void
+  setElementLists: (lists: {
+    characters: CharacterResponse[]
+    locations: LocationResponse[]
+    items: ItemResponse[]
+    species: SpeciesResponse[]
+    communities: CommunityResponse[]
+  }) => void
+  toggleCharacter: (name: string, mode?: ElementMode) => void
+  toggleLocation: (name: string, mode?: ElementMode) => void
+  toggleItem: (name: string, mode?: ElementMode) => void
+  toggleSpecies: (name: string, mode?: ElementMode) => void
+  toggleCommunity: (name: string, mode?: ElementMode) => void
+  setElementMode: (elementType: 'characters' | 'locations' | 'items' | 'species' | 'communities', name: string, mode: ElementMode) => void
+  getElementMode: (elementType: 'characters' | 'locations' | 'items' | 'species' | 'communities', name: string) => ElementMode | null
+  isElementSelected: (elementType: 'characters' | 'locations' | 'items' | 'species' | 'communities', name: string) => boolean
   setRegion: (regionName: string | null) => void
   toggleSubLocation: (name: string) => void
   applyLinkedElements: (elements: string[]) => void
   clearSelections: () => void
   restoreState: (selections: ContextSelection, region: string | null, subLocations: string[]) => void
+  // Actions pour le cache
+  setCachedCharacters: (characters: string[]) => void
+  setCachedRegions: (regions: string[]) => void
+  setCachedSubLocations: (regionName: string, subLocations: string[]) => void
+  invalidateCache: () => void
+  isCacheValid: (cached: CachedData | null) => boolean
 }
 
 const defaultSelections: ContextSelection = {
+  characters_full: [],
+  characters_excerpt: [],
+  locations_full: [],
+  locations_excerpt: [],
+  items_full: [],
+  items_excerpt: [],
+  species_full: [],
+  species_excerpt: [],
+  communities_full: [],
+  communities_excerpt: [],
+  dialogues_examples: [],
+}
+
+function normalizeSelections(selections: ContextSelection): ContextSelection {
+  return {
+    ...defaultSelections,
+    ...selections,
+    characters_full: Array.isArray(selections.characters_full) ? selections.characters_full : [],
+    characters_excerpt: Array.isArray(selections.characters_excerpt) ? selections.characters_excerpt : [],
+    locations_full: Array.isArray(selections.locations_full) ? selections.locations_full : [],
+    locations_excerpt: Array.isArray(selections.locations_excerpt) ? selections.locations_excerpt : [],
+    items_full: Array.isArray(selections.items_full) ? selections.items_full : [],
+    items_excerpt: Array.isArray(selections.items_excerpt) ? selections.items_excerpt : [],
+    species_full: Array.isArray(selections.species_full) ? selections.species_full : [],
+    species_excerpt: Array.isArray(selections.species_excerpt) ? selections.species_excerpt : [],
+    communities_full: Array.isArray(selections.communities_full) ? selections.communities_full : [],
+    communities_excerpt: Array.isArray(selections.communities_excerpt) ? selections.communities_excerpt : [],
+    dialogues_examples: Array.isArray(selections.dialogues_examples) ? selections.dialogues_examples : [],
+  }
+}
+
+export const useContextStore = create<ContextState>((set, get) => ({
+  selections: defaultSelections,
+  selectedRegion: null,
+  selectedSubLocations: [],
   characters: [],
   locations: [],
   items: [],
   species: [],
   communities: [],
-  dialogues_examples: [],
-}
-
-export const useContextStore = create<ContextState>((set) => ({
-  selections: defaultSelections,
-  selectedRegion: null,
-  selectedSubLocations: [],
+  // Cache initial
+  cachedCharacters: null,
+  cachedRegions: null,
+  cachedSubLocations: new Map<string, CachedData>(),
 
   setSelections: (selections: ContextSelection) => {
-    set({ selections })
+    set({ selections: normalizeSelections(selections) })
   },
 
-  toggleCharacter: (name: string) => {
+  setElementLists: (lists) => {
+    set({
+      characters: lists.characters,
+      locations: lists.locations,
+      items: lists.items,
+      species: lists.species,
+      communities: lists.communities,
+    })
+  },
+
+  toggleCharacter: (name: string, mode: ElementMode = 'full') => {
     set((state) => {
-      const characters = state.selections.characters.includes(name)
-        ? state.selections.characters.filter((n) => n !== name)
-        : [...state.selections.characters, name]
+      const isInFull = state.selections.characters_full.includes(name)
+      const isInExcerpt = state.selections.characters_excerpt.includes(name)
+      const isSelected = isInFull || isInExcerpt
+      
+      if (isSelected) {
+        // Retirer des deux listes
+        return {
+          selections: {
+            ...state.selections,
+            characters_full: state.selections.characters_full.filter((n) => n !== name),
+            characters_excerpt: state.selections.characters_excerpt.filter((n) => n !== name),
+          },
+        }
+      } else {
+        // Ajouter dans la liste correspondante
+        if (mode === 'full') {
+          return {
+            selections: {
+              ...state.selections,
+              characters_full: [...state.selections.characters_full, name],
+            },
+          }
+        } else {
+          return {
+            selections: {
+              ...state.selections,
+              characters_excerpt: [...state.selections.characters_excerpt, name],
+            },
+          }
+        }
+      }
+    })
+  },
+
+  toggleLocation: (name: string, mode: ElementMode = 'full') => {
+    set((state) => {
+      const isInFull = state.selections.locations_full.includes(name)
+      const isInExcerpt = state.selections.locations_excerpt.includes(name)
+      const isSelected = isInFull || isInExcerpt
+      
+      if (isSelected) {
+        return {
+          selections: {
+            ...state.selections,
+            locations_full: state.selections.locations_full.filter((n) => n !== name),
+            locations_excerpt: state.selections.locations_excerpt.filter((n) => n !== name),
+          },
+        }
+      } else {
+        if (mode === 'full') {
+          return {
+            selections: {
+              ...state.selections,
+              locations_full: [...state.selections.locations_full, name],
+            },
+          }
+        } else {
+          return {
+            selections: {
+              ...state.selections,
+              locations_excerpt: [...state.selections.locations_excerpt, name],
+            },
+          }
+        }
+      }
+    })
+  },
+
+  toggleItem: (name: string, mode: ElementMode = 'full') => {
+    set((state) => {
+      const isInFull = state.selections.items_full.includes(name)
+      const isInExcerpt = state.selections.items_excerpt.includes(name)
+      const isSelected = isInFull || isInExcerpt
+      
+      if (isSelected) {
+        return {
+          selections: {
+            ...state.selections,
+            items_full: state.selections.items_full.filter((n) => n !== name),
+            items_excerpt: state.selections.items_excerpt.filter((n) => n !== name),
+          },
+        }
+      } else {
+        if (mode === 'full') {
+          return {
+            selections: {
+              ...state.selections,
+              items_full: [...state.selections.items_full, name],
+            },
+          }
+        } else {
+          return {
+            selections: {
+              ...state.selections,
+              items_excerpt: [...state.selections.items_excerpt, name],
+            },
+          }
+        }
+      }
+    })
+  },
+
+  toggleSpecies: (name: string, mode: ElementMode = 'full') => {
+    set((state) => {
+      const isInFull = state.selections.species_full.includes(name)
+      const isInExcerpt = state.selections.species_excerpt.includes(name)
+      const isSelected = isInFull || isInExcerpt
+      
+      if (isSelected) {
+        return {
+          selections: {
+            ...state.selections,
+            species_full: state.selections.species_full.filter((n) => n !== name),
+            species_excerpt: state.selections.species_excerpt.filter((n) => n !== name),
+          },
+        }
+      } else {
+        if (mode === 'full') {
+          return {
+            selections: {
+              ...state.selections,
+              species_full: [...state.selections.species_full, name],
+            },
+          }
+        } else {
+          return {
+            selections: {
+              ...state.selections,
+              species_excerpt: [...state.selections.species_excerpt, name],
+            },
+          }
+        }
+      }
+    })
+  },
+
+  toggleCommunity: (name: string, mode: ElementMode = 'full') => {
+    set((state) => {
+      const isInFull = state.selections.communities_full.includes(name)
+      const isInExcerpt = state.selections.communities_excerpt.includes(name)
+      const isSelected = isInFull || isInExcerpt
+      
+      if (isSelected) {
+        return {
+          selections: {
+            ...state.selections,
+            communities_full: state.selections.communities_full.filter((n) => n !== name),
+            communities_excerpt: state.selections.communities_excerpt.filter((n) => n !== name),
+          },
+        }
+      } else {
+        if (mode === 'full') {
+          return {
+            selections: {
+              ...state.selections,
+              communities_full: [...state.selections.communities_full, name],
+            },
+          }
+        } else {
+          return {
+            selections: {
+              ...state.selections,
+              communities_excerpt: [...state.selections.communities_excerpt, name],
+            },
+          }
+        }
+      }
+    })
+  },
+
+  setElementMode: (elementType, name, mode) => {
+    set((state) => {
+      const fullKey = `${elementType}_full` as keyof ContextSelection
+      const excerptKey = `${elementType}_excerpt` as keyof ContextSelection
+      
+      const fullList = (state.selections[fullKey] as string[]) || []
+      const excerptList = (state.selections[excerptKey] as string[]) || []
+      
+      // Retirer de l'ancienne liste
+      const newFullList = fullList.filter((n) => n !== name)
+      const newExcerptList = excerptList.filter((n) => n !== name)
+      
+      // Ajouter dans la nouvelle liste
+      if (mode === 'full') {
+        newFullList.push(name)
+      } else {
+        newExcerptList.push(name)
+      }
+      
       return {
         selections: {
           ...state.selections,
-          characters,
+          [fullKey]: newFullList,
+          [excerptKey]: newExcerptList,
         },
       }
     })
   },
 
-  toggleLocation: (name: string) => {
-    set((state) => {
-      const locations = state.selections.locations.includes(name)
-        ? state.selections.locations.filter((n) => n !== name)
-        : [...state.selections.locations, name]
-      return {
-        selections: {
-          ...state.selections,
-          locations,
-        },
-      }
-    })
+  getElementMode: (elementType, name) => {
+    const state = get()
+    const fullKey = `${elementType}_full` as keyof ContextSelection
+    const excerptKey = `${elementType}_excerpt` as keyof ContextSelection
+    
+    const fullList = (state.selections[fullKey] as string[]) || []
+    const excerptList = (state.selections[excerptKey] as string[]) || []
+    
+    if (fullList.includes(name)) return 'full'
+    if (excerptList.includes(name)) return 'excerpt'
+    return null
   },
 
-  toggleItem: (name: string) => {
-    set((state) => {
-      const items = state.selections.items.includes(name)
-        ? state.selections.items.filter((n) => n !== name)
-        : [...state.selections.items, name]
-      return {
-        selections: {
-          ...state.selections,
-          items,
-        },
-      }
-    })
-  },
-
-  toggleSpecies: (name: string) => {
-    set((state) => {
-      const species = state.selections.species.includes(name)
-        ? state.selections.species.filter((n) => n !== name)
-        : [...state.selections.species, name]
-      return {
-        selections: {
-          ...state.selections,
-          species,
-        },
-      }
-    })
-  },
-
-  toggleCommunity: (name: string) => {
-    set((state) => {
-      const communities = state.selections.communities.includes(name)
-        ? state.selections.communities.filter((n) => n !== name)
-        : [...state.selections.communities, name]
-      return {
-        selections: {
-          ...state.selections,
-          communities,
-        },
-      }
-    })
+  isElementSelected: (elementType, name) => {
+    const state = get()
+    const fullKey = `${elementType}_full` as keyof ContextSelection
+    const excerptKey = `${elementType}_excerpt` as keyof ContextSelection
+    
+    const fullList = (state.selections[fullKey] as string[]) || []
+    const excerptList = (state.selections[excerptKey] as string[]) || []
+    
+    return fullList.includes(name) || excerptList.includes(name)
   },
 
   setRegion: (regionName: string | null) => {
     set((state) => {
       // Retirer les sous-lieux de la sélection si on change de région
-      const locations = regionName === null
-        ? state.selections.locations.filter((loc) => !state.selectedSubLocations.includes(loc))
-        : state.selections.locations
+      const allLocations = [...state.selections.locations_full, ...state.selections.locations_excerpt]
+      const locationsToRemove = regionName === null
+        ? state.selectedSubLocations.filter((loc) => allLocations.includes(loc))
+        : []
       
       return {
         selectedRegion: regionName,
         selectedSubLocations: [],
         selections: {
           ...state.selections,
-          locations,
+          locations_full: state.selections.locations_full.filter((loc) => !locationsToRemove.includes(loc)),
+          locations_excerpt: state.selections.locations_excerpt.filter((loc) => !locationsToRemove.includes(loc)),
         },
       }
     })
@@ -133,34 +374,67 @@ export const useContextStore = create<ContextState>((set) => ({
         ? state.selectedSubLocations.filter((n) => n !== name)
         : [...state.selectedSubLocations, name]
       
-      // Mettre à jour aussi la liste des locations dans selections
-      const locations = state.selections.locations.includes(name)
-        ? state.selections.locations.filter((n) => n !== name)
-        : [...state.selections.locations, name]
+      // Mettre à jour aussi la liste des locations dans selections (ajouter en full par défaut)
+      const isInFull = state.selections.locations_full.includes(name)
+      const isInExcerpt = state.selections.locations_excerpt.includes(name)
+      const isSelected = isInFull || isInExcerpt
       
-      return {
-        selectedSubLocations: subLocations,
-        selections: {
-          ...state.selections,
-          locations,
-        },
+      if (isSelected) {
+        return {
+          selectedSubLocations: subLocations,
+          selections: {
+            ...state.selections,
+            locations_full: state.selections.locations_full.filter((n) => n !== name),
+            locations_excerpt: state.selections.locations_excerpt.filter((n) => n !== name),
+          },
+        }
+      } else {
+        return {
+          selectedSubLocations: subLocations,
+          selections: {
+            ...state.selections,
+            locations_full: [...state.selections.locations_full, name],
+          },
+        }
       }
     })
   },
 
   applyLinkedElements: (elements: string[]) => {
     set((state) => {
-      // Ajouter tous les éléments liés aux sélections appropriées
-      // On ne peut pas déterminer automatiquement la catégorie, donc on les ajoute tous aux locations
-      // pour l'instant. Dans une implémentation plus sophistiquée, on pourrait avoir une logique
-      // pour déterminer la catégorie de chaque élément.
-      const newLocations = [...new Set([...state.selections.locations, ...elements])]
+      const newSelections = { ...state.selections }
+      
+      // Déterminer le type de chaque élément en cherchant dans les listes du store
+      for (const elementName of elements) {
+        // Chercher dans chaque catégorie (ordre important)
+        // Par défaut, ajouter en mode "full"
+        if (state.characters.some((char) => char.name === elementName)) {
+          if (!newSelections.characters_full.includes(elementName) && !newSelections.characters_excerpt.includes(elementName)) {
+            newSelections.characters_full = [...newSelections.characters_full, elementName]
+          }
+        } else if (state.locations.some((loc) => loc.name === elementName)) {
+          if (!newSelections.locations_full.includes(elementName) && !newSelections.locations_excerpt.includes(elementName)) {
+            newSelections.locations_full = [...newSelections.locations_full, elementName]
+          }
+        } else if (state.items.some((item) => item.name === elementName)) {
+          if (!newSelections.items_full.includes(elementName) && !newSelections.items_excerpt.includes(elementName)) {
+            newSelections.items_full = [...newSelections.items_full, elementName]
+          }
+        } else if (state.species.some((spec) => spec.name === elementName)) {
+          if (!newSelections.species_full.includes(elementName) && !newSelections.species_excerpt.includes(elementName)) {
+            newSelections.species_full = [...newSelections.species_full, elementName]
+          }
+        } else if (state.communities.some((comm) => comm.name === elementName)) {
+          if (!newSelections.communities_full.includes(elementName) && !newSelections.communities_excerpt.includes(elementName)) {
+            newSelections.communities_full = [...newSelections.communities_full, elementName]
+          }
+        } else {
+          console.warn(`Élément "${elementName}" non trouvé dans les listes, ignoré`)
+        }
+      }
       
       return {
-        selections: {
-          ...state.selections,
-          locations: newLocations,
-        },
+        selections: newSelections,
       }
     })
   },
@@ -175,10 +449,53 @@ export const useContextStore = create<ContextState>((set) => ({
 
   restoreState: (selections: ContextSelection, region: string | null, subLocations: string[]) => {
     set({
-      selections,
+      selections: normalizeSelections(selections),
       selectedRegion: region,
       selectedSubLocations: subLocations,
     })
+  },
+
+  // Actions pour le cache
+  setCachedCharacters: (characters: string[]) => {
+    set({
+      cachedCharacters: {
+        data: characters,
+        timestamp: Date.now(),
+      },
+    })
+  },
+
+  setCachedRegions: (regions: string[]) => {
+    set({
+      cachedRegions: {
+        data: regions,
+        timestamp: Date.now(),
+      },
+    })
+  },
+
+  setCachedSubLocations: (regionName: string, subLocations: string[]) => {
+    set((state) => {
+      const newCache = new Map(state.cachedSubLocations)
+      newCache.set(regionName, {
+        data: subLocations,
+        timestamp: Date.now(),
+      })
+      return { cachedSubLocations: newCache }
+    })
+  },
+
+  invalidateCache: () => {
+    set({
+      cachedCharacters: null,
+      cachedRegions: null,
+      cachedSubLocations: new Map<string, CachedData>(),
+    })
+  },
+
+  isCacheValid: (cached: CachedData | null) => {
+    if (!cached) return false
+    return Date.now() - cached.timestamp < CACHE_TTL
   },
 }))
 

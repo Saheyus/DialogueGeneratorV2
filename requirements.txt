@@ -1,11 +1,9 @@
-PySide6>=6.0
 openai>=1.15
+mistralai>=1.10.0  # SDK Mistral AI pour multi-provider LLM support
 PyYAML>=6.0 # Potentiellement utile pour configuration YAML (non utilisé actuellement) 
 jinja2>=3.0
 tiktoken>=0.4 
 pytest>=7.0
-pytest-qt>=4.0
-qasync>=0.23.0 # Pour la gestion asyncio avec Qt 
 pytest-asyncio # Ajout pour le support asyncio dans pytest 
 pydantic>=2.0 # Ajout pour les modèles de données et la validation de schéma 
 pytest-cov>=2.12 # Ajout pour la couverture de tests 
@@ -19,3 +17,13 @@ bcrypt>=4.0.0
 python-multipart>=0.0.6
 pydantic-settings>=2.0.0
 email-validator>=2.0.0
+python-dotenv>=1.0.0
+slowapi>=0.1.9
+httpx>=0.25.0  # Client HTTP async pour l'API Notion
+# Observabilité et monitoring
+prometheus-fastapi-instrumentator>=6.0.0
+tenacity>=8.2.0
+pybreaker>=1.0.0
+sentry-sdk[fastapi]>=1.32.0
+cachetools>=5.3.0
+jsonschema>=4.0.0  # Validation JSON Schema pour Unity dialogue format

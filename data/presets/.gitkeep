@@ -1,0 +1,5 @@
+# Presets Storage
+
+This directory stores user-created generation presets as individual JSON files.
+
+Files are named with UUIDs (e.g., `abc123-def456-789.json`).

@@ -1,0 +1,564 @@
+# API Contracts - Backend API
+
+## Base URL
+- Development: `http://localhost:4243/api/v1`
+- Production: `http://localhost:4242/api/v1` (or configured via `VITE_API_BASE_URL`)
+
+## Authentication
+All endpoints (except `/auth/login`) require JWT authentication via `Authorization: Bearer <token>` header.
+
+---
+
+## Authentication Endpoints (`/api/v1/auth`)
+
+### POST `/auth/login`
+Login and obtain access token.
+
+**Request Body:**
+```json
+{
+  "email": "string",
+  "password": "string"
+}
+```
+
+**Response:** `TokenResponse`
+```json
+{
+  "access_token": "string",
+  "token_type": "bearer"
+}
+```
+
+### POST `/auth/refresh`
+Refresh access token using refresh token from httpOnly cookie.
+
+**Response:** `TokenResponse`
+
+### GET `/auth/me`
+Get current authenticated user information.
+
+**Response:** `UserResponse`
+
+### POST `/auth/logout`
+Logout and invalidate refresh token.
+
+**Response:** `204 No Content`
+
+---
+
+## Context Endpoints (`/api/v1/context`)
+
+### GET `/context/characters`
+List all available characters with optional pagination.
+
+**Query Parameters:**
+- `page` (optional): Page number (1-indexed)
+- `page_size` (optional): Page size (default: 50)
+
+**Response:** `CharacterListResponse`
+
+### GET `/context/characters/{name}`
+Get a specific character by name.
+
+**Response:** `CharacterResponse`
+
+### GET `/context/locations`
+List all available locations with optional pagination.
+
+**Response:** `LocationListResponse`
+
+### GET `/context/locations/{name}`
+Get a specific location by name.
+
+**Response:** `LocationResponse`
+
+### GET `/context/items`
+List all available items.
+
+**Response:** `ItemListResponse`
+
+### GET `/context/items/{name}`
+Get a specific item by name.
+
+**Response:** `ItemResponse`
+
+### GET `/context/species`
+List all available species.
+
+**Response:** `SpeciesListResponse`
+
+### GET `/context/species/{name}`
+Get a specific species by name.
+
+**Response:** `SpeciesResponse`
+
+### GET `/context/communities`
+List all available communities.
+
+**Response:** `CommunityListResponse`
+
+### GET `/context/communities/{name}`
+Get a specific community by name.
+
+**Response:** `CommunityResponse`
+
+### GET `/context/regions`
+List all available regions.
+
+**Response:** `RegionListResponse`
+
+### GET `/context/sublocations`
+List all sub-locations.
+
+**Response:** `SubLocationListResponse`
+
+### POST `/context/linked-elements`
+Get linked elements for selected context items.
+
+**Request Body:** `LinkedElementsRequest`
+
+**Response:** `LinkedElementsResponse`
+
+### POST `/context/build`
+Build context summary from selected elements.
+
+**Request Body:** `BuildContextRequest`
+
+**Response:** `BuildContextResponse`
+
+---
+
+## Dialogue Generation Endpoints (`/api/v1/dialogues`)
+
+### POST `/dialogues/estimate-tokens`
+Estimate token count for a prompt without generating dialogue.
+
+**Request Body:** `EstimateTokensRequest`
+```json
+{
+  "context_selection": {
+    "characters_full": ["string"],
+    "characters_excerpt": ["string"],
+    "locations_full": ["string"],
+    "locations_excerpt": ["string"],
+    "items_full": ["string"],
+    "items_excerpt": ["string"],
+    "species_full": ["string"],
+    "species_excerpt": ["string"],
+    "communities_full": ["string"],
+    "communities_excerpt": ["string"],
+    "dialogues_examples": ["string"],
+    "scene_protagonists": {},
+    "scene_location": {},
+    "generation_settings": {}
+  },
+  "user_instruction": "string",
+  "system_prompt_override": "string (optional)",
+  "model_name": "string (optional)"
+}
+```
+
+**Response:** `EstimateTokensResponse`
+```json
+{
+  "estimated_tokens": 0,
+  "raw_prompt": "string",
+  "prompt_sections": {}
+}
+```
+
+### POST `/dialogues/preview-prompt`
+Preview the full prompt that would be sent to LLM.
+
+**Request Body:** `PreviewPromptRequest`
+
+**Response:** `PreviewPromptResponse`
+
+### POST `/dialogues/generate/unity-dialogue`
+Generate Unity dialogue nodes using LLM.
+
+**Request Body:** `GenerateUnityDialogueRequest`
+```json
+{
+  "context_selection": {},
+  "user_instruction": "string",
+  "system_prompt_override": "string (optional)",
+  "model_name": "string (optional)",
+  "temperature": 0.0,
+  "max_tokens": 0,
+  "variants_count": 1
+}
+```
+
+**Response:** `GenerateUnityDialogueResponse`
+```json
+{
+  "variants": [
+    {
+      "nodes": [],
+      "reasoning_trace": "string (optional)"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0
+  }
+}
+```
+
+### POST `/dialogues/export/unity-dialogue`
+Export Unity dialogue to YARN file format.
+
+**Request Body:** `ExportUnityDialogueRequest`
+
+**Response:** `ExportUnityDialogueResponse`
+
+---
+
+## Graph Editor Endpoints (`/api/v1/graph`)
+
+### POST `/graph/validate`
+Validate graph structure.
+
+**Request Body:** Graph validation request
+
+**Response:** Validation result
+
+### POST `/graph/layout`
+Calculate graph layout.
+
+**Request Body:** Graph layout request
+
+**Response:** Layout data
+
+### POST `/graph/export`
+Export graph to various formats.
+
+**Request Body:** Export request
+
+**Response:** Export data
+
+### POST `/graph/import`
+Import graph from format.
+
+**Request Body:** Import request
+
+**Response:** Imported graph data
+
+### POST `/graph/save`
+Save graph to storage.
+
+**Request Body:** Graph save request
+
+**Response:** Save confirmation
+
+---
+
+## Narrative Guides Endpoints (`/api/v1/narrative-guides`)
+
+### GET `/narrative-guides`
+List all narrative guides.
+
+**Response:** List of narrative guides
+
+### GET `/narrative-guides/{id}`
+Get a specific narrative guide.
+
+**Response:** Narrative guide data
+
+### POST `/narrative-guides`
+Create or update narrative guide.
+
+**Request Body:** Narrative guide data
+
+**Response:** Created/updated guide
+
+---
+
+## Vocabulary Endpoints (`/api/v1/vocabulary`)
+
+### GET `/vocabulary`
+List vocabulary entries.
+
+**Response:** Vocabulary list
+
+### POST `/vocabulary`
+Add vocabulary entry.
+
+**Request Body:** Vocabulary entry data
+
+**Response:** Created entry
+
+### GET `/vocabulary/{term}`
+Get specific vocabulary term.
+
+**Response:** Vocabulary term data
+
+---
+
+## Mechanics Flags Endpoints (`/api/v1/mechanics/flags`)
+
+### GET `/mechanics/flags`
+List all available game flags.
+
+**Response:** Flag catalog
+
+### POST `/mechanics/flags/validate`
+Validate flag requirements.
+
+**Request Body:** Flag validation request
+
+**Response:** Validation result
+
+### POST `/mechanics/flags/check`
+Check flag conditions.
+
+**Request Body:** Flag check request
+
+**Response:** Check result
+
+### POST `/mechanics/flags/combinations`
+Get valid flag combinations.
+
+**Request Body:** Combination request
+
+**Response:** Valid combinations
+
+### POST `/mechanics/flags/suggest`
+Suggest flags based on context.
+
+**Request Body:** Suggestion request
+
+**Response:** Suggested flags
+
+---
+
+## Configuration Endpoints (`/api/v1/config`)
+
+### GET `/config`
+Get application configuration.
+
+**Response:** Configuration object
+
+### PUT `/config`
+Update application configuration.
+
+**Request Body:** Configuration updates
+
+**Response:** Updated configuration
+
+### GET `/config/fields`
+Get available context fields.
+
+**Response:** Field definitions
+
+### GET `/config/system-prompts`
+Get system prompt templates.
+
+**Response:** System prompt list
+
+### POST `/config/system-prompts`
+Create or update system prompt.
+
+**Request Body:** System prompt data
+
+**Response:** Created/updated prompt
+
+### GET `/config/scene-instructions`
+Get scene instruction templates.
+
+**Response:** Scene instruction list
+
+### POST `/config/scene-instructions`
+Create or update scene instruction.
+
+**Request Body:** Scene instruction data
+
+**Response:** Created/updated instruction
+
+### GET `/config/author-profiles`
+Get author profile templates.
+
+**Response:** Author profile list
+
+### GET `/config/llm-models`
+Get available LLM models.
+
+**Response:** LLM model list
+
+### GET `/config/llm-pricing`
+Get LLM pricing information.
+
+**Response:** Pricing data
+
+### GET `/config/context-fields`
+Get context field definitions.
+
+**Response:** Context field list
+
+### GET `/config/context-fields/{field_name}`
+Get specific context field definition.
+
+**Response:** Field definition
+
+### PUT `/config/context-fields/{field_name}`
+Update context field definition.
+
+**Request Body:** Field updates
+
+**Response:** Updated field
+
+### GET `/config/validation`
+Get validation configuration.
+
+**Response:** Validation config
+
+### POST `/config/validate-field`
+Validate a specific field value.
+
+**Request Body:** Field validation request
+
+**Response:** Validation result
+
+### POST `/config/validate-fields`
+Validate multiple field values.
+
+**Request Body:** Fields validation request
+
+**Response:** Validation results
+
+### GET `/config/field-suggestions`
+Get field value suggestions.
+
+**Query Parameters:**
+- `field_name`: Field to get suggestions for
+- `query`: Search query (optional)
+
+**Response:** Field suggestions
+
+---
+
+## Unity Dialogues Endpoints (`/api/v1/unity-dialogues`)
+
+### GET `/unity-dialogues`
+List all Unity dialogue files.
+
+**Response:** Dialogue file list
+
+### GET `/unity-dialogues/{filename}`
+Get specific Unity dialogue file content.
+
+**Response:** Dialogue file content
+
+### DELETE `/unity-dialogues/{filename}`
+Delete Unity dialogue file.
+
+**Response:** `204 No Content`
+
+### POST `/unity-dialogues`
+Create or update Unity dialogue file.
+
+**Request Body:** Dialogue file data
+
+**Response:** Created/updated file info
+
+---
+
+## LLM Usage Endpoints (`/api/v1/llm-usage`)
+
+### GET `/llm-usage`
+Get LLM usage statistics.
+
+**Query Parameters:**
+- `start_date` (optional): Start date filter
+- `end_date` (optional): End date filter
+
+**Response:** Usage statistics
+
+### GET `/llm-usage/history`
+Get detailed usage history.
+
+**Query Parameters:**
+- Pagination parameters
+
+**Response:** Usage history with pagination
+
+---
+
+## Logs Endpoints (`/api/v1/logs`)
+
+### GET `/logs`
+Search application logs.
+
+**Query Parameters:**
+- Search and filter parameters
+
+**Response:** `LogSearchResponse`
+
+### GET `/logs/stats`
+Get log statistics.
+
+**Response:** `LogStatisticsResponse`
+
+### GET `/logs/files`
+List available log files.
+
+**Response:** List of `LogFileInfo`
+
+### POST `/logs/frontend`
+Receive frontend log entries.
+
+**Request Body:** Frontend log data
+
+**Response:** `204 No Content`
+
+---
+
+## Error Responses
+
+All endpoints may return standard error responses:
+
+**400 Bad Request:**
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Validation failed",
+    "details": {}
+  }
+}
+```
+
+**401 Unauthorized:**
+```json
+{
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Authentication required"
+  }
+}
+```
+
+**404 Not Found:**
+```json
+{
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Resource not found",
+    "details": {}
+  }
+}
+```
+
+**500 Internal Server Error:**
+```json
+{
+  "error": {
+    "code": "INTERNAL_ERROR",
+    "message": "Internal server error",
+    "request_id": "string"
+  }
+}
+```

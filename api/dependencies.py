@@ -1,135 +1,159 @@
-"""Injection de dépendances pour l'API FastAPI."""
+"""Injection de dépendances pour l'API FastAPI.
+
+Toutes les dépendances utilisent maintenant ServiceContainer depuis app.state.
+Les singletons globaux ont été supprimés pour unifier le système d'injection.
+"""
 import logging
 import os
+import sys
+import json
 from pathlib import Path
 from typing import Annotated
-from fastapi import Depends, Request
-from context_builder import ContextBuilder
-from prompt_engine import PromptEngine
-from llm_client import ILLMClient
+from fastapi import Depends
+from starlette.requests import Request
+from core.context.context_builder import ContextBuilder
+from core.prompt.prompt_engine import PromptEngine
+from core.llm.llm_client import ILLMClient
 from services.configuration_service import ConfigurationService
-from services.interaction_service import InteractionService
+# InteractionService supprimé - système obsolète
 from services.dialogue_generation_service import DialogueGenerationService
 from services.linked_selector import LinkedSelectorService
-from services.repositories.file_repository import FileInteractionRepository
+# FileInteractionRepository supprimé - système obsolète
+from services.repositories.llm_usage_repository import FileLLMUsageRepository
+from services.repositories.cost_budget_repository import FileCostBudgetRepository
+from services.llm_usage_service import LLMUsageService
+from services.llm_pricing_service import LLMPricingService
+from services.cost_governance_service import CostGovernanceService
 from factories.llm_factory import LLMClientFactory
+from services.vocabulary_service import VocabularyService
+from services.narrative_guides_service import NarrativeGuidesService
+from services.notion_import_service import NotionImportService
+from services.prompt_enricher import PromptEnricher
+from services.skill_catalog_service import SkillCatalogService
+from services.trait_catalog_service import TraitCatalogService
+from services.preset_service import PresetService
 from constants import FilePaths, Defaults
 
 logger = logging.getLogger(__name__)
 
 # Chemins par défaut
 DIALOGUE_GENERATOR_DIR = Path(__file__).resolve().parent.parent
-DEFAULT_INTERACTIONS_STORAGE_DIR = DIALOGUE_GENERATOR_DIR / FilePaths.INTERACTIONS_DIR
+# DEFAULT_INTERACTIONS_STORAGE_DIR supprimé - système obsolète
+
+# Les singletons globaux ont été supprimés.
+# Tous les services sont maintenant gérés par ServiceContainer dans app.state.
 
 
-# Instances globales (singletons) pour les services qui peuvent être partagés
-_context_builder: ContextBuilder | None = None
-_config_service: ConfigurationService | None = None
-_prompt_engine: PromptEngine | None = None
-
-
-def get_config_service() -> ConfigurationService:
-    """Retourne le service de configuration (singleton).
+def get_config_service(request: Request) -> ConfigurationService:
+    """Retourne le service de configuration.
     
-    Returns:
-        Instance de ConfigurationService.
-    """
-    global _config_service
-    if _config_service is None:
-        _config_service = ConfigurationService()
-        logger.info("ConfigurationService initialisé (singleton).")
-    return _config_service
-
-
-def get_context_builder() -> ContextBuilder:
-    """Retourne le ContextBuilder (singleton).
-    
-    Le ContextBuilder charge les fichiers GDD au premier accès.
-    
-    Returns:
-        Instance de ContextBuilder avec données GDD chargées.
-    """
-    global _context_builder
-    if _context_builder is None:
-        _context_builder = ContextBuilder()
-        logger.info("Chargement des fichiers GDD...")
-        _context_builder.load_gdd_files()
-        logger.info("ContextBuilder initialisé avec données GDD chargées (singleton).")
-    return _context_builder
-
-
-def get_prompt_engine() -> PromptEngine:
-    """Retourne le PromptEngine (singleton).
-    
-    Returns:
-        Instance de PromptEngine.
-    """
-    global _prompt_engine
-    if _prompt_engine is None:
-        _prompt_engine = PromptEngine()
-        logger.info("PromptEngine initialisé (singleton).")
-    return _prompt_engine
-
-
-def get_interaction_repository() -> FileInteractionRepository:
-    """Crée un repository d'interactions basé sur fichiers.
-    
-    Returns:
-        Instance de FileInteractionRepository.
-    """
-    storage_dir = str(DEFAULT_INTERACTIONS_STORAGE_DIR)
-    os.makedirs(storage_dir, exist_ok=True)
-    return FileInteractionRepository(storage_dir=storage_dir)
-
-
-def get_interaction_service(
-    repository: Annotated[FileInteractionRepository, Depends(get_interaction_repository)]
-) -> InteractionService:
-    """Retourne le service d'interactions.
+    Utilise le ServiceContainer depuis app.state (système unifié).
     
     Args:
-        repository: Repository injecté via dépendance.
+        request: La requête HTTP (injecté automatiquement par FastAPI).
         
     Returns:
-        Instance de InteractionService.
+        Instance de ConfigurationService.
+        
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
     """
-    return InteractionService(repository=repository)
+    container = getattr(request.app.state, "container", None)
+    if container is None:
+        raise RuntimeError("ServiceContainer not initialized in app.state. Ensure app.state.container is set in lifespan.")
+    return container.get_config_service()
+
+
+# _get_context_builder_singleton() supprimé - utilisez ServiceContainer via get_context_builder()
+
+
+def get_context_builder(request: Request) -> ContextBuilder:
+    """Retourne le ContextBuilder.
+    
+    Utilise le ServiceContainer depuis app.state (système unifié).
+    
+    Le ContextBuilder charge les fichiers GDD au premier accès.
+    Les chemins GDD peuvent être configurés via les variables d'environnement :
+    - GDD_CATEGORIES_PATH : Chemin vers le répertoire des catégories GDD
+    - GDD_IMPORT_PATH : Chemin vers le répertoire import (ou directement Bible_Narrative)
+    
+    Args:
+        request: La requête HTTP (injecté automatiquement par FastAPI).
+        
+    Returns:
+        Instance de ContextBuilder avec données GDD chargées.
+        
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
+    """
+    container = getattr(request.app.state, "container", None)
+    if container is None:
+        raise RuntimeError("ServiceContainer not initialized in app.state. Ensure app.state.container is set in lifespan.")
+    return container.get_context_builder()
+
+
+def get_prompt_engine(request: Request) -> PromptEngine:
+    """Retourne le PromptEngine.
+    
+    Utilise le ServiceContainer depuis app.state (système unifié).
+    
+    Args:
+        request: La requête HTTP (injecté automatiquement par FastAPI).
+        
+    Returns:
+        Instance de PromptEngine.
+        
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
+    """
+    container = getattr(request.app.state, "container", None)
+    if container is None:
+        raise RuntimeError("ServiceContainer not initialized in app.state. Ensure app.state.container is set in lifespan.")
+    return container.get_prompt_engine()
+
+
+# get_interaction_repository supprimé - système obsolète
+# get_interaction_service supprimé - système obsolète
+
+# reset_singletons() supprimé - le ServiceContainer gère déjà le reset via container.reset()
 
 
 def get_dialogue_generation_service(
     context_builder: Annotated[ContextBuilder, Depends(get_context_builder)],
-    prompt_engine: Annotated[PromptEngine, Depends(get_prompt_engine)],
-    interaction_service: Annotated[InteractionService, Depends(get_interaction_service)]
+    prompt_engine: Annotated[PromptEngine, Depends(get_prompt_engine)]
 ) -> DialogueGenerationService:
     """Retourne le service de génération de dialogues.
     
     Args:
         context_builder: ContextBuilder injecté.
         prompt_engine: PromptEngine injecté.
-        interaction_service: InteractionService injecté.
         
     Returns:
         Instance de DialogueGenerationService.
     """
     return DialogueGenerationService(
         context_builder=context_builder,
-        prompt_engine=prompt_engine,
-        interaction_service=interaction_service
+        prompt_engine=prompt_engine
     )
 
 
 def get_llm_client(
-    model_identifier: str
+    model_identifier: str,
+    request: Request
 ) -> ILLMClient:
     """Crée un client LLM basé sur l'identifiant du modèle.
     
     Args:
         model_identifier: Identifiant du modèle LLM à utiliser.
+        request: La requête HTTP (pour accéder au container).
         
     Returns:
         Instance de ILLMClient (OpenAI ou Dummy).
+        
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
     """
-    config_service = get_config_service()
+    config_service = get_config_service(request)
     llm_config = config_service.get_llm_config()
     available_models = config_service.get_available_llm_models()
     
@@ -154,6 +178,83 @@ def get_linked_selector_service(
     return LinkedSelectorService(context_builder=context_builder)
 
 
+def get_llm_usage_repository() -> FileLLMUsageRepository:
+    """Crée un repository d'utilisation LLM basé sur fichiers.
+    
+    Returns:
+        Instance de FileLLMUsageRepository.
+    """
+    storage_dir = str(DIALOGUE_GENERATOR_DIR / FilePaths.LLM_USAGE_DIR)
+    os.makedirs(storage_dir, exist_ok=True)
+    return FileLLMUsageRepository(storage_dir=storage_dir)
+
+
+def get_cost_budget_repository() -> FileCostBudgetRepository:
+    """Crée un repository de budgets LLM basé sur fichier JSON.
+    
+    Returns:
+        Instance de FileCostBudgetRepository.
+    """
+    storage_file = str(DIALOGUE_GENERATOR_DIR / FilePaths.COST_BUDGETS_FILE)
+    return FileCostBudgetRepository(storage_file=storage_file)
+
+
+def get_cost_governance_service(
+    repository: Annotated[FileCostBudgetRepository, Depends(get_cost_budget_repository)]
+) -> CostGovernanceService:
+    """Retourne le service de cost governance.
+    
+    Args:
+        repository: Repository injecté via dépendance.
+        
+    Returns:
+        Instance de CostGovernanceService.
+    """
+    return CostGovernanceService(repository=repository)
+
+
+def create_llm_usage_service() -> LLMUsageService:
+    """Crée un service de tracking d'utilisation LLM (sans dépendances FastAPI).
+    
+    Cette fonction peut être appelée directement sans passer par le système
+    de dépendances FastAPI. Pour l'injection de dépendances dans les routes,
+    utiliser get_llm_usage_service() avec Depends().
+    
+    Le service est configuré avec CostGovernanceService pour mettre à jour
+    automatiquement le budget après chaque génération.
+    
+    Returns:
+        Instance de LLMUsageService.
+    """
+    repository = get_llm_usage_repository()
+    # Injecter CostGovernanceService pour mise à jour automatique du budget
+    cost_repository = get_cost_budget_repository()
+    cost_service = CostGovernanceService(repository=cost_repository)
+    return LLMUsageService(
+        repository=repository,
+        cost_governance_service=cost_service
+    )
+
+
+def get_llm_usage_service(
+    repository: Annotated[FileLLMUsageRepository, Depends(get_llm_usage_repository)],
+    cost_service: Annotated[CostGovernanceService, Depends(get_cost_governance_service)]
+) -> LLMUsageService:
+    """Retourne le service de tracking d'utilisation LLM.
+    
+    Args:
+        repository: Repository injecté via dépendance.
+        cost_service: Service de cost governance injecté.
+        
+    Returns:
+        Instance de LLMUsageService avec cost governance intégré.
+    """
+    return LLMUsageService(
+        repository=repository,
+        cost_governance_service=cost_service
+    )
+
+
 def get_request_id(request: Request) -> str:
     """Extrait le request_id de la requête.
     
@@ -164,4 +265,116 @@ def get_request_id(request: Request) -> str:
         Le request_id ou "unknown" si absent.
     """
     return getattr(request.state, "request_id", "unknown")
+
+
+# Variables globales _vocab_service et _guides_service supprimées - utilisez ServiceContainer
+
+
+def get_vocabulary_service(request: Request) -> VocabularyService:
+    """Retourne le service de vocabulaire.
+    
+    Utilise le ServiceContainer depuis app.state (système unifié).
+    
+    Args:
+        request: La requête HTTP (injecté automatiquement par FastAPI).
+        
+    Returns:
+        Instance de VocabularyService.
+        
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
+    """
+    container = getattr(request.app.state, "container", None)
+    if container is None:
+        raise RuntimeError("ServiceContainer not initialized in app.state. Ensure app.state.container is set in lifespan.")
+    return container.get_vocabulary_service()
+
+
+def get_narrative_guides_service(request: Request) -> NarrativeGuidesService:
+    """Retourne le service des guides narratifs.
+    
+    Utilise le ServiceContainer depuis app.state (système unifié).
+    
+    Args:
+        request: La requête HTTP (injecté automatiquement par FastAPI).
+        
+    Returns:
+        Instance de NarrativeGuidesService.
+        
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
+    """
+    container = getattr(request.app.state, "container", None)
+    if container is None:
+        raise RuntimeError("ServiceContainer not initialized in app.state. Ensure app.state.container is set in lifespan.")
+    return container.get_narrative_guides_service()
+
+
+def get_notion_import_service() -> NotionImportService:
+    """Retourne le service d'import Notion (singleton).
+    
+    Returns:
+        Instance de NotionImportService.
+    """
+    return NotionImportService()
+
+
+def get_skill_catalog_service(request: Request) -> SkillCatalogService:
+    """Retourne le service de catalogue des compétences.
+    
+    Utilise le ServiceContainer depuis app.state (système unifié).
+    
+    Args:
+        request: La requête HTTP (injecté automatiquement par FastAPI).
+        
+    Returns:
+        Instance de SkillCatalogService.
+        
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
+    """
+    container = getattr(request.app.state, "container", None)
+    if container is None:
+        raise RuntimeError("ServiceContainer not initialized in app.state. Ensure app.state.container is set in lifespan.")
+    return container.get_skill_catalog_service()
+
+
+def get_trait_catalog_service(request: Request) -> TraitCatalogService:
+    """Retourne le service de catalogue des traits.
+    
+    Utilise le ServiceContainer depuis app.state (système unifié).
+    
+    Args:
+        request: La requête HTTP (injecté automatiquement par FastAPI).
+        
+    Returns:
+        Instance de TraitCatalogService.
+        
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
+    """
+    container = getattr(request.app.state, "container", None)
+    if container is None:
+        raise RuntimeError("ServiceContainer not initialized in app.state. Ensure app.state.container is set in lifespan.")
+    return container.get_trait_catalog_service()
+
+
+def get_preset_service(request: Request) -> PresetService:
+    """Retourne le service de gestion des presets.
+    
+    Utilise le ServiceContainer depuis app.state (système unifié).
+    
+    Args:
+        request: La requête HTTP (injecté automatiquement par FastAPI).
+        
+    Returns:
+        Instance de PresetService.
+        
+    Raises:
+        RuntimeError: Si le ServiceContainer n'est pas initialisé dans app.state.
+    """
+    container = getattr(request.app.state, "container", None)
+    if container is None:
+        raise RuntimeError("ServiceContainer not initialized in app.state. Ensure app.state.container is set in lifespan.")
+    return container.get_preset_service()
 

@@ -1,184 +1,355 @@
 """Schémas Pydantic pour la génération de dialogues."""
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any, Literal
+from pydantic import BaseModel, Field, field_validator
+import sys
+from pathlib import Path
+
+# Ajouter le répertoire racine au path pour importer constants
+_root_dir = Path(__file__).parent.parent.parent
+if str(_root_dir) not in sys.path:
+    sys.path.insert(0, str(_root_dir))
+
+from constants import Defaults, ModelNames
 
 
 class ContextSelection(BaseModel):
     """Sélection de contexte pour la génération.
     
     Attributes:
-        characters: Liste des noms de personnages à inclure.
-        locations: Liste des noms de lieux à inclure.
-        items: Liste des noms d'objets à inclure.
-        species: Liste des noms d'espèces à inclure.
-        communities: Liste des noms de communautés à inclure.
+        characters_full: Liste des noms de personnages à inclure en mode complet.
+        characters_excerpt: Liste des noms de personnages à inclure en mode extrait.
+        locations_full: Liste des noms de lieux à inclure en mode complet.
+        locations_excerpt: Liste des noms de lieux à inclure en mode extrait.
+        items_full: Liste des noms d'objets à inclure en mode complet.
+        items_excerpt: Liste des noms d'objets à inclure en mode extrait.
+        species_full: Liste des noms d'espèces à inclure en mode complet.
+        species_excerpt: Liste des noms d'espèces à inclure en mode extrait.
+        communities_full: Liste des noms de communautés à inclure en mode complet.
+        communities_excerpt: Liste des noms de communautés à inclure en mode extrait.
         dialogues_examples: Liste des titres d'exemples de dialogues à inclure.
         scene_protagonists: Dictionnaire des protagonistes de la scène (sera converti en _scene_protagonists pour le service).
         scene_location: Dictionnaire du lieu de la scène (sera converti en _scene_location pour le service).
         generation_settings: Paramètres de génération additionnels.
     """
-    characters: List[str] = Field(default_factory=list, description="Liste des personnages")
-    locations: List[str] = Field(default_factory=list, description="Liste des lieux")
-    items: List[str] = Field(default_factory=list, description="Liste des objets")
-    species: List[str] = Field(default_factory=list, description="Liste des espèces")
-    communities: List[str] = Field(default_factory=list, description="Liste des communautés")
+    characters_full: List[str] = Field(default_factory=list, description="Liste des personnages (mode complet)")
+    characters_excerpt: List[str] = Field(default_factory=list, description="Liste des personnages (mode extrait)")
+    locations_full: List[str] = Field(default_factory=list, description="Liste des lieux (mode complet)")
+    locations_excerpt: List[str] = Field(default_factory=list, description="Liste des lieux (mode extrait)")
+    items_full: List[str] = Field(default_factory=list, description="Liste des objets (mode complet)")
+    items_excerpt: List[str] = Field(default_factory=list, description="Liste des objets (mode extrait)")
+    species_full: List[str] = Field(default_factory=list, description="Liste des espèces (mode complet)")
+    species_excerpt: List[str] = Field(default_factory=list, description="Liste des espèces (mode extrait)")
+    communities_full: List[str] = Field(default_factory=list, description="Liste des communautés (mode complet)")
+    communities_excerpt: List[str] = Field(default_factory=list, description="Liste des communautés (mode extrait)")
     dialogues_examples: List[str] = Field(default_factory=list, description="Liste des exemples de dialogues")
     scene_protagonists: Optional[Dict[str, Any]] = Field(None, description="Protagonistes de la scène")
     scene_location: Optional[Dict[str, Any]] = Field(None, description="Lieu de la scène")
     generation_settings: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Paramètres de génération")
     
+    @field_validator('scene_protagonists', mode='before')
+    @classmethod
+    def validate_scene_protagonists(cls, v):
+        """Convertit les tableaux vides en None pour scene_protagonists."""
+        if isinstance(v, list) and len(v) == 0:
+            return None
+        return v
+    
+    @field_validator('scene_location', mode='before')
+    @classmethod
+    def validate_scene_location(cls, v):
+        """Convertit les tableaux vides en None pour scene_location."""
+        if isinstance(v, list) and len(v) == 0:
+            return None
+        return v
+    
     def to_service_dict(self) -> Dict[str, Any]:
-        """Convertit le ContextSelection en dictionnaire pour le service (avec préfixes underscore).
+        """Convertit le ContextSelection en dictionnaire pour le service (avec préfixes underscore et métadonnées de mode).
         
         Returns:
-            Dictionnaire avec _scene_protagonists et _scene_location pour compatibilité service.
+            Dictionnaire avec _scene_protagonists, _scene_location, et _element_modes pour compatibilité service.
+            Les listes sont fusionnées et un dictionnaire _element_modes indique le mode de chaque élément.
         """
         data = self.model_dump(exclude_none=True)
+        
         # Convertir scene_protagonists -> _scene_protagonists
         if "scene_protagonists" in data:
             data["_scene_protagonists"] = data.pop("scene_protagonists")
         # Convertir scene_location -> _scene_location
         if "scene_location" in data:
             data["_scene_location"] = data.pop("scene_location")
+        
+        # Construire _element_modes pour indiquer le mode de chaque élément
+        element_modes: Dict[str, Dict[str, str]] = {}
+        
+        # Fusionner les listes et créer les métadonnées de mode
+        for element_type in ["characters", "locations", "items", "species", "communities"]:
+            full_list = data.get(f"{element_type}_full", [])
+            excerpt_list = data.get(f"{element_type}_excerpt", [])
+            
+            # Fusionner les listes (mode full par défaut pour compatibilité)
+            merged_list = full_list + excerpt_list
+            data[element_type] = merged_list
+            
+            # Créer le dictionnaire de modes pour ce type
+            if merged_list:
+                element_modes[element_type] = {}
+                for name in full_list:
+                    element_modes[element_type][name] = "full"
+                for name in excerpt_list:
+                    element_modes[element_type][name] = "excerpt"
+            
+            # Supprimer les listes séparées
+            data.pop(f"{element_type}_full", None)
+            data.pop(f"{element_type}_excerpt", None)
+        
+        # Ajouter _element_modes si non vide
+        if element_modes:
+            data["_element_modes"] = element_modes
+        
         return data
 
 
-class GenerateDialogueVariantsRequest(BaseModel):
-    """Requête pour générer des variantes de dialogue texte.
-    
-    Attributes:
-        k_variants: Nombre de variantes à générer.
-        user_instructions: Instructions spécifiques de l'utilisateur.
-        context_selections: Sélections de contexte GDD.
-        max_context_tokens: Nombre maximum de tokens pour le contexte.
-        structured_output: Générer en format structuré.
-        system_prompt_override: Surcharge du system prompt (optionnel).
-        llm_model_identifier: Identifiant du modèle LLM à utiliser.
-        npc_speaker_id: ID du PNJ interlocuteur (si None, utiliser le premier personnage sélectionné).
-    """
-    k_variants: int = Field(default=1, ge=1, le=10, description="Nombre de variantes à générer")
+# GenerateDialogueVariantsRequest, DialogueVariantResponse, GenerateDialogueVariantsResponse supprimés - système texte libre obsolète, utiliser Unity JSON à la place
+
+# GenerateInteractionVariantsRequest supprimé - système obsolète remplacé par Unity JSON
+
+class BasePromptRequest(BaseModel):
+    """Base pour les requêtes de construction de prompt."""
     user_instructions: str = Field(..., min_length=1, description="Instructions spécifiques pour la scène")
     context_selections: ContextSelection = Field(..., description="Sélections de contexte GDD")
-    max_context_tokens: int = Field(default=1500, ge=100, le=50000, description="Nombre maximum de tokens pour le contexte")
-    structured_output: bool = Field(default=False, description="Générer en format structuré")
-    system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
-    llm_model_identifier: str = Field(default="gpt-4o-mini", description="Identifiant du modèle LLM")
     npc_speaker_id: Optional[str] = Field(None, description="ID du PNJ interlocuteur (si None, utiliser le premier personnage sélectionné)")
-
-
-class GenerateInteractionVariantsRequest(BaseModel):
-    """Requête pour générer des interactions structurées.
-    
-    Attributes:
-        k_variants: Nombre de variantes à générer.
-        user_instructions: Instructions spécifiques de l'utilisateur.
-        context_selections: Sélections de contexte GDD.
-        max_context_tokens: Nombre maximum de tokens pour le contexte.
-        system_prompt_override: Surcharge du system prompt (optionnel).
-        llm_model_identifier: Identifiant du modèle LLM à utiliser.
-        previous_interaction_id: ID d'une interaction précédente pour la continuité narrative (optionnel).
-    """
-    k_variants: int = Field(default=1, ge=1, le=10, description="Nombre de variantes à générer")
-    user_instructions: str = Field(..., min_length=1, description="Instructions spécifiques pour la scène")
-    context_selections: ContextSelection = Field(..., description="Sélections de contexte GDD")
-    max_context_tokens: int = Field(default=1500, ge=100, le=50000, description="Nombre maximum de tokens pour le contexte")
+    max_context_tokens: int = Field(default=1500, ge=100, le=Defaults.MAX_CONTEXT_TOKENS, description="Nombre maximum de tokens pour le contexte")
     system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
-    llm_model_identifier: str = Field(default="gpt-4o-mini", description="Identifiant du modèle LLM")
-    previous_interaction_id: Optional[str] = Field(None, description="ID d'une interaction précédente pour la continuité narrative")
-
-
-class DialogueVariantResponse(BaseModel):
-    """Réponse contenant une variante de dialogue.
+    author_profile: Optional[str] = Field(None, description="Profil d'auteur global (style réutilisable entre scènes)")
+    max_choices: Optional[int] = Field(None, ge=0, le=8, description="Nombre maximum de choix à générer (0-8, ou None pour laisser l'IA décider librement)")
+    choices_mode: Literal["free", "capped"] = Field(default="free", description="Mode de génération des choix")
+    narrative_tags: Optional[List[str]] = Field(None, description="Tags narratifs pour guider le ton (ex: tension, humour, dramatique)")
+    vocabulary_config: Optional[Dict[str, str]] = Field(None, description="Configuration du vocabulaire par niveau")
+    include_narrative_guides: bool = Field(default=True, description="Inclure les guides narratifs dans le prompt")
+    previous_dialogue_preview: Optional[str] = Field(None, description="Texte formaté du dialogue précédent")
+    in_game_flags: Optional[List[Dict[str, Any]]] = Field(None, description="Flags in-game sélectionnés pour la génération réactive")
     
-    Attributes:
-        id: Identifiant unique de la variante.
-        title: Titre de la variante.
-        content: Contenu de la variante (texte ou JSON).
-        is_new: Indique si c'est une nouvelle variante.
-    """
-    id: str = Field(..., description="Identifiant unique de la variante")
-    title: str = Field(..., description="Titre de la variante")
-    content: str = Field(..., description="Contenu de la variante")
-    is_new: bool = Field(default=True, description="Indique si c'est une nouvelle variante")
+    @field_validator('max_context_tokens')
+    @classmethod
+    def validate_max_context_tokens(cls, v: int) -> int:
+        """Valide que max_context_tokens est dans les limites autorisées (règle métier)."""
+        if v < 100:
+            raise ValueError(f"max_context_tokens doit être au minimum 100 (reçu: {v})")
+        if v > Defaults.MAX_CONTEXT_TOKENS:
+            raise ValueError(f"max_context_tokens ne peut pas dépasser {Defaults.MAX_CONTEXT_TOKENS} (reçu: {v})")
+        return v
 
-
-class GenerateDialogueVariantsResponse(BaseModel):
-    """Réponse pour la génération de variantes de dialogue.
-    
-    Attributes:
-        variants: Liste des variantes générées.
-        prompt_used: Le prompt complet utilisé pour la génération.
-        estimated_tokens: Nombre estimé de tokens utilisés.
-        warning: Avertissement si DummyLLMClient a été utilisé.
-    """
-    variants: List[DialogueVariantResponse] = Field(..., description="Liste des variantes générées")
-    prompt_used: Optional[str] = Field(None, description="Prompt complet utilisé")
-    estimated_tokens: int = Field(..., description="Nombre estimé de tokens")
-    warning: Optional[str] = Field(None, description="Avertissement (ex: DummyLLMClient utilisé)")
-
-
-class EstimateTokensRequest(BaseModel):
+class EstimateTokensRequest(BasePromptRequest):
     """Requête pour estimer le nombre de tokens.
     
-    Attributes:
-        context_selections: Sélections de contexte GDD.
-        user_instructions: Instructions utilisateur (peut être vide si des sélections existent).
-        max_context_tokens: Nombre maximum de tokens pour le contexte.
-        system_prompt_override: Surcharge du system prompt (optionnel).
+    Hérite de BasePromptRequest pour garantir que l'estimation utilise les mêmes paramètres que la génération.
     """
-    context_selections: ContextSelection = Field(..., description="Sélections de contexte GDD")
-    user_instructions: str = Field(default="", description="Instructions utilisateur")
-    max_context_tokens: int = Field(default=1500, ge=100, le=50000, description="Nombre maximum de tokens pour le contexte")
-    system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
-
+    field_configs: Optional[Dict[str, List[str]]] = Field(None, description="Configuration des champs de contexte par type d'élément")
+    organization_mode: Optional[str] = Field(None, description="Mode d'organisation du contexte (default, narrative, minimal)")
 
 class EstimateTokensResponse(BaseModel):
     """Réponse pour l'estimation de tokens.
     
     Attributes:
         context_tokens: Nombre de tokens du contexte.
-        total_estimated_tokens: Nombre total estimé de tokens (contexte + prompt).
-        estimated_prompt: Le prompt estimé complet.
+        token_count: Nombre total de tokens (contexte + prompt).
+        raw_prompt: Le prompt brut réel qui sera envoyé au LLM.
+        prompt_hash: Hash SHA-256 du prompt pour validation.
+        structured_prompt: Structure JSON du prompt (optionnel).
     """
     context_tokens: int = Field(..., description="Nombre de tokens du contexte")
-    total_estimated_tokens: int = Field(..., description="Nombre total estimé de tokens")
-    estimated_prompt: str | None = Field(default=None, description="Le prompt estimé complet")
+    token_count: int = Field(..., description="Nombre total de tokens")
+    raw_prompt: str = Field(..., description="Le prompt brut réel qui sera envoyé au LLM")
+    prompt_hash: str = Field(..., description="Hash SHA-256 du prompt")
+    structured_prompt: Optional[Dict[str, Any]] = Field(None, description="Structure JSON du prompt pour affichage structuré")
 
 
-class GenerateUnityDialogueRequest(BaseModel):
-    """Requête pour générer un nœud de dialogue au format Unity JSON.
+class PreviewPromptRequest(BasePromptRequest):
+    """Requête pour prévisualiser le prompt brut construit.
+    
+    Hérite de BasePromptRequest pour utiliser les mêmes paramètres que la génération.
+    Utilisé pour visualiser le prompt avant génération, sans estimer les tokens.
+    """
+    field_configs: Optional[Dict[str, List[str]]] = Field(None, description="Configuration des champs de contexte par type d'élément")
+    organization_mode: Optional[str] = Field(None, description="Mode d'organisation du contexte (default, narrative, minimal)")
+
+
+class PreviewPromptResponse(BaseModel):
+    """Réponse pour la prévisualisation du prompt.
     
     Attributes:
-        user_instructions: Instructions spécifiques de l'utilisateur.
-        context_selections: Sélections de contexte GDD (doit contenir au moins un personnage).
-        npc_speaker_id: ID du PNJ interlocuteur (si None, utiliser le premier personnage sélectionné).
-        max_context_tokens: Nombre maximum de tokens pour le contexte.
-        system_prompt_override: Surcharge du system prompt (optionnel).
-        llm_model_identifier: Identifiant du modèle LLM à utiliser.
-        max_choices: Nombre maximum de choix à générer (0-8, ou None pour laisser l'IA décider).
+        raw_prompt: Le prompt brut réel qui sera envoyé au LLM (format XML).
+        prompt_hash: Hash SHA-256 du prompt pour validation.
+        structured_prompt: Structure JSON du prompt pour affichage structuré (optionnel).
     """
-    user_instructions: str = Field(..., min_length=1, description="Instructions spécifiques pour la scène")
-    context_selections: ContextSelection = Field(..., description="Sélections de contexte GDD")
-    npc_speaker_id: Optional[str] = Field(None, description="ID du PNJ interlocuteur (si None, utiliser le premier personnage sélectionné)")
-    max_context_tokens: int = Field(default=1500, ge=100, le=50000, description="Nombre maximum de tokens pour le contexte")
-    system_prompt_override: Optional[str] = Field(None, description="Surcharge du system prompt")
-    llm_model_identifier: str = Field(default="gpt-4o-mini", description="Identifiant du modèle LLM")
-    max_choices: Optional[int] = Field(None, ge=0, le=8, description="Nombre maximum de choix à générer (0-8, ou None pour laisser l'IA décider librement)")
+    raw_prompt: str = Field(..., description="Le prompt brut réel qui sera envoyé au LLM (format XML)")
+    prompt_hash: str = Field(..., description="Hash SHA-256 du prompt pour validation")
+    structured_prompt: Optional[Dict[str, Any]] = Field(None, description="Structure JSON du prompt pour affichage structuré")
 
+
+class GenerateUnityDialogueRequest(BasePromptRequest):
+    """Requête pour générer un nœud de dialogue au format Unity JSON."""
+    llm_model_identifier: str = Field(default=ModelNames.GPT_5_MINI, description="Identifiant du modèle LLM")
+    max_completion_tokens: Optional[int] = Field(None, ge=500, le=50000, description="Nombre maximum de tokens pour la génération. Recommandation OpenAI: 25000+ tokens pour reasoning summary.")
+    reasoning_effort: Optional[Literal["none", "low", "medium", "high", "xhigh"]] = Field(None, description="Niveau de raisonnement pour GPT-5.2 (none=rapide, xhigh=très approfondi). Disponible uniquement pour GPT-5.2 et GPT-5.2-pro.")
+    reasoning_summary: Optional[Literal["auto"]] = Field(None, description="Format du résumé de reasoning (thinking summary). Uniquement 'auto' disponible (les résumés 'detailed' nécessitent une organisation OpenAI vérifiée Tier 2/3, non disponible actuellement). Si None, 'auto' est utilisé par défaut.")
+    top_p: Optional[float] = Field(None, ge=0.0, le=1.0, description="Nucleus sampling (0.0-1.0). Alternative/complément à temperature. 0.0=focalisé, 1.0=diversifié.")
+    
+    @field_validator('reasoning_summary', mode='before')
+    @classmethod
+    def validate_reasoning_summary(cls, v: Optional[str]) -> Optional[str]:
+        """Valide que reasoning_summary est uniquement 'auto' (detailed nécessite organisation vérifiée).
+        
+        Note: Les résumés 'detailed' nécessitent une organisation OpenAI vérifiée (Tier 2/3).
+        Notre organisation n'étant pas vérifiée, nous nous limitons à 'auto' pour éviter
+        les échecs silencieux où l'API ignore la demande de résumé détaillé.
+        """
+        if v is not None and v != "auto":
+            raise ValueError(
+                f"reasoning_summary='{v}' non supporté. "
+                f"Uniquement 'auto' disponible (les résumés 'detailed' nécessitent une organisation OpenAI vérifiée Tier 2/3)."
+            )
+        return v or "auto"  # Par défaut, utiliser "auto"
+    
+    @field_validator('context_selections', mode='after')
+    @classmethod
+    def validate_at_least_one_character(cls, v: ContextSelection) -> ContextSelection:
+        """Valide qu'au moins un personnage est sélectionné (règle métier Unity).
+        
+        Raises:
+            ValueError: Si aucun personnage n'est sélectionné.
+        """
+        all_characters = (v.characters_full or []) + (v.characters_excerpt or [])
+        if not all_characters:
+            raise ValueError("Au moins un personnage doit être sélectionné pour générer un dialogue Unity")
+        return v
+    
+    @field_validator('max_completion_tokens', mode='before')
+    @classmethod
+    def validate_max_completion_tokens(cls, v: Optional[int]) -> Optional[int]:
+        """Valide que max_completion_tokens est dans les limites autorisées (règle métier).
+        
+        Recommandation OpenAI: 25000 tokens minimum pour reasoning summary.
+        Limite max alignée avec le Field (50000) pour permettre les cas d'usage avancés.
+        """
+        if v is not None:
+            if v < 100:
+                raise ValueError(f"max_completion_tokens doit être au minimum 100 (reçu: {v})")
+            if v > 50000:
+                raise ValueError(f"max_completion_tokens ne peut pas dépasser 50000 (reçu: {v})")
+        return v
 
 class GenerateUnityDialogueResponse(BaseModel):
     """Réponse pour la génération d'un nœud de dialogue Unity JSON.
     
     Attributes:
-        json_content: Contenu JSON du dialogue au format Unity (tableau de nœuds).
+        json_content: Contenu JSON du dialogue au format Unity.
         title: Titre descriptif du dialogue généré par l'IA.
-        prompt_used: Le prompt complet utilisé pour la génération.
+        raw_prompt: Le prompt brut réel utilisé pour la génération (RawPrompt).
+        prompt_hash: Hash SHA-256 du prompt pour validation.
         estimated_tokens: Nombre estimé de tokens utilisés.
-        warning: Avertissement si DummyLLMClient a été utilisé.
+        warning: Avertissement éventuel.
+        structured_prompt: Structure JSON du prompt (optionnel).
+        reasoning_trace: Trace de raisonnement du modèle (optionnel, uniquement pour GPT-5.2 avec reasoning effort).
     """
     json_content: str = Field(..., description="Contenu JSON du dialogue au format Unity")
     title: Optional[str] = Field(None, description="Titre descriptif du dialogue généré par l'IA")
-    prompt_used: Optional[str] = Field(None, description="Prompt complet utilisé")
+    raw_prompt: str = Field(..., description="Le prompt brut réel utilisé pour la génération")
+    prompt_hash: str = Field(..., description="Hash SHA-256 du prompt")
     estimated_tokens: int = Field(..., description="Nombre estimé de tokens")
     warning: Optional[str] = Field(None, description="Avertissement (ex: DummyLLMClient utilisé)")
+    structured_prompt: Optional[Dict[str, Any]] = Field(None, description="Structure JSON du prompt pour affichage structuré")
+    reasoning_trace: Optional[Dict[str, Any]] = Field(None, description="Trace de raisonnement du modèle (effort, summary, items)")
 
+
+
+class ExportUnityDialogueRequest(BaseModel):
+    """Requête pour exporter un dialogue Unity JSON vers un fichier.
+    
+    Attributes:
+        json_content: Contenu JSON du dialogue au format Unity (tableau de nœuds).
+        title: Titre descriptif du dialogue (utilisé pour générer le nom de fichier).
+        filename: Nom de fichier optionnel (si non fourni, généré à partir du titre).
+    """
+    json_content: str = Field(..., description="Contenu JSON du dialogue au format Unity")
+    title: str = Field(..., description="Titre descriptif du dialogue")
+    filename: Optional[str] = Field(None, description="Nom de fichier optionnel (sans extension)")
+
+
+class ExportUnityDialogueResponse(BaseModel):
+    """Réponse pour l'export d'un dialogue Unity JSON.
+    
+    Attributes:
+        file_path: Chemin absolu du fichier créé.
+        filename: Nom du fichier créé.
+        success: Indique si l'export a réussi.
+    """
+    file_path: str = Field(..., description="Chemin absolu du fichier créé")
+    filename: str = Field(..., description="Nom du fichier créé")
+    success: bool = Field(..., description="Indique si l'export a réussi")
+
+
+# Schemas pour la bibliothèque Unity Dialogues
+class UnityDialogueMetadata(BaseModel):
+    """Métadonnées d'un fichier de dialogue Unity JSON.
+    
+    Attributes:
+        filename: Nom du fichier (avec extension .json).
+        file_path: Chemin absolu du fichier.
+        size_bytes: Taille du fichier en octets.
+        modified_time: Date de modification (ISO format).
+        title: Titre extrait depuis le JSON (optionnel).
+    """
+    filename: str = Field(..., description="Nom du fichier")
+    file_path: str = Field(..., description="Chemin absolu du fichier")
+    size_bytes: int = Field(..., description="Taille en octets")
+    modified_time: str = Field(..., description="Date de modification (ISO format)")
+    title: Optional[str] = Field(None, description="Titre extrait du dialogue")
+
+
+class UnityDialogueListResponse(BaseModel):
+    """Réponse pour la liste des dialogues Unity.
+    
+    Attributes:
+        dialogues: Liste des métadonnées des fichiers.
+        total: Nombre total de fichiers.
+    """
+    dialogues: List[UnityDialogueMetadata] = Field(..., description="Liste des métadonnées")
+    total: int = Field(..., description="Nombre total de fichiers")
+
+
+class UnityDialogueReadResponse(BaseModel):
+    """Réponse pour la lecture d'un dialogue Unity.
+    
+    Attributes:
+        filename: Nom du fichier.
+        json_content: Contenu JSON brut (string).
+        title: Titre extrait du dialogue (optionnel).
+        size_bytes: Taille du fichier en octets.
+        modified_time: Date de modification (ISO format).
+    """
+    filename: str = Field(..., description="Nom du fichier")
+    json_content: str = Field(..., description="Contenu JSON brut")
+    title: Optional[str] = Field(None, description="Titre extrait du dialogue")
+    size_bytes: int = Field(..., description="Taille en octets")
+    modified_time: str = Field(..., description="Date de modification (ISO format)")
+
+
+class UnityDialoguePreviewRequest(BaseModel):
+    """Requête pour générer un preview texte d'un dialogue Unity.
+    
+    Attributes:
+        json_content: Contenu JSON du dialogue Unity.
+    """
+    json_content: str = Field(..., description="Contenu JSON du dialogue Unity")
+
+
+class UnityDialoguePreviewResponse(BaseModel):
+    """Réponse pour le preview texte d'un dialogue Unity.
+    
+    Attributes:
+        preview_text: Texte formaté pour injection LLM.
+        node_count: Nombre de nœuds dans le dialogue.
+    """
+    preview_text: str = Field(..., description="Texte formaté pour injection LLM")
+    node_count: int = Field(..., description="Nombre de nœuds")

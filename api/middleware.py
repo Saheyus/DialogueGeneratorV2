@@ -1,4 +1,5 @@
 """Middleware pour l'API FastAPI."""
+import os
 import uuid
 import time
 import logging
@@ -33,10 +34,10 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
-    """Middleware pour logger les requêtes HTTP."""
+    """Middleware pour logger les requêtes HTTP avec contexte structuré."""
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        """Log les requêtes HTTP avec timing.
+        """Log les requêtes HTTP avec timing et contexte enrichi.
         
         Args:
             request: La requête HTTP.
@@ -45,25 +46,85 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         Returns:
             La réponse HTTP.
         """
+        from api.middleware.logging_context import add_logging_context_to_record
+        
         request_id = getattr(request.state, "request_id", "unknown")
         start_time = time.time()
+        path = request.url.path
         
-        # Log de la requête entrante
-        logger.info(
-            f"Request: {request.method} {request.url.path} "
-            f"(request_id: {request_id}, client: {request.client.host if request.client else 'unknown'})"
-        )
+        # Log de debug uniquement si DEBUG_MIDDLEWARE=true
+        if os.getenv("DEBUG_MIDDLEWARE", "false").lower() in ("true", "1", "yes") and "/estimate-tokens" in path:
+            import sys
+            uvicorn_log = logging.getLogger("uvicorn.error")
+            uvicorn_log.warning(f"=== LoggingMiddleware HIT: {request.method} {path} request_id={request_id} ===")
+            print(f"=== LoggingMiddleware HIT: {request.method} {path} request_id={request_id} ===", file=sys.stderr, flush=True)
+        
+        request_logger = logging.getLogger("api.middleware")
+        extra = {
+            "request_id": request_id,
+            "endpoint": path,
+            "method": request.method,
+            "client": request.client.host if request.client else "unknown"
+        }
+        
+        # Niveaux et filtres (réduction de bruit en dev)
+        # - HTTP_LOG_LEVEL contrôle le niveau mini pour loguer les succès (2xx/3xx)
+        # - HTTP_SLOW_MS loggue en INFO au-dessus du seuil (même si succès)
+        http_log_level = os.getenv("HTTP_LOG_LEVEL", "WARNING").upper()
+        try:
+            slow_ms = int(os.getenv("HTTP_SLOW_MS", "1500"))
+        except ValueError:
+            slow_ms = 1500
+        
+        # Exclure /health par défaut (sauf si erreur)
+        is_health = path == "/health" or path.startswith("/health/")
         
         try:
             response = await call_next(request)
             process_time = time.time() - start_time
+            duration_ms = int(process_time * 1000)
             
-            # Log de la réponse
-            logger.info(
-                f"Response: {request.method} {request.url.path} "
-                f"Status: {response.status_code} "
-                f"Time: {process_time:.3f}s "
-                f"(request_id: {request_id})"
+            # Log de la réponse avec contexte
+            response_extra = {
+                "request_id": request_id,
+                "endpoint": path,
+                "method": request.method,
+                "status_code": response.status_code,
+                "duration_ms": duration_ms
+            }
+            
+            status_code = response.status_code
+            
+            # Skip total pour /health en succès (trop bruyant avec polling)
+            if is_health and status_code < 400:
+                response.headers["X-Process-Time"] = str(process_time)
+                return response
+            
+            # Choisir le niveau selon statut / lenteur
+            if status_code >= 500:
+                log_fn = request_logger.error
+            elif status_code >= 400:
+                log_fn = request_logger.warning
+            elif duration_ms >= slow_ms:
+                log_fn = request_logger.info
+            else:
+                # Succès normal: DEBUG par défaut (ou selon HTTP_LOG_LEVEL)
+                if http_log_level == "DEBUG":
+                    log_fn = request_logger.debug
+                elif http_log_level == "INFO":
+                    log_fn = request_logger.info
+                elif http_log_level == "WARNING":
+                    log_fn = request_logger.debug
+                elif http_log_level == "ERROR":
+                    log_fn = request_logger.debug
+                elif http_log_level == "CRITICAL":
+                    log_fn = request_logger.debug
+                else:
+                    log_fn = request_logger.debug
+            
+            log_fn(
+                f"HTTP {request.method} {path} -> {status_code} ({duration_ms}ms)",
+                extra=response_extra
             )
             
             response.headers["X-Process-Time"] = str(process_time)
@@ -71,11 +132,19 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             
         except Exception as e:
             process_time = time.time() - start_time
-            logger.error(
-                f"Error: {request.method} {request.url.path} "
-                f"Exception: {type(e).__name__}: {str(e)} "
-                f"Time: {process_time:.3f}s "
-                f"(request_id: {request_id})",
+            duration_ms = int(process_time * 1000)
+            
+            # Log de l'erreur avec contexte
+            error_extra = {
+                "request_id": request_id,
+                "endpoint": path,
+                "method": request.method,
+                "duration_ms": duration_ms,
+                "exception_type": type(e).__name__
+            }
+            request_logger.error(
+                f"Error: {request.method} {path} Exception: {type(e).__name__}: {str(e)}",
+                extra=error_extra,
                 exc_info=True
             )
             raise

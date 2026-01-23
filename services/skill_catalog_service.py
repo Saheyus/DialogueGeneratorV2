@@ -19,12 +19,12 @@ class SkillCatalogService:
         
         Args:
             csv_path: Chemin vers le fichier CSV. Si None, utilise le chemin par défaut
-                     (Assets/Data/SkillCatalog.csv).
+                     (data/UnityData/SkillCatalog.csv).
         """
         if csv_path is None:
             # Chemin par défaut relatif à la racine du projet
             project_root = Path(__file__).resolve().parent.parent
-            csv_path = project_root / "Assets" / "Data" / "SkillCatalog.csv"
+            csv_path = project_root / "data" / "UnityData" / "SkillCatalog.csv"
         
         self.csv_path = csv_path
         self._skills: Optional[List[str]] = None
@@ -106,4 +106,9 @@ class SkillCatalogService:
         """Force le rechargement du CSV (utile si le fichier a été modifié)."""
         self._skills = None
         logger.info("Rechargement forcé du catalogue des compétences")
+
+
+
+
+
 

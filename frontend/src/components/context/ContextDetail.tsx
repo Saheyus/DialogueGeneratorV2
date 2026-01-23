@@ -78,13 +78,27 @@ export function ContextDetail({ item }: ContextDetailProps) {
 
   return (
     <div style={{ 
-      padding: '1rem', 
-      height: '100%', 
+      flex: 1,
       minHeight: 0,
-      overflowY: 'auto',
-      boxSizing: 'border-box',
+      maxHeight: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      backgroundColor: theme.background.panel,
+      overflow: 'hidden',
     }}>
-      <h3 style={{ marginTop: 0, marginBottom: '1rem', color: theme.text.primary }}>{item.name}</h3>
+      <div 
+        style={{ 
+          flex: '1 1 0%',
+          minHeight: 0,
+          height: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: '1rem',
+          boxSizing: 'border-box',
+          scrollbarGutter: 'stable',
+        }}
+      >
+        <h3 style={{ marginTop: 0, marginBottom: '1rem', color: theme.text.primary }}>{item.name}</h3>
       
       {isCharacter && (
         <>
@@ -133,6 +147,7 @@ export function ContextDetail({ item }: ContextDetailProps) {
           Détails complets
         </h4>
         {renderData(data)}
+      </div>
       </div>
     </div>
   )

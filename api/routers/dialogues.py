@@ -1,35 +1,37 @@
 """Router pour la génération de dialogues."""
 import logging
-from typing import Annotated
+import re
+import json
+from pathlib import Path
+from typing import Annotated, Dict, Any
 from fastapi import APIRouter, Depends, Request, status
+from starlette.requests import Request
 from api.schemas.dialogue import (
-    GenerateDialogueVariantsRequest,
-    GenerateInteractionVariantsRequest,
-    GenerateDialogueVariantsResponse,
-    DialogueVariantResponse,
     EstimateTokensRequest,
     EstimateTokensResponse,
+    PreviewPromptRequest,
+    PreviewPromptResponse,
     GenerateUnityDialogueRequest,
-    GenerateUnityDialogueResponse
+    GenerateUnityDialogueResponse,
+    ExportUnityDialogueRequest,
+    ExportUnityDialogueResponse
 )
-from api.schemas.interaction import InteractionResponse
+from pydantic import BaseModel, Field
 from api.dependencies import (
     get_dialogue_generation_service,
-    get_interaction_service,
     get_request_id,
-    get_prompt_engine
+    get_prompt_engine,
+    get_config_service,
+    get_skill_catalog_service,
+    get_trait_catalog_service
 )
-from prompt_engine import PromptEngine
+from core.prompt.prompt_engine import PromptEngine, PromptInput, BuiltPrompt
 from api.exceptions import InternalServerException, ValidationException, NotFoundException, OpenAIException
 from services.dialogue_generation_service import DialogueGenerationService
-from services.interaction_service import InteractionService
-from services.unity_dialogue_generation_service import UnityDialogueGenerationService
+from services.configuration_service import ConfigurationService
 from services.skill_catalog_service import SkillCatalogService
 from services.trait_catalog_service import TraitCatalogService
-from services.json_renderer.unity_json_renderer import UnityJsonRenderer
-from llm_client import ILLMClient
-from models.dialogue_structure.interaction import Interaction
-from models.dialogue_structure.dialogue_elements import PlayerChoicesBlockElement
+from core.llm.llm_client import ILLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -81,297 +83,196 @@ def _transform_openai_error(error: Exception, request_id: str) -> OpenAIExceptio
         )
 
 
-@router.post(
-    "/generate/variants",
-    response_model=GenerateDialogueVariantsResponse,
-    status_code=status.HTTP_200_OK
-)
-async def generate_dialogue_variants(
-    request_data: GenerateDialogueVariantsRequest,
-    request: Request,
-    dialogue_service: Annotated[DialogueGenerationService, Depends(get_dialogue_generation_service)],
-    request_id: Annotated[str, Depends(get_request_id)]
-) -> GenerateDialogueVariantsResponse:
-    """Génère des variantes de dialogue texte.
+# NOTE: L'endpoint /generate/interactions a été supprimé. Utiliser /generate/unity-dialogue à la place.
+
+
+def _build_prompt_from_request(
+    request_data: EstimateTokensRequest,
+    dialogue_service: DialogueGenerationService,
+    prompt_engine: PromptEngine,
+    skill_service: SkillCatalogService,
+    trait_service: TraitCatalogService
+) -> BuiltPrompt:
+    """Fonction helper pour construire un prompt à partir d'une requête.
     
     Args:
-        request_data: Données de la requête de génération.
-        request: La requête HTTP.
-        dialogue_service: Service de génération injecté.
-        request_id: ID de la requête.
+        request_data: Données de la requête (sélections, instructions).
+        dialogue_service: Service de dialogue.
+        prompt_engine: Moteur de prompt.
+        skill_service: Service de catalogue des compétences injecté.
+        trait_service: Service de catalogue des traits injecté.
         
     Returns:
-        Réponse contenant les variantes générées.
+        BuiltPrompt contenant le prompt construit.
         
     Raises:
-        InternalServerException: Si la génération échoue.
+        ValueError: Si le XML généré est invalide.
     """
+    # 1. Convertir ContextSelection en dict
+    context_selections_dict = request_data.context_selections.to_service_dict()
+    
+    # 2. Charger catalogues (skills/traits) pour injection
+    skills_list = []
     try:
-        # Créer le client LLM via la factory
-        from api.dependencies import get_config_service
-        config_service = get_config_service()
-        from factories.llm_factory import LLMClientFactory
-        llm_config = config_service.get_llm_config()
-        available_models = config_service.get_available_llm_models()
-        logger.info(f"Tentative de création du client LLM pour model_id: {request_data.llm_model_identifier}")
-        logger.debug(f"Available models: {available_models}")
-        llm_client = LLMClientFactory.create_client(
-            model_id=request_data.llm_model_identifier,
-            config=llm_config,
-            available_models=available_models
-        )
-        from llm_client import DummyLLMClient, OpenAIClient
-        is_dummy_client = isinstance(llm_client, DummyLLMClient)
-        is_openai_client = isinstance(llm_client, OpenAIClient)
-        if is_dummy_client:
-            logger.warning(f"ATTENTION: DummyLLMClient utilisé au lieu d'OpenAI pour model_id: {request_data.llm_model_identifier}")
-        if is_openai_client:
-            logger.info(f"OpenAIClient créé avec succès - model_name: {getattr(llm_client, 'model_name', 'N/A')}, has_client: {hasattr(llm_client, 'client')}")
-        
-        logger.info(f"Client LLM créé: {type(llm_client).__name__}, is_dummy: {is_dummy_client}, is_openai: {is_openai_client}")
-        
-        # Convertir ContextSelection en dict pour le service (avec préfixes underscore)
-        context_selections_dict = request_data.context_selections.to_service_dict()
-        logger.info(f"Context selections reçus - characters: {context_selections_dict.get('characters', [])}, locations: {context_selections_dict.get('locations', [])}, items: {context_selections_dict.get('items', [])}")
-        logger.debug(f"Context selections complet: {context_selections_dict}")
-        
-        # Appeler le service de génération
-        variants, prompt_used, estimated_tokens = await dialogue_service.generate_dialogue_variants(
-            llm_client=llm_client,
-            k_variants=request_data.k_variants,
-            max_context_tokens_for_context_builder=request_data.max_context_tokens,
-            structured_output=request_data.structured_output,
-            user_instructions=request_data.user_instructions,
-            system_prompt_override=request_data.system_prompt_override,
-            context_selections=context_selections_dict,
-            current_llm_model_identifier=request_data.llm_model_identifier
-        )
-        
-        if variants is None:
-            raise InternalServerException(
-                message="Échec de la génération de variantes",
-                request_id=request_id
-            )
-        
-        # Convertir en format de réponse
-        variant_responses = [
-            DialogueVariantResponse(
-                id=variant.get("id", f"variant-{i}"),
-                title=variant.get("title", f"Variante {i+1}"),
-                content=variant.get("content", ""),
-                is_new=variant.get("is_new", True)
-            )
-            for i, variant in enumerate(variants)
-        ]
-        
-        # Ajouter un avertissement si DummyLLMClient a été utilisé
-        warning_message = None
-        if is_dummy_client:
-            warning_message = (
-                f"⚠️ Mode test activé (DummyLLMClient). "
-                f"Vérifiez que la clé API OpenAI ({llm_config.get('api_key_env_var', 'OPENAI_API_KEY')}) est configurée dans les variables d'environnement."
-            )
-            logger.warning(warning_message)
-        
-        return GenerateDialogueVariantsResponse(
-            variants=variant_responses,
-            prompt_used=prompt_used,
-            estimated_tokens=estimated_tokens or 0,
-            warning=warning_message
-        )
-        
+        skills_list = skill_service.load_skills()
     except Exception as e:
-        # Vérifier si c'est une erreur OpenAI
-        from openai import APIError
-        if isinstance(e, APIError):
-            logger.error(f"Erreur OpenAI lors de la génération de variantes (request_id: {request_id}): {e}")
-            raise _transform_openai_error(e, request_id)
-        
-        logger.exception(f"Erreur lors de la génération de variantes (request_id: {request_id})")
-        raise InternalServerException(
-            message="Erreur lors de la génération de variantes",
-            details={"error": str(e)},
-            request_id=request_id
-        )
+        logger.warning(f"Erreur lors du chargement des compétences: {e}", exc_info=True)
+        # Continuer avec une liste vide si le chargement échoue
+    
+    traits_list = []
+    try:
+        traits_list = trait_service.get_trait_labels()
+    except Exception as e:
+        logger.warning(f"Erreur lors du chargement des traits: {e}", exc_info=True)
+        # Continuer avec une liste vide si le chargement échoue
+
+    # 3. Déterminer le PNJ speaker
+    npc_speaker_id = request_data.npc_speaker_id
+    all_characters = context_selections_dict.get('characters', [])
+    if not npc_speaker_id and all_characters:
+        npc_speaker_id = all_characters[0]
+    elif not npc_speaker_id:
+        npc_speaker_id = "PNJ"
+
+    # 4. Construire le contexte GDD via ContextBuilder
+    context_builder = dialogue_service.context_builder
+    if request_data.previous_dialogue_preview:
+        context_builder.set_previous_dialogue_context(request_data.previous_dialogue_preview)
+    
+    # Construire le contexte JSON (obligatoire, plus de fallback)
+    structured_context = context_builder.build_context_json(
+        selected_elements=context_selections_dict,
+        scene_instruction=request_data.user_instructions,
+        field_configs=request_data.field_configs,
+        organization_mode=request_data.organization_mode or "narrative",
+        max_tokens=request_data.max_context_tokens,
+        include_dialogue_type=True,
+        element_modes=context_selections_dict.get("_element_modes")
+    )
+    # Sérialiser en texte pour le LLM
+    context_text = context_builder._context_serializer.serialize_to_text(structured_context)
+
+    # 5. Construire le prompt unifié via le builder unique (PromptInput)
+    prompt_input = PromptInput(
+        user_instructions=request_data.user_instructions,
+        npc_speaker_id=npc_speaker_id,
+        player_character_id="URESAIR",
+        skills_list=skills_list,
+        traits_list=traits_list,
+        context_summary=context_text,
+        structured_context=structured_context,
+        scene_location=request_data.context_selections.scene_location,
+        max_choices=request_data.max_choices,
+        choices_mode=request_data.choices_mode,
+        narrative_tags=request_data.narrative_tags,
+        author_profile=request_data.author_profile,
+        vocabulary_config=request_data.vocabulary_config,
+        include_narrative_guides=request_data.include_narrative_guides,
+        in_game_flags=request_data.in_game_flags  # Ajouter les flags
+    )
+    
+    return prompt_engine.build_prompt(prompt_input)
 
 
 @router.post(
-    "/generate/interactions",
-    response_model=list[InteractionResponse],
+    "/preview-prompt",
+    response_model=PreviewPromptResponse,
     status_code=status.HTTP_200_OK
 )
-async def generate_interaction_variants(
-    request_data: GenerateInteractionVariantsRequest,
+async def preview_prompt(
+    request_data: PreviewPromptRequest,
     request: Request,
     dialogue_service: Annotated[DialogueGenerationService, Depends(get_dialogue_generation_service)],
-    interaction_service: Annotated[InteractionService, Depends(get_interaction_service)],
+    prompt_engine: Annotated[PromptEngine, Depends(get_prompt_engine)],
+    skill_service: Annotated[SkillCatalogService, Depends(get_skill_catalog_service)],
+    trait_service: Annotated[TraitCatalogService, Depends(get_trait_catalog_service)],
     request_id: Annotated[str, Depends(get_request_id)]
-) -> list[InteractionResponse]:
-    """Génère des interactions structurées.
+) -> PreviewPromptResponse:
+    """Prévisualise le prompt brut construit sans estimer les tokens.
+    
+    Cet endpoint est dédié à la prévisualisation du prompt avant génération.
+    Pour estimer les tokens, utiliser /estimate-tokens à la place.
     
     Args:
-        request_data: Données de la requête de génération.
+        request_data: Données de la requête (sélections, instructions).
         request: La requête HTTP.
-        dialogue_service: Service de génération injecté.
-        interaction_service: Service d'interactions injecté.
+        dialogue_service: Service de dialogue injecté.
+        prompt_engine: Moteur de prompt injecté.
         request_id: ID de la requête.
         
     Returns:
-        Liste des interactions générées.
-        
-    Raises:
-        InternalServerException: Si la génération échoue.
-        NotFoundException: Si previous_interaction_id est fourni mais l'interaction n'existe pas.
+        Prompt brut construit (format XML) et sa structure JSON.
     """
     try:
-        # Gérer la continuité narrative si previous_interaction_id est fourni
-        if request_data.previous_interaction_id:
-            if not interaction_service.exists(request_data.previous_interaction_id):
-                raise NotFoundException(
-                    resource_type="Interaction",
-                    resource_id=request_data.previous_interaction_id,
+        # Convertir PreviewPromptRequest en EstimateTokensRequest pour réutiliser la logique
+        estimate_request = EstimateTokensRequest(
+            context_selections=request_data.context_selections,
+            user_instructions=request_data.user_instructions,
+            npc_speaker_id=request_data.npc_speaker_id,
+            max_context_tokens=request_data.max_context_tokens,
+            system_prompt_override=request_data.system_prompt_override,
+            author_profile=request_data.author_profile,
+            max_choices=request_data.max_choices,
+            choices_mode=request_data.choices_mode,
+            narrative_tags=request_data.narrative_tags,
+            vocabulary_config=request_data.vocabulary_config,
+            include_narrative_guides=request_data.include_narrative_guides,
+            previous_dialogue_preview=request_data.previous_dialogue_preview,
+            field_configs=request_data.field_configs,
+            organization_mode=request_data.organization_mode,
+            in_game_flags=request_data.in_game_flags  # Ajouter les flags
+        )
+        
+        try:
+            built = _build_prompt_from_request(estimate_request, dialogue_service, prompt_engine, skill_service, trait_service)
+        except ValueError as xml_error:
+            # Erreur XML détectée - récupérer les détails depuis l'exception
+            if "XML invalide" in str(xml_error) and hasattr(xml_error, 'xml_error_details'):
+                error_details = {
+                    "error": str(xml_error),
+                    "error_type": "XML_VALIDATION_ERROR",
+                    "xml_error_details": xml_error.xml_error_details,
+                    "raw_xml": getattr(xml_error, 'raw_xml', None)
+                }
+                logger.error(f"Erreur XML détaillée (request_id: {request_id}): {xml_error.xml_error_details}")
+                raise InternalServerException(
+                    message="Erreur lors de la construction du prompt: XML invalide généré",
+                    details=error_details,
                     request_id=request_id
                 )
-            
-            # Récupérer le chemin complet (tous les parents jusqu'à la racine)
-            path_interactions = interaction_service.get_dialogue_path(request_data.previous_interaction_id)
-            
-            # Définir le contexte de dialogue précédent dans le ContextBuilder
-            context_builder = dialogue_service.context_builder
-            context_builder.set_previous_dialogue_context(path_interactions)
+            # Si pas de détails XML, re-lancer l'erreur originale
+            raise
         
-        # Créer le client LLM via la factory
-        from api.dependencies import get_config_service
-        config_service = get_config_service()
-        from factories.llm_factory import LLMClientFactory
-        llm_config = config_service.get_llm_config()
-        available_models = config_service.get_available_llm_models()
-        logger.info(f"Tentative de création du client LLM pour model_id: {request_data.llm_model_identifier}")
-        logger.debug(f"Available models: {available_models}")
-        llm_client = LLMClientFactory.create_client(
-            model_id=request_data.llm_model_identifier,
-            config=llm_config,
-            available_models=available_models
-        )
-        from llm_client import DummyLLMClient, OpenAIClient
-        is_dummy_client = isinstance(llm_client, DummyLLMClient)
-        is_openai_client = isinstance(llm_client, OpenAIClient)
-        if is_dummy_client:
-            logger.warning(f"ATTENTION: DummyLLMClient utilisé au lieu d'OpenAI pour model_id: {request_data.llm_model_identifier}")
-        if is_openai_client:
-            logger.info(f"OpenAIClient créé avec succès - model_name: {getattr(llm_client, 'model_name', 'N/A')}, has_client: {hasattr(llm_client, 'client')}")
-        
-        logger.info(f"Client LLM créé: {type(llm_client).__name__}, is_dummy: {is_dummy_client}, is_openai: {is_openai_client}")
-        
-        # Convertir ContextSelection en dict pour le service (avec préfixes underscore)
-        context_selections_dict = request_data.context_selections.to_service_dict()
-        logger.info(f"Context selections reçus - characters: {context_selections_dict.get('characters', [])}, locations: {context_selections_dict.get('locations', [])}, items: {context_selections_dict.get('items', [])}")
-        logger.debug(f"Context selections complet: {context_selections_dict}")
-        
-        # Appeler le service de génération
-        interactions, prompt_used, estimated_tokens = await dialogue_service.generate_interaction_variants(
-            llm_client=llm_client,
-            k_variants=request_data.k_variants,
-            max_context_tokens_for_context_builder=request_data.max_context_tokens,
-            user_instructions=request_data.user_instructions,
-            system_prompt_override=request_data.system_prompt_override,
-            context_selections=context_selections_dict,
-            current_llm_model_identifier=request_data.llm_model_identifier
-        )
-        
-        if interactions is None or len(interactions) == 0:
-            raise InternalServerException(
-                message="Échec de la génération d'interactions",
-                request_id=request_id
-            )
-        
-        # Valider les références dans les interactions générées
-        # Collecter tous les IDs des interactions générées
-        generated_ids = {interaction.interaction_id for interaction in interactions}
-        valid_ids = set(generated_ids)
-        
-        # Ajouter les IDs existants dans le système (pour références vers interactions existantes)
-        all_existing = interaction_service.get_all()
-        for existing_interaction in all_existing:
-            valid_ids.add(existing_interaction.interaction_id)
-        
-        # Valider chaque interaction générée
-        validated_interactions = []
-        validation_errors = []
-        
-        for interaction in interactions:
+        # Convertir structured_prompt en dict pour la réponse
+        structured_prompt_dict = None
+        if built.structured_prompt:
             try:
-                # Collecter tous les IDs référencés dans cette interaction
-                referenced_ids = []
-                if interaction.next_interaction_id_if_no_choices:
-                    referenced_ids.append(interaction.next_interaction_id_if_no_choices)
-                
-                for element in interaction.elements:
-                    if isinstance(element, PlayerChoicesBlockElement):
-                        for choice in element.choices:
-                            if choice.next_interaction_id:
-                                referenced_ids.append(choice.next_interaction_id)
-                
-                # Vérifier que tous les IDs référencés existent (dans les interactions générées OU existantes)
-                invalid_refs = [ref_id for ref_id in referenced_ids if ref_id not in valid_ids]
-                
-                if invalid_refs:
-                    logger.warning(
-                        f"Interaction générée '{interaction.interaction_id}' a des références cassées: {invalid_refs} "
-                        f"(request_id: {request_id})"
-                    )
-                    # Option: supprimer les références cassées plutôt que de rejeter l'interaction
-                    # Pour l'instant, on log juste un warning et on garde l'interaction
-                    validation_errors.append({
-                        "interaction_id": interaction.interaction_id,
-                        "invalid_references": invalid_refs
-                    })
-                
-                validated_interactions.append(interaction)
-                
+                structured_prompt_dict = built.structured_prompt.model_dump()
             except Exception as e:
-                logger.error(
-                    f"Erreur lors de la validation de l'interaction générée '{interaction.interaction_id}': {e} "
-                    f"(request_id: {request_id})"
-                )
-                validation_errors.append({
-                    "interaction_id": interaction.interaction_id,
-                    "error": str(e)
-                })
-                # On continue avec les autres interactions même si une échoue
+                logger.warning(f"Erreur lors de la conversion du structured_prompt en dict: {e}")
+
+        return PreviewPromptResponse(
+            raw_prompt=built.raw_prompt,
+            prompt_hash=built.prompt_hash,
+            structured_prompt=structured_prompt_dict
+        )
         
-        # Si toutes les interactions ont échoué, lever une exception
-        if len(validated_interactions) == 0:
-            raise InternalServerException(
-                message="Aucune interaction valide générée",
-                details={"errors": validation_errors},
-                request_id=request_id
-            )
-        
-        # Si certaines interactions ont échoué, logger un warning mais retourner les valides
-        if validation_errors:
-            logger.warning(
-                f"Génération partielle: {len(validated_interactions)}/{len(interactions)} interactions valides, "
-                f"{len(validation_errors)} erreurs (request_id: {request_id})"
-            )
-        
-        # Convertir en format de réponse
-        return [InteractionResponse.from_model(interaction) for interaction in validated_interactions]
-        
-    except NotFoundException:
-        # Re-propager NotFoundException (déjà gérée)
+    except ValidationException:
+        # Re-raise les ValidationException telles quelles
         raise
     except Exception as e:
-        # Vérifier si c'est une erreur OpenAI
-        from openai import APIError
-        if isinstance(e, APIError):
-            logger.error(f"Erreur OpenAI lors de la génération d'interactions (request_id: {request_id}): {e}")
-            raise _transform_openai_error(e, request_id)
-        
-        logger.exception(f"Erreur lors de la génération d'interactions (request_id: {request_id})")
+        logger.exception(f"Erreur lors de la prévisualisation du prompt (request_id: {request_id}): {type(e).__name__}: {str(e)}")
+        error_details = {
+            "error": str(e),
+            "error_type": type(e).__name__,
+        }
+        import sys
+        import traceback
+        if hasattr(sys, '_getframe'):
+            error_details["traceback"] = traceback.format_exc()
         raise InternalServerException(
-            message="Erreur lors de la génération d'interactions",
-            details={"error": str(e)},
+            message="Erreur lors de la prévisualisation du prompt",
+            details=error_details,
             request_id=request_id
         )
 
@@ -385,84 +286,96 @@ async def estimate_tokens(
     request_data: EstimateTokensRequest,
     request: Request,
     dialogue_service: Annotated[DialogueGenerationService, Depends(get_dialogue_generation_service)],
+    prompt_engine: Annotated[PromptEngine, Depends(get_prompt_engine)],
+    skill_service: Annotated[SkillCatalogService, Depends(get_skill_catalog_service)],
+    trait_service: Annotated[TraitCatalogService, Depends(get_trait_catalog_service)],
     request_id: Annotated[str, Depends(get_request_id)]
 ) -> EstimateTokensResponse:
     """Estime le nombre de tokens pour un contexte donné.
     
     Args:
-        request_data: Données de la requête d'estimation.
+        request_data: Données de la requête (sélections, instructions).
         request: La requête HTTP.
-        dialogue_service: Service de génération injecté.
+        dialogue_service: Service de dialogue injecté.
         request_id: ID de la requête.
         
     Returns:
-        Estimation du nombre de tokens.
+        Estimation du nombre de tokens et prompt brut réel.
     """
     try:
-        # Convertir ContextSelection en dict pour le service (avec préfixes underscore)
-        context_selections_dict = request_data.context_selections.to_service_dict()
+        # Construire le prompt en réutilisant la fonction helper
+        try:
+            built = _build_prompt_from_request(request_data, dialogue_service, prompt_engine, skill_service, trait_service)
+        except ValueError as xml_error:
+            # Erreur XML détectée - récupérer les détails depuis l'exception
+            if "XML invalide" in str(xml_error) and hasattr(xml_error, 'xml_error_details'):
+                error_details = {
+                    "error": str(xml_error),
+                    "error_type": "XML_VALIDATION_ERROR",
+                    "xml_error_details": xml_error.xml_error_details,
+                    "raw_xml": getattr(xml_error, 'raw_xml', None)
+                }
+                logger.error(f"Erreur XML détaillée (request_id: {request_id}): {xml_error.xml_error_details}")
+                raise InternalServerException(
+                    message="Erreur lors de l'estimation de tokens: XML invalide généré",
+                    details=error_details,
+                    request_id=request_id
+                )
+            # Si pas de détails XML, re-lancer l'erreur originale
+            raise
         
-        # Construire le contexte via le service
+        # Calculer context_tokens (tokens du contexte seul)
         context_builder = dialogue_service.context_builder
-        context_text = context_builder.build_context(
+        context_selections_dict = request_data.context_selections.to_service_dict()
+        if request_data.previous_dialogue_preview:
+            context_builder.set_previous_dialogue_context(request_data.previous_dialogue_preview)
+        
+        structured_context = context_builder.build_context_json(
             selected_elements=context_selections_dict,
             scene_instruction=request_data.user_instructions,
-            max_tokens=request_data.max_context_tokens
+            field_configs=request_data.field_configs,
+            organization_mode=request_data.organization_mode or "narrative",
+            max_tokens=request_data.max_context_tokens,
+            include_dialogue_type=True,
+            element_modes=context_selections_dict.get("_element_modes")
         )
-        
-        # S'assurer que context_text n'est jamais None
-        if context_text is None:
-            context_text = ""
-        
+        context_text = context_builder._context_serializer.serialize_to_text(structured_context)
         context_tokens = context_builder._count_tokens(context_text)
         
-        # Estimer le prompt complet
-        prompt_engine = dialogue_service.prompt_engine
-        original_system_prompt = None
-        
-        # Appliquer le system_prompt_override s'il est fourni
-        if request_data.system_prompt_override is not None and prompt_engine.system_prompt_template != request_data.system_prompt_override:
-            original_system_prompt = prompt_engine.system_prompt_template
-            prompt_engine.system_prompt_template = request_data.system_prompt_override
-            logger.info(f"System prompt temporarily set for estimation: '{request_data.system_prompt_override[:100]}...'")
-        
-        try:
-            # Extraire les informations de scène pour PromptEngine depuis context_selections
-            scene_protagonists_dict = context_selections_dict.pop("_scene_protagonists", {})
-            scene_location_dict = context_selections_dict.pop("_scene_location", {})
-            
-            # Extraire generation_settings si présent
-            generation_settings = context_selections_dict.pop("generation_settings", {})
-            dialogue_structure = generation_settings.get("dialogue_structure", []) if generation_settings else []
-            
-            generation_params_for_prompt_build = {}
-            if dialogue_structure:
-                # Convertir la structure en description narrative pour le prompt
-                generation_params_for_prompt_build["dialogue_structure_narrative"] = "Structure: " + " → ".join(dialogue_structure)
-            
-            full_prompt, total_tokens = prompt_engine.build_prompt(
-                context_summary=context_text,
-                user_specific_goal=request_data.user_instructions,
-                scene_protagonists=scene_protagonists_dict if scene_protagonists_dict else None,
-                scene_location=scene_location_dict if scene_location_dict else None,
-                generation_params=generation_params_for_prompt_build if generation_params_for_prompt_build else None
-            )
-        finally:
-            # Restaurer le system prompt original si on l'a modifié
-            if original_system_prompt is not None:
-                prompt_engine.system_prompt_template = original_system_prompt
-        
+        # Convertir structured_prompt en dict pour la réponse
+        structured_prompt_dict = None
+        if built.structured_prompt:
+            try:
+                structured_prompt_dict = built.structured_prompt.model_dump()
+            except Exception as e:
+                logger.warning(f"Erreur lors de la conversion du structured_prompt en dict: {e}")
+
         return EstimateTokensResponse(
             context_tokens=context_tokens,
-            total_estimated_tokens=total_tokens,
-            estimated_prompt=full_prompt
+            token_count=built.token_count,
+            raw_prompt=built.raw_prompt,
+            prompt_hash=built.prompt_hash,
+            structured_prompt=structured_prompt_dict
         )
         
+    except ValidationException:
+        # Re-raise les ValidationException telles quelles
+        raise
     except Exception as e:
-        logger.exception(f"Erreur lors de l'estimation de tokens (request_id: {request_id})")
+        logger.exception(f"Erreur lors de l'estimation de tokens (request_id: {request_id}): {type(e).__name__}: {str(e)}")
+        # Inclure plus de détails pour le debug
+        error_details = {
+            "error": str(e),
+            "error_type": type(e).__name__,
+        }
+        # Ajouter la traceback en développement uniquement
+        import sys
+        import traceback
+        if hasattr(sys, '_getframe'):
+            error_details["traceback"] = traceback.format_exc()
         raise InternalServerException(
             message="Erreur lors de l'estimation de tokens",
-            details={"error": str(e)},
+            details=error_details,
             request_id=request_id
         )
 
@@ -477,157 +390,266 @@ async def generate_unity_dialogue(
     request: Request,
     dialogue_service: Annotated[DialogueGenerationService, Depends(get_dialogue_generation_service)],
     prompt_engine: Annotated[PromptEngine, Depends(get_prompt_engine)],
+    skill_service: Annotated[SkillCatalogService, Depends(get_skill_catalog_service)],
+    trait_service: Annotated[TraitCatalogService, Depends(get_trait_catalog_service)],
     request_id: Annotated[str, Depends(get_request_id)]
 ) -> GenerateUnityDialogueResponse:
     """Génère un nœud de dialogue au format Unity JSON.
     
+    Utilise UnityDialogueOrchestrator pour factoriser la logique
+    avec le streaming SSE.
+    """
+    try:
+        # Créer orchestrateur avec toutes les dépendances
+        from services.unity_dialogue_orchestrator import UnityDialogueOrchestrator
+        from api.dependencies import get_config_service, create_llm_usage_service
+        
+        config_service = get_config_service(request)
+        usage_service = create_llm_usage_service()
+        
+        orchestrator = UnityDialogueOrchestrator(
+            dialogue_service=dialogue_service,
+            prompt_engine=prompt_engine,
+            skill_service=skill_service,
+            trait_service=trait_service,
+            config_service=config_service,
+            usage_service=usage_service,
+            request_id=request_id
+        )
+        
+        # Appel simple sans streaming (usage REST)
+        return await orchestrator.generate(request_data)
+        
+    except Exception as e:
+        if isinstance(e, ValidationException): raise
+        logger.exception(f"Erreur lors de la génération Unity JSON (request_id: {request_id})")
+        raise InternalServerException(message=str(e), request_id=request_id)
+
+
+
+@router.post(
+    "/unity/export",
+    response_model=ExportUnityDialogueResponse,
+    status_code=status.HTTP_200_OK
+)
+async def export_unity_dialogue(
+    request_data: ExportUnityDialogueRequest,
+    request: Request,
+    config_service: Annotated[ConfigurationService, Depends(get_config_service)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> ExportUnityDialogueResponse:
+    """Exporte un dialogue Unity JSON vers un fichier.
+    
     Args:
-        request_data: Données de la requête de génération.
+        request_data: Données de la requête d'export (JSON, titre, nom de fichier).
         request: La requête HTTP.
-        dialogue_service: Service de génération injecté (pour ContextBuilder).
-        prompt_engine: PromptEngine injecté.
+        config_service: Service de configuration injecté.
         request_id: ID de la requête.
         
     Returns:
-        Réponse contenant le JSON Unity généré.
+        Réponse contenant le chemin du fichier créé.
         
     Raises:
-        ValidationException: Si aucun personnage n'est sélectionné.
-        InternalServerException: Si la génération échoue.
+        ValidationException: Si le chemin Unity n'est pas configuré ou si le JSON est invalide.
+        InternalServerException: Si l'écriture du fichier échoue.
     """
     try:
-        # 1. Valider qu'au moins un personnage est sélectionné
-        if not request_data.context_selections.characters or len(request_data.context_selections.characters) == 0:
+        # 1. Récupérer le chemin Unity configuré
+        unity_path = config_service.get_unity_dialogues_path()
+        if not unity_path:
             raise ValidationException(
-                message="Au moins un personnage doit être sélectionné pour générer un dialogue",
-                details={"field": "context_selections.characters"},
+                message="Le chemin Unity dialogues n'est pas configuré. Configurez-le dans les paramètres.",
+                details={"field": "unity_dialogues_path"},
                 request_id=request_id
             )
         
-        # 2. Extraire le PNJ interlocuteur
-        npc_speaker_id = request_data.npc_speaker_id
-        if not npc_speaker_id:
-            # Utiliser le premier personnage sélectionné
-            npc_speaker_id = request_data.context_selections.characters[0]
-            logger.info(f"PNJ interlocuteur non spécifié, utilisation du premier personnage: {npc_speaker_id}")
-        else:
-            # Vérifier que le PNJ sélectionné est dans la liste des personnages
-            if npc_speaker_id not in request_data.context_selections.characters:
-                logger.warning(
-                    f"PNJ interlocuteur '{npc_speaker_id}' n'est pas dans la liste des personnages sélectionnés. "
-                    f"Utilisation quand même."
+        unity_dir = Path(unity_path)
+        
+        # Créer le dossier s'il n'existe pas
+        unity_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 2. Valider que le JSON est valide et conforme au schéma Unity
+        try:
+            json_data = json.loads(request_data.json_content)
+            if not isinstance(json_data, list):
+                raise ValidationException(
+                    message="Le JSON Unity doit être un tableau de nœuds",
+                    details={"json_content": "Doit être un tableau []"},
+                    request_id=request_id
                 )
+        except json.JSONDecodeError as e:
+            raise ValidationException(
+                message="Le JSON fourni n'est pas valide",
+                details={"json_content": f"Erreur JSON: {str(e)}"},
+                request_id=request_id
+            )
         
-        # 3. Charger le catalogue des compétences
-        skill_service = SkillCatalogService()
-        try:
-            skills_list = skill_service.load_skills()
-            logger.info(f"Chargement réussi: {len(skills_list)} compétences disponibles")
-        except Exception as e:
-            logger.warning(f"Impossible de charger le catalogue des compétences: {e}. Continuation sans liste de compétences.")
-            skills_list = []
-        
-        # 4. Charger le catalogue des traits
-        trait_service = TraitCatalogService()
-        try:
-            traits_data = trait_service.load_traits()
-            traits_list = trait_service.get_trait_labels()
-            logger.info(f"Chargement réussi: {len(traits_list)} traits disponibles")
-        except Exception as e:
-            logger.warning(f"Impossible de charger le catalogue des traits: {e}. Continuation sans liste de traits.")
-            traits_list = []
-        
-        # 5. Construire le contexte GDD
-        context_builder = dialogue_service.context_builder
-        context_selections_dict = request_data.context_selections.to_service_dict()
-        
-        context_summary = context_builder.build_context(
-            selected_elements=context_selections_dict,
-            scene_instruction=request_data.user_instructions,
-            max_tokens=request_data.max_context_tokens
-        )
-        context_tokens = context_builder._count_tokens(context_summary)
-        
-        # Extraire le lieu de la scène
-        scene_location = None
-        if request_data.context_selections.scene_location:
-            scene_location = request_data.context_selections.scene_location
-        
-        # 6. Construire le prompt Unity
-        prompt, prompt_tokens = prompt_engine.build_unity_dialogue_prompt(
-            user_instructions=request_data.user_instructions,
-            npc_speaker_id=npc_speaker_id,
-            player_character_id="URESAIR",  # Seigneuresse Uresaïr par défaut
-            skills_list=skills_list,
-            traits_list=traits_list,
-            context_summary=context_summary,
-            scene_location=scene_location,
-            max_choices=request_data.max_choices
-        )
-        
-        estimated_tokens = context_tokens + prompt_tokens
-        
-        # 7. Créer le client LLM
-        from api.dependencies import get_config_service
-        config_service = get_config_service()
-        from factories.llm_factory import LLMClientFactory
-        llm_config = config_service.get_llm_config()
-        available_models = config_service.get_available_llm_models()
-        
-        llm_client = LLMClientFactory.create_client(
-            model_id=request_data.llm_model_identifier,
-            config=llm_config,
-            available_models=available_models
-        )
-        
-        from llm_client import DummyLLMClient, OpenAIClient
-        is_dummy_client = isinstance(llm_client, DummyLLMClient)
-        warning = None
-        if is_dummy_client:
-            warning = "ATTENTION: DummyLLMClient utilisé au lieu d'OpenAI"
-            logger.warning(warning)
-        
-        # 8. Générer le nœud via Structured Output
-        unity_service = UnityDialogueGenerationService()
-        generation_response = await unity_service.generate_dialogue_node(
-            llm_client=llm_client,
-            prompt=prompt,
-            system_prompt_override=request_data.system_prompt_override,
-            max_choices=request_data.max_choices
-        )
-        
-        # 9. Enrichir avec IDs
-        enriched_nodes = unity_service.enrich_with_ids(
-            content=generation_response,
-            start_id="START"
-        )
-        
-        # 10. Normaliser et rendre en JSON
+        # 3. Valider le schéma Unity (IDs uniques, références valides, etc.)
+        from services.json_renderer.unity_json_renderer import UnityJsonRenderer
         renderer = UnityJsonRenderer()
-        json_content = renderer.render_unity_nodes(
-            nodes=enriched_nodes,
-            normalize=True
-        )
+        is_valid, validation_errors = renderer.validate_nodes(json_data)
+        if not is_valid:
+            raise ValidationException(
+                message="Le dialogue Unity contient des erreurs de validation",
+                details={
+                    "validation_errors": validation_errors,
+                    "json_content": "Le JSON ne respecte pas le schéma Unity (IDs uniques, références valides, etc.)"
+                },
+                request_id=request_id
+            )
         
-        # 11. Extraire le titre depuis la réponse de génération
-        dialogue_title = generation_response.title if hasattr(generation_response, 'title') and generation_response.title else None
+        # 4. Générer le nom de fichier
+        if request_data.filename:
+            # Utiliser le nom fourni (sans extension)
+            filename = request_data.filename
+        else:
+            # Générer un slug à partir du titre
+            # Convertir en minuscules, remplacer espaces et caractères spéciaux par underscores
+            slug = re.sub(r'[^\w\s-]', '', request_data.title.lower())
+            slug = re.sub(r'[-\s]+', '_', slug)
+            filename = slug[:100]  # Limiter la longueur
         
-        logger.info(f"Génération Unity JSON réussie: {len(enriched_nodes)} nœud(s), titre: {dialogue_title}")
+        # Ajouter l'extension .json si pas présente
+        if not filename.endswith('.json'):
+            filename += '.json'
         
-        return GenerateUnityDialogueResponse(
-            json_content=json_content,
-            title=dialogue_title,
-            prompt_used=prompt,
-            estimated_tokens=estimated_tokens,
-            warning=warning
+        file_path = unity_dir / filename
+        
+        # 5. Écrire le fichier JSON (pretty-print avec 2 espaces)
+        json_content_formatted = json.dumps(json_data, indent=2, ensure_ascii=False)
+        file_path.write_text(json_content_formatted, encoding='utf-8')
+        
+        logger.info(f"Dialogue Unity exporté: {file_path} (request_id: {request_id})")
+        
+        return ExportUnityDialogueResponse(
+            file_path=str(file_path.absolute()),
+            filename=filename,
+            success=True
         )
         
     except ValidationException:
         raise
     except Exception as e:
-        logger.exception(f"Erreur lors de la génération Unity JSON (request_id: {request_id})")
+        logger.exception(f"Erreur lors de l'export Unity JSON (request_id: {request_id})")
         raise InternalServerException(
-            message="Erreur lors de la génération du dialogue Unity JSON",
+            message="Erreur lors de l'export du dialogue Unity JSON",
+            details={"error": str(e)},
+            request_id=request_id
+        )
+
+
+class RawJsonContextResponse(BaseModel):
+    """Réponse pour l'endpoint debug raw-json.
+    
+    Attributes:
+        structured_context: Structure JSON brute du contexte (PromptStructure).
+        prompt_hash: Hash SHA-256 du prompt pour référence.
+    """
+    structured_context: Dict[str, Any] = Field(..., description="Structure JSON brute du contexte")
+    prompt_hash: str = Field(..., description="Hash SHA-256 du prompt pour référence")
+
+
+@router.post(
+    "/debug/raw-json",
+    response_model=RawJsonContextResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Debug"]
+)
+async def get_raw_json_context(
+    request_data: EstimateTokensRequest,
+    request: Request,
+    dialogue_service: Annotated[DialogueGenerationService, Depends(get_dialogue_generation_service)],
+    prompt_engine: Annotated[PromptEngine, Depends(get_prompt_engine)],
+    skill_service: Annotated[SkillCatalogService, Depends(get_skill_catalog_service)],
+    trait_service: Annotated[TraitCatalogService, Depends(get_trait_catalog_service)],
+    request_id: Annotated[str, Depends(get_request_id)]
+) -> RawJsonContextResponse:
+    """Expose le JSON brut du contexte structuré pour debug.
+    
+    Reconstruit le contexte depuis les paramètres de la requête et retourne
+    la structure JSON brute (PromptStructure) avant conversion en XML.
+    
+    Args:
+        request_data: Paramètres de la requête (même format que estimate-tokens).
+        request: La requête HTTP.
+        dialogue_service: DialogueGenerationService injecté.
+        prompt_engine: PromptEngine injecté.
+        request_id: ID de la requête.
+        
+    Returns:
+        Structure JSON brute du contexte et hash du prompt.
+    """
+    try:
+        # Convertir ContextSelection en dict
+        context_selections_dict = request_data.context_selections.to_service_dict()
+        
+        # Construire le contexte JSON (même logique que estimate-tokens)
+        context_builder = dialogue_service.context_builder
+        if request_data.previous_dialogue_preview:
+            context_builder.set_previous_dialogue_context(request_data.previous_dialogue_preview)
+        
+        structured_context = context_builder.build_context_json(
+            selected_elements=context_selections_dict,
+            scene_instruction=request_data.user_instructions,
+            field_configs=request_data.field_configs,
+            organization_mode=request_data.organization_mode or "narrative",
+            max_tokens=request_data.max_context_tokens,
+            include_dialogue_type=True,
+            element_modes=context_selections_dict.get("_element_modes")
+        )
+        
+        # Construire le prompt pour obtenir le hash (services injectés)
+        skills_list = []
+        try:
+            skills_list = skill_service.load_skills()
+        except Exception as e:
+            logger.warning(f"Erreur lors du chargement des compétences (request_id: {request_id}): {e}", exc_info=True)
+            # Continuer avec une liste vide si le chargement échoue
+        
+        traits_list = []
+        try:
+            traits_list = trait_service.get_trait_labels()
+        except Exception as e:
+            logger.warning(f"Erreur lors du chargement des traits (request_id: {request_id}): {e}", exc_info=True)
+            # Continuer avec une liste vide si le chargement échoue
+        
+        # Déterminer le PNJ interlocuteur
+        all_characters = context_selections_dict.get('characters', [])
+        npc_speaker_id = request_data.npc_speaker_id or (all_characters[0] if all_characters else "UNKNOWN")
+        
+        # Construire le prompt pour obtenir le hash
+        prompt_input = PromptInput(
+            user_instructions=request_data.user_instructions,
+            npc_speaker_id=npc_speaker_id,
+            player_character_id="URESAIR",
+            skills_list=skills_list,
+            traits_list=traits_list,
+            context_summary=None,  # On utilise structured_context
+            structured_context=structured_context,
+            scene_location=request_data.context_selections.scene_location,
+            max_choices=request_data.max_choices,
+            choices_mode=request_data.choices_mode,
+            narrative_tags=request_data.narrative_tags,
+            author_profile=request_data.author_profile,
+            vocabulary_config=request_data.vocabulary_config,
+            include_narrative_guides=request_data.include_narrative_guides
+        )
+        
+        built = prompt_engine.build_prompt(prompt_input)
+        prompt_hash = built.prompt_hash
+        
+        # Convertir structured_context en dict
+        structured_context_dict = structured_context.model_dump() if hasattr(structured_context, 'model_dump') else structured_context
+        
+        return RawJsonContextResponse(
+            structured_context=structured_context_dict,
+            prompt_hash=prompt_hash
+        )
+        
+    except Exception as e:
+        logger.exception(f"Erreur lors de la récupération du JSON brut (request_id: {request_id})")
+        raise InternalServerException(
+            message="Erreur lors de la récupération du JSON brut",
             details={"error": str(e)},
             request_id=request_id
         )

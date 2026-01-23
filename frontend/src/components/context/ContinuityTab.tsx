@@ -1,33 +1,39 @@
 /**
- * Onglet Continuité pour sélectionner une interaction précédente comme contexte.
+ * Onglet Continuité pour sélectionner un dialogue Unity précédent comme contexte.
  */
 import { memo, useState, useEffect, useCallback } from 'react'
-import * as interactionsAPI from '../../api/interactions'
+import * as unityDialoguesAPI from '../../api/unityDialogues'
 import { getErrorMessage } from '../../types/errors'
 import { theme } from '../../theme'
-import type { InteractionResponse, InteractionContextPathResponse } from '../../types/api'
+import type { UnityDialogueMetadata } from '../../types/api'
 
 export interface ContinuityTabProps {
-  onSelectContext?: (interactionId: string | null, path: InteractionResponse[]) => void
+  onSelectContext?: (filename: string | null, previewText: string) => void
 }
 
 export const ContinuityTab = memo(function ContinuityTab({
   onSelectContext,
 }: ContinuityTabProps) {
-  const [interactions, setInteractions] = useState<InteractionResponse[]>([])
-  const [selectedInteractionId, setSelectedInteractionId] = useState<string | null>(null)
-  const [path, setPath] = useState<InteractionResponse[]>([])
+  const [dialogues, setDialogues] = useState<UnityDialogueMetadata[]>([])
+  const [selectedFilename, setSelectedFilename] = useState<string | null>(null)
   const [contextPreview, setContextPreview] = useState<string>('')
   const [isLoading, setIsLoading] = useState(true)
-  const [isLoadingPath, setIsLoadingPath] = useState(false)
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const loadInteractions = useCallback(async () => {
+  const formatFilename = (filename: string): string => {
+    // Enlever l'extension .json et remplacer les underscores par des espaces
+    const formatted = filename.replace(/\.json$/, '').replace(/_/g, ' ')
+    // Ajouter une majuscule au premier mot
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1)
+  }
+
+  const loadDialogues = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await interactionsAPI.listInteractions()
-      setInteractions(response.interactions)
+      const response = await unityDialoguesAPI.listUnityDialogues()
+      setDialogues(response.dialogues)
     } catch (err) {
       setError(getErrorMessage(err))
     } finally {
@@ -36,54 +42,45 @@ export const ContinuityTab = memo(function ContinuityTab({
   }, [])
 
   useEffect(() => {
-    loadInteractions()
-  }, [loadInteractions])
+    loadDialogues()
+  }, [loadDialogues])
 
-  const loadPath = useCallback(async (interactionId: string) => {
-    setIsLoadingPath(true)
+  const loadPreview = useCallback(async (filename: string) => {
+    setIsLoadingPreview(true)
     try {
-      const response: InteractionContextPathResponse = await interactionsAPI.getInteractionContextPath(interactionId)
-      setPath(response.path || [])
-      
-      // Générer un aperçu du contexte formaté
-      const preview = response.path
-        .map((interaction, index) => {
-          const dialogueLines = interaction.elements
-            .filter((el: any) => el.element_type === 'dialogue_line')
-            .map((el: any) => `${el.speaker || 'NPC'}: ${el.text}`)
-            .join('\n')
-          return `${index + 1}. ${interaction.title || interaction.interaction_id}\n${dialogueLines}`
-        })
-        .join('\n\n---\n\n')
-      setContextPreview(preview)
+      // Charger le dialogue
+      const dialogue = await unityDialoguesAPI.getUnityDialogue(filename)
+      // Générer le preview
+      const previewResponse = await unityDialoguesAPI.previewUnityDialogue({
+        json_content: dialogue.json_content,
+      })
+      setContextPreview(previewResponse.preview_text)
     } catch (err) {
-      console.error('Erreur lors du chargement du chemin:', err)
-      setPath([])
+      console.error('Erreur lors du chargement du preview:', err)
       setContextPreview('')
     } finally {
-      setIsLoadingPath(false)
+      setIsLoadingPreview(false)
     }
   }, [])
 
   useEffect(() => {
-    if (selectedInteractionId) {
-      loadPath(selectedInteractionId)
+    if (selectedFilename) {
+      loadPreview(selectedFilename)
     } else {
-      setPath([])
       setContextPreview('')
     }
-  }, [selectedInteractionId, loadPath])
+  }, [selectedFilename, loadPreview])
 
   const handleUseContext = useCallback(() => {
-    if (selectedInteractionId && path.length > 0) {
-      onSelectContext?.(selectedInteractionId, path)
+    if (selectedFilename && contextPreview) {
+      onSelectContext?.(selectedFilename, contextPreview)
     }
-  }, [selectedInteractionId, path, onSelectContext])
+  }, [selectedFilename, contextPreview, onSelectContext])
 
   if (isLoading) {
     return (
       <div style={{ padding: '1rem', textAlign: 'center', color: theme.text.secondary }}>
-        Chargement des interactions...
+        Chargement des dialogues Unity...
       </div>
     )
   }
@@ -100,7 +97,7 @@ export const ContinuityTab = memo(function ContinuityTab({
       >
         {error}
         <button
-          onClick={loadInteractions}
+          onClick={loadDialogues}
           style={{
             marginTop: '0.5rem',
             padding: '0.5rem 1rem',
@@ -118,120 +115,125 @@ export const ContinuityTab = memo(function ContinuityTab({
   }
 
   return (
-    <div style={{ padding: '1rem', height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+    <div
+      style={{
+        padding: '1rem',
+        height: '100%',
+        overflowY: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '1rem',
+      }}
+    >
       <div>
-        <h4 style={{ marginTop: 0, marginBottom: '0.5rem', color: theme.text.primary }}>Interactions Existantes</h4>
-        <div style={{ maxHeight: '200px', overflowY: 'auto', border: `1px solid ${theme.border.primary}`, borderRadius: '4px' }}>
-          {interactions.length === 0 ? (
+        <h4 style={{ marginTop: 0, marginBottom: '0.5rem', color: theme.text.primary }}>
+          Dialogues Unity Existants
+        </h4>
+        <div
+          style={{
+            maxHeight: '200px',
+            overflowY: 'auto',
+            border: `1px solid ${theme.border.primary}`,
+            borderRadius: '4px',
+          }}
+        >
+          {dialogues.length === 0 ? (
             <div style={{ padding: '1rem', textAlign: 'center', color: theme.text.secondary }}>
-              Aucune interaction
+              Aucun dialogue Unity
             </div>
           ) : (
-            interactions.map((interaction) => (
+            dialogues.map((dialogue) => (
               <div
-                key={interaction.interaction_id}
-                onClick={() => setSelectedInteractionId(interaction.interaction_id)}
+                key={dialogue.filename}
+                onClick={() => setSelectedFilename(dialogue.filename)}
                 style={{
                   padding: '0.75rem',
                   borderBottom: `1px solid ${theme.border.primary}`,
                   backgroundColor:
-                    selectedInteractionId === interaction.interaction_id
+                    selectedFilename === dialogue.filename
                       ? theme.state.selected.background
                       : 'transparent',
                   color: theme.text.primary,
                   cursor: 'pointer',
                 }}
                 onMouseEnter={(e) => {
-                  if (selectedInteractionId !== interaction.interaction_id) {
+                  if (selectedFilename !== dialogue.filename) {
                     e.currentTarget.style.backgroundColor = theme.state.hover.background
                   }
                 }}
                 onMouseLeave={(e) => {
-                  if (selectedInteractionId !== interaction.interaction_id) {
+                  if (selectedFilename !== dialogue.filename) {
                     e.currentTarget.style.backgroundColor = 'transparent'
                   }
                 }}
               >
-                {interaction.title || interaction.interaction_id}
-                <div style={{ fontSize: '0.85rem', color: theme.text.secondary, marginTop: '0.25rem' }}>
-                  ID: {interaction.interaction_id.substring(0, 8)}...
-                </div>
+                {formatFilename(dialogue.filename)}
               </div>
             ))
           )}
         </div>
       </div>
 
-      {selectedInteractionId && (
+      {selectedFilename && (
         <>
           <div>
             <h4 style={{ marginTop: 0, marginBottom: '0.5rem', color: theme.text.primary }}>
-              Chemin de Dialogue (vers l'interaction sélectionnée)
+              Dialogue Sélectionné
             </h4>
-            {isLoadingPath ? (
-              <div style={{ padding: '1rem', textAlign: 'center', color: theme.text.secondary }}>
-                Chargement du chemin...
-              </div>
-            ) : path.length === 0 ? (
-              <div style={{ padding: '1rem', color: theme.text.secondary }}>
-                Aucun chemin disponible
-              </div>
-            ) : (
-              <div
-                style={{
-                  padding: '1rem',
-                  backgroundColor: theme.background.secondary,
-                  border: `1px solid ${theme.border.primary}`,
-                  borderRadius: '4px',
-                  maxHeight: '150px',
-                  overflowY: 'auto',
-                }}
-              >
-                {path.map((interaction, index) => (
-                  <div key={interaction.interaction_id} style={{ marginBottom: '0.5rem' }}>
-                    <strong style={{ color: theme.text.primary }}>
-                      {index + 1}. {interaction.title || interaction.interaction_id}
-                    </strong>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div
+              style={{
+                padding: '0.75rem',
+                backgroundColor: theme.background.secondary,
+                border: `1px solid ${theme.border.primary}`,
+                borderRadius: '4px',
+              }}
+            >
+              <strong style={{ color: theme.text.primary }}>
+                {selectedFilename ? formatFilename(selectedFilename) : ''}
+              </strong>
+            </div>
           </div>
 
           <div>
             <h4 style={{ marginTop: 0, marginBottom: '0.5rem', color: theme.text.primary }}>
               Aperçu du contexte injecté dans le LLM
             </h4>
-            <pre
-              style={{
-                padding: '1rem',
-                backgroundColor: theme.background.secondary,
-                border: `1px solid ${theme.border.primary}`,
-                borderRadius: '4px',
-                fontFamily: 'monospace',
-                fontSize: '0.85rem',
-                color: theme.text.secondary,
-                maxHeight: '200px',
-                overflowY: 'auto',
-                whiteSpace: 'pre-wrap',
-                wordWrap: 'break-word',
-              }}
-            >
-              {contextPreview || 'Sélectionnez une interaction pour voir l\'aperçu du contexte'}
-            </pre>
+            {isLoadingPreview ? (
+              <div style={{ padding: '1rem', textAlign: 'center', color: theme.text.secondary }}>
+                Chargement du preview...
+              </div>
+            ) : (
+              <pre
+                style={{
+                  padding: '1rem',
+                  backgroundColor: theme.background.secondary,
+                  border: `1px solid ${theme.border.primary}`,
+                  borderRadius: '4px',
+                  fontFamily: 'monospace',
+                  fontSize: '0.85rem',
+                  color: theme.text.secondary,
+                  maxHeight: '200px',
+                  overflowY: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  wordWrap: 'break-word',
+                }}
+              >
+                {contextPreview || 'Aucun aperçu disponible'}
+              </pre>
+            )}
           </div>
 
           <button
             onClick={handleUseContext}
-            disabled={!selectedInteractionId || path.length === 0}
+            disabled={!selectedFilename || !contextPreview}
             style={{
               padding: '0.75rem 1.5rem',
               border: 'none',
               borderRadius: '4px',
               backgroundColor: theme.button.primary.background,
               color: theme.button.primary.color,
-              cursor: !selectedInteractionId || path.length === 0 ? 'not-allowed' : 'pointer',
-              opacity: !selectedInteractionId || path.length === 0 ? 0.6 : 1,
+              cursor: !selectedFilename || !contextPreview ? 'not-allowed' : 'pointer',
+              opacity: !selectedFilename || !contextPreview ? 0.6 : 1,
             }}
           >
             Utiliser comme Contexte de Départ
@@ -241,4 +243,3 @@ export const ContinuityTab = memo(function ContinuityTab({
     </div>
   )
 })
-

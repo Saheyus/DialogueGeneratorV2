@@ -2,6 +2,15 @@
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from api.schemas.dialogue import ContextSelection
+import sys
+from pathlib import Path
+
+# Ajouter le répertoire racine au path pour importer constants
+_root_dir = Path(__file__).parent.parent.parent
+if str(_root_dir) not in sys.path:
+    sys.path.insert(0, str(_root_dir))
+
+from constants import Defaults
 
 
 class CharacterResponse(BaseModel):
@@ -43,9 +52,15 @@ class CharacterListResponse(BaseModel):
     Attributes:
         characters: Liste des personnages.
         total: Nombre total de personnages.
+        page: Numéro de page actuelle (1-indexed, None si pas de pagination).
+        page_size: Taille de la page (None si pas de pagination).
+        total_pages: Nombre total de pages (None si pas de pagination).
     """
     characters: List[CharacterResponse] = Field(..., description="Liste des personnages")
     total: int = Field(..., description="Nombre total de personnages")
+    page: Optional[int] = Field(None, description="Numéro de page actuelle (1-indexed)")
+    page_size: Optional[int] = Field(None, description="Taille de la page")
+    total_pages: Optional[int] = Field(None, description="Nombre total de pages")
 
 
 class LocationListResponse(BaseModel):
@@ -54,9 +69,15 @@ class LocationListResponse(BaseModel):
     Attributes:
         locations: Liste des lieux.
         total: Nombre total de lieux.
+        page: Numéro de page actuelle (1-indexed, None si pas de pagination).
+        page_size: Taille de la page (None si pas de pagination).
+        total_pages: Nombre total de pages (None si pas de pagination).
     """
     locations: List[LocationResponse] = Field(..., description="Liste des lieux")
     total: int = Field(..., description="Nombre total de lieux")
+    page: Optional[int] = Field(None, description="Numéro de page actuelle (1-indexed)")
+    page_size: Optional[int] = Field(None, description="Taille de la page")
+    total_pages: Optional[int] = Field(None, description="Nombre total de pages")
 
 
 class ItemListResponse(BaseModel):
@@ -65,9 +86,15 @@ class ItemListResponse(BaseModel):
     Attributes:
         items: Liste des objets.
         total: Nombre total d'objets.
+        page: Numéro de page actuelle (1-indexed, None si pas de pagination).
+        page_size: Taille de la page (None si pas de pagination).
+        total_pages: Nombre total de pages (None si pas de pagination).
     """
     items: List[ItemResponse] = Field(..., description="Liste des objets")
     total: int = Field(..., description="Nombre total d'objets")
+    page: Optional[int] = Field(None, description="Numéro de page actuelle (1-indexed)")
+    page_size: Optional[int] = Field(None, description="Taille de la page")
+    total_pages: Optional[int] = Field(None, description="Nombre total de pages")
 
 
 class SpeciesResponse(BaseModel):
@@ -87,9 +114,15 @@ class SpeciesListResponse(BaseModel):
     Attributes:
         species: Liste des espèces.
         total: Nombre total d'espèces.
+        page: Numéro de page actuelle (1-indexed, None si pas de pagination).
+        page_size: Taille de la page (None si pas de pagination).
+        total_pages: Nombre total de pages (None si pas de pagination).
     """
     species: List[SpeciesResponse] = Field(..., description="Liste des espèces")
     total: int = Field(..., description="Nombre total d'espèces")
+    page: Optional[int] = Field(None, description="Numéro de page actuelle (1-indexed)")
+    page_size: Optional[int] = Field(None, description="Taille de la page")
+    total_pages: Optional[int] = Field(None, description="Nombre total de pages")
 
 
 class CommunityResponse(BaseModel):
@@ -175,7 +208,7 @@ class BuildContextRequest(BaseModel):
     """
     context_selections: ContextSelection = Field(..., description="Sélections de contexte GDD")
     user_instructions: str = Field(default="", description="Instructions utilisateur")
-    max_tokens: int = Field(default=1500, ge=100, le=50000, description="Nombre maximum de tokens")
+    max_tokens: int = Field(default=1500, ge=100, le=Defaults.MAX_CONTEXT_TOKENS, description="Nombre maximum de tokens")
     include_dialogue_type: bool = Field(default=False, description="Inclure le type de dialogue")
 
 

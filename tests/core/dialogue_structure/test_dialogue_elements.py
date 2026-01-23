@@ -2,7 +2,7 @@ import pytest
 from models.dialogue_structure.dialogue_elements import (
     DialogueLineElement, PlayerChoiceOption, PlayerChoicesBlockElement, CommandElement
 )
-from models.dialogue_structure.interaction import Interaction
+# Interaction supprimé - système obsolète
 
 def test_dialogue_line_element_serialization():
     elem = DialogueLineElement(
@@ -46,22 +46,4 @@ def test_command_element_serialization():
     cmd2 = CommandElement.model_validate(d)
     assert cmd2.command_string == cmd.command_string
 
-def test_interaction_serialization():
-    elem1 = DialogueLineElement(text="Bonjour", speaker="PNJ")
-    elem2 = CommandElement(command_string="set $x = 1")
-    opt = PlayerChoiceOption(text="Aller", next_interaction_id="Node2")
-    block = PlayerChoicesBlockElement(choices=[opt])
-    interaction = Interaction(
-        interaction_id="Node1",
-        elements=[elem1, elem2, block],
-        header_commands=["set $start = true"],
-        header_tags=["intro"],
-        next_interaction_id_if_no_choices="Node2"
-    )
-    d = interaction.model_dump()
-    interaction2 = Interaction.model_validate(d)
-    assert interaction2.interaction_id == interaction.interaction_id
-    assert len(interaction2.elements) == 3
-    assert interaction2.header_commands == ["set $start = true"]
-    assert interaction2.header_tags == ["intro"]
-    assert interaction2.next_interaction_id_if_no_choices == "Node2" 
+# test_interaction_serialization supprimé - système obsolète 

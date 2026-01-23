@@ -36,6 +36,14 @@ class APIException(HTTPException):
         
         super().__init__(status_code=status_code, detail=message)
         logger.error(f"APIException [{code}]: {message} (request_id: {request_id})")
+        
+        # Envoyer à Sentry si disponible (seulement pour les erreurs 500+)
+        if status_code >= 500:
+            try:
+                from api.utils.sentry_config import capture_exception
+                capture_exception(self, request_id=request_id, error_code=code)
+            except Exception:
+                pass  # Ne pas échouer si Sentry n'est pas disponible
 
 
 class ValidationException(APIException):
@@ -55,7 +63,7 @@ class ValidationException(APIException):
             request_id: ID de la requête.
         """
         super().__init__(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             code="VALIDATION_ERROR",
             message=message,
             details=details,
@@ -119,7 +127,7 @@ class NotFoundException(APIException):
         """Initialise une exception de ressource non trouvée.
         
         Args:
-            resource_type: Type de ressource (ex: "Interaction", "Personnage").
+            resource_type: Type de ressource (ex: "Dialogue", "Personnage").
             resource_id: ID de la ressource non trouvée.
             request_id: ID de la requête.
         """

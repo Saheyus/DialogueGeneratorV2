@@ -11,9 +11,7 @@ npm run dev          # Lance backend + frontend automatiquement
 
 **L'app sera accessible sur http://localhost:3000**
 
-⚠️ **IMPORTANT** : L'application utilise désormais **uniquement l'interface web** (React + FastAPI).
-- **Interface Web (PRINCIPALE)** : `npm run dev` — ✅ **Utiliser cette interface**
-- ⚠️ **Interface Desktop (DÉPRÉCIÉE)** : `python main_app.py` — Ne plus utiliser, maintenue uniquement pour compatibilité
+L'application utilise **l'interface web** (React + FastAPI) comme interface principale.
 
 ## Objectif Principal (Rappel des Spécifications)
 
@@ -31,112 +29,168 @@ L'application est en cours de développement actif. Les fonctionnalités suivant
     *   Lecture des fichiers JSON générés par les scripts `filter.py` et `main.py` (situés dans `../GDD/categories/`).
     *   Chargement de `Vision.json` depuis `../import/Bible_Narrative/`.
     *   Les données (personnages, lieux, objets, espèces, communautés, dialogues exemples, structures narratives/macro/micro) sont stockées en mémoire.
-*   ⚠️ **Interface Utilisateur Desktop (`PySide6`) — DÉPRÉCIÉE** :
-    *   ⚠️ Cette interface est dépréciée. Utiliser l'interface web React à la place (`npm run dev`).
-    *   Fenêtre principale avec plusieurs panneaux redimensionnables (`QSplitter`).
-    *   **Panneau de Sélection du Contexte (Gauche)** :
-        *   Listes distinctes pour les personnages, lieux, objets, espèces, communautés et exemples de dialogues.
-        *   Chaque élément des listes peut être coché pour inclusion dans le contexte additionnel.
-        *   Champs de filtre textuel pour chaque liste.
-        *   Affichage du nombre d'éléments (filtrés/total) pour chaque liste.
-    *   **Panneau de Détails (Centre)** :
-        *   Affichage des détails complets de l'élément sélectionné dans une liste (format arborescent `QTreeView` avec "Propriété" et "Valeur").
-    *   **Panneau de Génération (Droite)** :
-        *   Sélection du **Personnage A**, du **Personnage B (Interlocuteur)** et du **Lieu de la Scène** via des listes déroulantes (`QComboBox`) affichant plus d'éléments pour faciliter la sélection.
-        *   Champ pour spécifier le nombre de variantes `k` à générer (valeur par défaut : 1).
-        *   Case à cocher **"Mode Test (contexte limité)"** :
-            *   Si activée, les détails de chaque élément inclus dans le contexte (personnages principaux, lieu, éléments cochés) sont simplifiés : seules certaines clés prioritaires sont conservées et leurs valeurs textuelles sont tronquées (ex: à 30 mots par champ).
-        *   Champ de texte multiligne avec l'étiquette **"Instructions spécifiques pour la scène / Prompt utilisateur:"** pour l'objectif et les détails de la scène.
-        *   Affichage dynamique de l'**estimation du nombre de mots** du prompt final.
-        *   Bouton "Générer le Dialogue".
-        *   Un `QTabWidget` pour afficher les variantes de dialogue générées, chaque variante dans un `QTextEdit` en lecture seule.
+*   **Interface Web (React + FastAPI)** :
+    *   Interface moderne et réactive pour la génération de dialogues.
+    *   Sélection de contexte (personnages, lieux, objets, etc.).
+    *   Génération de dialogues avec variantes multiples.
+    *   Gestion des interactions et export Unity.
 *   **Moteur de Prompt (`PromptEngine`)** :
     *   Classe `PromptEngine` capable de combiner un *system prompt*, un résumé de contexte (incluant les détails JSON des éléments sélectionnés/cochés), et l'instruction utilisateur pour former un prompt complet.
     *   *System prompt* par défaut basique inclus, avec une brève introduction au format JSON Unity.
 *   **Client LLM (`LLMClient`)** :
     *   Interface `IGenerator` définissant la méthode `async generate_variants(prompt, k)`.
-    *   `OpenAIClient` : Implémentation utilisant l'API OpenAI (modèle par défaut actuel : `gpt-4o-mini`). Nécessite la variable d'environnement `OPENAI_API_KEY`.
+    *   `OpenAIClient` : Implémentation utilisant l'API OpenAI (modèle par défaut actuel : `gpt-5-mini`). Nécessite la variable d'environnement `OPENAI_API_KEY`.
     *   `DummyLLMClient` : Implémentation factice utilisée en fallback si `OpenAIClient` ne peut s'initialiser (ex: clé API manquante) ou pour des tests rapides. Simule la génération de `k` variantes au format JSON Unity.
-*   **Flux de Génération Initial** :
-    *   La sélection d'éléments dans les listes et les `QComboBox` du panneau de génération, ainsi que la modification de l'instruction utilisateur ou de l'état du "Mode Test", mettent à jour l'estimation du nombre de mots du prompt.
-    *   Le bouton "Générer le Dialogue" déclenche :
-        *   La récupération du contexte : détails complets (ou simplifiés/tronqués en "Mode Test") des Personnages A & B, du Lieu, et de tous les éléments cochés dans les listes de gauche.
-        *   La récupération de l'instruction utilisateur.
-        *   La construction du prompt complet via `PromptEngine`.
-        *   L'appel asynchrone au client LLM configuré (OpenAI ou Dummy) via `asyncio.run()`.
-        *   L'affichage des variantes (ou des messages d'erreur) dans les onglets.
+*   **Flux de Génération** :
+    *   Sélection du contexte via l'interface web.
+    *   Configuration des paramètres de génération (personnages, lieu, instructions).
+    *   Construction du prompt complet via `PromptEngine`.
+    *   Appel asynchrone au client LLM configuré (OpenAI ou Dummy).
+    *   Affichage des variantes générées dans l'interface web.
+
+## 📚 Documentation
+
+### Documentation la plus récente
+
+**⚠️ La documentation la plus récente et à jour se trouve dans les dossiers artifacts de BMad :**
+
+- **Planning Artifacts** : [`_bmad-output/planning-artifacts/`](_bmad-output/planning-artifacts/)
+  - Architecture détaillée, PRD, épics, rapports de préparation à l'implémentation
+  - Contient la documentation de planification la plus récente
+  
+- **Implementation Artifacts** : [`_bmad-output/implementation-artifacts/`](_bmad-output/implementation-artifacts/)
+  - ADRs (Architecture Decision Records), plans de sprint, statut d'implémentation
+  - Contient la documentation d'implémentation la plus récente
+
+**Note** : La documentation dans `docs/` est organisée et structurée, mais peut être moins à jour que celle dans `_bmad-output/`. Consultez d'abord les artifacts BMad pour la documentation la plus récente.
+
+### Documentation structurée
+
+La documentation organisée se trouve dans [`docs/`](docs/) avec un index dans [`docs/index.md`](docs/index.md).
 
 ## Structure du Projet
 
 Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux modules suivants :
 
-*   `main_app.py`: Point d'entrée de l'application. Initialise l'application Qt et la fenêtre principale.
-*   `__main__.py`: Point d'entrée alternatif pour un lancement en tant que module (ex: `python -m DialogueGenerator`), bien que le lancement direct de `main_app.py` soit privilégié.
-*   `config/`: Contient les fichiers de configuration (ex: `llm_config.json`, `context_config.json`, `ui_settings.json`).
-*   `core/`: Logique métier principale, indépendante de l'interface utilisateur ou des frameworks externes.
-    *   `dialogue_system/`: Classes et fonctions liées au système de dialogue.
+*   `api/`: API REST FastAPI (backend).
+    *   `routers/`: Routes API pour dialogues, contexte, configuration, etc.
+    *   `schemas/`: Schémas Pydantic pour validation des requêtes/réponses.
+    *   `services/`: Services API (authentification, etc.).
+    *   `container.py`: ServiceContainer pour la gestion du cycle de vie des services.
+    *   `dependencies.py`: Helpers d'injection de dépendances FastAPI.
+*   `frontend/`: Interface web React (frontend).
+    *   `src/`: Code source React/TypeScript.
+*   `config/`: Contient les fichiers de configuration (ex: `llm_config.json`, `context_config.json`, `app_config.json`).
+*   `core/`: Modules métier principaux (logique métier indépendante de l'interface).
+    *   `context/`: Construction et gestion du contexte GDD (`context_builder.py`).
+    *   `prompt/`: Construction et gestion des prompts LLM (`prompt_engine.py`).
+    *   `llm/`: Clients et interfaces pour les modèles de langage (`llm_client.py`).
 *   `data/`: Données persistantes de l'application.
     *   `interactions/`: Stockage des dialogues générés (fichiers JSON).
-*   `domain/`: Modèles de données et services du domaine de l'application.
-*   `llm_client/`: Clients pour interagir avec les modèles de langage (OpenAI, Dummy).
 *   `models/`: Structures de données Pydantic utilisées dans l'application.
     *   `dialogue_structure/`: Modèles pour les éléments de dialogue et les interactions.
-*   `services/`: Services applicatifs (ex: gestion des interactions, rendu JSON Unity).
-    *   `repositories/`: Abstractions pour l'accès aux données (ex: `FileInteractionRepository`).
+*   `services/`: Services applicatifs réutilisables (ex: gestion des interactions, rendu JSON Unity, configuration).
+    *   `repositories/`: Abstractions pour l'accès aux données (ex: `FileLLMUsageRepository`).
     *   `json_renderer/`: Logique pour convertir les interactions en format JSON Unity.
+    *   `configuration_service.py`: Gestionnaire principal de configuration (fichiers JSON).
 *   `tests/`: Tests unitaires et d'intégration.
-*   `ui/`: Code relatif à l'interface utilisateur (PySide6).
-    *   `generation_panel/`: Widgets spécifiques au panneau de génération.
-    *   `left_panel/`: Widgets spécifiques au panneau de sélection de gauche.
-*   `context_builder.py`: Responsable du chargement, du stockage et de l'accès aux données du GDD.
-*   `prompt_engine.py`: Construit les prompts à envoyer aux LLMs.
-*   `config_manager.py`: Gère le chargement et la sauvegarde des configurations.
+    *   `manual/`: Scripts de test manuels et de debug.
+
+### Architecture
+
+#### Injection de Dépendances
+
+L'application utilise `api/container.py` (ServiceContainer) pour gérer le cycle de vie des services.
+Le container est initialisé dans `app.state` au démarrage de l'API (voir `api/main.py`).
+Toutes les dépendances FastAPI utilisent `api/dependencies.py` qui accède au container via `request.app.state.container`.
+
+**Note**: Les modules `context_builder.py`, `prompt_engine.py`, et `llm_client.py` à la racine sont des wrappers de compatibilité qui redirigent vers `core/`. Ils seront supprimés dans la version 2.0.
 
 ## Prérequis et Installation
 
 1.  **Python** : Version 3.10 ou ultérieure recommandée.
-2.  **Dépendances Python** : Installer les dépendances listées dans `requirements.txt`.
-    ```bash
-    pip install -r requirements.txt
-    ```
-    Ce fichier inclut `PySide6`, `openai`, et d'autres bibliothèques nécessaires.
+2.  **Node.js et npm** : Pour l'interface web et les scripts de développement.
+3.  **Environnement virtuel Python** : Le projet utilise un venv pour isoler les dépendances.
+
+### Installation Rapide
+
+**Méthode recommandée (automatique):**
+
+```bash
+# Créer le venv et installer toutes les dépendances
+npm run setup
+```
+
+**Méthode manuelle:**
+
+```bash
+# 1. Créer l'environnement virtuel Python
+python -m venv .venv
+
+# 2. Activer le venv (Windows PowerShell)
+.\.venv\Scripts\Activate.ps1
+
+# 3. Installer les dépendances Python
+pip install -r requirements.txt
+
+# 4. Installer les dépendances frontend
+cd frontend
+npm install
+cd ..
+```
+
+**Note:** Tous les scripts npm (`npm run dev`, `npm test`, etc.) utilisent automatiquement le venv. Vous n'avez besoin de l'activer manuellement que si vous exécutez des commandes Python directement.
+
+4.  **Configuration des variables d'environnement** :
+    *   Copier `.env.example` vers `.env` :
+        ```bash
+        cp .env.example .env
+        ```
+    *   Modifier `.env` et définir les variables nécessaires :
+        *   `OPENAI_API_KEY` : Clé API OpenAI (requis pour la génération de dialogues)
+        *   `JWT_SECRET_KEY` : Clé secrète pour JWT (valeur par défaut acceptée en dev, **doit être changée en production**)
+        *   `ENVIRONMENT` : Environnement (`development` ou `production`)
+    *   Pour plus de détails, voir [README_API.md](README_API.md) et [docs/SECURITY.md](docs/SECURITY.md).
+
+### Vérifier l'Installation
+
+```bash
+npm run verify:venv
+```
+
+Ce script vérifie que le venv et toutes les dépendances sont correctement installés.
 
 ## Comment Lancer l'Application
 
 1.  **Positionnement des Données du GDD** :
-    *   Les fichiers JSON du Game Design Document (GDD) doivent être accessibles. Par défaut, l'application s'attend à les trouver dans un dossier `GDD/categories/` et `import/Bible_Narrative/` situés **au même niveau que le dossier `DialogueGenerator`**.
+    *   Les fichiers JSON du Game Design Document (GDD) doivent être accessibles via un lien symbolique.
+    *   **Fichiers de catégories** : L'application utilise le chemin `DialogueGenerator/data/GDD_categories/` qui doit être un lien symbolique pointant vers le répertoire réel contenant les fichiers JSON (personnages.json, lieux.json, etc.).
+    *   **Vision.json** : Toujours depuis `PROJECT_ROOT_DIR/import/Bible_Narrative/Vision.json` (répertoire parent de DialogueGenerator).
     *   Exemple de structure attendue :
         ```
         Parent_Folder/
         ├── DialogueGenerator/  <-- Racine du projet de l'application
+        │   ├── data/
+        │   │   └── GDD_categories/  <-- Lien symbolique vers le vrai répertoire
+        │   │       ├── personnages.json
+        │   │       ├── lieux.json
+        │   │       └── ... (autres fichiers JSON du GDD)
         │   ├── main_app.py
         │   └── ... (autres fichiers et dossiers du projet)
-        ├── GDD/
-        │   └── categories/
-        │       ├── personnages.json
-        │       └── ... (autres fichiers JSON du GDD)
         └── import/
             └── Bible_Narrative/
                 └── Vision.json
         ```
-    *   Le chemin d'accès aux données du GDD est configurable dans `context_config.json`.
+    *   **Créer le lien symbolique** :
+        *   Windows : `mklink /D data\GDD_categories <chemin_vers_repertoire_GDD>`
+        *   Linux/Mac : `ln -s <chemin_vers_repertoire_GDD> data/GDD_categories`
 
-2.  **Clé API OpenAI (Optionnel mais recommandé)** :
-    *   Pour utiliser le client OpenAI, assurez-vous que la variable d'environnement `OPENAI_API_KEY` est définie, ou que votre clé est présente dans `config/llm_config.json`.
-    *   Si aucune clé n'est configurée, l'application utilisera `DummyLLMClient` qui simule les réponses.
-
-3.  **Lancement** :
-    *   ⚠️ **IMPORTANT** : Utiliser l'interface web React, pas l'interface desktop Python.
-    *   **Interface Web (RECOMMANDÉE)** :
+2.  **Lancement** :
+    *   **Interface Web** :
         ```bash
         npm run dev
         ```
         L'application sera accessible sur http://localhost:3000
-    *   ⚠️ **Interface Desktop (DÉPRÉCIÉE)** — Ne plus utiliser :
-        ```bash
-        python main_app.py
-        ```
-        Cette interface est maintenue uniquement pour compatibilité mais ne doit plus être utilisée pour le développement.
 
 ## Prochaines Étapes Prévues
 
@@ -147,7 +201,7 @@ Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux m
     *   Gérer la configuration de la clé API (probablement via `config.yaml` ou variable d'environnement).
     *   Permettre de switcher entre `DummyLLMClient` et `OpenAIClient`.
 *   **Gestion Asynchrone Améliorée** :
-    *   Utiliser `asyncqt` ou `QThread` pour les appels LLM afin de ne pas bloquer l'UI.
+    *   Optimisation des appels LLM asynchrones pour améliorer la réactivité de l'interface web.
 *   **Amélioration du `PromptEngine` et du *System Prompt*** :
     *   Itérer sur le *system prompt* basé sur les résultats réels.
     *   Instructions plus détaillées pour le format JSON Unity.
@@ -187,6 +241,25 @@ Le code est organisé dans le dossier `DialogueGenerator/` avec les principaux m
         *   Gestion des dépendances entre événements.
         *   Adaptation de l'interface utilisateur de `DialogueGenerator`.
     *   Cette approche représente une évolution significative pour la génération de dialogues dynamiques et contextuellement conscients.
+
+## Warnings connus (non bloquants)
+
+### Warning Node.js `util._extend` déprécié
+
+Lors du démarrage avec `npm run dev`, vous pouvez voir un warning Node.js :
+```
+(node:xxxxx) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+```
+
+**Ce warning est normal et non bloquant.** Il provient de la dépendance `concurrently` (via `spawn-command`) qui utilise une API Node.js dépréciée. Cela n'affecte pas le fonctionnement de l'application. Ce warning sera résolu lorsque les dépendances seront mises à jour.
+
+### Warnings de validation GDD
+
+Au démarrage, vous pouvez voir des warnings concernant la validation des champs GDD :
+- Champs invalides détectés (normal si certains champs ne sont pas dans la configuration)
+- Fichiers GDD manquants (normal si certains fichiers sont optionnels)
+
+Ces warnings sont informatifs et n'empêchent pas l'application de fonctionner. Pour plus de détails, utilisez `STARTUP_REPORT=full npm run dev`.
 
 ## Dépannage
 

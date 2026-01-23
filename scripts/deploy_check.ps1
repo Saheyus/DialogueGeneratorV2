@@ -8,6 +8,9 @@ Write-Host "=== Vérification de déploiement ===" -ForegroundColor Cyan
 $projectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $projectRoot
 
+# Importer la fonction Get-VenvPython
+. (Join-Path $projectRoot "scripts\Get-VenvPython.ps1")
+
 $errors = @()
 $warnings = @()
 
@@ -51,30 +54,41 @@ if ($missingVars.Count -gt 0) {
     Write-Host "  ⚠ Variables manquantes: $($missingVars -join ', ')" -ForegroundColor Yellow
 }
 
-# 3. Vérifier que Python est disponible
-Write-Host "`n3. Vérification de Python..." -ForegroundColor Cyan
-$pythonVersion = python --version 2>$null
+# 3. Vérifier que le venv Python existe
+Write-Host "`n3. Vérification du venv Python..." -ForegroundColor Cyan
+if (Test-VenvExists -ProjectRoot $projectRoot) {
+    Write-Host "  ✓ Venv trouvé" -ForegroundColor Green
+    $pythonPath = Get-VenvPython -ProjectRoot $projectRoot -Quiet
+} else {
+    $warnings += "Le venv n'existe pas. Créez-le avec: npm run setup"
+    Write-Host "  ⚠ Venv non trouvé, utilisation de Python global" -ForegroundColor Yellow
+    $pythonPath = "python"
+}
+
+# 4. Vérifier que Python est disponible
+Write-Host "`n4. Vérification de Python..." -ForegroundColor Cyan
+$pythonVersion = & $pythonPath --version 2>$null
 if (-not $pythonVersion) {
     $errors += "Python n'est pas installé ou pas dans le PATH"
 } else {
     Write-Host "  ✓ $pythonVersion" -ForegroundColor Green
 }
 
-# 4. Vérifier que les dépendances Python sont installées
-Write-Host "`n4. Vérification des dépendances Python..." -ForegroundColor Cyan
+# 5. Vérifier que les dépendances Python sont installées
+Write-Host "`n5. Vérification des dépendances Python..." -ForegroundColor Cyan
 try {
-    python -c "import fastapi; import uvicorn" 2>$null
+    & $pythonPath -c "import fastapi; import uvicorn" 2>$null
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  ✓ Dépendances FastAPI/uvicorn trouvées" -ForegroundColor Green
     } else {
-        $errors += "Les dépendances Python (fastapi, uvicorn) ne sont pas installées. Exécutez: pip install -r requirements.txt"
+        $errors += "Les dépendances Python (fastapi, uvicorn) ne sont pas installées. Exécutez: npm run setup"
     }
 } catch {
     $errors += "Impossible de vérifier les dépendances Python"
 }
 
-# 5. Vérifier la structure des fichiers API
-Write-Host "`n5. Vérification de la structure API..." -ForegroundColor Cyan
+# 6. Vérifier la structure des fichiers API
+Write-Host "`n6. Vérification de la structure API..." -ForegroundColor Cyan
 $apiMain = Join-Path $projectRoot "api" "main.py"
 if (-not (Test-Path $apiMain)) {
     $errors += "Le fichier api/main.py n'existe pas"

@@ -1,0 +1,64 @@
+{
+  "system_prompts": {
+    "default": {
+      "file": "system_prompts/default.txt",
+      "name": "Par défaut",
+      "description": "Prompt système par défaut pour la génération de dialogues"
+    }
+  },
+  "author_profiles": {
+    "default": {
+      "file": "author_profiles/default.txt",
+      "name": "Neutre (Par défaut)",
+      "description": "Style équilibré et accessible, privilégiant la clarté et l'efficacité narrative sans contraintes stylistiques particulières"
+    },
+    "literary": {
+      "file": "author_profiles/literary.txt",
+      "name": "Littéraire",
+      "description": "Écriture dense, incarnée, exigeante. Le dialogue est un acte social, politique et symbolique. Position esthétique assumée."
+    },
+    "minimal": {
+      "file": "author_profiles/minimal.txt",
+      "name": "Sec & Minimal",
+      "description": "Style direct, concis et percutant. Chaque mot compte. L'efficacité narrative prime sur l'ornementation."
+    },
+    "humorous": {
+      "file": "author_profiles/humorous.txt",
+      "name": "Humour",
+      "description": "Style avec une touche d'humour et de légèreté. L'ironie, le sous-entendu et la comédie de situation sont des ressources narratives."
+    }
+  },
+  "scene_instructions": {
+    "first_meeting": {
+      "file": "scene_instructions/first_meeting.txt",
+      "name": "Première rencontre",
+      "description": "Ton adaptatif, établissement de la relation, présentation du personnage. Idéal pour la première interaction in-game entre le joueur et un PNJ, même si une relation préexistante peut exister."
+    },
+    "conversation": {
+      "file": "scene_instructions/conversation.txt",
+      "name": "Conversation",
+      "description": "Ton équilibré, répliques naturelles, dialogue classique. Idéal pour les conversations quotidiennes, échanges normaux, interactions standards."
+    },
+    "action_scene": {
+      "file": "scene_instructions/action_scene.txt",
+      "name": "Scène d'action",
+      "description": "Ton rapide, répliques courtes, tension élevée. Idéal pour les combats, poursuites, moments intenses."
+    },
+    "intimate_moment": {
+      "file": "scene_instructions/intimate_moment.txt",
+      "name": "Moment intime",
+      "description": "Ton calme, répliques longues, émotion profonde. Idéal pour les conversations personnelles, révélations émotionnelles, moments de vulnérabilité."
+    },
+    "revelation": {
+      "file": "scene_instructions/revelation.txt",
+      "name": "Révélation",
+      "description": "Ton dramatique, progression graduelle, tension narrative. Idéal pour les révélations de plot, découvertes importantes, moments de bascule."
+    },
+    "confrontation": {
+      "file": "scene_instructions/confrontation.txt",
+      "name": "Confrontation",
+      "description": "Ton tendu, répliques percutantes, tension conflictuelle. Idéal pour les disputes, négociations tendues, moments de conflit."
+    }
+  }
+}
+

@@ -3,11 +3,17 @@ description: Python (global) — conventions, qualité, Windows-first, migration
 globs: []
 alwaysApply: true
 ---
+- Architecture : modules core dans `core/` (context, prompt, llm), services réutilisables dans `services/`, API dans `api/`
+- Imports : Préférer `from core.context.context_builder import ContextBuilder` aux anciens imports racine (dépréciés)
+- Configuration : Utiliser `services.configuration_service.ConfigurationService` uniquement (pas `config_manager.py` racine)
+- Injection de dépendances : Via `api/container.py` (ServiceContainer), pas de singletons globaux
 - Conserver l’architecture existante (répertoires `core/`, `domain/`, `services/`, `ui/`, `models/`) et réutiliser les services plutôt que dupliquer la logique.
 - Windows-first: utiliser `pathlib.Path`, encodage `utf-8`, éviter les hypothèses POSIX (chemins, commandes, signaux).
 - Pour tout code Python modifié/ajouté: annotations de types complètes + docstrings PEP257 (fonctions, méthodes, classes). Ne pas supprimer les commentaires existants.
-- Erreurs: messages utiles + logging contextualisé; pas de `except Exception` silencieux.
-- Config/secrets: aucun secret en dur; passer par variables d’environnement et config existante (ex: `OPENAI_API_KEY`, `config/*.json`).
+- Erreurs: messages utiles + logging contextualisé; pas de `except Exception` silencieux. Le système de logs archive automatiquement dans `data/logs/` (voir `.cursor/rules/logging.mdc`).
+- Config/secrets: aucun secret en dur; passer par variables d'environnement et config existante (ex: `OPENAI_API_KEY`, `config/*.json`).
+- Chemins GDD: utiliser `data/GDD_categories/` (lien symbolique). Voir `.cursor/rules/gdd_paths.mdc`.
+- Classification champs: métadonnées (avant "Introduction") vs contexte narratif, champs essentiels (MINIMAL_FIELDS). Voir `.cursor/rules/field_classification.mdc`.
 
 - Migration web terminée (API REST FastAPI + Frontend React):
   - Frontend React (`frontend/`) ↔ API REST FastAPI (`api/`) ↔ Services existants (`services/`) ↔ LLM/GDD/Storage

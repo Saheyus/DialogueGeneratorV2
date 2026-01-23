@@ -1,9 +1,22 @@
 /**
  * Composant pour créer des panneaux redimensionnables avec localStorage.
  */
-import { useState, useEffect, useRef, useCallback, ReactNode } from 'react'
+import {
+  forwardRef,
+  useEffect,
+  useRef,
+  useCallback,
+  useImperativeHandle,
+  useState,
+  type ReactNode,
+} from 'react'
 import React from 'react'
 import { theme } from '../../theme'
+
+export interface ResizablePanelsRef {
+  getSizes: () => number[]
+  setSizes: (newSizes: number[], options?: { persist?: boolean }) => void
+}
 
 interface ResizablePanelsProps {
   children: ReactNode[]
@@ -12,24 +25,31 @@ interface ResizablePanelsProps {
   minSizes?: number[]
   direction?: 'horizontal' | 'vertical'
   style?: React.CSSProperties
+  onSizesChange?: (sizes: number[]) => void
+  renderResizer?: (index: number) => React.ReactNode
 }
 
-export function ResizablePanels({
-  children,
-  storageKey,
-  defaultSizes = children.map(() => 1),
-  minSizes = children.map(() => 100),
-  direction = 'horizontal',
-  style,
-}: ResizablePanelsProps) {
+export const ResizablePanels = forwardRef<ResizablePanelsRef, ResizablePanelsProps>(function ResizablePanels(
+  {
+    children,
+    storageKey,
+    defaultSizes = children.map(() => 1),
+    minSizes = children.map(() => 100),
+    direction = 'horizontal',
+    style,
+    onSizesChange,
+    renderResizer,
+  }: ResizablePanelsProps,
+  ref
+) {
   const containerRef = useRef<HTMLDivElement>(null)
   
   // Helper pour normaliser les tailles
-  const normalizeSizesHelper = (newSizes: number[]): number[] => {
+  const normalizeSizesHelper = useCallback((newSizes: number[]): number[] => {
     const total = newSizes.reduce((sum, size) => sum + size, 0)
     if (total === 0) return newSizes
     return newSizes.map((size) => (size / total) * 100)
-  }
+  }, [])
   
   const [sizes, setSizes] = useState<number[]>(() => {
     let initialSizes = defaultSizes
@@ -64,6 +84,41 @@ export function ResizablePanels({
       return newSizes.map((size) => (size / total) * 100)
     },
     []
+  )
+
+  const persistSizes = useCallback(
+    (sizesToPersist: number[]) => {
+      if (!storageKey) return
+      try {
+        localStorage.setItem(`resizable_${storageKey}`, JSON.stringify(sizesToPersist))
+      } catch (err) {
+        console.error('Erreur lors de la sauvegarde des tailles de panneaux:', err)
+      }
+    },
+    [storageKey]
+  )
+
+  const applySizes = useCallback(
+    (newSizes: number[], options?: { persist?: boolean }) => {
+      const normalized = normalizeSizesHelper(newSizes)
+      setSizes(normalized)
+      onSizesChange?.(normalized)
+      if (options?.persist !== false) {
+        persistSizes(normalized)
+      }
+    },
+    [normalizeSizesHelper, onSizesChange, persistSizes]
+  )
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      getSizes: () => sizes,
+      setSizes: (newSizes: number[], options?: { persist?: boolean }) => {
+        applySizes(newSizes, options)
+      },
+    }),
+    [applySizes, sizes]
   )
 
   const handleMouseDown = useCallback(
@@ -111,6 +166,7 @@ export function ResizablePanels({
 
       const normalized = normalizeSizes(newSizes)
       setSizes(normalized)
+      onSizesChange?.(normalized)
       // Garder les tailles à sauvegarder pour handleMouseUp
       sizesToSaveRef.current = normalized
     }
@@ -118,13 +174,9 @@ export function ResizablePanels({
     const handleMouseUp = () => {
       setIsDragging(null)
       // Sauvegarder immédiatement à la fin du drag
-      if (storageKey && sizesToSaveRef.current) {
-        try {
-          localStorage.setItem(`resizable_${storageKey}`, JSON.stringify(sizesToSaveRef.current))
-          sizesToSaveRef.current = null
-        } catch (err) {
-          console.error('Erreur lors de la sauvegarde des tailles de panneaux:', err)
-        }
+      if (sizesToSaveRef.current) {
+        persistSizes(sizesToSaveRef.current)
+        sizesToSaveRef.current = null
       }
     }
 
@@ -135,7 +187,7 @@ export function ResizablePanels({
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [isDragging, startPos, startSizes, direction, minSizes, normalizeSizes, storageKey])
+  }, [isDragging, startPos, startSizes, direction, minSizes, normalizeSizes, persistSizes, onSizesChange])
 
   const isHorizontal = direction === 'horizontal'
 
@@ -186,7 +238,23 @@ export function ResizablePanels({
               e.currentTarget.style.backgroundColor = theme.border.primary
             }
           }}
-        />
+        >
+          {renderResizer && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'grid',
+                placeItems: 'center',
+                pointerEvents: 'none',
+              }}
+            >
+              <div style={{ pointerEvents: 'auto' }}>
+                {renderResizer(index)}
+              </div>
+            </div>
+          )}
+        </div>
       )
     }
   })
@@ -207,5 +275,5 @@ export function ResizablePanels({
       {renderedElements}
     </div>
   )
-}
+})
 

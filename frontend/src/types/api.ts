@@ -2,6 +2,25 @@
  * Types TypeScript pour l'API.
  */
 
+// WARNING: Types distincts pour éviter les faux amis
+// RawPrompt = Le prompt brut réellement utilisé pour la génération
+// Ces deux prompts peuvent différer et NE DOIVENT JAMAIS être confondus dans l'UI.
+
+/**
+ * Type pour le prompt brut réellement utilisé pour la génération.
+ * Ce prompt provient de raw_prompt dans EstimateTokensResponse ou GenerateUnityDialogueResponse.
+ * C'est le SEUL prompt qui doit être affiché comme "PROMPT BRUT" dans l'UI.
+ */
+export type RawPrompt = string
+
+// Flags in-game
+export interface InGameFlag {
+  id: string
+  value: boolean | number | string
+  category?: string
+  timestamp?: string
+}
+
 // Auth
 export interface LoginRequest {
   username: string
@@ -21,92 +40,72 @@ export interface UserResponse {
 }
 
 // Dialogue
+export type ElementMode = 'full' | 'excerpt'
+
 export interface ContextSelection {
-  characters: string[]
-  locations: string[]
-  items: string[]
-  species: string[]
-  communities: string[]
+  // Listes séparées par mode pour chaque type d'élément
+  characters_full: string[]
+  characters_excerpt: string[]
+  locations_full: string[]
+  locations_excerpt: string[]
+  items_full: string[]
+  items_excerpt: string[]
+  species_full: string[]
+  species_excerpt: string[]
+  communities_full: string[]
+  communities_excerpt: string[]
   dialogues_examples: string[]
   scene_protagonists?: Record<string, unknown>
   scene_location?: Record<string, unknown>
   generation_settings?: Record<string, unknown>
 }
 
-export interface GenerateDialogueVariantsRequest {
-  k_variants: number
+/**
+ * Base pour les requêtes de construction de prompt.
+ */
+export interface BasePromptRequest {
   user_instructions: string
   context_selections: ContextSelection
-  max_context_tokens: number
-  structured_output: boolean
-  system_prompt_override?: string
-  llm_model_identifier: string
   npc_speaker_id?: string
+  max_context_tokens: number
+  system_prompt_override?: string
+  author_profile?: string
+  max_choices?: number | null
+  choices_mode: 'free' | 'capped'
+  narrative_tags?: string[]
+  vocabulary_config?: Record<string, string>
+  include_narrative_guides?: boolean
+  previous_dialogue_preview?: string
+  in_game_flags?: InGameFlag[]
 }
 
-export interface DialogueVariantResponse {
-  id: string
-  title: string
-  content: string
-  is_new: boolean
-}
-
-export interface GenerateDialogueVariantsResponse {
-  variants: DialogueVariantResponse[]
-  prompt_used?: string
-  estimated_tokens: number
-  warning?: string
+export interface EstimateTokensRequest extends BasePromptRequest {
+  field_configs?: Record<string, string[]>
+  organization_mode?: string
 }
 
 export interface EstimateTokensResponse {
   context_tokens: number
-  total_estimated_tokens: number
-  estimated_prompt?: string | null
+  token_count: number
+  raw_prompt: RawPrompt
+  prompt_hash: string
+  structured_prompt?: import('./prompt').PromptStructure
 }
 
-export interface GenerateInteractionVariantsRequest {
-  k_variants: number
-  user_instructions: string
-  context_selections: ContextSelection
-  max_context_tokens: number
-  system_prompt_override?: string
-  llm_model_identifier: string
-  previous_interaction_id?: string
+export interface PreviewPromptRequest extends BasePromptRequest {
+  field_configs?: Record<string, string[]>
+  organization_mode?: string
 }
 
-// Interaction
-export interface DialogueElement {
-  type: 'dialogue'
-  content: string
-  speaker?: string
-}
-
-export interface ChoiceElement {
-  type: 'choice'
-  options: Array<{
-    text: string
-    next_interaction_id: string
-  }>
-}
-
-export type InteractionElement = DialogueElement | ChoiceElement | Record<string, unknown>
-
-export interface InteractionResponse {
-  interaction_id: string
-  title: string
-  elements: InteractionElement[]
-  header_commands: string[]
-  header_tags: string[]
-  next_interaction_id_if_no_choices?: string
-}
-
-export interface InteractionListResponse {
-  interactions: InteractionResponse[]
-  total: number
+export interface PreviewPromptResponse {
+  raw_prompt: RawPrompt
+  prompt_hash: string
+  structured_prompt?: import('./prompt').PromptStructure
 }
 
 // Context
 export interface CharacterResponse {
+
   name: string
   data: Record<string, unknown>
 }
@@ -196,27 +195,118 @@ export interface UnityDialoguesPathResponse {
   path: string
 }
 
-export interface InteractionContextPathResponse {
-  path: InteractionResponse[]
-  total: number
-}
+// InteractionContextPathResponse supprimé - système obsolète
 
 // Unity Dialogue
-export interface GenerateUnityDialogueRequest {
-  user_instructions: string
-  context_selections: ContextSelection
-  npc_speaker_id?: string
-  max_context_tokens: number
-  system_prompt_override?: string
+export interface GenerateUnityDialogueRequest extends BasePromptRequest {
   llm_model_identifier: string
-  max_choices?: number | null
+  max_completion_tokens?: number | null
+  reasoning_effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null
+  top_p?: number | null
+}
+
+export interface ReasoningTrace {
+  effort?: string
+  summary?: string
+  items?: Array<Record<string, unknown> | string>
+  items_count?: number
 }
 
 export interface GenerateUnityDialogueResponse {
   json_content: string
   title?: string
-  prompt_used?: string
+  reasoning_trace?: ReasoningTrace | null
+  raw_prompt: RawPrompt
+  prompt_hash: string
   estimated_tokens: number
   warning?: string
+  structured_prompt?: import('./prompt').PromptStructure
+}
+
+
+export interface ExportUnityDialogueRequest {
+  json_content: string
+  title: string
+  filename?: string
+}
+
+export interface ExportUnityDialogueResponse {
+  file_path: string
+  filename: string
+  success: boolean
+}
+
+// Unity Dialogues Library
+export interface UnityDialogueMetadata {
+  filename: string
+  file_path: string
+  size_bytes: number
+  modified_time: string
+  title?: string
+}
+
+export interface UnityDialogueListResponse {
+  dialogues: UnityDialogueMetadata[]
+  total: number
+}
+
+export interface UnityDialogueReadResponse {
+  filename: string
+  json_content: string
+  title?: string
+  size_bytes: number
+  modified_time: string
+}
+
+export interface UnityDialoguePreviewRequest {
+  json_content: string
+}
+
+export interface UnityDialoguePreviewResponse {
+  preview_text: string
+  node_count: number
+}
+
+// Unity Dialogue Node Types (for editor)
+export interface UnityDialogueChoice {
+  text: string
+  targetNode: string
+  traitRequirements?: Array<{
+    trait: string
+    minValue: number
+  }>
+  allowInfluenceForcing?: boolean
+  influenceThreshold?: number
+  influenceDelta?: number
+  respectDelta?: number
+  test?: string
+  testCriticalFailureNode?: string
+  testFailureNode?: string
+  testSuccessNode?: string
+  testCriticalSuccessNode?: string
+  condition?: string
+  [key: string]: unknown
+}
+
+export interface UnityDialogueNode {
+  id: string
+  speaker?: string
+  line?: string
+  nextNode?: string
+  choices?: UnityDialogueChoice[]
+  test?: string
+  successNode?: string
+  failureNode?: string
+  isLongRest?: boolean
+  startState?: number
+  cutsceneMode?: boolean
+  cutsceneImageId?: string
+  cutsceneId?: string
+  exitCutsceneMode?: boolean
+  consequences?: {
+    flag: string
+    description?: string
+  }
+  [key: string]: unknown
 }
 

@@ -1,905 +1,632 @@
 /**
  * Panneau de génération de dialogues.
+ * 
+ * Composant refactorisé utilisant des hooks métier et composants UI extraits.
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
-import * as dialoguesAPI from '../../api/dialogues'
 import * as configAPI from '../../api/config'
-import * as interactionsAPI from '../../api/interactions'
-import { useContextStore } from '../../store/contextStore'
+import * as dialoguesAPI from '../../api/dialogues'
 import { useGenerationStore } from '../../store/generationStore'
 import { useGenerationActionsStore } from '../../store/generationActionsStore'
-import { getErrorMessage } from '../../types/errors'
+import { useLLMStore } from '../../store/llmStore'
+import { useAuthorProfile } from '../../hooks/useAuthorProfile'
 import { theme } from '../../theme'
-import type {
-  GenerateDialogueVariantsRequest,
-  GenerateInteractionVariantsRequest,
-  DialogueVariantResponse,
-  InteractionResponse,
-  LLMModelResponse,
-  InteractionListResponse,
-  ContextSelection,
-  GenerateDialogueVariantsResponse,
-  GenerateUnityDialogueRequest,
-  GenerateUnityDialogueResponse,
-} from '../../types/api'
+import type { LLMModelResponse } from '../../types/api'
 import { DialogueStructureWidget } from './DialogueStructureWidget'
 import { SystemPromptEditor } from './SystemPromptEditor'
 import { SceneSelectionWidget } from './SceneSelectionWidget'
-import { VariantsTabsView } from './VariantsTabsView'
-import { InteractionsTab } from './InteractionsTab'
-import { Tabs, type Tab } from '../shared/Tabs'
-import { ContextActions } from '../context/ContextActions'
-import { ContextSummaryChips, useToast, toastManager } from '../shared'
+import { InGameFlagsSummary } from './InGameFlagsSummary'
+import { GenerationProgressModal } from './GenerationProgressModal'
+import { ModelSelector } from './ModelSelector'
+import { PresetSelector } from './PresetSelector'
+import { useToast } from '../shared'
+import { CONTEXT_TOKENS_LIMITS, DEFAULT_MODEL, API_TIMEOUTS } from '../../constants'
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
+import type { DialogueStructure } from '../../types/generation'
+// Hooks métier extraits
+import { useGenerationOrchestrator } from '../../hooks/useGenerationOrchestrator'
+import { useGenerationDraft } from '../../hooks/useGenerationDraft'
+import { usePresetManagement } from '../../hooks/usePresetManagement'
+// Composants UI extraits
+import { GenerationPanelControls } from './GenerationPanelControls'
+import { GenerationPanelModals } from './GenerationPanelModals'
 
-type GenerationMode = 'variants' | 'interactions' | 'unity'
-type PanelTab = 'generation' | 'interactions'
 
 export function GenerationPanel() {
-  const { 
-    selections, 
-    selectedRegion, 
-    selectedSubLocations,
-    setSelections,
-    setRegion,
-    restoreState: restoreContextState,
-  } = useContextStore()
+  // Stores
   const {
-    sceneSelection,
     dialogueStructure,
     systemPromptOverride,
     setDialogueStructure,
     setSystemPromptOverride,
-    setEstimatedPrompt,
-    setSceneSelection,
-    setVariantsResponse: setStoreVariantsResponse,
-    setInteractionsResponse: setStoreInteractionsResponse,
-    setTokensUsed,
+    // État streaming (Story 0.2)
+    isGenerating,
+    streamingContent,
+    currentStep,
+    isMinimized,
+    error: streamingError,
+    currentJobId,
+    isInterrupting,
+    interrupt,
+    minimize,
+    resetStreamingState,
+    setInterrupting,
+    setError: setStreamingError,
   } = useGenerationStore()
   
-  const [generationMode, setGenerationMode] = useState<GenerationMode>('unity')
+  const { authorProfile, updateProfile: updateAuthorProfile } = useAuthorProfile()
+  const { model: selectedLLMModel, provider: currentProvider } = useLLMStore()
+  
+  // État local UI
+  const [showBudgetBlockModal, setShowBudgetBlockModal] = useState(false)
+  const [budgetBlockMessage] = useState<string>('')
+  
+  // État local UI
   const [userInstructions, setUserInstructions] = useState('')
-  const [kVariants, setKVariants] = useState(2)
-  const [maxContextTokens, setMaxContextTokens] = useState(1500)
-  const [llmModel, setLlmModel] = useState('gpt-4o-mini')
+  const [maxContextTokens, setMaxContextTokens] = useState<number>(CONTEXT_TOKENS_LIMITS.DEFAULT)
+  const [maxCompletionTokens, setMaxCompletionTokens] = useState<number | null>(null)
+  const [llmModel, setLlmModel] = useState<string>(DEFAULT_MODEL)
+  const [reasoningEffort, setReasoningEffort] = useState<'none' | 'low' | 'medium' | 'high' | 'xhigh' | null>(null)
+  const [topP, setTopP] = useState<number | null>(null)
   const [maxChoices, setMaxChoices] = useState<number | null>(null)
+  const choicesMode: 'free' | 'capped' = maxChoices !== null ? 'capped' : 'free'
   const [availableModels, setAvailableModels] = useState<LLMModelResponse[]>([])
-  const [variantsResponse, setVariantsResponse] = useState<GenerateDialogueVariantsResponse | null>(null)
-  const [interactions, setInteractions] = useState<InteractionResponse[]>([])
-  const [estimatedTokens, setEstimatedTokens] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [isEstimating, setIsEstimating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [previousInteractionId, setPreviousInteractionId] = useState<string>('')
-  const [availableInteractions, setAvailableInteractions] = useState<InteractionResponse[]>([])
-  const [activePanelTab, setActivePanelTab] = useState<PanelTab>('generation')
-  const [isDirty, setIsDirty] = useState(false)
-  const [npcSpeakerId, setNpcSpeakerId] = useState<string>('')
+  const [narrativeTags, setNarrativeTags] = useState<string[]>([])
+  const [previousDialoguePreview] = useState<string | null>(null)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
   const toast = useToast()
-
-  // Sauvegarde automatique très fréquente (toutes les 2 secondes)
-  const DRAFT_STORAGE_KEY = 'generation_draft'
   
-  const saveDraft = useCallback(() => {
-    const draft = {
-      userInstructions,
-      systemPromptOverride,
-      dialogueStructure,
-      sceneSelection,
-      kVariants,
-      maxContextTokens,
-      llmModel,
-      generationMode,
-      previousInteractionId,
-      npcSpeakerId,
-      maxChoices,
-      contextSelections: selections,
-      selectedRegion,
-      selectedSubLocations,
-      timestamp: Date.now(),
-    }
-    try {
-      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft))
-      setIsDirty(false)
-    } catch (err) {
-      console.error('Erreur lors de la sauvegarde automatique:', err)
-    }
-  }, [userInstructions, systemPromptOverride, dialogueStructure, sceneSelection, kVariants, maxContextTokens, llmModel, maxChoices, generationMode, previousInteractionId, npcSpeakerId, selections, selectedRegion, selectedSubLocations])
-
-  // Charger le brouillon au démarrage (AVANT loadModels pour préserver le modèle sauvegardé)
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(DRAFT_STORAGE_KEY)
-      if (saved) {
-        const draft = JSON.parse(saved)
-        if (draft.userInstructions !== undefined) setUserInstructions(draft.userInstructions)
-        if (draft.systemPromptOverride !== undefined) setSystemPromptOverride(draft.systemPromptOverride)
-        if (draft.dialogueStructure !== undefined) setDialogueStructure(draft.dialogueStructure)
-        if (draft.sceneSelection !== undefined) {
-          setSceneSelection(draft.sceneSelection)
-        }
-        if (draft.kVariants !== undefined) setKVariants(draft.kVariants)
-        if (draft.maxContextTokens !== undefined) setMaxContextTokens(draft.maxContextTokens)
-        if (draft.llmModel !== undefined) setLlmModel(draft.llmModel)
-        if (draft.maxChoices !== undefined) setMaxChoices(draft.maxChoices)
-        if (draft.generationMode !== undefined) {
-          setGenerationMode(draft.generationMode)
-        } else {
-          // Mode par défaut : Unity
-          setGenerationMode('unity')
-        }
-        if (draft.previousInteractionId !== undefined) setPreviousInteractionId(draft.previousInteractionId)
-        if (draft.npcSpeakerId !== undefined) setNpcSpeakerId(draft.npcSpeakerId)
-        // Charger les sélections de contexte
-        if (draft.contextSelections !== undefined) {
-          const savedRegion = draft.selectedRegion !== undefined ? draft.selectedRegion : null
-          const savedSubLocations = draft.selectedSubLocations !== undefined && Array.isArray(draft.selectedSubLocations) 
-            ? draft.selectedSubLocations 
-            : []
-          restoreContextState(draft.contextSelections, savedRegion, savedSubLocations)
-        }
-        setIsDirty(false)
-      }
-    } catch (err) {
-      console.error('Erreur lors du chargement du brouillon:', err)
-    }
-  }, [setDialogueStructure, setSystemPromptOverride, setSceneSelection, restoreContextState]) // Charger une seule fois au montage
-
-  // Détecter les changements de sceneSelection pour déclencher la sauvegarde
-  // (sauf au chargement initial)
-  const [isInitialLoad, setIsInitialLoad] = useState(true)
-  useEffect(() => {
-    if (!isInitialLoad) {
-      setIsDirty(true)
-    }
-  }, [sceneSelection, isInitialLoad])
-
-  // Détecter les changements dans les sélections de contexte pour déclencher la sauvegarde
-  useEffect(() => {
-    if (!isInitialLoad) {
-      setIsDirty(true)
-    }
-  }, [selections, selectedRegion, selectedSubLocations, isInitialLoad])
+  const availableNarrativeTags = ['tension', 'humour', 'dramatique', 'intime', 'révélation']
+  const maxContextSliderRef = useRef<HTMLInputElement>(null)
+  const maxCompletionSliderRef = useRef<HTMLInputElement>(null)
   
+  // Hooks métier extraits
+  const draft = useGenerationDraft({
+    userInstructions,
+    maxContextTokens,
+    maxCompletionTokens,
+    llmModel,
+    reasoningEffort,
+    topP,
+    maxChoices,
+    choicesMode,
+    narrativeTags,
+    setUserInstructions,
+    setMaxContextTokens,
+    setMaxCompletionTokens,
+    setLlmModel,
+    setReasoningEffort,
+    setTopP,
+    setMaxChoices,
+    setNarrativeTags,
+    updateAuthorProfile,
+  })
+  
+  const presets = usePresetManagement({
+    userInstructions,
+    setUserInstructions,
+    setIsDirty: draft.markDirty,
+    setSaveStatus: () => {
+      // Draft hook gère saveStatus en interne - on peut appeler markDirty qui met à jour saveStatus
+    },
+    toast,
+    topP,
+    setTopP,
+    reasoningEffort,
+    setReasoningEffort,
+    maxCompletionTokens,
+    setMaxCompletionTokens,
+    maxChoices,
+    setMaxChoices,
+    llmModel,
+    setLlmModel,
+  })
+  
+  // Synchroniser l'état local llmModel avec useLLMStore (Story 0.3)
   useEffect(() => {
-    // Marquer la fin du chargement initial après un court délai
-    const timer = setTimeout(() => setIsInitialLoad(false), 1000)
-    return () => clearTimeout(timer)
-  }, [])
+    if (selectedLLMModel && selectedLLMModel !== llmModel) {
+      setLlmModel(selectedLLMModel)
+      draft.markDirty()
+    }
+  }, [selectedLLMModel, llmModel, draft])
 
-  // Sauvegarde automatique avec debounce (toutes les 2 secondes)
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (isDirty) {
-        saveDraft()
-      }
-    }, 2000) // Sauvegarder 2 secondes après le dernier changement
+  const orchestrator = useGenerationOrchestrator({
+    userInstructions,
+    maxContextTokens,
+    maxCompletionTokens,
+    llmModel,
+    reasoningEffort,
+    topP,
+    maxChoices,
+    choicesMode,
+    narrativeTags,
+    previousDialoguePreview,
+    availableModels,
+    setIsLoading,
+    setError,
+    setAvailableModels,
+    setIsDirty: draft.markDirty,
+    setUserInstructions,
+    setMaxContextTokens,
+    setMaxCompletionTokens,
+    setMaxChoices,
+    setNarrativeTags,
+    toast,
+  })
 
-    return () => clearTimeout(timeoutId)
-  }, [isDirty, saveDraft])
+  /**
+   * Ferme l'EventSource proprement (utilisé pour l'interruption).
+   * Utilise la connexion SSE de l'orchestrator (source de vérité unique).
+   * 
+   * NOTE: La connexion SSE est gérée par handleGenerate dans useGenerationHandlers,
+   * qui appelle connectSSE(job.job_id) après la création du job.
+   * Pas besoin de useEffect pour se connecter automatiquement ici.
+   */
+  const closeEventSource = useCallback(() => {
+    orchestrator.disconnectSSE()
+  }, [orchestrator])
 
+  // Draft hook gère la sauvegarde automatique et le chargement
+  // (logique extraite dans useGenerationDraft)
+
+  // Cache pour les modèles LLM (TTL: 5 minutes)
+  const modelsCacheRef = useRef<{ models: LLMModelResponse[], timestamp: number } | null>(null)
+  const MODELS_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+  // Chargement des modèles LLM disponibles
   const loadModels = useCallback(async () => {
+    // Vérifier le cache avant l'appel API
+    if (modelsCacheRef.current && Date.now() - modelsCacheRef.current.timestamp < MODELS_CACHE_TTL) {
+      setAvailableModels(modelsCacheRef.current.models)
+      // Valider que le modèle actuel existe dans la liste
+      if (modelsCacheRef.current.models.length > 0) {
+        const currentModelExists = llmModel && modelsCacheRef.current.models.some(m => m.model_identifier === llmModel && m.model_identifier !== "unknown")
+        if (!currentModelExists) {
+          const firstModel = modelsCacheRef.current.models.find(m => m.model_identifier && m.model_identifier !== "unknown") || modelsCacheRef.current.models[0]
+          if (firstModel && firstModel.model_identifier && firstModel.model_identifier !== "unknown") {
+            setLlmModel(firstModel.model_identifier)
+          }
+        }
+      }
+      return
+    }
+
     try {
       const response = await configAPI.listLLMModels()
-      setAvailableModels(response.models)
-      // Ne pas écraser le modèle si un draft existe avec un modèle sauvegardé
-      const saved = localStorage.getItem(DRAFT_STORAGE_KEY)
-      if (saved) {
-        try {
-          const draft = JSON.parse(saved)
-          if (draft.llmModel && response.models.some(m => m.model_identifier === draft.llmModel)) {
-            // Le modèle sauvegardé existe toujours, on le garde (déjà chargé par le useEffect du draft)
-            return
-          }
-        } catch {
-          // Ignorer les erreurs de parsing, continuer avec le modèle par défaut
-        }
+      
+      // Mettre à jour le cache
+      modelsCacheRef.current = {
+        models: response.models,
+        timestamp: Date.now(),
       }
-      // Sinon, utiliser le premier modèle disponible seulement si aucun modèle n'est déjà défini
-      if (response.models.length > 0 && !llmModel) {
-        setLlmModel(response.models[0].model_identifier)
+      
+      setAvailableModels(response.models)
+      // Valider que le modèle actuel existe dans la liste
+      if (response.models.length > 0) {
+        const currentModelExists = llmModel && response.models.some(m => m.model_identifier === llmModel && m.model_identifier !== "unknown")
+        if (!currentModelExists) {
+          const firstModel = response.models.find(m => m.model_identifier && m.model_identifier !== "unknown") || response.models[0]
+          if (firstModel && firstModel.model_identifier && firstModel.model_identifier !== "unknown") {
+            setLlmModel(firstModel.model_identifier)
+          }
+        }
       }
     } catch (err) {
       console.error('Erreur lors du chargement des modèles:', err)
+      // En cas d'erreur, utiliser le cache même s'il est expiré si disponible
+      if (modelsCacheRef.current) {
+        setAvailableModels(modelsCacheRef.current.models)
+      }
     }
   }, [llmModel])
 
   useEffect(() => {
     loadModels()
-    loadInteractions()
   }, [loadModels])
 
-  const loadInteractions = useCallback(async () => {
-    try {
-      const response: InteractionListResponse = await interactionsAPI.listInteractions()
-      setAvailableInteractions(response.interactions)
-    } catch (err) {
-      console.error('Erreur lors du chargement des interactions:', err)
-    }
-  }, [])
-
-  const hasSelections = useCallback((): boolean => {
-    return (
-      selections.characters.length > 0 ||
-      selections.locations.length > 0 ||
-      selections.items.length > 0 ||
-      selections.species.length > 0 ||
-      selections.communities.length > 0 ||
-      selections.dialogues_examples.length > 0
-    )
-  }, [selections])
-
-  // Construire context_selections avec scene_protagonists, scene_location, et generation_settings
-  const buildContextSelections = useCallback((): ContextSelection => {
-    const contextSelections: ContextSelection = {
-      ...selections,
-    }
-
-    // Ajouter scene_protagonists
-    const sceneProtagonists: Record<string, string> = {}
-    if (sceneSelection.characterA) {
-      sceneProtagonists.personnage_a = sceneSelection.characterA
-    }
-    if (sceneSelection.characterB) {
-      sceneProtagonists.personnage_b = sceneSelection.characterB
-    }
-    if (Object.keys(sceneProtagonists).length > 0) {
-      contextSelections.scene_protagonists = sceneProtagonists
-    }
-
-    // Ajouter scene_location
-    const sceneLocation: Record<string, string> = {}
-    if (sceneSelection.sceneRegion) {
-      sceneLocation.lieu = sceneSelection.sceneRegion
-    }
-    if (sceneSelection.subLocation) {
-      sceneLocation.sous_lieu = sceneSelection.subLocation
-    }
-    if (Object.keys(sceneLocation).length > 0) {
-      contextSelections.scene_location = sceneLocation
-    }
-
-    // Ajouter generation_settings avec dialogue_structure
-    if (dialogueStructure && dialogueStructure.length > 0) {
-      contextSelections.generation_settings = {
-        dialogue_structure: dialogueStructure,
-      }
-    }
-
-    return contextSelections
-  }, [selections, sceneSelection, dialogueStructure])
-
-  const estimateTokens = useCallback(async () => {
-    // Permettre l'estimation si on a au moins : instructions, sélections, ou un system prompt
-    const hasSystemPrompt = systemPromptOverride && systemPromptOverride.trim().length > 0
-    if (!userInstructions.trim() && !hasSelections() && !hasSystemPrompt) {
-      setEstimatedTokens(null)
-      setEstimatedPrompt(null, null, false)
-      return
-    }
-
-    setIsEstimating(true)
-    setEstimatedPrompt(null, null, true)
-    try {
-      const contextSelections = buildContextSelections()
-      const response = await dialoguesAPI.estimateTokens(
-        contextSelections,
-        userInstructions,
-        maxContextTokens,
-        systemPromptOverride
-      )
-      setEstimatedTokens(response.total_estimated_tokens)
-      setEstimatedPrompt(response.estimated_prompt || null, response.total_estimated_tokens, false)
-    } catch (err: any) {
-      // Ne logger que les erreurs non liées à la connexion (backend non accessible)
-      // Les erreurs de connexion sont normales si le backend n'est pas encore démarré
-      if (err?.code !== 'ERR_NETWORK' && err?.code !== 'ECONNREFUSED' && err?.response?.status !== 401) {
-        console.error('Erreur lors de l\'estimation:', err)
-      }
-      setEstimatedTokens(null)
-      setEstimatedPrompt(null, null, false)
-    } finally {
-      setIsEstimating(false)
-    }
-  }, [userInstructions, hasSelections, maxContextTokens, buildContextSelections, setEstimatedPrompt, systemPromptOverride])
-
-  useEffect(() => {
-    // Estimer les tokens quand les sélections, les instructions ou le system prompt changent
-    const hasAnySelections = 
-      selections.characters.length > 0 ||
-      selections.locations.length > 0 ||
-      selections.items.length > 0 ||
-      selections.species.length > 0 ||
-      selections.communities.length > 0 ||
-      selections.dialogues_examples.length > 0
-    
-    const hasSystemPrompt = systemPromptOverride && systemPromptOverride.trim().length > 0
-    
-    const timeoutId = setTimeout(() => {
-      if (userInstructions.trim() || hasAnySelections || hasSystemPrompt) {
-        estimateTokens()
-      } else {
-        setEstimatedTokens(null)
-        setEstimatedPrompt(null, null, false)
-      }
-    }, 500)
-
-    return () => clearTimeout(timeoutId)
-  }, [userInstructions, selections.characters, selections.locations, selections.items, selections.species, selections.communities, selections.dialogues_examples, maxContextTokens, estimateTokens, sceneSelection, dialogueStructure, systemPromptOverride, setEstimatedPrompt])
-
-  const handleGenerate = useCallback(async () => {
-    // Validation minimale
-    if (!sceneSelection.characterA && !sceneSelection.characterB && !userInstructions.trim()) {
-      toast('Veuillez sélectionner au moins un personnage ou ajouter des instructions', 'error')
-      return
-    }
-
-    setIsLoading(true)
-    setError(null)
-    // Toast sans durée (0) pour qu'il reste affiché pendant la génération
-    const toastId = toast('Génération en cours...', 'info', 0)
-
-    try {
-      const contextSelections = buildContextSelections()
-      // Log pour déboguer les personnages sélectionnés
-      console.log('Context selections envoyés:', contextSelections)
-      console.log('Personnages dans contextSelections:', contextSelections.characters)
-      
-      // Calculer les tokens envoyés avant la génération
-      let tokensSent = 0
-      try {
-        const estimateResponse = await dialoguesAPI.estimateTokens(
-          contextSelections,
-          userInstructions,
-          maxContextTokens,
-          systemPromptOverride
-        )
-        tokensSent = estimateResponse.total_estimated_tokens
-        setTokensUsed(tokensSent)
-      } catch (err) {
-        console.warn('Impossible d\'estimer les tokens:', err)
-      }
-      
-      if (generationMode === 'variants') {
-        const request: GenerateDialogueVariantsRequest = {
-          k_variants: kVariants,
-          user_instructions: userInstructions,
-          context_selections: contextSelections,
-          max_context_tokens: maxContextTokens,
-          structured_output: false,
-          system_prompt_override: systemPromptOverride || undefined,
-          llm_model_identifier: llmModel,
-          npc_speaker_id: npcSpeakerId || undefined,
-        }
-
-        const response = await dialoguesAPI.generateDialogueVariants(request)
-        
-        // Afficher un avertissement si DummyLLMClient a été utilisé
-        if (response.warning) {
-          toast(response.warning, 'error', 10000) // Afficher pendant 10 secondes
-        }
-        
-        // Stocker dans le store pour affichage dans le panneau de droite
-        setStoreVariantsResponse(response)
-        setStoreInteractionsResponse(null)
-        setVariantsResponse(response)
-        setInteractions([])
-        setIsDirty(false)
-        // Mettre à jour le prompt estimé avec le prompt utilisé
-        if (response.prompt_used) {
-          setEstimatedPrompt(response.prompt_used, response.estimated_tokens, false)
-        }
-        // Mettre à jour les tokens utilisés
-        if (response.estimated_tokens) {
-          setTokensUsed(response.estimated_tokens)
-        }
-        // Fermer le toast de génération en cours et afficher le succès
-        if (toastId) {
-          toastManager.remove(toastId)
-        }
-        if (!response.warning) {
-          toast('Génération réussie!', 'success')
-        }
-      } else if (generationMode === 'interactions') {
-        const request: GenerateInteractionVariantsRequest = {
-          k_variants: kVariants,
-          user_instructions: userInstructions,
-          context_selections: contextSelections,
-          max_context_tokens: maxContextTokens,
-          system_prompt_override: systemPromptOverride || undefined,
-          llm_model_identifier: llmModel,
-          previous_interaction_id: previousInteractionId || undefined,
-        }
-
-        const response = await dialoguesAPI.generateInteractionVariants(request)
-        // Stocker dans le store pour affichage dans le panneau de droite
-        setStoreInteractionsResponse(response)
-        setStoreVariantsResponse(null)
-        setInteractions(response)
-        setVariantsResponse(null)
-        setIsDirty(false)
-        // Fermer le toast de génération en cours et afficher le succès
-        if (toastId) {
-          toastManager.remove(toastId)
-        }
-        toast('Génération réussie!', 'success')
-      } else if (generationMode === 'unity') {
-        // Validation : au moins un personnage requis pour Unity
-        if (!contextSelections.characters || contextSelections.characters.length === 0) {
-          toast('Au moins un personnage doit être sélectionné pour générer un dialogue Unity', 'error')
-          if (toastId) {
-            toastManager.remove(toastId)
+  // Raccourcis clavier
+  useKeyboardShortcuts(
+    [
+      {
+        key: 'ctrl+enter',
+        handler: () => {
+          if (!isLoading) {
+            orchestrator.handleGenerate()
           }
-          setIsLoading(false)
-          return
-        }
-        
-        const request: GenerateUnityDialogueRequest = {
-          user_instructions: userInstructions,
-          context_selections: contextSelections,
-          npc_speaker_id: npcSpeakerId || undefined,
-          max_context_tokens: maxContextTokens,
-          system_prompt_override: systemPromptOverride || undefined,
-          llm_model_identifier: llmModel,
-          max_choices: maxChoices ?? undefined,
-        }
+        },
+        description: 'Générer un dialogue',
+        enabled: !isLoading,
+      },
+      {
+        key: 'ctrl+n',
+        handler: () => {
+          orchestrator.handleReset()
+        },
+        description: 'Nouveau dialogue (réinitialiser)',
+      },
+    ],
+    [isLoading, orchestrator.handleGenerate, orchestrator.handleReset]
+  )
 
-        const response = await dialoguesAPI.generateUnityDialogue(request)
-        
-        // Afficher un avertissement si DummyLLMClient a été utilisé
-        if (response.warning) {
-          toast(response.warning, 'error', 10000)
-        }
-        
-        // Pour Unity, on affiche le JSON dans une variante
-        const unityVariant: DialogueVariantResponse = {
-          id: 'unity-1',
-          title: response.title || 'Dialogue Unity JSON',
-          content: response.json_content,
-          is_new: true
-        }
-        
-        const unityResponse: GenerateDialogueVariantsResponse = {
-          variants: [unityVariant],
-          prompt_used: response.prompt_used || undefined,
-          estimated_tokens: response.estimated_tokens,
-          warning: response.warning || undefined
-        }
-        
-        // Stocker dans le store pour affichage
-        setStoreVariantsResponse(unityResponse)
-        setStoreInteractionsResponse(null)
-        setVariantsResponse(unityResponse)
-        setInteractions([])
-        setIsDirty(false)
-        
-        if (response.prompt_used) {
-          setEstimatedPrompt(response.prompt_used, response.estimated_tokens, false)
-        }
-        if (response.estimated_tokens) {
-          setTokensUsed(response.estimated_tokens)
-        }
-        
-        // Fermer le toast de génération en cours et afficher le succès
-        if (toastId) {
-          toastManager.remove(toastId)
-        }
-        if (!response.warning) {
-          toast('Génération Unity JSON réussie!', 'success')
-        }
-      }
-    } catch (err) {
-      const errorMsg = getErrorMessage(err)
-      setError(errorMsg)
-      // Fermer le toast de génération en cours en cas d'erreur
-      if (toastId) {
-        toastManager.remove(toastId)
-      }
-      toast(errorMsg, 'error')
-    } finally {
-      setIsLoading(false)
+  const { setActions } = useGenerationActionsStore()
+
+  // Utiliser useRef pour stocker les handlers et éviter les boucles infinies
+  const handlersRef = useRef({
+    handleGenerate: orchestrator.handleGenerate,
+    handlePreview: orchestrator.handlePreview,
+    handleExportUnity: orchestrator.handleExportUnity,
+    handleReset: orchestrator.handleReset,
+    handleResetAll: orchestrator.handleResetAll,
+    handleResetInstructions: orchestrator.handleResetInstructions,
+    handleResetSelections: orchestrator.handleResetSelections,
+  })
+  
+  // Mettre à jour la ref quand les handlers changent
+  useEffect(() => {
+    handlersRef.current = {
+      handleGenerate: orchestrator.handleGenerate,
+      handlePreview: orchestrator.handlePreview,
+      handleExportUnity: orchestrator.handleExportUnity,
+      handleReset: orchestrator.handleReset,
+      handleResetAll: orchestrator.handleResetAll,
+      handleResetInstructions: orchestrator.handleResetInstructions,
+      handleResetSelections: orchestrator.handleResetSelections,
     }
   }, [
-    sceneSelection,
-    userInstructions,
-    generationMode,
-    kVariants,
-    maxContextTokens,
-    systemPromptOverride,
-    llmModel,
-    previousInteractionId,
-    buildContextSelections,
-    toast,
-    setStoreVariantsResponse,
-    setStoreInteractionsResponse,
-    setTokensUsed,
-    setEstimatedPrompt,
+    orchestrator.handleGenerate,
+    orchestrator.handlePreview,
+    orchestrator.handleExportUnity,
+    orchestrator.handleReset,
+    orchestrator.handleResetAll,
+    orchestrator.handleResetInstructions,
+    orchestrator.handleResetSelections,
   ])
 
-  const handlePreview = () => {
-    // TODO: Implémenter prévisualisation
-    toast('Prévisualisation à implémenter', 'info')
-  }
-
-
-  const handleExportUnity = () => {
-    // TODO: Implémenter export Unity
-    toast('Export Unity à implémenter', 'info')
-  }
-
-  const handleReset = () => {
-    setUserInstructions('')
-    setVariantsResponse(null)
-    setInteractions([])
-    setError(null)
-    setIsDirty(false)
-    toast('Formulaire réinitialisé', 'info')
-  }
-
-  // Raccourci clavier pour générer (Ctrl+Enter)
+  // Exposer les handlers via le store pour Dashboard
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'Enter') {
-        e.preventDefault()
-        if (!isLoading) {
-          handleGenerate()
-        }
-      }
-    }
+    setActions({
+      handleGenerate: handlersRef.current.handleGenerate,
+      handlePreview: handlersRef.current.handlePreview,
+      handleExportUnity: handlersRef.current.handleExportUnity,
+      handleReset: handlersRef.current.handleReset,
+      isLoading,
+      isDirty: draft.isDirty,
+    })
+  }, [isLoading, draft.isDirty, setActions])
+  
+  // Initialiser le store au montage
+  useEffect(() => {
+    setActions({
+      handleGenerate: handlersRef.current.handleGenerate,
+      handlePreview: handlersRef.current.handlePreview,
+      handleExportUnity: handlersRef.current.handleExportUnity,
+      handleReset: handlersRef.current.handleReset,
+      isLoading,
+      isDirty: draft.isDirty,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Exécuter une seule fois au montage
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isLoading, handleGenerate])
+  // Mettre à jour le style du slider en fonction de la valeur
+  const applyRangeGradient = useCallback(
+    (el: HTMLInputElement | null, value: number, min: number, max: number) => {
+      if (!el) return
+      const safeMax = Math.max(min + 1, max)
+      const percentage = ((value - min) / (safeMax - min)) * 100
+      const gradient = `linear-gradient(to right, ${theme.border.focus} 0%, ${theme.border.focus} ${percentage}%, ${theme.input.background} ${percentage}%, ${theme.input.background} 100%)`
+      // Certains navigateurs dessinent la piste via les pseudo-éléments (track).
+      // On expose donc le gradient en variable CSS pour l'utiliser sur la track.
+      el.style.setProperty('--range-track-bg', gradient)
+      // Et on le met aussi sur l'input pour les implémentations qui lisent le background directement.
+      el.style.background = gradient
+    },
+    []
+  )
 
-  const handleSaveAsInteraction = async (variant: DialogueVariantResponse) => {
-    try {
-      // Convertir une variante en interaction (structure basique)
-      const interaction: InteractionResponse = {
-        interaction_id: `generated_${Date.now()}`,
-        title: variant.title,
-        elements: [
-          {
-            type: 'dialogue',
-            content: variant.content,
-          },
-        ],
-        header_commands: [],
-        header_tags: ['generated'],
-      }
+  useEffect(() => {
+    applyRangeGradient(
+      maxContextSliderRef.current,
+      maxContextTokens,
+      CONTEXT_TOKENS_LIMITS.MIN,
+      CONTEXT_TOKENS_LIMITS.MAX
+    )
+  }, [applyRangeGradient, maxContextTokens])
 
-      await interactionsAPI.createInteraction(interaction)
-      alert('Interaction sauvegardée avec succès!')
-      loadInteractions()
-    } catch (err) {
-      alert(getErrorMessage(err))
-    }
-  }
+  useEffect(() => {
+    const value = maxCompletionTokens ?? 10000
+    applyRangeGradient(maxCompletionSliderRef.current, value, 100, 16000)
+  }, [applyRangeGradient, maxCompletionTokens])
 
-  const panelTabs: Tab[] = [
-    {
-      id: 'generation',
-      label: 'Génération',
-      content: (
-        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: theme.background.panel }}>
-          <div style={{ padding: '1.5rem', flex: 1, overflowY: 'auto' }}>
-            <h2 style={{ marginTop: 0, color: theme.text.primary }}>Génération de Dialogues</h2>
+  const normalizedDialogueStructure = ((): DialogueStructure => {
+    const arr = Array.isArray(dialogueStructure) ? dialogueStructure : []
+    // Le store peut exposer un string[]; le widget attend une structure de longueur 6.
+    return [...arr, '', '', '', '', '', ''].slice(0, 6) as DialogueStructure
+  })()
 
-            <ContextSummaryChips
-              sceneSelection={sceneSelection}
-              style={{ marginBottom: '1rem' }}
-            />
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: theme.background.panel }}>
+      <div style={{ padding: '1.5rem', flex: 1, overflowY: 'auto' }}>
+        {/* PresetSelector (Task 6) */}
+        <PresetSelector
+          onPresetLoaded={presets.handlePresetLoaded}
+          getCurrentConfiguration={presets.getCurrentConfiguration}
+          saveStatus={draft.saveStatus}
+        />
 
-            <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
-        <button
-          onClick={() => {
-            setGenerationMode('unity')
-            setVariantsResponse(null)
-            setInteractions([])
-            setIsDirty(true)
-          }}
-          style={{
-            padding: '0.5rem 1rem',
-            border: `1px solid ${theme.border.primary}`,
-            borderRadius: '4px',
-            backgroundColor: generationMode === 'unity' ? theme.button.primary.background : theme.button.default.background,
-            color: generationMode === 'unity' ? theme.button.primary.color : theme.button.default.color,
-            cursor: 'pointer',
-          }}
-        >
-          Dialogue Unity
-        </button>
-        <button
-          onClick={() => {
-            setGenerationMode('variants')
-            setVariantsResponse(null)
-            setInteractions([])
-            setIsDirty(true)
-          }}
-          style={{
-            padding: '0.5rem 1rem',
-            border: `1px solid ${theme.border.primary}`,
-            borderRadius: '4px',
-            backgroundColor: generationMode === 'variants' ? theme.button.primary.background : theme.button.default.background,
-            color: generationMode === 'variants' ? theme.button.primary.color : theme.button.default.color,
-            cursor: 'pointer',
-          }}
-        >
-          Texte libre
-        </button>
-        <button
-          onClick={() => {
-            setGenerationMode('interactions')
-            setVariantsResponse(null)
-            setInteractions([])
-            setIsDirty(true)
-          }}
-          style={{
-            padding: '0.5rem 1rem',
-            border: `1px solid ${theme.border.primary}`,
-            borderRadius: '4px',
-            backgroundColor: generationMode === 'interactions' ? theme.button.primary.background : theme.button.default.background,
-            color: generationMode === 'interactions' ? theme.button.primary.color : theme.button.default.color,
-            cursor: 'pointer',
-          }}
-        >
-          Interactions structurées
-        </button>
-      </div>
-
-      <SceneSelectionWidget />
-
-      <ContextActions
-        onError={setError}
-        onSuccess={(msg: string) => {
-          // Optionnel: afficher un message de succès
-          console.log(msg)
-        }}
-      />
+            <SceneSelectionWidget />
 
       <SystemPromptEditor
         userInstructions={userInstructions}
+        authorProfile={authorProfile}
         systemPromptOverride={systemPromptOverride}
         onUserInstructionsChange={(value) => {
           setUserInstructions(value)
-          setIsDirty(true)
+          draft.markDirty()
+        }}
+        onAuthorProfileChange={(value) => {
+          updateAuthorProfile(value)
+          draft.markDirty()
         }}
         onSystemPromptChange={(value) => {
           setSystemPromptOverride(value)
-          setIsDirty(true)
+          draft.markDirty()
         }}
       />
 
       <DialogueStructureWidget
-        value={dialogueStructure}
+        value={normalizedDialogueStructure}
         onChange={(value) => {
           setDialogueStructure(value)
-          setIsDirty(true)
+          draft.markDirty()
         }}
       />
 
-      {selections.characters.length > 0 && (
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={{ color: theme.text.primary, display: 'block', marginBottom: '0.5rem' }}>
-            PNJ interlocuteur:
-          </label>
-          <select
-            value={npcSpeakerId}
-            onChange={(e) => {
-              setNpcSpeakerId(e.target.value)
-              setIsDirty(true)
-            }}
-            style={{ 
-              width: '100%', 
-              padding: '0.5rem', 
-              boxSizing: 'border-box',
-              backgroundColor: theme.input.background,
-              border: `1px solid ${theme.input.border}`,
-              color: theme.input.color,
-            }}
-          >
-            <option value="">Sélectionner un PNJ...</option>
-            {selections.characters.map((char) => (
-              <option key={char} value={char}>
-                {char}
-              </option>
-            ))}
-          </select>
-          <div style={{ 
-            fontSize: '0.85rem', 
-            color: theme.text.secondary, 
-            marginTop: '0.25rem' 
-          }}>
-            Personnage joueur: Seigneuresse Uresaïr (par défaut)
-          </div>
-        </div>
-      )}
+      <InGameFlagsSummary />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-        <div>
-          <label style={{ color: theme.text.primary }}>
-            Nombre de variantes:
-            <input
-              type="number"
-              value={kVariants}
-              onChange={(e) => {
-                setKVariants(parseInt(e.target.value) || 1)
-                setIsDirty(true)
-              }}
-              min={1}
-              max={10}
-              style={{ 
-                width: '100%', 
-                padding: '0.5rem', 
-                marginTop: '0.5rem', 
-                boxSizing: 'border-box',
-                backgroundColor: theme.input.background,
-                border: `1px solid ${theme.input.border}`,
-                color: theme.input.color,
-              }}
-            />
-          </label>
-        </div>
-
-        <div>
-          <label style={{ color: theme.text.primary }}>
-            Modèle LLM:
-            <select
-              value={llmModel}
-              onChange={(e) => {
-                setLlmModel(e.target.value)
-                setIsDirty(true)
-              }}
-              style={{ 
-                width: '100%', 
-                padding: '0.5rem', 
-                marginTop: '0.5rem', 
-                boxSizing: 'border-box',
-                backgroundColor: theme.input.background,
-                border: `1px solid ${theme.input.border}`,
-                color: theme.input.color,
-              }}
-            >
-              {availableModels.map((model, index) => (
-                <option key={`${model.model_identifier}-${index}-${model.display_name}`} value={model.model_identifier}>
-                  {model.display_name || model.model_identifier}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </div>
-
+      {/* Sélecteur de modèle LLM (Story 0.3) */}
       <div style={{ marginBottom: '1rem' }}>
-        <label style={{ color: theme.text.primary }}>
-          Max tokens contexte:
-            <input
-              type="number"
-              value={maxContextTokens}
-              onChange={(e) => {
-                setMaxContextTokens(parseInt(e.target.value) || 1500)
-                setIsDirty(true)
-              }}
-              min={100}
-              max={8000}
-            style={{ 
-              width: '100%', 
-              padding: '0.5rem', 
-              marginTop: '0.5rem', 
-              boxSizing: 'border-box',
-              backgroundColor: theme.input.background,
-              border: `1px solid ${theme.input.border}`,
-              color: theme.input.color,
-            }}
-          />
-        </label>
-      </div>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+          {/* Colonne Modèle */}
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <label htmlFor="model-select" style={{ color: theme.text.primary, fontSize: '0.9rem', fontWeight: 500 }}>
+                Modèle
+              </label>
+              <div style={{ position: 'relative', display: 'inline-block' }}>
+                <button
+                  type="button"
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '12px',
+                    border: `1px solid ${theme.border.primary}`,
+                    backgroundColor: theme.background.secondary,
+                    color: theme.text.secondary,
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 0,
+                  }}
+                  title={`Provider actuel: ${currentProvider === 'openai' ? 'OpenAI' : 'Mistral'}`}
+                >
+                  ?
+                </button>
+              </div>
+            </div>
+            <ModelSelector />
+          </div>
 
-      {generationMode === 'unity' && (
-        <div style={{ marginBottom: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-            <label style={{ color: theme.text.primary, margin: 0 }}>
-              Nombre max de choix:
+          {/* Colonne Niveau de raisonnement */}
+          {(llmModel === "gpt-5.2" || llmModel === "gpt-5.2-pro" || llmModel === "gpt-5-mini" || llmModel === "gpt-5-nano") && (
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <label htmlFor="reasoning-effort-select" style={{ color: theme.text.primary, fontSize: '0.9rem', fontWeight: 500 }}>
+                  Niveau de raisonnement
+                </label>
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <button
+                    type="button"
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '12px',
+                      border: `1px solid ${theme.border.primary}`,
+                      backgroundColor: theme.background.secondary,
+                      color: theme.text.secondary,
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: 0,
+                    }}
+                    title={
+                      llmModel === "gpt-5-mini" || llmModel === "gpt-5-nano"
+                        ? "Contrôle la profondeur de raisonnement. Mini/nano supportent uniquement minimal, low, medium, high (pas 'none' ni 'xhigh'). Le reasoning est toujours actif."
+                        : "Contrôle la profondeur de raisonnement du modèle. Plus élevé = meilleure qualité mais plus lent et plus coûteux."
+                    }
+                  >
+                    ?
+                  </button>
+                </div>
+              </div>
+              <select
+                id="reasoning-effort-select"
+                value={reasoningEffort || (llmModel === "gpt-5-mini" || llmModel === "gpt-5-nano" ? 'minimal' : 'none')}
+                onChange={(e) => {
+                  const newValue = e.target.value as 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+                  setReasoningEffort(newValue === 'none' ? null : newValue)
+                  draft.markDirty()
+                }}
+                style={{ 
+                  width: '100%', 
+                  padding: '0.5rem', 
+                  boxSizing: 'border-box',
+                  backgroundColor: theme.input.background,
+                  border: `1px solid ${theme.input.border}`,
+                  color: theme.input.color,
+                  borderRadius: '4px',
+                  fontSize: '0.9rem',
+                }}
+              >
+                {/* Options différentes selon le modèle */}
+                {llmModel === "gpt-5.2" || llmModel === "gpt-5.2-pro" ? (
+                  <>
+                    <option value="none">Aucun (rapide, latence minimale)</option>
+                    <option value="low">Faible (raisonnement minimal)</option>
+                    <option value="medium">Moyen (équilibré, recommandé)</option>
+                    <option value="high">Élevé (raisonnement approfondi)</option>
+                    <option value="xhigh">Très élevé (raisonnement maximal)</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="minimal">Minimal (raisonnement minimal, toujours actif)</option>
+                    <option value="low">Faible (raisonnement léger)</option>
+                    <option value="medium">Moyen (équilibré, recommandé)</option>
+                    <option value="high">Élevé (raisonnement approfondi)</option>
+                  </>
+                )}
+              </select>
+            </div>
+          )}
+          
+          {/* Contrôle Top_p */}
+          <div style={{ marginTop: '1rem' }}>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '0.5rem', 
+              fontSize: '0.9rem',
+              color: theme.text.secondary,
+              fontWeight: 500
+            }}>
+              Top_p (Nucleus Sampling)
+              <span style={{ 
+                marginLeft: '0.5rem', 
+                fontSize: '0.8rem', 
+                color: theme.text.tertiary,
+                fontWeight: 'normal'
+              }}>
+                {topP !== null && topP !== undefined ? `(${topP.toFixed(1)})` : '(non utilisé)'}
+              </span>
             </label>
-            <div style={{ position: 'relative', display: 'inline-block' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={topP ?? 0.5}
+                onChange={(e) => {
+                  const value = parseFloat(e.target.value)
+                  setTopP(value === 0.5 ? null : value)
+                  draft.markDirty()
+                }}
+                style={{ 
+                  flex: 1,
+                  height: '6px',
+                  borderRadius: '3px',
+                  background: theme.input.background,
+                  outline: 'none',
+                }}
+              />
+              <input
+                type="number"
+                min="0"
+                max="1"
+                step="0.1"
+                value={topP ?? ''}
+                placeholder="Auto"
+                onChange={(e) => {
+                  const value = e.target.value === '' ? null : parseFloat(e.target.value)
+                  if (value === null || (value >= 0 && value <= 1)) {
+                    setTopP(value)
+                    draft.markDirty()
+                  }
+                }}
+                style={{ 
+                  width: '80px', 
+                  padding: '0.5rem', 
+                  boxSizing: 'border-box',
+                  backgroundColor: theme.input.background,
+                  border: `1px solid ${theme.input.border}`,
+                  color: theme.input.color,
+                  borderRadius: '4px',
+                  fontSize: '0.9rem',
+                }}
+              />
               <button
                 type="button"
-                style={{
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '12px',
-                  border: `1px solid ${theme.border.primary}`,
-                  backgroundColor: theme.background.secondary,
-                  color: theme.text.secondary,
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: 'bold',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: 0,
+                onClick={() => {
+                  setTopP(null)
+                  draft.markDirty()
                 }}
-                title="0 = aucun choix (dialogue linéaire), 1-8 = nombre max de choix, vide = l'IA décide"
+                style={{
+                  padding: '0.5rem 1rem',
+                  backgroundColor: theme.button.secondary.background,
+                  color: theme.button.secondary.color,
+                  border: `1px solid ${theme.button.secondary.border}`,
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                }}
               >
-                ?
+                Réinitialiser
               </button>
             </div>
+            <div style={{ 
+              marginTop: '0.25rem', 
+              fontSize: '0.75rem', 
+              color: theme.text.tertiary 
+            }}>
+              {topP === null ? (
+                'Non utilisé (temperature sera utilisée si disponible)'
+              ) : topP < 0.3 ? (
+                'Focalisé (réponses plus déterministes)'
+              ) : topP > 0.7 ? (
+                'Diversifié (réponses plus créatives)'
+              ) : (
+                'Équilibré'
+              )}
+            </div>
           </div>
-          <input
-            type="number"
-            value={maxChoices ?? ''}
-            onChange={(e) => {
-              const value = e.target.value
-              if (value === '') {
-                setMaxChoices(null)
-              } else {
-                const num = parseInt(value)
-                if (!isNaN(num) && num >= 0 && num <= 8) {
-                  setMaxChoices(num)
-                }
-              }
-              setIsDirty(true)
-            }}
-            min={0}
-            max={8}
-            placeholder="Libre"
-            style={{ 
-              width: '100%', 
-              padding: '0.5rem', 
-              boxSizing: 'border-box',
-              backgroundColor: theme.input.background,
-              border: `1px solid ${theme.input.border}`,
-              color: theme.input.color,
-            }}
-          />
         </div>
-      )}
+      </div>
 
-      {estimatedTokens !== null && (
-        <div style={{ 
-          marginBottom: '1rem', 
-          padding: '0.5rem', 
-          backgroundColor: theme.state.info.background, 
-          color: theme.state.info.color,
-          borderRadius: '4px' 
-        }}>
-          {isEstimating ? (
-            <span>Estimation en cours...</span>
-          ) : (
-            <span>
-              <strong>Tokens estimés:</strong> {estimatedTokens.toLocaleString()}
-            </span>
-          )}
-        </div>
-      )}
+      {/* Contrôles de génération (sliders tokens, max choix, tags narratifs) */}
+      <GenerationPanelControls
+        maxContextTokens={maxContextTokens}
+        maxCompletionTokens={maxCompletionTokens}
+        maxChoices={maxChoices}
+        narrativeTags={narrativeTags}
+        availableNarrativeTags={availableNarrativeTags}
+        validationErrors={orchestrator.validationErrors}
+        tokenCount={orchestrator.tokenCount}
+        onMaxContextTokensChange={(value) => {
+          setMaxContextTokens(value)
+          draft.markDirty()
+        }}
+        onMaxCompletionTokensChange={(value) => {
+          setMaxCompletionTokens(value)
+          draft.markDirty()
+        }}
+        onMaxChoicesChange={(value) => {
+          setMaxChoices(value)
+          draft.markDirty()
+        }}
+        onNarrativeTagsChange={(tags) => {
+          setNarrativeTags(tags)
+          draft.markDirty()
+        }}
+        onDirty={draft.markDirty}
+      />
 
 
-      {generationMode === 'interactions' && (
-        <div style={{ marginBottom: '1rem', padding: '1rem', border: `1px solid ${theme.border.primary}`, borderRadius: '4px' }}>
-          <h3 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1rem', fontWeight: 'bold' }}>
-            Continuité (Interaction précédente)
-          </h3>
-          <select
-            value={previousInteractionId}
-            onChange={(e) => {
-              setPreviousInteractionId(e.target.value)
-              setIsDirty(true)
-            }}
-            style={{ 
-              width: '100%', 
-              padding: '0.5rem', 
-              backgroundColor: theme.input.background,
-              border: `1px solid ${theme.input.border}`,
-              color: theme.input.color,
-            }}
-          >
-            <option value="">-- Aucune interaction précédente --</option>
-            {availableInteractions.map((interaction) => (
-              <option key={interaction.interaction_id} value={interaction.interaction_id}>
-                {interaction.title || interaction.interaction_id}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
 
 
       {error && (
@@ -913,75 +640,89 @@ export function GenerationPanel() {
           {error}
         </div>
       )}
-          </div>
-        </div>
-      ),
-    },
-    {
-      id: 'interactions',
-      label: 'Interactions',
-      content: (
-        <InteractionsTab
-          onSelectInteraction={(interaction) => {
-            if (interaction) {
-              setPreviousInteractionId(interaction.interaction_id)
+      </div>
+      
+      {/* Modal de progression streaming (Story 0.2) */}
+      <GenerationProgressModal
+        isOpen={isGenerating}
+        content={streamingContent}
+        currentStep={currentStep}
+        isMinimized={isMinimized}
+        error={streamingError}
+        isInterrupting={isInterrupting}
+        onInterrupt={async () => {
+          // Afficher "Interruption en cours..."
+          setInterrupting(true)
+          
+          // Appeler l'API de cancel avec le job_id avec timeout de 10s
+          if (currentJobId) {
+            try {
+              const cancelPromise = dialoguesAPI.cancelGenerationJob(currentJobId).catch((err) => {
+                console.warn('Erreur lors de l\'annulation du job:', err)
+                return 'error' as const
+              })
+              const timeoutPromise = new Promise<'timeout'>((resolve) => 
+                setTimeout(() => resolve('timeout'), API_TIMEOUTS.CANCEL_JOB)
+              )
+              
+              const result = await Promise.race([cancelPromise, timeoutPromise])
+              
+              // Si timeout atteint ou erreur, force close EventSource
+              if (result === 'timeout' || result === 'error') {
+                closeEventSource()
+                setStreamingError('Interruption terminée')
+              } else {
+                // Interruption réussie
+                closeEventSource()
+                setStreamingError('Génération interrompue')
+              }
+            } catch (err) {
+              console.warn('Erreur lors de l\'annulation du job:', err)
+              closeEventSource()
+              setStreamingError('Interruption terminée')
             }
-          }}
-        />
-      ),
-    },
-  ]
-
-  const { setActions } = useGenerationActionsStore()
-  
-  // Utiliser useRef pour stocker les handlers et éviter les boucles infinies
-  const handlersRef = useRef({
-    handleGenerate,
-    handlePreview,
-    handleExportUnity,
-    handleReset,
-  })
-  
-  // Mettre à jour la ref quand les handlers changent
-  useEffect(() => {
-    handlersRef.current = {
-      handleGenerate,
-      handlePreview,
-      handleExportUnity,
-      handleReset,
-    }
-  }, [handleGenerate, handlePreview, handleExportUnity, handleReset])
-
-  // Exposer les handlers via le store pour Dashboard
-  // Mettre à jour au montage initial et quand isLoading ou isDirty changent
-  useEffect(() => {
-    setActions({
-      handleGenerate: handlersRef.current.handleGenerate,
-      handlePreview: handlersRef.current.handlePreview,
-      handleExportUnity: handlersRef.current.handleExportUnity,
-      handleReset: handlersRef.current.handleReset,
-      isLoading,
-      isDirty,
-    })
-  }, [isLoading, isDirty, setActions])
-  
-  // S'assurer que le store est initialisé au montage même si isLoading/isDirty ne changent pas
-  // (nécessaire car le useEffect ci-dessus ne s'exécute que si isLoading/isDirty changent)
-  useEffect(() => {
-    setActions({
-      handleGenerate: handlersRef.current.handleGenerate,
-      handlePreview: handlersRef.current.handlePreview,
-      handleExportUnity: handlersRef.current.handleExportUnity,
-      handleReset: handlersRef.current.handleReset,
-      isLoading,
-      isDirty,
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Exécuter une seule fois au montage pour initialiser le store
-
-  return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: theme.background.panel }}>
-      <Tabs tabs={panelTabs} activeTabId={activePanelTab} onTabChange={(tabId) => setActivePanelTab(tabId as PanelTab)} />
+          } else {
+            closeEventSource()
+            setStreamingError('Génération interrompue')
+          }
+          
+          // Réinitialiser l'état
+          interrupt()
+          
+          // Réinitialiser l'état d'interruption après un court délai
+          setTimeout(() => {
+            setInterrupting(false)
+            resetStreamingState()
+            setIsLoading(false)
+          }, 2000)
+        }}
+        onMinimize={minimize}
+        onClose={() => {
+          resetStreamingState()
+          setIsLoading(false)
+        }}
+      />
+      
+      {/* Modals (reset confirm, preset validation, budget block) */}
+      <GenerationPanelModals
+        showResetConfirm={showResetConfirm}
+        showBudgetBlock={showBudgetBlockModal}
+        budgetBlockMessage={budgetBlockMessage}
+        validationResult={presets.validationResult}
+        isValidationModalOpen={presets.isValidationModalOpen}
+        onResetConfirm={() => {
+          if (draft.isDirty) {
+            orchestrator.handleResetAll()
+          } else {
+            orchestrator.handleReset()
+          }
+          setShowResetConfirm(false)
+        }}
+        onResetCancel={() => setShowResetConfirm(false)}
+        onBudgetBlockClose={() => setShowBudgetBlockModal(false)}
+        onValidationClose={presets.handleValidationClose}
+        onValidationConfirm={presets.handleValidationConfirm}
+      />
     </div>
   )
 }
