@@ -102,6 +102,41 @@ class GDDLoader:
             logger.debug("Cache GDD non disponible. Chargement direct depuis fichiers.")
             return None
     
+    def _find_file_case_insensitive(self, directory: Path, filename: str) -> Optional[Path]:
+        """Trouve un fichier dans un répertoire de manière case-insensitive.
+        
+        Args:
+            directory: Répertoire dans lequel chercher.
+            filename: Nom du fichier à chercher (peut être avec ou sans extension).
+            
+        Returns:
+            Chemin vers le fichier trouvé, ou None si non trouvé.
+        """
+        if not directory.exists() or not directory.is_dir():
+            return None
+        
+        # Normaliser le nom de fichier (enlever l'extension si présente)
+        filename_lower = filename.lower()
+        if filename_lower.endswith('.json'):
+            base_name = filename_lower[:-5]
+            extension = '.json'
+        else:
+            base_name = filename_lower
+            extension = ''
+        
+        # Chercher dans le répertoire
+        for file_path in directory.iterdir():
+            if file_path.is_file():
+                file_name_lower = file_path.name.lower()
+                # Vérifier si le nom correspond (avec ou sans extension)
+                if file_name_lower == filename_lower:
+                    return file_path
+                # Vérifier aussi sans extension
+                if extension and file_name_lower == base_name + extension:
+                    return file_path
+        
+        return None
+    
     def load_vision(self) -> Optional[Dict[str, Any]]:
         """Charge le fichier Vision.json.
         
@@ -112,17 +147,21 @@ class GDDLoader:
         
         # Déterminer le chemin vers Vision.json
         # Si le chemin pointe directement vers un fichier Vision.json
-        if self._import_path.name == "Vision.json":
+        if self._import_path.is_file() and self._import_path.name.lower() == "vision.json":
             vision_file_path = self._import_path
         # Si le chemin pointe vers Bible_Narrative
-        elif self._import_path.name == "Bible_Narrative":
-            vision_file_path = self._import_path / "Vision.json"
+        elif self._import_path.is_dir() and self._import_path.name == "Bible_Narrative":
+            vision_file_path = self._find_file_case_insensitive(self._import_path, "Vision.json")
+            if vision_file_path is None:
+                vision_file_path = self._import_path / "Vision.json"
         # Sinon, chercher Vision.json directement dans le répertoire (data/)
         else:
-            vision_file_path = self._import_path / "Vision.json"
+            vision_file_path = self._find_file_case_insensitive(self._import_path, "Vision.json")
+            if vision_file_path is None:
+                vision_file_path = self._import_path / "Vision.json"
         
-        if not vision_file_path.exists() or not vision_file_path.is_file():
-            logger.warning(f"Fichier {vision_file_path.name} non trouvé ou n'est pas un fichier.")
+        if vision_file_path is None or not vision_file_path.exists() or not vision_file_path.is_file():
+            logger.warning(f"Fichier Vision.json non trouvé dans {self._import_path}.")
             return None
         
         # Vérifier le cache
@@ -168,17 +207,24 @@ class GDDLoader:
         
         config = self.CATEGORIES_CONFIG[category_name]
         # Privilégier les fichiers avec "_full" dans le nom
-        file_path_full = self._categories_path / f"{category_name}_full.json"
-        file_path = self._categories_path / f"{category_name}.json"
+        # Recherche case-insensitive pour compatibilité Windows/Linux
+        file_path_full = self._find_file_case_insensitive(
+            self._categories_path, 
+            f"{category_name}_full.json"
+        )
+        file_path = self._find_file_case_insensitive(
+            self._categories_path, 
+            f"{category_name}.json"
+        )
         
         # Sélectionner le fichier à utiliser : "_full" en priorité, sinon le fichier standard
-        if file_path_full.exists() and file_path_full.is_file():
+        if file_path_full is not None:
             file_path = file_path_full
             logger.debug(f"Fichier {file_path.name} trouvé (version _full).")
-        elif not file_path.exists() or not file_path.is_file():
+        elif file_path is None:
             # Les fichiers GDD sont optionnels (sauf personnages.json et lieux.json qui sont recommandés)
             # Utiliser DEBUG pour éviter les warnings inutiles au démarrage
-            logger.debug(f"Fichier {file_path.name} non trouvé dans {self._categories_path}. Utilisation de la valeur par défaut.")
+            logger.debug(f"Fichier {category_name}.json non trouvé dans {self._categories_path}. Utilisation de la valeur par défaut.")
             return [] if config["type"] == list else {}
         
         json_main_key = config["key"]

@@ -51,6 +51,27 @@ class HealthCheckResult:
         return result
 
 
+def _find_file_case_insensitive(directory: Path, filename: str) -> Optional[Path]:
+    """Trouve un fichier dans un répertoire de manière case-insensitive.
+    
+    Args:
+        directory: Répertoire dans lequel chercher.
+        filename: Nom du fichier à chercher.
+        
+    Returns:
+        Chemin vers le fichier trouvé, ou None si non trouvé.
+    """
+    if not directory.exists() or not directory.is_dir():
+        return None
+    
+    filename_lower = filename.lower()
+    for file_path in directory.iterdir():
+        if file_path.is_file() and file_path.name.lower() == filename_lower:
+            return file_path
+    
+    return None
+
+
 def check_gdd_files() -> HealthCheckResult:
     """Vérifie que les fichiers GDD sont accessibles.
     
@@ -76,7 +97,7 @@ def check_gdd_files() -> HealthCheckResult:
         if env_import_path:
             import_base_path = Path(env_import_path)
             # Si le chemin pointe directement vers Vision.json, c'est bon
-            if import_base_path.name == "Vision.json":
+            if import_base_path.name.lower() == "vision.json":
                 vision_file_path = import_base_path
             # Si le chemin pointe vers Bible_Narrative, chercher Vision.json dedans
             elif import_base_path.name == "Bible_Narrative":
@@ -98,11 +119,12 @@ def check_gdd_files() -> HealthCheckResult:
         elif not gdd_base_path.is_dir():
             issues.append(f"Chemin GDD n'est pas un répertoire: {gdd_base_path}")
         
-        # Vérifier Vision.json
-        if not vision_file_path.exists():
-            issues.append(f"Fichier Vision.json non trouvé: {vision_file_path}")
-        elif not vision_file_path.is_file():
-            issues.append(f"Vision.json n'est pas un fichier: {vision_file_path}")
+        # Vérifier Vision.json (case-insensitive)
+        vision_file_found = _find_file_case_insensitive(import_base_path, "Vision.json")
+        if vision_file_found is None:
+            issues.append(f"Fichier Vision.json non trouvé dans: {import_base_path}")
+        else:
+            vision_file_path = vision_file_found
         
         if issues:
             return HealthCheckResult(
@@ -113,11 +135,12 @@ def check_gdd_files() -> HealthCheckResult:
             )
         
         # Vérifier quelques fichiers clés (optionnel, car ils peuvent ne pas tous exister)
+        # Recherche case-insensitive pour compatibilité Windows/Linux
         key_files = ["personnages.json", "lieux.json"]
         missing_files = []
         for key_file in key_files:
-            file_path = gdd_base_path / key_file
-            if not file_path.exists():
+            file_path = _find_file_case_insensitive(gdd_base_path, key_file)
+            if file_path is None:
                 missing_files.append(key_file)
         
         if missing_files:
