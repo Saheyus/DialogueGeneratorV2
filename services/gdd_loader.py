@@ -57,7 +57,7 @@ class GDDLoader:
         Args:
             categories_path: Chemin vers le répertoire des catégories GDD.
                             Si None, utilise la valeur par défaut.
-            import_path: Chemin vers le répertoire import (ou directement Bible_Narrative).
+            import_path: Chemin vers le répertoire contenant Vision.json (ou directement le fichier Vision.json).
                         Si None, utilise la valeur par défaut.
             context_builder_dir: Répertoire de base pour les chemins par défaut.
                                 Si None, calcule depuis __file__.
@@ -86,7 +86,8 @@ class GDDLoader:
             if env_import_path:
                 self._import_path = Path(env_import_path)
             else:
-                self._import_path = project_root_dir / "import" / "Bible_Narrative"
+                # Par défaut, Vision.json est dans data/ du projet
+                self._import_path = context_builder_dir / "data"
     
     def _get_gdd_cache(self):
         """Récupère l'instance du cache GDD si disponible.
@@ -110,10 +111,15 @@ class GDDLoader:
         gdd_cache = self._get_gdd_cache()
         
         # Déterminer le chemin vers Vision.json
-        if self._import_path.name == "Bible_Narrative":
+        # Si le chemin pointe directement vers un fichier Vision.json
+        if self._import_path.name == "Vision.json":
+            vision_file_path = self._import_path
+        # Si le chemin pointe vers Bible_Narrative
+        elif self._import_path.name == "Bible_Narrative":
             vision_file_path = self._import_path / "Vision.json"
+        # Sinon, chercher Vision.json directement dans le répertoire (data/)
         else:
-            vision_file_path = self._import_path / "Bible_Narrative" / "Vision.json"
+            vision_file_path = self._import_path / "Vision.json"
         
         if not vision_file_path.exists() or not vision_file_path.is_file():
             logger.warning(f"Fichier {vision_file_path.name} non trouvé ou n'est pas un fichier.")

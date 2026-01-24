@@ -75,7 +75,7 @@ def get_context_builder(request: Request) -> ContextBuilder:
     Le ContextBuilder charge les fichiers GDD au premier accès.
     Les chemins GDD peuvent être configurés via les variables d'environnement :
     - GDD_CATEGORIES_PATH : Chemin vers le répertoire des catégories GDD
-    - GDD_IMPORT_PATH : Chemin vers le répertoire import (ou directement Bible_Narrative)
+    - GDD_IMPORT_PATH : Chemin vers le répertoire contenant Vision.json (ou directement le fichier Vision.json)
     
     Args:
         request: La requête HTTP (injecté automatiquement par FastAPI).

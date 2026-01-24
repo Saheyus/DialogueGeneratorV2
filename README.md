@@ -27,7 +27,7 @@ L'application est en cours de développement actif. Les fonctionnalités suivant
 
 *   **Chargement des Données du GDD (`ContextBuilder`)** :
     *   Lecture des fichiers JSON depuis `data/GDD_categories/` (maintenance manuelle requise - voir `docs/deployment/DATA_MAINTENANCE.md`).
-    *   Chargement de `Vision.json` depuis `../import/Bible_Narrative/`.
+    *   Chargement de `Vision.json` depuis `data/Vision.json`.
     *   Les données (personnages, lieux, objets, espèces, communautés, dialogues exemples, structures narratives/macro/micro) sont stockées en mémoire.
 *   **Interface Web (React + FastAPI)** :
     *   Interface moderne et réactive pour la génération de dialogues.
@@ -165,25 +165,21 @@ Ce script vérifie que le venv et toutes les dépendances sont correctement inst
 1.  **Positionnement des Données du GDD** :
     *   Les fichiers JSON du Game Design Document (GDD) doivent être accessibles via un lien symbolique.
     *   **Fichiers de catégories** : L'application utilise le chemin `DialogueGenerator/data/GDD_categories/` qui doit être un lien symbolique pointant vers le répertoire réel contenant les fichiers JSON (personnages.json, lieux.json, etc.).
-    *   **Vision.json** : Toujours depuis `PROJECT_ROOT_DIR/import/Bible_Narrative/Vision.json` (répertoire parent de DialogueGenerator).
+    *   **Vision.json** : Depuis `DialogueGenerator/data/Vision.json` (dans le même dossier que GDD_categories).
     *   Exemple de structure attendue :
         ```
-        Parent_Folder/
-        ├── DialogueGenerator/  <-- Racine du projet de l'application
-        │   ├── data/
-        │   │   └── GDD_categories/  <-- Lien symbolique vers le vrai répertoire
-        │   │       ├── personnages.json
-        │   │       ├── lieux.json
-        │   │       └── ... (autres fichiers JSON du GDD)
-        │   ├── main_app.py
-        │   └── ... (autres fichiers et dossiers du projet)
-        └── import/
-            └── Bible_Narrative/
-                └── Vision.json
+        DialogueGenerator/  <-- Racine du projet de l'application
+        ├── data/
+        │   ├── GDD_categories/  <-- Dossier réel (maintenance manuelle)
+        │   │   ├── personnages.json
+        │   │   ├── lieux.json
+        │   │   └── ... (autres fichiers JSON du GDD)
+        │   └── Vision.json  <-- Fichier Vision.json
+        ├── api/
+        ├── core/
+        └── ... (autres fichiers et dossiers du projet)
         ```
-    *   **Créer le lien symbolique** :
-        *   Windows : `mklink /D data\GDD_categories <chemin_vers_repertoire_GDD>`
-        *   Linux/Mac : `ln -s <chemin_vers_repertoire_GDD> data/GDD_categories`
+    *   **Note** : Les fichiers GDD doivent être copiés manuellement dans `data/GDD_categories/` et `Vision.json` dans `data/`.
 
 2.  **Lancement** :
     *   **Interface Web** :

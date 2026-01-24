@@ -75,17 +75,20 @@ def check_gdd_files() -> HealthCheckResult:
         env_import_path = os.getenv("GDD_IMPORT_PATH")
         if env_import_path:
             import_base_path = Path(env_import_path)
-            # Si le chemin pointe directement vers Bible_Narrative, c'est bon
-            # Sinon, chercher dans le sous-dossier Bible_Narrative
-            if import_base_path.name != "Bible_Narrative":
-                import_base_path = import_base_path / "Bible_Narrative"
-        else:
-            # Chemin par défaut : PROJECT_ROOT_DIR/import/Bible_Narrative
-            if PROJECT_ROOT_DIR:
-                import_base_path = PROJECT_ROOT_DIR / "import" / "Bible_Narrative"
+            # Si le chemin pointe directement vers Vision.json, c'est bon
+            if import_base_path.name == "Vision.json":
+                vision_file_path = import_base_path
+            # Si le chemin pointe vers Bible_Narrative, chercher Vision.json dedans
+            elif import_base_path.name == "Bible_Narrative":
+                vision_file_path = import_base_path / "Vision.json"
+            # Sinon, chercher Vision.json directement dans le répertoire (data/)
             else:
-                project_root = Path(__file__).resolve().parent.parent.parent
-                import_base_path = project_root.parent / "import" / "Bible_Narrative"
+                vision_file_path = import_base_path / "Vision.json"
+        else:
+            # Chemin par défaut : data/Vision.json dans le projet
+            project_root = Path(__file__).resolve().parent.parent.parent
+            vision_file_path = project_root / "data" / "Vision.json"
+            import_base_path = project_root / "data"
         
         # Vérifier que les répertoires existent
         issues = []
@@ -95,10 +98,11 @@ def check_gdd_files() -> HealthCheckResult:
         elif not gdd_base_path.is_dir():
             issues.append(f"Chemin GDD n'est pas un répertoire: {gdd_base_path}")
         
-        if not import_base_path.exists():
-            issues.append(f"Répertoire import non trouvé: {import_base_path}")
-        elif not import_base_path.is_dir():
-            issues.append(f"Chemin import n'est pas un répertoire: {import_base_path}")
+        # Vérifier Vision.json
+        if not vision_file_path.exists():
+            issues.append(f"Fichier Vision.json non trouvé: {vision_file_path}")
+        elif not vision_file_path.is_file():
+            issues.append(f"Vision.json n'est pas un fichier: {vision_file_path}")
         
         if issues:
             return HealthCheckResult(
@@ -128,7 +132,7 @@ def check_gdd_files() -> HealthCheckResult:
             name="gdd_files",
             status="healthy",
             message="Fichiers GDD accessibles",
-            details={"gdd_path": str(gdd_base_path), "import_path": str(import_base_path)}
+            details={"gdd_path": str(gdd_base_path), "vision_path": str(vision_file_path)}
         )
     
     except Exception as e:

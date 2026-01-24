@@ -59,7 +59,7 @@ class ServiceContainer:
         Le ContextBuilder charge les fichiers GDD au premier accès.
         Les chemins GDD peuvent être configurés via les variables d'environnement :
         - GDD_CATEGORIES_PATH : Chemin vers le répertoire des catégories GDD
-        - GDD_IMPORT_PATH : Chemin vers le répertoire import (ou directement Bible_Narrative)
+        - GDD_IMPORT_PATH : Chemin vers le répertoire contenant Vision.json (ou directement le fichier Vision.json)
         
         Returns:
             Instance de ContextBuilder avec données GDD chargées.
