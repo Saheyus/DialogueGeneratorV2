@@ -161,11 +161,13 @@ describe('useGraphStore - Auto-save draft state', () => {
       const { addNode, deleteNode } = useGraphStore.getState()
       
       // Créer un DialogueNode avec des choix ayant des tests
+      // Les TestBars seront créés automatiquement par normalizeTestBars lors de addNode
       const dialogueNode: Node = {
         id: 'dialogue-node-1',
         type: 'dialogueNode',
         position: { x: 0, y: 0 },
         data: {
+          id: 'dialogue-node-1',
           choices: [
             { text: 'Choix 1', test: 'Raison+Diplomatie:8' },
             { text: 'Choix 2', test: 'Force+Combat:10' },
@@ -174,23 +176,7 @@ describe('useGraphStore - Auto-save draft state', () => {
       }
       addNode(dialogueNode)
       
-      // Créer les TestNodes associés (simulant la création automatique)
-      const testNode1: Node = {
-        id: 'test-node-dialogue-node-1-choice-0',
-        type: 'testNode',
-        position: { x: 300, y: 0 },
-        data: { test: 'Raison+Diplomatie:8' },
-      }
-      const testNode2: Node = {
-        id: 'test-node-dialogue-node-1-choice-1',
-        type: 'testNode',
-        position: { x: 300, y: 200 },
-        data: { test: 'Force+Combat:10' },
-      }
-      addNode(testNode1)
-      addNode(testNode2)
-      
-      // Vérifier que les nodes existent
+      // Vérifier que les nodes existent (DialogueNode + 2 TestBars créés automatiquement)
       let state = useGraphStore.getState()
       expect(state.nodes.length).toBe(3)
       expect(state.nodes.find(n => n.id === 'dialogue-node-1')).toBeDefined()
@@ -200,7 +186,7 @@ describe('useGraphStore - Auto-save draft state', () => {
       // Supprimer le DialogueNode
       deleteNode('dialogue-node-1')
       
-      // Vérifier que le DialogueNode et tous les TestNodes associés sont supprimés
+      // Vérifier que le DialogueNode et tous les TestBars associés sont supprimés
       state = useGraphStore.getState()
       expect(state.nodes.length).toBe(0)
       expect(state.nodes.find(n => n.id === 'dialogue-node-1')).toBeUndefined()

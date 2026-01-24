@@ -354,6 +354,137 @@ describe('useGraphStore - TestNode Synchronization', () => {
     })
   })
 
+  describe('targetNode cleanup', () => {
+    it('should not allow targetNode to point to a TestBar', () => {
+      const { addNode, connectNodes } = useGraphStore.getState()
+
+      // Créer un DialogueNode avec un choix
+      const dialogueNode: Node = {
+        id: 'dialogue-1',
+        type: 'dialogueNode',
+        position: { x: 0, y: 0 },
+        data: {
+          id: 'dialogue-1',
+          choices: [
+            {
+              text: 'Test choice',
+              targetNode: 'END',
+            },
+          ],
+        },
+      }
+      addNode(dialogueNode)
+
+      // Créer un TestBar (simulé)
+      const testBar: Node = {
+        id: 'test-node-dialogue-1-choice-0',
+        type: 'testNode',
+        position: { x: 300, y: 0 },
+        data: {
+          id: 'test-node-dialogue-1-choice-0',
+          test: 'Raison+Diplomatie:8',
+        },
+      }
+      addNode(testBar)
+
+      // Essayer de connecter le choix vers le TestBar
+      connectNodes('dialogue-1', 'test-node-dialogue-1-choice-0', 0)
+
+      // Vérifier que targetNode n'a pas été mis à jour vers le TestBar
+      const state = useGraphStore.getState()
+      const updatedDialogueNode = state.nodes.find((n) => n.id === 'dialogue-1')
+      const updatedChoice = (updatedDialogueNode?.data.choices as Choice[])?.[0]
+
+      expect(updatedChoice?.targetNode).not.toBe('test-node-dialogue-1-choice-0')
+      // targetNode devrait rester 'END' ou être undefined, mais pas pointer vers le TestBar
+    })
+
+    it('should remove targetNode when a test is added to a choice', () => {
+      const { addNode, updateNode } = useGraphStore.getState()
+
+      // Créer un DialogueNode avec un choix ayant un targetNode
+      const dialogueNode: Node = {
+        id: 'dialogue-1',
+        type: 'dialogueNode',
+        position: { x: 0, y: 0 },
+        data: {
+          id: 'dialogue-1',
+          choices: [
+            {
+              text: 'Test choice',
+              targetNode: 'NODE_TARGET',
+            },
+          ],
+        },
+      }
+      addNode(dialogueNode)
+
+      // Ajouter un test au choix
+      updateNode('dialogue-1', {
+        data: {
+          choices: [
+            {
+              text: 'Test choice',
+              targetNode: 'NODE_TARGET',
+              test: 'Raison+Diplomatie:8',
+            },
+          ],
+        },
+      })
+
+      // Vérifier que targetNode a été supprimé
+      const state = useGraphStore.getState()
+      const updatedDialogueNode = state.nodes.find((n) => n.id === 'dialogue-1')
+      const updatedChoice = (updatedDialogueNode?.data.choices as Choice[])?.[0]
+
+      expect(updatedChoice?.test).toBe('Raison+Diplomatie:8')
+      expect(updatedChoice?.targetNode).toBeUndefined()
+    })
+
+    it('should not set targetNode when connecting a choice with test', () => {
+      const { addNode, connectNodes } = useGraphStore.getState()
+
+      // Créer un DialogueNode avec un choix ayant un test
+      const dialogueNode: Node = {
+        id: 'dialogue-1',
+        type: 'dialogueNode',
+        position: { x: 0, y: 0 },
+        data: {
+          id: 'dialogue-1',
+          choices: [
+            {
+              text: 'Test choice',
+              test: 'Raison+Diplomatie:8',
+            },
+          ],
+        },
+      }
+      addNode(dialogueNode)
+
+      // Créer un nœud cible
+      const targetNode: Node = {
+        id: 'NODE_TARGET',
+        type: 'dialogueNode',
+        position: { x: 300, y: 0 },
+        data: {
+          id: 'NODE_TARGET',
+        },
+      }
+      addNode(targetNode)
+
+      // Essayer de connecter le choix (avec test) vers le nœud cible
+      connectNodes('dialogue-1', 'NODE_TARGET', 0)
+
+      // Vérifier que targetNode n'a pas été mis à jour (car le choix a un test)
+      const state = useGraphStore.getState()
+      const updatedDialogueNode = state.nodes.find((n) => n.id === 'dialogue-1')
+      const updatedChoice = (updatedDialogueNode?.data.choices as Choice[])?.[0]
+
+      expect(updatedChoice?.test).toBe('Raison+Diplomatie:8')
+      expect(updatedChoice?.targetNode).toBeUndefined()
+    })
+  })
+
   describe('Anti-recursion', () => {
     it('should not create infinite loop when updating TestNode that updates choice that updates TestNode', () => {
       const { addNode, updateNode } = useGraphStore.getState()

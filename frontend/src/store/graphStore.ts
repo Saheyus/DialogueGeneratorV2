@@ -19,6 +19,81 @@ import {
 } from '../utils/testNodeSync'
 import type { Choice } from '../schemas/nodeEditorSchema'
 
+/**
+ * Normalise les nodes pour garantir la synchronisation TestBar ↔ choix.
+ * 
+ * Règle : Pour chaque DialogueNode avec choix ayant un test,
+ * un TestBar doit exister. Si le choix n'a plus de test, le TestBar doit être supprimé.
+ * 
+ * @param nodes - Liste des nodes à normaliser
+ * @param edges - Liste des edges à normaliser
+ * @returns Nodes et edges normalisés avec TestBars synchronisés
+ */
+function normalizeTestBars(nodes: Node[], edges: Edge[]): { nodes: Node[], edges: Edge[] } {
+  let normalizedNodes = [...nodes]
+  let normalizedEdges = [...edges]
+  
+  // Parcourir tous les DialogueNodes
+  normalizedNodes.forEach((node) => {
+    if (node.type === 'dialogueNode') {
+      const choices = (node.data.choices || []) as Choice[]
+      
+      choices.forEach((choice, choiceIndex) => {
+        const testBarId = `test-node-${node.id}-choice-${choiceIndex}`
+        const existingTestBar = normalizedNodes.find((n) => n.id === testBarId)
+        
+        // Synchroniser TestBar depuis le choix
+        const syncResult = syncTestNodeFromChoice(
+          choice,
+          choiceIndex,
+          node.id,
+          node.position,
+          existingTestBar || null,
+          normalizedEdges,
+          normalizedNodes
+        )
+        
+        // Mettre à jour ou supprimer le TestBar
+        if (syncResult.testNode) {
+          const testBarIndex = normalizedNodes.findIndex((n) => n.id === testBarId)
+          if (testBarIndex !== -1) {
+            normalizedNodes[testBarIndex] = syncResult.testNode
+          } else {
+            normalizedNodes.push(syncResult.testNode)
+          }
+        } else {
+          // Supprimer le TestBar s'il existe
+          normalizedNodes = normalizedNodes.filter((n) => n.id !== testBarId)
+        }
+        
+        normalizedEdges = syncResult.edges
+        
+        // Nettoyer targetNode si le choix a un test
+        if (choice.test && choice.targetNode) {
+          const nodeIndex = normalizedNodes.findIndex((n) => n.id === node.id)
+          if (nodeIndex !== -1) {
+            const updatedDialogueNode = normalizedNodes[nodeIndex]
+            const updatedChoices = (updatedDialogueNode.data.choices as Choice[]).map((c, idx) =>
+              idx === choiceIndex
+                ? { ...c, targetNode: undefined }
+                : c
+            )
+            normalizedNodes[nodeIndex] = {
+              ...updatedDialogueNode,
+              data: {
+                ...updatedDialogueNode.data,
+                choices: updatedChoices,
+              },
+            }
+          }
+        }
+      })
+    }
+  })
+  
+  return { nodes: normalizedNodes, edges: normalizedEdges }
+}
+
 export interface GraphMetadata {
   title: string
   filename?: string
@@ -185,13 +260,16 @@ export const useGraphStore = create<GraphState>()(
             ...(edge.sourceHandle && { sourceHandle: edge.sourceHandle }), // Préserver sourceHandle si présent
           }))
           
+          // Normaliser pour garantir la synchronisation TestBar ↔ choix après chargement
+          const normalized = normalizeTestBars(nodes, edges)
+          
           set({
-            nodes,
-            edges,
+            nodes: normalized.nodes,
+            edges: normalized.edges,
             dialogueMetadata: {
               title: response.metadata.title,
-              node_count: response.metadata.node_count,
-              edge_count: response.metadata.edge_count,
+              node_count: normalized.nodes.length,
+              edge_count: normalized.edges.length,
               filename: filename, // Utiliser le filename résolu (explicitFilename ou metadata)
             },
             isLoading: false,
@@ -213,11 +291,17 @@ export const useGraphStore = create<GraphState>()(
       addNode: (node: Node) => {
         const state = get()
         const newNodes = [...state.nodes, node]
+        
+        // Normaliser pour garantir la synchronisation TestBar ↔ choix
+        const normalized = normalizeTestBars(newNodes, state.edges)
+        
         set({
-          nodes: newNodes,
+          nodes: normalized.nodes,
+          edges: normalized.edges,
           dialogueMetadata: {
             ...state.dialogueMetadata,
-            node_count: newNodes.length,
+            node_count: normalized.nodes.length,
+            edge_count: normalized.edges.length,
           },
         })
         // Marquer dirty pour auto-save draft (Task 1 - Story 0.5)
@@ -333,6 +417,14 @@ export const useGraphStore = create<GraphState>()(
 
           // Parcourir tous les choix pour détecter les changements
           choices.forEach((choice: Choice, choiceIndex: number) => {
+            // Récupérer le node mis à jour depuis newNodes (peut avoir été modifié dans une itération précédente)
+            const currentDialogueNode = newNodes.find((n) => n.id === nodeId)
+            if (!currentDialogueNode || currentDialogueNode.type !== 'dialogueNode') {
+              return
+            }
+            const currentChoices = (currentDialogueNode.data.choices || []) as Choice[]
+            const currentChoice = currentChoices[choiceIndex] || choice
+            
             const testNodeId = `test-node-${nodeId}-choice-${choiceIndex}`
             const existingTestNode = newNodes.find((n) => n.id === testNodeId)
 
@@ -340,10 +432,10 @@ export const useGraphStore = create<GraphState>()(
             // Passer newEdges et newNodes pour vérifier l'existence des nœuds cibles
             // Note: newEdges est accumulé à chaque itération pour préserver les edges des choix précédents
             const syncResult = syncTestNodeFromChoice(
-              choice,
+              currentChoice,
               choiceIndex,
               nodeId,
-              updatedNode.position,
+              currentDialogueNode.position,
               existingTestNode || null,
               newEdges,
               newNodes
@@ -371,11 +463,43 @@ export const useGraphStore = create<GraphState>()(
             newEdges = syncResult.edges
 
             // Supprimer l'edge directe vers targetNode si elle existe (choix avec test n'a pas de targetNode direct)
-            if (choice.targetNode) {
+            if (currentChoice.test) {
+              // Si le choix a un test, targetNode doit être undefined
               const directEdgeIndex = newEdges.findIndex(
                 (e) =>
                   e.source === nodeId &&
-                  e.target === choice.targetNode &&
+                  e.target === currentChoice.targetNode &&
+                  e.sourceHandle === `choice-${choiceIndex}`
+              )
+              if (directEdgeIndex !== -1) {
+                newEdges.splice(directEdgeIndex, 1)
+              }
+              
+              // Nettoyer targetNode si présent
+              if (currentChoice.targetNode) {
+                const dialogueNodeIndex = newNodes.findIndex((n) => n.id === nodeId)
+                if (dialogueNodeIndex !== -1) {
+                  const updatedDialogueNode = newNodes[dialogueNodeIndex]
+                  const updatedChoices = (updatedDialogueNode.data.choices as Choice[]).map((c, idx) =>
+                    idx === choiceIndex
+                      ? { ...c, targetNode: undefined }
+                      : c
+                  )
+                  newNodes[dialogueNodeIndex] = {
+                    ...updatedDialogueNode,
+                    data: {
+                      ...updatedDialogueNode.data,
+                      choices: updatedChoices,
+                    },
+                  }
+                }
+              }
+            } else if (currentChoice.targetNode) {
+              // Si pas de test, on peut garder l'edge vers targetNode
+              const directEdgeIndex = newEdges.findIndex(
+                (e) =>
+                  e.source === nodeId &&
+                  e.target === currentChoice.targetNode &&
                   e.sourceHandle === `choice-${choiceIndex}`
               )
               if (directEdgeIndex !== -1) {
@@ -632,17 +756,31 @@ export const useGraphStore = create<GraphState>()(
           } else if (choiceIndex !== undefined) {
             // Connexion via choix (DialogueNode)
             if (sourceNode.data?.choices && sourceNode.data.choices[choiceIndex]) {
-              // Mettre à jour targetNode dans le choix
-              updatedNodes[sourceNodeIndex] = {
-                ...sourceNode,
-                data: {
-                  ...sourceNode.data,
-                  choices: (sourceNode.data.choices as Array<{ targetNode?: string; [key: string]: unknown }>).map((choice, idx: number) =>
-                    idx === choiceIndex
-                      ? { ...choice, targetNode: targetId }
-                      : choice
-                  ),
-                },
+              const choice = sourceNode.data.choices[choiceIndex] as Choice
+              
+              // BUG FIX: Ne pas mettre à jour targetNode si :
+              // 1. Le target est un TestBar (commence par "test-node-")
+              // 2. Le choix a déjà un test (les connexions se font via les TestTargets)
+              const isTargetTestBar = targetId.startsWith('test-node-')
+              const choiceHasTest = !!choice.test
+              
+              if (isTargetTestBar || choiceHasTest) {
+                // Ne pas mettre à jour targetNode - les connexions se font via les TestTargets
+                // Le TestBar est géré par syncTestNodeFromChoice
+                // Ne rien faire ici, la connexion est déjà créée dans newEdge
+              } else {
+                // Mettre à jour targetNode uniquement si pas de test
+                updatedNodes[sourceNodeIndex] = {
+                  ...sourceNode,
+                  data: {
+                    ...sourceNode.data,
+                    choices: (sourceNode.data.choices as Choice[]).map((c, idx) =>
+                      idx === choiceIndex
+                        ? { ...c, targetNode: targetId }
+                        : c
+                    ),
+                  },
+                }
               }
             }
           } else if (connectionType === 'nextNode') {
@@ -961,6 +1099,19 @@ export const useGraphStore = create<GraphState>()(
               conn.connection_type
             )
           }
+
+          // Normaliser pour garantir la synchronisation TestBar ↔ choix après génération
+          const stateAfterConnections = get()
+          const normalized = normalizeTestBars(stateAfterConnections.nodes, stateAfterConnections.edges)
+          set({
+            nodes: normalized.nodes,
+            edges: normalized.edges,
+            dialogueMetadata: {
+              ...stateAfterConnections.dialogueMetadata,
+              node_count: normalized.nodes.length,
+              edge_count: normalized.edges.length,
+            },
+          })
 
           // Marquer la génération comme terminée APRÈS avoir ajouté tous les nœuds
           // Cela permet à la modale de se fermer et aux nœuds d'être visibles immédiatement

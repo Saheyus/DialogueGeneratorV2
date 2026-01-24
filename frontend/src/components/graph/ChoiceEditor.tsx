@@ -121,35 +121,37 @@ export const ChoiceEditor = memo(function ChoiceEditor({
         )}
       </div>
       
-      {/* Target Node */}
-      <div style={{ marginBottom: '0.75rem' }}>
-        <label
-          style={{
-            display: 'block',
-            marginBottom: '0.5rem',
-            fontSize: '0.85rem',
-            fontWeight: 'bold',
-            color: theme.text.secondary,
-          }}
-        >
-          Nœud cible
-        </label>
-        <input
-          type="text"
-          {...register(`choices.${choiceIndex}.targetNode` as const)}
-          placeholder="ID du nœud cible (ex: END, START, NODE_123)"
-          style={{
-            width: '100%',
-            padding: '0.5rem',
-            border: `1px solid ${theme.border.primary}`,
-            borderRadius: 4,
-            backgroundColor: theme.background.tertiary,
-            color: theme.text.primary,
-            fontSize: '0.9rem',
-            fontFamily: 'monospace',
-          }}
-        />
-      </div>
+      {/* Nœud cible (affiché seulement si pas de test) */}
+      {!currentChoice?.test && (
+        <div style={{ marginBottom: '0.75rem' }}>
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '0.5rem',
+              fontSize: '0.85rem',
+              fontWeight: 'bold',
+              color: theme.text.secondary,
+            }}
+          >
+            Nœud cible
+          </label>
+          <input
+            type="text"
+            {...register(`choices.${choiceIndex}.targetNode` as const)}
+            placeholder="ID du nœud cible (ex: END, START, NODE_123)"
+            style={{
+              width: '100%',
+              padding: '0.5rem',
+              border: `1px solid ${theme.border.primary}`,
+              borderRadius: 4,
+              backgroundColor: theme.background.tertiary,
+              color: theme.text.primary,
+              fontSize: '0.9rem',
+              fontFamily: 'monospace',
+            }}
+          />
+        </div>
+      )}
       
       {/* Condition */}
       <div style={{ marginBottom: '0.75rem' }}>
@@ -217,11 +219,11 @@ export const ChoiceEditor = memo(function ChoiceEditor({
         </div>
       </div>
       
-      {/* Résultats de test (affichés seulement si test est défini) */}
+      {/* TestTargets (affichés seulement si test présent) - Remplace le champ "Nœud cible" */}
       {currentChoice?.test && (
         <div style={{ marginBottom: '0.75rem', padding: '0.75rem', backgroundColor: theme.background.secondary, borderRadius: 6, border: `1px solid ${theme.border.primary}` }}>
           <h5 style={{ margin: '0 0 0.75rem 0', fontSize: '0.85rem', fontWeight: 'bold', color: theme.text.primary }}>
-            Résultats de test
+            Destinations du test
           </h5>
           
           {/* Échec critique */}
@@ -236,7 +238,7 @@ export const ChoiceEditor = memo(function ChoiceEditor({
                 color: theme.text.secondary,
               }}
             >
-              Échec critique
+              Échec critique →
             </label>
             <input
               id={`choice-${choiceIndex}-testCriticalFailureNode`}
@@ -268,7 +270,7 @@ export const ChoiceEditor = memo(function ChoiceEditor({
                 color: theme.text.secondary,
               }}
             >
-              Échec
+              Échec →
             </label>
             <input
               id={`choice-${choiceIndex}-testFailureNode`}
@@ -300,7 +302,7 @@ export const ChoiceEditor = memo(function ChoiceEditor({
                 color: theme.text.secondary,
               }}
             >
-              Réussite
+              Réussite →
             </label>
             <input
               id={`choice-${choiceIndex}-testSuccessNode`}
@@ -332,7 +334,7 @@ export const ChoiceEditor = memo(function ChoiceEditor({
                 color: theme.text.secondary,
               }}
             >
-              Réussite critique
+              Réussite critique →
             </label>
             <input
               id={`choice-${choiceIndex}-testCriticalSuccessNode`}
