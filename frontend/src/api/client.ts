@@ -4,10 +4,10 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios'
 
 // En développement, utiliser le proxy Vite (/api) au lieu de l'URL directe
-// En production, utiliser VITE_API_BASE_URL ou l'URL par défaut
-// Note: Le proxy Vite redirige /api vers http://localhost:4242, donc on utilise '' comme baseURL
-// et les endpoints commencent déjà par /api/v1/...
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? '' : 'http://localhost:4242')
+// En production, utiliser VITE_API_BASE_URL ou des URLs relatives (/api)
+// Note: Le proxy Vite redirige /api vers http://localhost:4243 en dev
+// En production, Nginx sert le frontend et l'API sur le même domaine, donc on utilise des URLs relatives
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 /**
  * Instance axios configurée pour l'API.
