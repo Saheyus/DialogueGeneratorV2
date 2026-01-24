@@ -1,187 +1,172 @@
-# Script pour créer et configurer le venv Python
-# Usage: .\scripts\setup-venv.ps1
+# Script to create and configure the project's Python venv
+# Usage:
+#   powershell -ExecutionPolicy Bypass -File scripts/setup-venv.ps1
+# Options:
+#   -Force       Recreate venv (deletes existing .venv)
+#   -SkipInstall Create venv but do not install requirements
 
 param(
     [switch]$Force = $false,
     [switch]$SkipInstall = $false
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
 $projectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$venvPath = Join-Path $projectRoot ".venv"
+$venvDir = Join-Path $projectRoot ".venv"
+$venvPython = Join-Path $venvDir "Scripts\python.exe"
 $requirementsFile = Join-Path $projectRoot "requirements.txt"
 
-Write-Host ""
-Write-Host "=== Configuration du venv Python ===" -ForegroundColor Cyan
-Write-Host "Projet: $projectRoot" -ForegroundColor Gray
-Write-Host ""
+function Get-PythonCandidate {
+    <#
+    .SYNOPSIS
+    Resolve a usable Python command on Windows.
 
-# Vérifier que Python est installé
-Write-Host "[1/5] Vérification de Python..." -ForegroundColor Cyan
-try {
-    $pythonVersion = & python --version 2>&1
-    Write-Host "  ✅ Python trouvé: $pythonVersion" -ForegroundColor Green
-} catch {
-    Write-Host "  ❌ Python n'est pas installé ou pas dans le PATH" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Installez Python 3.10+ depuis: https://www.python.org/downloads/" -ForegroundColor Yellow
-    exit 1
-}
+    .DESCRIPTION
+    Tries "python" first, then the Windows launcher "py" for 3.12/3.11/3.10.
+    Returns a PSCustomObject with Exe, Args, VersionText, Major, Minor.
+    Returns $null if nothing works.
+    #>
+    param()
 
-# Vérifier si le venv existe déjà
-if (Test-Path $venvPath) {
-    if ($Force) {
-        Write-Host ""
-        Write-Host "⚠️  Le venv existe déjà et sera supprimé (-Force)" -ForegroundColor Yellow
-        Remove-Item -Recurse -Force $venvPath
-        Write-Host "  ✅ Ancien venv supprimé" -ForegroundColor Green
-    } else {
-        Write-Host ""
-        Write-Host "ℹ️  Le venv existe déjà: $venvPath" -ForegroundColor Cyan
-        Write-Host ""
-        $response = Read-Host "Voulez-vous le recréer ? Cela supprimera tous les packages installés (o/N)"
-        if ($response -eq "o" -or $response -eq "O") {
-            Remove-Item -Recurse -Force $venvPath
-            Write-Host "  ✅ Ancien venv supprimé" -ForegroundColor Green
-        } else {
-            Write-Host ""
-            Write-Host "✅ Venv existant conservé" -ForegroundColor Green
-            
-            if (-not $SkipInstall) {
-                Write-Host ""
-                Write-Host "[5/5] Mise à jour des dépendances..." -ForegroundColor Cyan
-                $pythonExe = Join-Path $venvPath "Scripts\python.exe"
-                & $pythonExe -m pip install --upgrade pip
-                & $pythonExe -m pip install -r $requirementsFile
-                
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Host "  ✅ Dépendances mises à jour" -ForegroundColor Green
-                } else {
-                    Write-Host "  ❌ Erreur lors de la mise à jour des dépendances" -ForegroundColor Red
-                    exit 1
+    $candidates = @(
+        @{ Exe = "python"; Args = @() },
+        @{ Exe = "py"; Args = @("-3.12") },
+        @{ Exe = "py"; Args = @("-3.11") },
+        @{ Exe = "py"; Args = @("-3.10") },
+        @{ Exe = "py"; Args = @("-3") }
+    )
+
+    foreach ($c in $candidates) {
+        try {
+            $versionText = & $c.Exe @($c.Args) --version 2>&1
+            if ($LASTEXITCODE -ne 0) { continue }
+
+            if ($versionText -match "Python (\d+)\.(\d+)\.(\d+)") {
+                return [pscustomobject]@{
+                    Exe         = $c.Exe
+                    Args        = $c.Args
+                    VersionText = $versionText
+                    Major       = [int]$matches[1]
+                    Minor       = [int]$matches[2]
                 }
             }
-            
-            Write-Host ""
-            Write-Host "✅ Configuration terminée !" -ForegroundColor Green
-            Write-Host ""
-            Write-Host "Les scripts npm utilisent automatiquement le venv." -ForegroundColor Gray
-            Write-Host "Pour activer manuellement: .\scripts\activate-venv.ps1" -ForegroundColor Gray
-            exit 0
-        }
-    }
-}
-
-# Créer le venv
-Write-Host ""
-Write-Host "[2/5] Création du venv..." -ForegroundColor Cyan
-try {
-    & python -m venv $venvPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "Erreur lors de la création du venv"
-    }
-    Write-Host "  ✅ Venv créé: $venvPath" -ForegroundColor Green
-} catch {
-    Write-Host "  ❌ Erreur: $_" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Assurez-vous que le module venv est installé:" -ForegroundColor Yellow
-    Write-Host "  python -m pip install --upgrade pip" -ForegroundColor Cyan
-    exit 1
-}
-
-# Vérifier que le venv a été créé correctement
-$pythonExe = Join-Path $venvPath "Scripts\python.exe"
-if (-not (Test-Path $pythonExe)) {
-    Write-Host "  ❌ L'exécutable Python n'a pas été créé: $pythonExe" -ForegroundColor Red
-    exit 1
-}
-
-# Mettre à jour pip
-Write-Host ""
-Write-Host "[3/5] Mise à jour de pip..." -ForegroundColor Cyan
-try {
-    & $pythonExe -m pip install --upgrade pip --quiet
-    if ($LASTEXITCODE -ne 0) {
-        throw "Erreur lors de la mise à jour de pip"
-    }
-    $pipVersion = & $pythonExe -m pip --version
-    Write-Host "  ✅ pip mis à jour: $pipVersion" -ForegroundColor Green
-} catch {
-    Write-Host "  ⚠️  Avertissement: Erreur lors de la mise à jour de pip" -ForegroundColor Yellow
-    Write-Host "  Continuons quand même..." -ForegroundColor Gray
-}
-
-# Installer les dépendances
-if (-not $SkipInstall) {
-    Write-Host ""
-    Write-Host "[4/5] Installation des dépendances..." -ForegroundColor Cyan
-    
-    if (-not (Test-Path $requirementsFile)) {
-        Write-Host "  ⚠️  Fichier requirements.txt non trouvé" -ForegroundColor Yellow
-        Write-Host "  Les dépendances devront être installées manuellement" -ForegroundColor Gray
-    } else {
-        Write-Host "  Installation depuis: requirements.txt" -ForegroundColor Gray
-        Write-Host "  Cela peut prendre quelques minutes..." -ForegroundColor Gray
-        Write-Host ""
-        
-        try {
-            & $pythonExe -m pip install -r $requirementsFile
-            if ($LASTEXITCODE -ne 0) {
-                throw "Erreur lors de l'installation des dépendances"
-            }
-            Write-Host ""
-            Write-Host "  ✅ Dépendances installées avec succès" -ForegroundColor Green
         } catch {
-            Write-Host ""
-            Write-Host "  ❌ Erreur lors de l'installation des dépendances" -ForegroundColor Red
-            Write-Host "  Vous pouvez réessayer avec:" -ForegroundColor Yellow
-            Write-Host "    .\.venv\Scripts\python.exe -m pip install -r requirements.txt" -ForegroundColor Cyan
-            exit 1
+            continue
         }
     }
-} else {
-    Write-Host ""
-    Write-Host "[4/5] Installation des dépendances ignorée (-SkipInstall)" -ForegroundColor Yellow
+
+    return $null
 }
 
-# Vérification finale
 Write-Host ""
-Write-Host "[5/5] Vérification de l'installation..." -ForegroundColor Cyan
+Write-Host "=== Python venv setup ===" -ForegroundColor Cyan
+Write-Host ("Project: {0}" -f $projectRoot) -ForegroundColor Gray
+Write-Host ""
 
-$packagesToCheck = @("fastapi", "pytest", "openai", "pydantic")
-$allInstalled = $true
+Write-Host "[1/4] Checking Python..." -ForegroundColor Cyan
+$python = Get-PythonCandidate
+if (-not $python) {
+    Write-Host "  ERROR: Python was not found on PATH." -ForegroundColor Red
+    Write-Host "  Install Python 3.10+ from https://www.python.org/downloads/ (recommended)." -ForegroundColor Yellow
+    Write-Host "  Tip: if typing 'python' opens the Microsoft Store, install Python from python.org (includes 'py')." -ForegroundColor Gray
+    exit 1
+}
 
-foreach ($package in $packagesToCheck) {
-    try {
-        $result = & $pythonExe -m pip show $package 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  ✅ $package installé" -ForegroundColor Green
-        } else {
-            Write-Host "  ⚠️  $package non installé" -ForegroundColor Yellow
-            $allInstalled = $false
-        }
-    } catch {
-        Write-Host "  ⚠️  $package non installé" -ForegroundColor Yellow
-        $allInstalled = $false
+if ($python.Major -lt 3 -or ($python.Major -eq 3 -and $python.Minor -lt 10)) {
+    Write-Host ("  ERROR: Unsupported Python version: {0}" -f $python.VersionText) -ForegroundColor Red
+    Write-Host "  Required: Python 3.10+" -ForegroundColor Yellow
+    exit 1
+}
+
+Write-Host ("  OK: {0}" -f $python.VersionText) -ForegroundColor Green
+
+Write-Host ""
+Write-Host "[2/4] Creating venv..." -ForegroundColor Cyan
+
+if (Test-Path -LiteralPath $venvDir) {
+    if ($Force) {
+        Write-Host ("  Removing existing venv: {0}" -f $venvDir) -ForegroundColor Yellow
+        Remove-Item -LiteralPath $venvDir -Recurse -Force
+    } elseif (-not (Test-Path -LiteralPath $venvPython)) {
+        Write-Host "  Existing venv looks corrupted (python.exe missing). Recreating it." -ForegroundColor Yellow
+        Remove-Item -LiteralPath $venvDir -Recurse -Force
+    } else {
+        Write-Host ("  Venv already exists: {0}" -f $venvDir) -ForegroundColor Gray
     }
 }
 
-# Résumé final
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-if ($allInstalled) {
-    Write-Host "  ✅ Configuration terminée avec succès !" -ForegroundColor Green
-} else {
-    Write-Host "  ⚠️  Configuration terminée avec avertissements" -ForegroundColor Yellow
+if (-not (Test-Path -LiteralPath $venvDir)) {
+    & $python.Exe @($python.Args) -m venv $venvDir
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  ERROR: Failed to create venv." -ForegroundColor Red
+        exit 1
+    }
 }
+
+if (-not (Test-Path -LiteralPath $venvPython)) {
+    Write-Host ("  ERROR: venv python was not created: {0}" -f $venvPython) -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ("  OK: {0}" -f $venvPython) -ForegroundColor Green
+
+Write-Host ""
+Write-Host "[3/4] Upgrading pip..." -ForegroundColor Cyan
+try {
+    & $venvPython -m pip install --upgrade pip | Out-Null
+    $pipVersion = & $venvPython -m pip --version 2>&1
+    Write-Host ("  OK: {0}" -f $pipVersion) -ForegroundColor Green
+} catch {
+    Write-Host "  WARN: pip upgrade failed; continuing." -ForegroundColor Yellow
+}
+
+Write-Host ""
+Write-Host "[4/4] Installing dependencies..." -ForegroundColor Cyan
+
+if ($SkipInstall) {
+    Write-Host "  Skipped (SkipInstall)." -ForegroundColor Yellow
+} elseif (-not (Test-Path -LiteralPath $requirementsFile)) {
+    Write-Host ("  WARN: requirements.txt not found: {0}" -f $requirementsFile) -ForegroundColor Yellow
+} else {
+    & $venvPython -m pip install -r $requirementsFile
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  ERROR: pip install -r requirements.txt failed." -ForegroundColor Red
+        Write-Host "  Try:" -ForegroundColor Yellow
+        Write-Host ("    {0} -m pip install -r requirements.txt" -f $venvPython) -ForegroundColor Cyan
+        exit 1
+    }
+    Write-Host "  OK: requirements installed." -ForegroundColor Green
+}
+
+$packagesToCheck = @("fastapi", "uvicorn", "pytest", "pytest-asyncio", "openai", "pydantic")
+$missing = @()
+
+foreach ($pkg in $packagesToCheck) {
+    & $venvPython -m pip show $pkg | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        $missing += $pkg
+    }
+}
+
+Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "Venv:   $venvDir" -ForegroundColor Gray
+Write-Host "Python: $venvPython" -ForegroundColor Gray
+
+if ($missing.Count -eq 0) {
+    Write-Host "Status: OK" -ForegroundColor Green
+} else {
+    Write-Host "Status: WARN (missing packages detected)" -ForegroundColor Yellow
+    Write-Host ("Missing: {0}" -f ($missing -join ", ")) -ForegroundColor Yellow
+    Write-Host "Fix: run npm run setup (or rerun this script without SkipInstall)." -ForegroundColor Gray
+}
+
 Write-Host ""
-Write-Host "Chemin du venv: $venvPath" -ForegroundColor Gray
-Write-Host "Python: $pythonExe" -ForegroundColor Gray
-Write-Host ""
-Write-Host "Prochaines etapes:" -ForegroundColor Yellow
-Write-Host "  * Les scripts npm utilisent automatiquement le venv" -ForegroundColor Gray
-Write-Host "  * Pour activer manuellement: .\scripts\activate-venv.ps1" -ForegroundColor Gray
-Write-Host "  * Pour verifier l'installation: npm run verify:venv" -ForegroundColor Gray
-Write-Host "  * Pour demarrer le developpement: npm run dev" -ForegroundColor Gray
+Write-Host "Next steps:" -ForegroundColor Yellow
+Write-Host "  - npm scripts automatically use the venv" -ForegroundColor Gray
+Write-Host "  - Manual activation: .\\scripts\\activate-venv.ps1" -ForegroundColor Gray
+Write-Host "  - Verify: npm run verify:venv" -ForegroundColor Gray
+Write-Host "  - Dev: npm run dev" -ForegroundColor Gray
 Write-Host ""
