@@ -421,6 +421,7 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 
 # Health check endpoint
 @app.get("/health", tags=["Health"])
+@app.get("/api/v1/healthcheck", tags=["Health"])  # Alias pour compatibilité avec monitoring
 async def health_check() -> JSONResponse:
     """Endpoint de vérification de santé basique de l'API.
     

@@ -19,8 +19,8 @@ SYSTEM_PROMPTS_FILE_PATH = DIALOGUE_GENERATOR_DIR / "config" / "system_prompts.j
 PROMPTS_METADATA_FILE_PATH = DIALOGUE_GENERATOR_DIR / "config" / "prompts_metadata.json"
 CONFIG_DIR = DIALOGUE_GENERATOR_DIR / "config"
 
-# Chemin par défaut pour les dialogues Unity - pourrait être une constante de classe ou globale
-DEFAULT_UNITY_DIALOGUES_PATH = Path("F:/Unity/Alteir/Alteir_Cursor/Assets/Dialogue/generated")
+# Chemin par défaut pour les dialogues Unity - None signifie qu'il doit être configuré par l'utilisateur
+DEFAULT_UNITY_DIALOGUES_PATH = None
 
 class ConfigurationService:
     def __init__(self):
@@ -270,27 +270,21 @@ class ConfigurationService:
         if path_str:
             dialogues_path = Path(path_str)
         else:
-            dialogues_path = DEFAULT_UNITY_DIALOGUES_PATH
-            logger.info(f"Unity dialogues path not configured, using default: {dialogues_path}")
-            # Save the default path to app_config if it wasn't there
-            self._update_app_config("unity_dialogues_path", str(dialogues_path))
-            self._save_app_config() # Persist this change
-
-        if not self._validate_and_prepare_path(dialogues_path):
-            # If validation fails for the (default or loaded) path, try the default path explicitly one more time
-            # This handles cases where the stored path is bad, but the default is good.
-            if dialogues_path != DEFAULT_UNITY_DIALOGUES_PATH:
-                logger.warning(f"Initial Unity dialogues path '{dialogues_path}' is invalid. Trying default path '{DEFAULT_UNITY_DIALOGUES_PATH}'.")
-                self._update_app_config("unity_dialogues_path", str(DEFAULT_UNITY_DIALOGUES_PATH))
-                self._save_app_config()
-                if self._validate_and_prepare_path(DEFAULT_UNITY_DIALOGUES_PATH):
-                    return DEFAULT_UNITY_DIALOGUES_PATH
-            logger.error(f"Unity dialogues path '{dialogues_path}' (and default, if tried) is invalid and could not be prepared.")
+            # Pas de chemin par défaut hardcodé - l'utilisateur doit configurer
+            logger.info("Unity dialogues path not configured. User must configure it via the UI or app_config.json")
             return None
-        return dialogues_path
+
+        if dialogues_path and self._validate_and_prepare_path(dialogues_path):
+            return dialogues_path
+        
+        # Si le chemin est invalide, on retourne None plutôt que d'essayer un fallback hardcodé
+        logger.error(f"Unity dialogues path '{dialogues_path}' is invalid and could not be prepared.")
+        return None
 
     def _validate_and_prepare_path(self, path_to_validate: Path) -> bool:
         """Validates a path: ensures it exists (creates if not), is a directory, and is R/W."""
+        if path_to_validate is None:
+            return False
         if not path_to_validate.exists():
             try:
                 path_to_validate.mkdir(parents=True, exist_ok=True)

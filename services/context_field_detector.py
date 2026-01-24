@@ -246,9 +246,19 @@ class ContextFieldDetector:
         
         data = getattr(self.context_builder, attr_name, [])
         if not isinstance(data, list):
+            logger.debug(f"Données pour '{element_type}' ({attr_name}) ne sont pas une liste: {type(data)}")
             return []
         
-        return [item for item in data if isinstance(item, dict)]
+        result = [item for item in data if isinstance(item, dict)]
+        if not result:
+            # Log plus détaillé pour comprendre pourquoi les données sont vides
+            logger.debug(
+                f"Aucune donnée trouvée pour '{element_type}' ({attr_name}). "
+                f"Type de données: {type(data)}, Longueur: {len(data) if hasattr(data, '__len__') else 'N/A'}, "
+                f"GDDDataAccessor: {hasattr(self.context_builder, '_gdd_data_accessor')}, "
+                f"GDDData: {hasattr(self.context_builder, '_gdd_data')}"
+            )
+        return result
     
     def _extract_all_paths(
         self, 

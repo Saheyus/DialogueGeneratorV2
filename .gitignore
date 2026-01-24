@@ -78,6 +78,7 @@ data/UnityData/
 
 # User interface settings file
 ui_settings.json
+app_config.json
 
 # Données locales et générées (fichiers JSON de logs uniquement, pas les configs)
 # Note: data/config/*.json peut être versionné selon besoin
