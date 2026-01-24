@@ -89,11 +89,13 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
   useEffect(() => {
     if (selectedNode?.data) {
       if (nodeType === 'dialogueNode') {
+        const choices = (selectedNode.data.choices || []) as Choice[]
+        
         reset({
           id: selectedNode.id,
           speaker: selectedNode.data.speaker || '',
           line: selectedNode.data.line || '',
-          choices: (selectedNode.data.choices || []) as Choice[],
+          choices,
           nextNode: selectedNode.data.nextNode || '',
         })
       } else if (nodeType === 'testNode') {

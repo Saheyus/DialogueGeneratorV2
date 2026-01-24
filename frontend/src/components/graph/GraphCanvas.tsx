@@ -32,6 +32,7 @@ export const GraphCanvas = memo(function GraphCanvas() {
     setSelectedNode,
     updateNodePosition,
     connectNodes,
+    deleteNode,
   } = useGraphStore()
   
   // Utiliser les hooks ReactFlow pour gérer l'état local du graphe
@@ -170,6 +171,14 @@ export const GraphCanvas = memo(function GraphCanvas() {
   // Cela capture tous les changements de position, y compris pendant le drag
   const handleNodesChange = useCallback(
     (changes: Array<{ type: string; id?: string; position?: { x: number; y: number }; [key: string]: unknown }>) => {
+      // Intercepter les suppressions de nœuds pour synchroniser avec le store
+      for (const change of changes) {
+        if (change.type === 'remove' && change.id) {
+          // Appeler deleteNode du store pour gérer la synchronisation TestNode ↔ choix parent
+          deleteNode(change.id)
+        }
+      }
+      
       // Appeler le handler ReactFlow par défaut
       onNodesChange(changes)
       
@@ -185,7 +194,7 @@ export const GraphCanvas = memo(function GraphCanvas() {
         }
       }
     },
-    [onNodesChange, updateNodePosition]
+    [onNodesChange, updateNodePosition, deleteNode]
   )
   
   // Composant interne pour utiliser useReactFlow (doit être dans ReactFlowProvider)

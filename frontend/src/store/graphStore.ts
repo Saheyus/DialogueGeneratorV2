@@ -11,6 +11,13 @@ import type {
   ValidationErrorDetail,
 } from '../types/graph'
 import { saveNodePositions, loadNodePositions, type NodePositions } from '../utils/nodePositions'
+import {
+  getParentChoiceForTestNode,
+  syncTestNodeFromChoice,
+  syncChoiceFromTestNode,
+  TEST_HANDLE_TO_CHOICE_FIELD,
+} from '../utils/testNodeSync'
+import type { Choice } from '../schemas/nodeEditorSchema'
 
 export interface GraphMetadata {
   title: string
@@ -220,155 +227,163 @@ export const useGraphStore = create<GraphState>()(
       // Mettre à jour un nœud
       updateNode: (nodeId: string, updates: Partial<Node>) => {
         set((state) => {
+          const node = state.nodes.find((n) => n.id === nodeId)
+          if (!node) {
+            return state
+          }
+
+          // Si c'est un TestNode, rediriger vers le choix parent
+          if (node.type === 'testNode') {
+            const parent = getParentChoiceForTestNode(nodeId, state.nodes)
+            if (parent) {
+              // Appliquer les updates au TestNode
+              const updatedTestNode = { ...node, ...updates } as Node
+
+              // Synchroniser le choix parent depuis le TestNode (testNode → choice)
+              const updatedChoice = syncChoiceFromTestNode(
+                updatedTestNode,
+                parent.dialogueNodeId,
+                parent.choiceIndex,
+                parent.choice
+              )
+
+              // Mettre à jour le DialogueNode avec le choix modifié
+              const updatedDialogueNode = {
+                ...parent.dialogueNode,
+                data: {
+                  ...parent.dialogueNode.data,
+                  choices: (parent.dialogueNode.data.choices as Choice[]).map((choice, idx) =>
+                    idx === parent.choiceIndex ? updatedChoice : choice
+                  ),
+                },
+              }
+
+              // Remplacer le DialogueNode dans la liste
+              const newNodes = state.nodes.map((n) =>
+                n.id === parent.dialogueNodeId ? updatedDialogueNode : n
+              )
+
+              // Synchroniser le TestNode depuis le choix mis à jour (choice → testNode)
+              // pour garantir la cohérence
+              const syncResult = syncTestNodeFromChoice(
+                updatedChoice,
+                parent.choiceIndex,
+                parent.dialogueNodeId,
+                updatedDialogueNode.position,
+                updatedTestNode,
+                state.edges,
+                newNodes
+              )
+
+              // Mettre à jour ou supprimer le TestNode selon le résultat
+              let finalNodes = newNodes
+              if (syncResult.testNode) {
+                // Mettre à jour le TestNode
+                finalNodes = finalNodes.map((n) =>
+                  n.id === nodeId ? syncResult.testNode! : n
+                )
+              } else {
+                // Supprimer le TestNode (si le test a été supprimé du choix)
+                finalNodes = finalNodes.filter((n) => n.id !== nodeId)
+              }
+
+              return {
+                nodes: finalNodes,
+                edges: syncResult.edges,
+                dialogueMetadata: {
+                  ...state.dialogueMetadata,
+                  node_count: finalNodes.length,
+                  edge_count: syncResult.edges.length,
+                },
+              }
+            }
+            // Si parent non trouvé, retourner state inchangé
+            return state
+          }
+
+          // Logique existante pour DialogueNode
           const updatedNodes = state.nodes.map((node) =>
             node.id === nodeId ? { ...node, ...updates } : node
           )
-          
+
           // Trouver le nœud mis à jour
           const updatedNode = updatedNodes.find((n) => n.id === nodeId)
           if (!updatedNode || updatedNode.type !== 'dialogueNode') {
             return { nodes: updatedNodes }
           }
-          
+
           // Vérifier si un choix a obtenu ou perdu un attribut test
-          const updatedData = updatedNode.data as { choices?: Array<{ test?: string; [key: string]: unknown }>; [key: string]: unknown }
+          const updatedData = updatedNode.data as {
+            choices?: Choice[]
+            [key: string]: unknown
+          }
           const choices = updatedData?.choices || []
-          
+
           const newNodes = [...updatedNodes]
-          const newEdges = [...state.edges]
-          
+          // Commencer avec les edges existants, mais exclure ceux liés aux TestNodes de ce DialogueNode
+          // (ils seront recréés par syncTestNodeFromChoice)
+          const testNodeIdsForThisDialogue = choices.map(
+            (_, idx) => `test-node-${nodeId}-choice-${idx}`
+          )
+          let newEdges = state.edges.filter(
+            (e) =>
+              !testNodeIdsForThisDialogue.includes(e.source) &&
+              !testNodeIdsForThisDialogue.includes(e.target)
+          )
+
           // Parcourir tous les choix pour détecter les changements
-          choices.forEach((choice: { test?: string; [key: string]: unknown }, choiceIndex: number) => {
+          choices.forEach((choice: Choice, choiceIndex: number) => {
             const testNodeId = `test-node-${nodeId}-choice-${choiceIndex}`
             const existingTestNode = newNodes.find((n) => n.id === testNodeId)
-            const existingEdge = newEdges.find(
-              (e) => e.source === nodeId && e.target === testNodeId && e.sourceHandle === `choice-${choiceIndex}`
+
+            // Utiliser syncTestNodeFromChoice pour synchroniser
+            // Passer newEdges et newNodes pour vérifier l'existence des nœuds cibles
+            // Note: newEdges est accumulé à chaque itération pour préserver les edges des choix précédents
+            const syncResult = syncTestNodeFromChoice(
+              choice,
+              choiceIndex,
+              nodeId,
+              updatedNode.position,
+              existingTestNode || null,
+              newEdges,
+              newNodes
             )
-            
-            if (choice.test) {
-              // Le choix a un test : créer le TestNode s'il n'existe pas
-              if (!existingTestNode) {
-                // Calculer la position du TestNode (à droite du DialogueNode)
-                const dialogueNode = updatedNode
-                const testNodePosition = {
-                  x: (dialogueNode.position?.x || 0) + 300,
-                  y: (dialogueNode.position?.y || 0) - 150 + (choiceIndex * 200),
-                }
-                
-                // Créer le TestNode
-                newNodes.push({
-                  id: testNodeId,
-                  type: 'testNode',
-                  position: testNodePosition,
-                  data: {
-                    id: testNodeId,
-                    test: choice.test,
-                    line: choice.text || '',
-                    criticalFailureNode: choice.testCriticalFailureNode,
-                    failureNode: choice.testFailureNode,
-                    successNode: choice.testSuccessNode,
-                    criticalSuccessNode: choice.testCriticalSuccessNode,
-                  },
-                })
+
+            // Mettre à jour ou supprimer le TestNode
+            if (syncResult.testNode) {
+              const testNodeIndex = newNodes.findIndex((n) => n.id === testNodeId)
+              if (testNodeIndex !== -1) {
+                newNodes[testNodeIndex] = syncResult.testNode
               } else {
-                // Mettre à jour le TestNode existant avec les nouvelles données
-                const testNodeIndex = newNodes.findIndex((n) => n.id === testNodeId)
-                if (testNodeIndex !== -1) {
-                  newNodes[testNodeIndex] = {
-                    ...newNodes[testNodeIndex],
-                    data: {
-                      ...newNodes[testNodeIndex].data,
-                      test: choice.test,
-                      line: choice.text || '',
-                      criticalFailureNode: choice.testCriticalFailureNode,
-                      failureNode: choice.testFailureNode,
-                      successNode: choice.testSuccessNode,
-                      criticalSuccessNode: choice.testCriticalSuccessNode,
-                    },
-                  }
-                }
-              }
-              
-              // Créer l'edge DialogueNode → TestNode s'il n'existe pas
-              if (!existingEdge) {
-                const choiceText = choice.text || `Choix ${choiceIndex + 1}`
-                // Tronquer le label pour l'affichage (comme pour les autres edges)
-                const truncatedLabel = choiceText.length > 30 ? `${choiceText.substring(0, 30)}...` : choiceText
-                newEdges.push({
-                  id: `${nodeId}-choice-${choiceIndex}-to-test`,
-                  source: nodeId,
-                  target: testNodeId,
-                  sourceHandle: `choice-${choiceIndex}`,
-                  type: 'smoothstep',
-                  label: truncatedLabel,
-                })
-              }
-              
-              // Créer les edges TestNode → nœuds de résultat (si les nœuds existent)
-              const testResults = [
-                { field: 'testCriticalFailureNode', handleId: 'critical-failure', color: '#C0392B', label: 'Échec critique' },
-                { field: 'testFailureNode', handleId: 'failure', color: '#E74C3C', label: 'Échec' },
-                { field: 'testSuccessNode', handleId: 'success', color: '#27AE60', label: 'Réussite' },
-                { field: 'testCriticalSuccessNode', handleId: 'critical-success', color: '#229954', label: 'Réussite critique' },
-              ]
-              
-              testResults.forEach((result) => {
-                const targetNodeId = choice[result.field]
-                if (targetNodeId) {
-                  // Vérifier que le nœud cible existe
-                  const targetNodeExists = newNodes.some((n) => n.id === targetNodeId)
-                  if (targetNodeExists) {
-                    // Vérifier que l'edge n'existe pas déjà
-                    const existingResultEdge = newEdges.find(
-                      (e) => e.source === testNodeId && e.target === targetNodeId && e.sourceHandle === result.handleId
-                    )
-                    if (!existingResultEdge) {
-                      newEdges.push({
-                        id: `${testNodeId}-${result.handleId}-${targetNodeId}`,
-                        source: testNodeId,
-                        target: targetNodeId,
-                        sourceHandle: result.handleId,
-                        type: 'smoothstep',
-                        label: result.label,
-                        style: { stroke: result.color },
-                      })
-                    }
-                  }
-                }
-              })
-              
-              // Supprimer l'edge directe vers targetNode si elle existe (choix avec test n'a pas de targetNode direct)
-              if (choice.targetNode) {
-                const directEdgeIndex = newEdges.findIndex(
-                  (e) => e.source === nodeId && e.target === choice.targetNode && e.sourceHandle === `choice-${choiceIndex}`
-                )
-                if (directEdgeIndex !== -1) {
-                  newEdges.splice(directEdgeIndex, 1)
-                }
+                newNodes.push(syncResult.testNode)
               }
             } else {
-              // Le choix n'a plus de test : supprimer le TestNode et ses edges
-              if (existingTestNode) {
-                // Supprimer le TestNode
-                const testNodeIndex = newNodes.findIndex((n) => n.id === testNodeId)
-                if (testNodeIndex !== -1) {
-                  newNodes.splice(testNodeIndex, 1)
-                }
-                
-                // Supprimer toutes les edges liées au TestNode
-                const edgesToRemove = newEdges.filter(
-                  (e) => e.source === testNodeId || e.target === testNodeId
-                )
-                edgesToRemove.forEach((edge) => {
-                  const edgeIndex = newEdges.findIndex((e) => e.id === edge.id)
-                  if (edgeIndex !== -1) {
-                    newEdges.splice(edgeIndex, 1)
-                  }
-                })
+              // Supprimer le TestNode s'il existe
+              const testNodeIndex = newNodes.findIndex((n) => n.id === testNodeId)
+              if (testNodeIndex !== -1) {
+                newNodes.splice(testNodeIndex, 1)
+              }
+            }
+
+            // Accumuler les edges : syncResult.edges contient les edges existants passés en paramètre
+            // + les nouveaux edges TestNode créés/mis à jour
+            // Donc on peut simplement utiliser syncResult.edges qui inclut déjà tout
+            newEdges = syncResult.edges
+
+            // Supprimer l'edge directe vers targetNode si elle existe (choix avec test n'a pas de targetNode direct)
+            if (choice.targetNode) {
+              const directEdgeIndex = newEdges.findIndex(
+                (e) =>
+                  e.source === nodeId &&
+                  e.target === choice.targetNode &&
+                  e.sourceHandle === `choice-${choiceIndex}`
+              )
+              if (directEdgeIndex !== -1) {
+                newEdges.splice(directEdgeIndex, 1)
               }
             }
           })
-          
+
           return {
             nodes: newNodes,
             edges: newEdges,
@@ -385,35 +400,111 @@ export const useGraphStore = create<GraphState>()(
       
       // Supprimer un nœud
       deleteNode: (nodeId: string) => {
-        const state = get()
-        
-        // Identifier les TestNodes associés (format: test-node-{nodeId}-choice-{index})
-        const testNodePrefix = `test-node-${nodeId}-`
-        const associatedTestNodeIds = state.nodes
-          .filter((n) => n.id.startsWith(testNodePrefix))
-          .map((n) => n.id)
-        
-        // Supprimer le nœud principal et tous les TestNodes associés
-        const nodesToDelete = [nodeId, ...associatedTestNodeIds]
-        const newNodes = state.nodes.filter((n) => !nodesToDelete.includes(n.id))
-        
-        // Supprimer aussi les edges liés (source ou target = nodeId ou TestNode associé)
-        const newEdges = state.edges.filter(
-          (e) => !nodesToDelete.includes(e.source) && !nodesToDelete.includes(e.target)
-        )
-        
-        // Mettre à jour le selectedNodeId si le nœud supprimé ou un TestNode associé était sélectionné
-        const selectedNodeToRemove = nodesToDelete.includes(state.selectedNodeId || '')
-        
-        set({
-          nodes: newNodes,
-          edges: newEdges,
-          selectedNodeId: selectedNodeToRemove ? null : state.selectedNodeId,
-          dialogueMetadata: {
-            ...state.dialogueMetadata,
-            node_count: newNodes.length,
-            edge_count: newEdges.length,
-          },
+        set((state) => {
+          // Si c'est un TestNode, supprimer le test du choix parent
+          if (nodeId.startsWith('test-node-')) {
+            const parent = getParentChoiceForTestNode(nodeId, state.nodes)
+            
+            if (parent) {
+              // Supprimer le champ test et tous les champs test*Node du choix
+              const updatedChoices = (parent.dialogueNode.data.choices as Choice[]).map(
+                (choice, idx) => {
+                  if (idx === parent.choiceIndex) {
+                    const { test, testCriticalFailureNode, testFailureNode, testSuccessNode, testCriticalSuccessNode, ...rest } = choice
+                    return rest
+                  }
+                  return choice
+                }
+              )
+
+              // Mettre à jour le DialogueNode avec le choix modifié
+              const updatedDialogueNode = {
+                ...parent.dialogueNode,
+                data: {
+                  ...parent.dialogueNode.data,
+                  choices: updatedChoices,
+                },
+              }
+
+              // Remplacer le DialogueNode dans la liste
+              const newNodes = state.nodes.map((n) =>
+                n.id === parent.dialogueNodeId ? updatedDialogueNode : n
+              )
+
+              // Supprimer le TestNode et toutes ses edges
+              const finalNodes = newNodes.filter((n) => n.id !== nodeId)
+              const newEdges = state.edges.filter(
+                (e) => e.source !== nodeId && e.target !== nodeId
+              )
+
+              // Mettre à jour selectedNodeId si le TestNode était sélectionné
+              const selectedNodeToRemove = state.selectedNodeId === nodeId
+              
+              // Si le TestNode était sélectionné, sélectionner automatiquement le DialogueNode parent
+              // pour que l'utilisateur voie que le test a été supprimé du choix
+              const newSelectedNodeId = selectedNodeToRemove 
+                ? parent.dialogueNodeId  // Sélectionner le DialogueNode parent
+                : state.selectedNodeId
+
+              return {
+                nodes: finalNodes,
+                edges: newEdges,
+                selectedNodeId: newSelectedNodeId,
+                dialogueMetadata: {
+                  ...state.dialogueMetadata,
+                  node_count: finalNodes.length,
+                  edge_count: newEdges.length,
+                },
+              }
+            }
+            // Si parent non trouvé, supprimer simplement le TestNode
+            const newNodes = state.nodes.filter((n) => n.id !== nodeId)
+            const newEdges = state.edges.filter(
+              (e) => e.source !== nodeId && e.target !== nodeId
+            )
+            const selectedNodeToRemove = state.selectedNodeId === nodeId
+
+            return {
+              nodes: newNodes,
+              edges: newEdges,
+              selectedNodeId: selectedNodeToRemove ? null : state.selectedNodeId,
+              dialogueMetadata: {
+                ...state.dialogueMetadata,
+                node_count: newNodes.length,
+                edge_count: newEdges.length,
+              },
+            }
+          }
+
+          // Logique existante pour DialogueNode : supprimer le nœud et tous ses TestNodes associés
+          // Identifier les TestNodes associés (format: test-node-{nodeId}-choice-{index})
+          const testNodePrefix = `test-node-${nodeId}-`
+          const associatedTestNodeIds = state.nodes
+            .filter((n) => n.id.startsWith(testNodePrefix))
+            .map((n) => n.id)
+
+          // Supprimer le nœud principal et tous les TestNodes associés
+          const nodesToDelete = [nodeId, ...associatedTestNodeIds]
+          const newNodes = state.nodes.filter((n) => !nodesToDelete.includes(n.id))
+
+          // Supprimer aussi les edges liés (source ou target = nodeId ou TestNode associé)
+          const newEdges = state.edges.filter(
+            (e) => !nodesToDelete.includes(e.source) && !nodesToDelete.includes(e.target)
+          )
+
+          // Mettre à jour le selectedNodeId si le nœud supprimé ou un TestNode associé était sélectionné
+          const selectedNodeToRemove = nodesToDelete.includes(state.selectedNodeId || '')
+
+          return {
+            nodes: newNodes,
+            edges: newEdges,
+            selectedNodeId: selectedNodeToRemove ? null : state.selectedNodeId,
+            dialogueMetadata: {
+              ...state.dialogueMetadata,
+              node_count: newNodes.length,
+              edge_count: newEdges.length,
+            },
+          }
         })
         // Marquer dirty pour auto-save draft (Task 1 - Story 0.5)
         get().markDirty()
@@ -461,10 +552,10 @@ export const useGraphStore = create<GraphState>()(
           },
         }
         
-        const newEdges = [...state.edges, newEdge]
+        let newEdges = [...state.edges, newEdge]
         
         // Mettre à jour les nœuds selon le type de connexion
-        const updatedNodes = [...state.nodes]
+        let updatedNodes = [...state.nodes]
         const sourceNodeIndex = updatedNodes.findIndex((n) => n.id === sourceId)
         
         if (sourceNodeIndex !== -1) {
@@ -472,21 +563,70 @@ export const useGraphStore = create<GraphState>()(
           
           // Gérer les connexions depuis un TestNode (avec sourceHandle pour les 4 résultats)
           if (actualSourceHandle && (actualSourceHandle === 'critical-failure' || actualSourceHandle === 'failure' || actualSourceHandle === 'success' || actualSourceHandle === 'critical-success')) {
-            // Mettre à jour le champ correspondant dans le TestNode
-            const fieldMapping: Record<string, string> = {
-              'critical-failure': 'criticalFailureNode',
-              'failure': 'failureNode',
-              'success': 'successNode',
-              'critical-success': 'criticalSuccessNode',
-            }
-            const fieldName = fieldMapping[actualSourceHandle]
-            if (fieldName) {
-              updatedNodes[sourceNodeIndex] = {
-                ...sourceNode,
+            // Trouver le choix parent du TestNode
+            const parent = getParentChoiceForTestNode(sourceId, state.nodes)
+            if (parent && TEST_HANDLE_TO_CHOICE_FIELD[actualSourceHandle]) {
+              // Mettre à jour le champ test*Node dans le choix parent (Source of Truth)
+              const fieldName = TEST_HANDLE_TO_CHOICE_FIELD[actualSourceHandle]
+              const updatedChoices = (parent.dialogueNode.data.choices as Choice[]).map(
+                (choice, idx) =>
+                  idx === parent.choiceIndex
+                    ? { ...choice, [fieldName]: targetId }
+                    : choice
+              )
+
+              // Mettre à jour le DialogueNode avec le choix modifié
+              const updatedDialogueNode = {
+                ...parent.dialogueNode,
                 data: {
-                  ...sourceNode.data,
-                  [fieldName]: targetId,
+                  ...parent.dialogueNode.data,
+                  choices: updatedChoices,
                 },
+              }
+
+              // Remplacer le DialogueNode dans la liste
+              updatedNodes = updatedNodes.map((n) =>
+                n.id === parent.dialogueNodeId ? updatedDialogueNode : n
+              )
+
+              // Synchroniser le TestNode depuis le choix mis à jour (choice → testNode)
+              const updatedChoice = updatedChoices[parent.choiceIndex]
+              const syncResult = syncTestNodeFromChoice(
+                updatedChoice,
+                parent.choiceIndex,
+                parent.dialogueNodeId,
+                updatedDialogueNode.position,
+                sourceNode,
+                newEdges,
+                updatedNodes
+              )
+
+              // Mettre à jour le TestNode
+              if (syncResult.testNode) {
+                updatedNodes = updatedNodes.map((n) =>
+                  n.id === sourceId ? syncResult.testNode! : n
+                )
+              }
+
+              // Mettre à jour les edges avec ceux retournés par syncTestNodeFromChoice
+              newEdges = syncResult.edges
+            } else {
+              // Fallback : mettre à jour le champ correspondant dans le TestNode (pour compatibilité)
+              const fieldMapping: Record<string, string> = {
+                'critical-failure': 'criticalFailureNode',
+                'failure': 'failureNode',
+                'success': 'successNode',
+                'critical-success': 'criticalSuccessNode',
+              }
+              const fieldName = fieldMapping[actualSourceHandle]
+              if (fieldName) {
+                updatedNodes[sourceNodeIndex] = {
+                  ...sourceNode,
+                  data: {
+                    ...sourceNode.data,
+                    [fieldName]: targetId,
+                  },
+                }
               }
             }
           } else if (choiceIndex !== undefined) {
@@ -522,6 +662,7 @@ export const useGraphStore = create<GraphState>()(
           edges: newEdges,
           dialogueMetadata: {
             ...state.dialogueMetadata,
+            node_count: updatedNodes.length,
             edge_count: newEdges.length,
           },
         })
@@ -531,15 +672,87 @@ export const useGraphStore = create<GraphState>()(
       
       // Déconnecter deux nœuds
       disconnectNodes: (edgeId: string) => {
-        const state = get()
-        const newEdges = state.edges.filter((e) => e.id !== edgeId)
-        
-        set({
-          edges: newEdges,
-          dialogueMetadata: {
-            ...state.dialogueMetadata,
-            edge_count: newEdges.length,
-          },
+        set((state) => {
+          const edge = state.edges.find((e) => e.id === edgeId)
+          if (!edge) {
+            return state
+          }
+
+          // Si déconnexion depuis un TestNode, mettre à jour le choix parent
+          if (edge.sourceHandle && edge.source.startsWith('test-node-')) {
+            const parent = getParentChoiceForTestNode(edge.source, state.nodes)
+            if (parent && TEST_HANDLE_TO_CHOICE_FIELD[edge.sourceHandle]) {
+              // Supprimer le champ test*Node dans le choix parent (Source of Truth)
+              const fieldName = TEST_HANDLE_TO_CHOICE_FIELD[edge.sourceHandle]
+              const updatedChoices = (parent.dialogueNode.data.choices as Choice[]).map(
+                (choice, idx) => {
+                  if (idx === parent.choiceIndex) {
+                    const { [fieldName]: _, ...rest } = choice
+                    return rest
+                  }
+                  return choice
+                }
+              )
+
+              // Mettre à jour le DialogueNode avec le choix modifié
+              const updatedDialogueNode = {
+                ...parent.dialogueNode,
+                data: {
+                  ...parent.dialogueNode.data,
+                  choices: updatedChoices,
+                },
+              }
+
+              // Remplacer le DialogueNode dans la liste
+              let updatedNodes = state.nodes.map((n) =>
+                n.id === parent.dialogueNodeId ? updatedDialogueNode : n
+              )
+
+              // Supprimer l'edge
+              const newEdges = state.edges.filter((e) => e.id !== edgeId)
+
+              // Synchroniser le TestNode depuis le choix mis à jour (choice → testNode)
+              const updatedChoice = updatedChoices[parent.choiceIndex]
+              const testNode = updatedNodes.find((n) => n.id === edge.source)
+              const syncResult = syncTestNodeFromChoice(
+                updatedChoice,
+                parent.choiceIndex,
+                parent.dialogueNodeId,
+                updatedDialogueNode.position,
+                testNode || null,
+                newEdges,
+                updatedNodes
+              )
+
+              // Mettre à jour le TestNode
+              if (syncResult.testNode) {
+                updatedNodes = updatedNodes.map((n) =>
+                  n.id === edge.source ? syncResult.testNode! : n
+                )
+              }
+
+              return {
+                nodes: updatedNodes,
+                edges: syncResult.edges,
+                dialogueMetadata: {
+                  ...state.dialogueMetadata,
+                  node_count: updatedNodes.length,
+                  edge_count: syncResult.edges.length,
+                },
+              }
+            }
+          }
+
+          // Logique existante : supprimer simplement l'edge
+          const newEdges = state.edges.filter((e) => e.id !== edgeId)
+
+          return {
+            edges: newEdges,
+            dialogueMetadata: {
+              ...state.dialogueMetadata,
+              edge_count: newEdges.length,
+            },
+          }
         })
         // Marquer dirty pour auto-save draft (Task 1 - Story 0.5)
         get().markDirty()

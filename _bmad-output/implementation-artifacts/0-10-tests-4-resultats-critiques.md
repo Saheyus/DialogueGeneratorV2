@@ -2,6 +2,8 @@
 
 Status: done
 
+**Note** : Synchronisation bidirectionnelle TestNode ↔ choix parent implémentée (voir section "Synchronisation TestNode ↔ Choix Parent" dans Dev Notes).
+
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
 ## Story
@@ -125,6 +127,29 @@ So that **je peux créer des dialogues plus nuancés avec des résultats de test
   - [x] Créé fichier de tests E2E : `e2e/graph-4-test-results.spec.ts` avec 4 scénarios complets
 
 ## Dev Notes
+
+### Synchronisation TestNode ↔ Choix Parent (Architecture SOLID)
+
+**Implémenté** : Synchronisation bidirectionnelle complète pour garantir la cohérence entre TestNodes (vue dérivée) et choix parents (Source of Truth).
+
+**Module utilitaire** : `frontend/src/utils/testNodeSync.ts`
+- `parseTestNodeId()` : Parse ID TestNode pour extraire dialogueNodeId et choiceIndex
+- `getParentChoiceForTestNode()` : Trouve le choix parent d'un TestNode
+- `syncTestNodeFromChoice()` : Synchronise TestNode depuis choix (choice → testNode)
+- `syncChoiceFromTestNode()` : Synchronise choix depuis TestNode (testNode → choice)
+- `syncTestNodeResultEdges()` : Crée/met à jour edges TestNode → nœuds de résultat
+
+**graphStore.ts refactorisé** :
+- `updateNode()` : Détecte TestNode, redirige vers choix parent, sync bidirectionnelle
+- `deleteNode()` : Supprime test du choix parent si TestNode supprimé
+- `connectNodes()` : Met à jour choix parent lors connexion depuis TestNode
+- `disconnectNodes()` : Met à jour choix parent lors déconnexion depuis TestNode
+
+**Garde-fous anti-récursion** : TestNode → choix → TestNode en une seule passe. Le TestNode est toujours resynchronisé depuis le choix (choix = Source of Truth).
+
+**Tests** : 32 tests passent (24 unitaires + 8 intégration). Voir `frontend/src/__tests__/testNodeSync.test.ts` et `useGraphStore.testNodeSync.test.ts`.
+
+**Documentation** : `docs/architecture/test-node-sync.md` (architecture complète), `.cursor/rules/testnode_sync.mdc` (mémo concis).
 
 ### Architecture Patterns
 
@@ -340,7 +365,7 @@ N/A
 - `frontend/src/components/graph/NodeEditorPanel.tsx` - Ajouté section "Connexions de test" pour éditer les 4 résultats d'un TestNode
 - `services/graph_conversion_service.py` - Modifié `unity_json_to_graph()` pour créer automatiquement TestNodes + `graph_to_unity_json()` pour exporter les 4 résultats + troncature labels
 - `services/json_renderer/unity_json_renderer.py` - Modifié `validate_nodes()` pour valider les 4 résultats de test dans les choix (avec refactor : constante et méthode helper)
-- `frontend/src/store/graphStore.ts` - Ajout création dynamique TestNodes dans `updateNode()` + troncature labels + documentation architecture
+- `frontend/src/store/graphStore.ts` - Ajout création dynamique TestNodes dans `updateNode()` + troncature labels + documentation architecture + synchronisation bidirectionnelle TestNode ↔ choix parent (refactorisé `updateNode()`, `deleteNode()`, `connectNodes()`, `disconnectNodes()`)
 - `docs/specifications/Unity_Dialogue_Format_4_Test_Results.md` - Documentation complète du format Unity avec 4 résultats
 - `tests/services/test_unity_export_import_4_results.py` - Test d'intégration export/import cycle avec 4 résultats
 - `e2e/graph-4-test-results.spec.ts` - Tests E2E complets pour les 4 résultats de test (4 scénarios)
@@ -359,3 +384,9 @@ N/A
 - `tests/services/test_unity_export_import_4_results.py` - Test d'intégration export/import cycle avec 4 résultats
 - `docs/specifications/Unity_Dialogue_Format_4_Test_Results.md` - Documentation complète du format Unity avec 4 résultats
 - `e2e/graph-4-test-results.spec.ts` - Tests E2E complets pour les 4 résultats de test (4 scénarios)
+- `frontend/src/utils/testNodeSync.ts` - Module utilitaire synchronisation TestNode ↔ choix parent (SRP)
+- `frontend/src/types/testNode.ts` - Types TypeScript pour synchronisation TestNode
+- `frontend/src/__tests__/testNodeSync.test.ts` - Tests unitaires synchronisation (24 tests)
+- `frontend/src/__tests__/useGraphStore.testNodeSync.test.ts` - Tests d'intégration synchronisation (8 tests)
+- `docs/architecture/test-node-sync.md` - Documentation architecture synchronisation complète
+- `.cursor/rules/testnode_sync.mdc` - Règle cursor mémo synchronisation TestNode
