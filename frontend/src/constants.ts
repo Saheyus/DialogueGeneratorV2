@@ -46,6 +46,20 @@ export const CONTEXT_TOKENS_LIMITS = {
 } as const
 
 /**
+ * Limites pour les tokens de completion (génération).
+ */
+export const COMPLETION_TOKENS_LIMITS = {
+  /** Minimum autorisé (100) */
+  MIN: 100,
+  /** Maximum autorisé (16K) */
+  MAX: 16000,
+  /** Pas du slider (500) */
+  STEP: 500,
+  /** Valeur par défaut (5K) */
+  DEFAULT: 5000,
+} as const
+
+/**
  * Timeouts pour les requêtes HTTP (en millisecondes).
  */
 export const API_TIMEOUTS = {

@@ -2,7 +2,7 @@
  * Composant pour les contrôles de génération (sliders tokens, max choix, tags narratifs).
  */
 import { useRef } from 'react'
-import { CONTEXT_TOKENS_LIMITS } from '../../constants'
+import { CONTEXT_TOKENS_LIMITS, COMPLETION_TOKENS_LIMITS } from '../../constants'
 import { theme } from '../../theme'
 
 export interface GenerationPanelControlsProps {
@@ -117,13 +117,13 @@ export function GenerationPanelControls({
                 ref={maxCompletionSliderRef}
                 type="range"
                 className="token-slider"
-                min={100}
-                max={16000}
-                step={500}
-                value={maxCompletionTokens ?? 10000}
+                min={COMPLETION_TOKENS_LIMITS.MIN}
+                max={COMPLETION_TOKENS_LIMITS.MAX}
+                step={COMPLETION_TOKENS_LIMITS.STEP}
+                value={maxCompletionTokens ?? COMPLETION_TOKENS_LIMITS.DEFAULT}
                 onChange={(e) => {
                   const value = parseInt(e.target.value)
-                  onMaxCompletionTokensChange(value === 10000 ? null : value) // null = valeur par défaut
+                  onMaxCompletionTokensChange(value === COMPLETION_TOKENS_LIMITS.DEFAULT ? null : value) // null = valeur par défaut
                   onDirty()
                 }}
                 style={{ 
@@ -143,7 +143,7 @@ export function GenerationPanelControls({
                 color: theme.text.primary,
                 fontWeight: 'bold',
               }}>
-                {maxCompletionTokens ? (maxCompletionTokens >= 1000 ? `${Math.round(maxCompletionTokens / 1000)}K` : maxCompletionTokens) : 'Auto (10K)'}
+                {maxCompletionTokens ? (maxCompletionTokens >= 1000 ? `${Math.round(maxCompletionTokens / 1000)}K` : maxCompletionTokens) : `Auto (${Math.round(COMPLETION_TOKENS_LIMITS.DEFAULT / 1000)}K)`}
               </span>
             </div>
           </div>

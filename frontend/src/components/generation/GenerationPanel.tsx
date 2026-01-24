@@ -20,7 +20,7 @@ import { GenerationProgressModal } from './GenerationProgressModal'
 import { ModelSelector } from './ModelSelector'
 import { PresetSelector } from './PresetSelector'
 import { useToast } from '../shared'
-import { CONTEXT_TOKENS_LIMITS, DEFAULT_MODEL, API_TIMEOUTS } from '../../constants'
+import { CONTEXT_TOKENS_LIMITS, COMPLETION_TOKENS_LIMITS, DEFAULT_MODEL, API_TIMEOUTS } from '../../constants'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import type { DialogueStructure } from '../../types/generation'
 // Hooks métier extraits
@@ -335,8 +335,8 @@ export function GenerationPanel() {
   }, [applyRangeGradient, maxContextTokens])
 
   useEffect(() => {
-    const value = maxCompletionTokens ?? 10000
-    applyRangeGradient(maxCompletionSliderRef.current, value, 100, 16000)
+    const value = maxCompletionTokens ?? COMPLETION_TOKENS_LIMITS.DEFAULT
+    applyRangeGradient(maxCompletionSliderRef.current, value, COMPLETION_TOKENS_LIMITS.MIN, COMPLETION_TOKENS_LIMITS.MAX)
   }, [applyRangeGradient, maxCompletionTokens])
 
   const normalizedDialogueStructure = ((): DialogueStructure => {

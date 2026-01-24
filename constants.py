@@ -75,6 +75,8 @@ class Defaults:
     # Limites pour les tokens de contexte (utilisées par l'API et le frontend)
     MAX_CONTEXT_TOKENS = 100000  # Maximum autorisé pour max_context_tokens
     MIN_CONTEXT_TOKENS = 10000   # Minimum pour le slider frontend
+    # Valeur par défaut pour max_completion_tokens (quand None)
+    DEFAULT_MAX_COMPLETION_TOKENS = 5000  # Valeur par défaut pour la génération de dialogues
 
 class ConfigFiles:
     pass  # Placeholder for future config file constants if needed 

@@ -180,8 +180,13 @@ class UnityDialogueOrchestrator:
                 endpoint="generate/unity-dialogue"
             )
             
+            # Configurer max_tokens : utiliser la valeur fournie ou la valeur par défaut
+            from constants import Defaults
             if request_data.max_completion_tokens is not None:
                 llm_client.max_tokens = request_data.max_completion_tokens
+            else:
+                # Utiliser la valeur par défaut si non spécifiée
+                llm_client.max_tokens = Defaults.DEFAULT_MAX_COMPLETION_TOKENS
             
             # Configurer le reasoning effort si fourni (uniquement pour GPT-5.2)
             if request_data.reasoning_effort is not None:

@@ -43,16 +43,48 @@ export async function computeStateHash(params: PromptStateParams): Promise<strin
   // Convertir en JSON stringifié (ordre garanti par normalizeParams)
   const jsonString = JSON.stringify(normalized)
   
-  // Calculer SHA-256 via Web Crypto API
-  const encoder = new TextEncoder()
-  const data = encoder.encode(jsonString)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  // Vérifier si crypto.subtle est disponible (nécessite HTTPS ou localhost)
+  // Utiliser try-catch pour gérer les cas où crypto.subtle est undefined
+  try {
+    if (typeof crypto !== 'undefined' && crypto.subtle) {
+      // Calculer SHA-256 via Web Crypto API
+      const encoder = new TextEncoder()
+      const data = encoder.encode(jsonString)
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+      
+      // Convertir en hexadécimal
+      const hashArray = Array.from(new Uint8Array(hashBuffer))
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+      
+      return hashHex
+    }
+  } catch (error) {
+    // crypto.subtle non disponible (HTTP au lieu de HTTPS, ou autre problème)
+    console.warn('crypto.subtle non disponible, utilisation du fallback hash:', error)
+  }
   
-  // Convertir en hexadécimal
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-  
-  return hashHex
+  // Fallback si crypto.subtle n'est pas disponible
+  {
+    // Fallback: hash simple basé sur la chaîne (moins sécurisé mais fonctionne en HTTP)
+    // Utiliser un algorithme de hash simple mais robuste pour le cache
+    // Note: Ce n'est pas cryptographiquement sécurisé, mais suffisant pour le cache
+    let hash = 0
+    for (let i = 0; i < jsonString.length; i++) {
+      const char = jsonString.charCodeAt(i)
+      hash = ((hash << 5) - hash) + char
+      hash = hash & hash // Convert to 32bit integer
+    }
+    // Utiliser un second hash pour réduire les collisions
+    let hash2 = 5381
+    for (let i = 0; i < jsonString.length; i++) {
+      hash2 = ((hash2 << 5) + hash2) + jsonString.charCodeAt(i)
+    }
+    // Combiner les deux hashs et convertir en hexadécimal
+    const combinedHash = Math.abs(hash) ^ Math.abs(hash2)
+    const hashHex = combinedHash.toString(16).padStart(16, '0')
+    // Ajouter un préfixe pour distinguer du vrai SHA-256 (64 caractères)
+    return `fallback_${hashHex}`
+  }
 }
 
 /**
