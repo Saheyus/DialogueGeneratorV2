@@ -44,10 +44,6 @@ export function GenerationOptionsModal({
       setActiveTab(initialTab as TabId)
     }
   }, [isOpen, initialTab])
-  const [unityPath, setUnityPath] = useState('')
-  const [isLoadingUnity, setIsLoadingUnity] = useState(false)
-  const [isSavingUnity, setIsSavingUnity] = useState(false)
-  const [unityError, setUnityError] = useState<string | null>(null)
   const [previewText, setPreviewText] = useState<string>('')
   const [previewTokens, setPreviewTokens] = useState<number>(0)
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
@@ -62,39 +58,12 @@ export function GenerationOptionsModal({
     loadDefaultConfig,
   } = useContextConfigStore()
 
-  // Charger la config par défaut et le chemin Unity au montage
+  // Charger la config par défaut au montage
   useEffect(() => {
     if (isOpen) {
       loadDefaultConfig().catch(console.error)
-      loadUnityPath()
     }
   }, [isOpen, loadDefaultConfig])
-
-  const loadUnityPath = async () => {
-    setIsLoadingUnity(true)
-    setUnityError(null)
-    try {
-      const response = await configAPI.getUnityDialoguesPath()
-      setUnityPath(response.path)
-    } catch (err) {
-      setUnityError(getErrorMessage(err))
-    } finally {
-      setIsLoadingUnity(false)
-    }
-  }
-
-  const handleSaveUnity = async () => {
-    setIsSavingUnity(true)
-    setUnityError(null)
-    try {
-      await configAPI.setUnityDialoguesPath(unityPath)
-      // Pas de fermeture automatique, juste un feedback
-    } catch (err) {
-      setUnityError(getErrorMessage(err))
-    } finally {
-      setIsSavingUnity(false)
-    }
-  }
 
   const handlePreview = useCallback(async () => {
     setIsLoadingPreview(true)
@@ -282,12 +251,6 @@ export function GenerationOptionsModal({
 
           {activeTab === 'general' && (
             <GeneralTab
-              unityPath={unityPath}
-              setUnityPath={setUnityPath}
-              isLoadingUnity={isLoadingUnity}
-              isSavingUnity={isSavingUnity}
-              unityError={unityError}
-              onSaveUnity={handleSaveUnity}
               organization={organization}
               setOrganization={setOrganization}
               previewText={previewText}
@@ -545,12 +508,6 @@ function ContextTab({
 }
 
 function GeneralTab({
-  unityPath,
-  setUnityPath,
-  isLoadingUnity,
-  isSavingUnity,
-  unityError,
-  onSaveUnity,
   organization,
   setOrganization,
   previewText,
@@ -559,12 +516,6 @@ function GeneralTab({
   onPreview,
   onBudgetUpdated,
 }: {
-  unityPath: string
-  setUnityPath: (path: string) => void
-  isLoadingUnity: boolean
-  isSavingUnity: boolean
-  unityError: string | null
-  onSaveUnity: () => void
   organization: 'default' | 'narrative' | 'minimal'
   setOrganization: (mode: 'default' | 'narrative' | 'minimal') => void
   previewText: string
@@ -575,63 +526,6 @@ function GeneralTab({
 }) {
   return (
     <div>
-      {/* Section Unity */}
-      <div style={{ marginBottom: '2rem' }}>
-        <h3 style={{ marginTop: 0, color: theme.text.primary }}>Configuration Unity</h3>
-
-        {unityError && (
-          <div
-            style={{
-              padding: '0.5rem',
-              backgroundColor: theme.state.error.background,
-              color: theme.state.error.color,
-              marginBottom: '1rem',
-              borderRadius: '4px',
-            }}
-          >
-            {unityError}
-          </div>
-        )}
-
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', color: theme.text.primary }}>
-            Chemin vers le dossier Unity des dialogues:
-          </label>
-          <input
-            type="text"
-            value={unityPath}
-            onChange={(e) => setUnityPath(e.target.value)}
-            disabled={isLoadingUnity}
-            placeholder="Ex: F:/Unity/Alteir/Alteir_Cursor/Assets/Dialogue/generated"
-            style={{
-              width: '100%',
-              padding: '0.5rem',
-              boxSizing: 'border-box',
-              backgroundColor: theme.input.background,
-              border: `1px solid ${theme.input.border}`,
-              color: theme.input.color,
-              borderRadius: '4px',
-            }}
-          />
-        </div>
-
-        <button
-          onClick={onSaveUnity}
-          disabled={isSavingUnity || isLoadingUnity}
-          style={{
-            padding: '0.5rem 1rem',
-            border: 'none',
-            borderRadius: '4px',
-            backgroundColor: theme.button.primary.background,
-            color: theme.button.primary.color,
-            cursor: isSavingUnity || isLoadingUnity ? 'not-allowed' : 'pointer',
-            opacity: isSavingUnity || isLoadingUnity ? 0.6 : 1,
-          }}
-        >
-          {isSavingUnity ? 'Enregistrement...' : 'Enregistrer'}
-        </button>
-      </div>
-
       {/* Section Budget LLM */}
       <div style={{ marginBottom: '2rem' }}>
         <BudgetSettings onBudgetUpdated={onBudgetUpdated} />

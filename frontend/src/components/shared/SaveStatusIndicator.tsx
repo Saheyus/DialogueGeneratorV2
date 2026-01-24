@@ -86,7 +86,6 @@ export function SaveStatusIndicator({ status, lastSavedAt, errorMessage, style }
           cursor: 'default',
         }}
       />
-      <span>{label}</span>
       <style>
         {`
           @keyframes pulse {

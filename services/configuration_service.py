@@ -19,8 +19,8 @@ SYSTEM_PROMPTS_FILE_PATH = DIALOGUE_GENERATOR_DIR / "config" / "system_prompts.j
 PROMPTS_METADATA_FILE_PATH = DIALOGUE_GENERATOR_DIR / "config" / "prompts_metadata.json"
 CONFIG_DIR = DIALOGUE_GENERATOR_DIR / "config"
 
-# Chemin par défaut pour les dialogues Unity - None signifie qu'il doit être configuré par l'utilisateur
-DEFAULT_UNITY_DIALOGUES_PATH = None
+# Chemin par défaut pour les dialogues Unity - toujours Assets/Dialogue depuis la racine du projet
+DEFAULT_UNITY_DIALOGUES_PATH = DIALOGUE_GENERATOR_DIR / "Assets" / "Dialogue"
 
 class ConfigurationService:
     def __init__(self):
@@ -263,21 +263,18 @@ class ConfigurationService:
 
     # --- Unity Dialogues Path specific methods (from config_manager.py) ---
     def _initialize_unity_dialogues_path(self) -> Optional[Path]:
-        """Initializes and validates the Unity dialogues path."""
-        path_str = self._get_app_config("unity_dialogues_path")
+        """Initializes and validates the Unity dialogues path.
         
-        dialogues_path = None
-        if path_str:
-            dialogues_path = Path(path_str)
-        else:
-            # Pas de chemin par défaut hardcodé - l'utilisateur doit configurer
-            logger.info("Unity dialogues path not configured. User must configure it via the UI or app_config.json")
-            return None
+        Always uses Assets/Dialogue from project root. No user configuration needed.
+        """
+        # Toujours utiliser le chemin par défaut : Assets/Dialogue depuis la racine du projet
+        dialogues_path = DEFAULT_UNITY_DIALOGUES_PATH
 
-        if dialogues_path and self._validate_and_prepare_path(dialogues_path):
+        if self._validate_and_prepare_path(dialogues_path):
+            logger.info(f"Unity dialogues path initialized: {dialogues_path}")
             return dialogues_path
         
-        # Si le chemin est invalide, on retourne None plutôt que d'essayer un fallback hardcodé
+        # Si le chemin est invalide, on retourne None
         logger.error(f"Unity dialogues path '{dialogues_path}' is invalid and could not be prepared.")
         return None
 
@@ -320,21 +317,14 @@ class ConfigurationService:
         return self.unity_dialogues_path
 
     def set_unity_dialogues_path(self, new_path_str: Union[str, Path]) -> bool:
-        """Sets and saves the new Unity dialogues path after validation."""
-        new_path = Path(new_path_str)
+        """Sets and saves the new Unity dialogues path after validation.
         
-        if not self._validate_and_prepare_path(new_path):
-            logger.warning(f"Proposed Unity dialogues path '{new_path}' is invalid or could not be prepared.")
-            return False
-
-        self._update_app_config("unity_dialogues_path", str(new_path))
-        if self._save_app_config():
-            self.unity_dialogues_path = new_path
-            logger.info(f"Unity dialogues path configured: {new_path}")
-            return True
-        else:
-            logger.error(f"Failed to save app config after updating Unity dialogues path to '{new_path}'.")
-            return False
+        NOTE: This method is kept for API compatibility but the path is now
+        always Assets/Dialogue from project root. User configuration is no longer allowed.
+        """
+        # Ignorer la configuration utilisateur, toujours utiliser le chemin par défaut
+        logger.warning(f"set_unity_dialogues_path called with '{new_path_str}' but user configuration is disabled. Using default path.")
+        return self._validate_and_prepare_path(DEFAULT_UNITY_DIALOGUES_PATH)
 
 # Example usage (optional, for testing or demonstration)
 if __name__ == "__main__":
