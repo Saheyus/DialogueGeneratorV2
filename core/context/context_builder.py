@@ -442,6 +442,15 @@ class ContextBuilder:
 
     def get_location_details_by_name(self, name: str) -> dict | None:
         """Récupère les détails d'un lieu par nom."""
+        # Lazy-load GDD files if not already loaded
+        if self._gdd_data_accessor is None:
+            logger.warning("GDD data accessor not initialized, attempting to load GDD files...")
+            try:
+                self.load_gdd_files()
+            except Exception as e:
+                logger.error(f"Failed to load GDD files: {e}", exc_info=True)
+                return None
+        
         if self._gdd_data_accessor is None:
             return None
         return self._gdd_data_accessor.get_location_details_by_name(name)
@@ -604,12 +613,30 @@ class ContextBuilder:
 
     def get_regions(self) -> list[str]:
         """Retourne une liste de noms de régions uniques à partir des données de localisation."""
+        # Lazy-load GDD files if not already loaded
+        if self._gdd_data_accessor is None:
+            logger.warning("GDD data accessor not initialized, attempting to load GDD files...")
+            try:
+                self.load_gdd_files()
+            except Exception as e:
+                logger.error(f"Failed to load GDD files: {e}", exc_info=True)
+                return []
+        
         if self._gdd_data_accessor is None:
             return []
         return self._gdd_data_accessor.get_regions()
 
     def get_sub_locations(self, region_name: str) -> list[str]:
         """Récupère les sous-lieux d'une région."""
+        # Lazy-load GDD files if not already loaded
+        if self._gdd_data_accessor is None:
+            logger.warning("GDD data accessor not initialized, attempting to load GDD files...")
+            try:
+                self.load_gdd_files()
+            except Exception as e:
+                logger.error(f"Failed to load GDD files: {e}", exc_info=True)
+                return []
+        
         if self._gdd_data_accessor is None:
             return []
         return self._gdd_data_accessor.get_sub_locations(region_name)
