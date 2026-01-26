@@ -157,8 +157,12 @@ Les `TestNode` (barre avec 4 handles) sont **uniquement** des artefacts de visua
 
 ## Références
 
-- Schéma Unity officiel : `docs/resources/JsonDocUnity/Documentation/dialogue-format.schema.json`
+- Schéma Unity officiel : `docs/resources/dialogue-format.schema.json`
 - Service de conversion backend : `services/graph_conversion_service.py`
 - API Graph : `api/routers/graph.py`
 - Store frontend : `frontend/src/store/graphStore.ts`
 - Documentation Story 0-10 (4 résultats de test) : `_bmad-output/implementation-artifacts/0-10-tests-4-resultats-critiques.md`
+
+---
+
+**Dernière mise à jour** : 2026-01-25 (correction chemin schéma JSON Unity)

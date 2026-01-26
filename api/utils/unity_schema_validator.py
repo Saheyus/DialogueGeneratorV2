@@ -1,7 +1,7 @@
 """Validateur de schéma JSON Unity pour les dialogues.
 
 Ce module charge et valide les exports Unity contre le schéma JSON Schema
-fourni par Unity. Le schéma est chargé depuis docs/JsonDocUnity/ et n'est
+fourni par Unity. Le schéma est chargé depuis docs/resources/ et n'est
 disponible qu'en développement (pas en production).
 
 Si le schéma est absent, les fonctions retournent des valeurs par défaut
@@ -15,7 +15,7 @@ from typing import List, Dict, Any, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # Chemin relatif depuis la racine du projet
-_SCHEMA_PATH = Path(__file__).parent.parent.parent / "docs" / "JsonDocUnity" / "Documentation" / "dialogue-format.schema.json"
+_SCHEMA_PATH = Path(__file__).parent.parent.parent / "docs" / "resources" / "dialogue-format.schema.json"
 
 # Cache du schéma chargé
 _schema_cache: Optional[Dict[str, Any]] = None
