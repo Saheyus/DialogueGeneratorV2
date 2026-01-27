@@ -26,8 +26,21 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class GenerationEvent:
-    """Événement de génération pour SSE streaming."""
-    type: str  # 'step', 'metadata', 'complete', 'error'
+    """Événement de génération pour SSE streaming.
+    
+    Représente un événement émis pendant le processus de génération
+    de dialogue Unity, utilisé pour le streaming Server-Sent Events (SSE).
+    
+    Attributes:
+        type: Type d'événement. Valeurs possibles :
+            - 'step' : Étape de progression (ex: 'Prompting', 'Generating', 'Validating')
+            - 'metadata' : Métadonnées de génération (tokens, coût, etc.)
+            - 'chunk' : Chunk de contenu streamé (texte ou JSON delta)
+            - 'complete' : Génération terminée avec résultat
+            - 'error' : Erreur survenue pendant la génération
+        data: Données associées à l'événement, format dépendant du type.
+    """
+    type: str
     data: Dict[str, Any]
 
 
