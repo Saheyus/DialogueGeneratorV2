@@ -14,7 +14,8 @@
  */
 import { test, expect, type Page } from '@playwright/test'
 
-const API_BASE = 'http://localhost:4243'
+// 127.0.0.1 pour éviter résolution IPv6 (::1) qui peut donner ECONNREFUSED si l'API n'écoute qu'en IPv4
+const API_BASE = 'http://127.0.0.1:4243'
 
 test.describe('Graph Node Accept/Reject (Story 1.4) @e2e-llm', () => {
   test.setTimeout(360_000)
@@ -25,7 +26,18 @@ test.describe('Graph Node Accept/Reject (Story 1.4) @e2e-llm', () => {
   })
 
   test.beforeAll(async ({ request }) => {
-    const healthRes = await request.get(`${API_BASE}/health/detailed`)
+    let healthRes
+    try {
+      healthRes = await request.get(`${API_BASE}/health/detailed`)
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === 'object' && 'message' in err
+          ? String((err as { message: string }).message)
+          : String(err)
+      throw new Error(
+        `E2E LLM : l'API ne répond pas (${msg}). Lance le serveur avant les tests : \`npm run dev\` (ou dans un autre terminal : \`npm run start:api\` avec API_PORT=4243, puis \`cd frontend && npm run dev\`). Voir docs/troubleshooting/e2e-llm.md.`
+      )
+    }
     if (!healthRes.ok()) {
       throw new Error(
         'E2E LLM : API injoignable (health check). Vérifier que l\'API tourne sur 4243. Voir docs/troubleshooting/e2e-llm.md.'

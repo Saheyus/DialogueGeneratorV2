@@ -119,6 +119,14 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
   const onSubmit = (data: DialogueNodeData | TestNodeData | EndNodeData) => {
     if (!selectedNodeId) return
     
+    // Warning nœud vide (Task 5 - Story 1.6) : placeholder autorisé
+    if (nodeType === 'dialogueNode') {
+      const line = (data as DialogueNodeData).line ?? ''
+      if (typeof line === 'string' && line.trim() === '') {
+        toast('Nœud vide - ajouter du texte', 'warning')
+      }
+    }
+    
     updateNode(selectedNodeId, {
       data: {
         ...selectedNode?.data,
@@ -802,7 +810,7 @@ export const NodeEditorPanel = memo(function NodeEditorPanel() {
               fontWeight: 'bold',
             }}
           >
-            💾
+            💾 Sauvegarder
           </button>
           
           <button

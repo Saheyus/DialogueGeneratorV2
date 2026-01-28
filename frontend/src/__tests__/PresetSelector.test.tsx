@@ -10,7 +10,7 @@ import type { Preset } from '../types/preset';
 // Mock le store
 vi.mock('../store/presetStore');
 
-// Mock le theme
+// Mock le theme (complet pour SaveStatusIndicator importé via shared)
 vi.mock('../theme', () => ({
   theme: {
     background: {
@@ -33,9 +33,10 @@ vi.mock('../theme', () => ({
       },
     },
     state: {
-      error: {
-        color: '#dc3545',
-      },
+      error: { color: '#dc3545' },
+      success: { color: '#28a745' },
+      info: { color: '#17a2b8' },
+      warning: { color: '#ffc107' },
     },
   },
 }));

@@ -1,6 +1,6 @@
 # Story 1.4: Accepter ou rejeter nœuds générés inline (FR4)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -326,3 +326,8 @@ Aucune erreur rencontrée lors de l'implémentation.
   - Tests unitaires : nettoyage targetNode/nextNode des parents lors reject (§7), rollback accept
   - E2E réécrits : génération réelle, AC#1–AC#3, AC#5 session recovery, assertions strictes (§2, §3)
   - Draft : `exportToUnity({ keepStatusForDraft: true })` pour persister status en localStorage (AC#5)
+- **2026-01-28** : Corrections issues code-review (adversarial review – option 1 fix auto)
+  - **[HIGH]** Reject : appel à `saveDialogue()` après suppression locale pour persister immédiatement (AC#3) ; ordre API puis mise à jour locale pour éviter état incohérent si API échoue
+  - **[HIGH]** API : doc explicite dans `graph.py` (accept/reject = validation-only, persistance via frontend saveDialogue)
+  - **[MEDIUM]** Reject : toast d’erreur si API échoue ; toast si sauvegarde échoue après reject
+  - Tests unitaires : mock `saveGraph` dans tous les tests rejectNode ; test « should not modify state and throw when reject API fails » ; assertion `saveGraph` appelé après reject

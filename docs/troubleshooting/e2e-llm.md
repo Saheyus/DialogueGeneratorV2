@@ -8,6 +8,17 @@ Objectif : faire passer ces tests lorsque l'environnement est correctement confi
 - **`.env`** à la racine du projet avec `OPENAI_API_KEY`, ou variable d'environnement équivalente (ex. Windows).
 - **Budget** utilisable : quota > 0 et non saturé. Le preflight peut ajuster automatiquement le quota en E2E (voir ci‑dessous).
 
+## Lancer les serveurs avant les tests (recommandé)
+
+Playwright peut démarrer API et frontend via `webServer`, mais il les arrête à la fin du run. Si un test échoue (ex. timeout), les retries ou tests suivants peuvent voir **ECONNREFUSED** car le serveur n’est plus là. **En tant que dev, tu dois t’assurer que l’environnement répond avant de considérer les E2E terminés.**
+
+**Procédure recommandée :**
+
+1. **Terminal 1** : `npm run dev` (API 4243 + frontend 3000).
+2. **Terminal 2** : `npm run test:e2e:llm`.
+
+Ainsi Playwright réutilise les serveurs (`reuseExistingServer: true` hors CI) et ne les tue pas ; les retries et tests suivants ont l’API disponible.
+
 ## Commande
 
 ```bash
@@ -67,7 +78,7 @@ Les E2E utilisent **gpt-5-nano** pour limiter les coûts. Le panneau de généra
 |----------|---------------|
 | Clé API manquante | `.env` à la racine avec `OPENAI_API_KEY`, ou variable d'environnement. Redémarrer l'API (ou relancer les E2E). |
 | Budget bloqué | `data/cost_budgets.json` : `quota > 0`, `percentage < 100`. Le preflight peut forcer `quota: 50` si besoin. |
-| API injoignable | L'API tourne sur **4243** en E2E. Vérifier `playwright.config.ts` (webServer API, `env.API_PORT`). |
+| API injoignable / ECONNREFUSED | **Lance le serveur avant les tests** : `npm run dev`, puis dans un autre terminal `npm run test:e2e:llm`. L’API doit écouter sur **4243**. Si Playwright a démarré les serveurs et qu’un test a échoué, les retries n’ont plus d’API → relancer les tests avec le serveur déjà up. |
 | Aucun toast de succès | Vérifier les logs frontend/API, budget, modèle gpt-5-nano. S'assurer qu'un dialogue Unity existe (ex. `Assets/Dialogue/*.json`) et que le graphe charge correctement. |
 | AC#5 pending introuvable après reload | Draft : debounce 3s, attendre 10s avant reload. Même dialogue « Tunnel vertébral » avant/après. |
 

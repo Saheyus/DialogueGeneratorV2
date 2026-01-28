@@ -743,6 +743,10 @@ async def accept_node(
 ):
     """Accepte un nœud généré (passe de "pending" à "accepted").
     
+    Validation-only: vérifie que le dialogue existe. La persistance (mise à jour
+    du JSON avec status "accepted") est faite par le frontend via saveDialogue()
+    après mise à jour optimiste du store.
+    
     Args:
         node_id: ID du nœud à accepter.
         request_data: ID du dialogue.
@@ -787,6 +791,10 @@ async def reject_node(
     config_service: Annotated[ConfigurationService, Depends(get_config_service)] = None,
 ):
     """Rejette un nœud généré (supprime le nœud).
+    
+    Validation-only: vérifie que le dialogue existe. La persistance (suppression
+    du nœud du JSON) est faite par le frontend après succès: mise à jour locale
+    puis saveDialogue() pour persister immédiatement (AC#3).
     
     Args:
         node_id: ID du nœud à rejeter.

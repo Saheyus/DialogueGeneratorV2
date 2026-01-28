@@ -130,6 +130,8 @@ export interface GraphState {
     filename?: string
   ) => Promise<void>
   addNode: (node: Node) => void
+  /** Crée un nœud vide (sans LLM). Story 1.6 - FR6. Retourne le nœud ; l'appelant appelle addNode + setSelectedNode. */
+  createEmptyNode: (position?: { x: number; y: number }) => Node
   updateNode: (nodeId: string, updates: Partial<Node>) => void
   deleteNode: (nodeId: string) => void
   connectNodes: (
@@ -295,10 +297,10 @@ export const useGraphStore = create<GraphState>()(
       addNode: (node: Node) => {
         const state = get()
         const newNodes = [...state.nodes, node]
-        
+
         // Normaliser pour garantir la synchronisation TestBar ↔ choix
         const normalized = normalizeTestBars(newNodes, state.edges)
-        
+
         set({
           nodes: normalized.nodes,
           edges: normalized.edges,
@@ -310,6 +312,24 @@ export const useGraphStore = create<GraphState>()(
         })
         // Marquer dirty pour auto-save draft (Task 1 - Story 0.5)
         get().markDirty()
+      },
+
+      // Créer un nœud vide sans LLM (Story 1.6 - FR6). Retourne le nœud ; l'action appelle addNode(node) puis setSelectedNode(node.id).
+      createEmptyNode: (position?: { x: number; y: number }) => {
+        const id = `manual-${crypto.randomUUID()}`
+        const pos = position ?? { x: 0, y: 0 }
+        const node: Node = {
+          id,
+          type: 'dialogueNode',
+          position: pos,
+          data: {
+            id,
+            speaker: '',
+            line: '',
+            choices: [],
+          },
+        }
+        return node
       },
       
       // Mettre à jour un nœud
@@ -1313,28 +1333,39 @@ export const useGraphStore = create<GraphState>()(
       },
       
       // Rejeter un nœud généré (Task 3 - Story 1.4)
+      // Ordre: API d'abord (évite état local incohérent si API échoue), puis mise à jour locale + saveDialogue pour persister (AC#3).
       rejectNode: async (nodeId: string) => {
+        const state = get()
+        const node = state.nodes.find((n) => n.id === nodeId)
+        if (!node) {
+          throw new Error(`Nœud ${nodeId} introuvable`)
+        }
+
+        const dialogueId = state.dialogueMetadata.filename || 'current'
         try {
-          const state = get()
-          const node = state.nodes.find((n) => n.id === nodeId)
-          
-          if (!node) {
-            throw new Error(`Nœud ${nodeId} introuvable`)
-          }
-          
-          // Nettoyer les références dans les choix des nœuds parents avant suppression
+          await graphAPI.rejectNode(dialogueId, nodeId)
+        } catch (err) {
+          console.error('Erreur lors du rejet du nœud:', err)
+          const { toastManager } = await import('../components/shared/Toast')
+          toastManager.show(
+            'Impossible de rejeter le nœud. Réessayez.',
+            'error',
+            5000
+          )
+          throw err
+        }
+
+        try {
+          // Nettoyer les références dans les choix des nœuds parents puis supprimer le nœud
           set((currentState) => {
             let updatedNodes = [...currentState.nodes]
             let updatedEdges = [...currentState.edges]
-            
-            // Trouver tous les nœuds qui pointent vers ce nœud (via targetNode dans les choix)
+
             updatedNodes = updatedNodes.map((n) => {
               if (n.type === 'dialogueNode' && n.data.choices) {
                 const choices = n.data.choices as Choice[]
                 const hasReference = choices.some((choice) => choice.targetNode === nodeId)
-                
                 if (hasReference) {
-                  // Nettoyer les références targetNode pointant vers le nœud rejeté
                   const cleanedChoices = choices.map((choice) => {
                     if (choice.targetNode === nodeId) {
                       const { targetNode, ...rest } = choice
@@ -1342,57 +1373,45 @@ export const useGraphStore = create<GraphState>()(
                     }
                     return choice
                   })
-                  
                   return {
                     ...n,
-                    data: {
-                      ...n.data,
-                      choices: cleanedChoices,
-                    },
+                    data: { ...n.data, choices: cleanedChoices },
                   }
                 }
               }
-              
-              // Nettoyer aussi nextNode si il pointe vers ce nœud
               if (n.data.nextNode === nodeId) {
                 const { nextNode, ...restData } = n.data
-                return {
-                  ...n,
-                  data: restData,
-                }
+                return { ...n, data: restData }
               }
-              
               return n
             })
-            
-            // Supprimer les edges pointant vers ou depuis ce nœud
             updatedEdges = updatedEdges.filter(
               (e) => e.source !== nodeId && e.target !== nodeId
             )
-            
             return {
               ...currentState,
               nodes: updatedNodes,
               edges: updatedEdges,
             }
           })
-          
-          // Appeler l'API pour supprimer le nœud
-          const dialogueId = get().dialogueMetadata.filename || 'current'
-          await graphAPI.rejectNode(dialogueId, nodeId)
-          
-          // Supprimer le nœud localement (utiliser deleteNode existant)
+
           get().deleteNode(nodeId)
-          
-          // Afficher toast de confirmation (AC #3)
+
+          // Persister immédiatement la suppression (AC#3 — le nœud ne doit pas réapparaître au reload)
+          await get().saveDialogue()
+
           const { toastManager } = await import('../components/shared/Toast')
           toastManager.show('Nœud rejeté', 'info', 3000)
-          
-          // Marquer dirty pour auto-save draft
           get().markDirty()
-        } catch (error) {
-          console.error('Erreur lors du rejet du nœud:', error)
-          throw error
+        } catch (err) {
+          console.error('Erreur après rejet (sauvegarde):', err)
+          const { toastManager } = await import('../components/shared/Toast')
+          toastManager.show(
+            'Nœud retiré du graphe mais la sauvegarde a échoué. Réessayez de sauvegarder.',
+            'error',
+            5000
+          )
+          throw err
         }
       },
       

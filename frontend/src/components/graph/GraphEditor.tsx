@@ -64,6 +64,8 @@ export function GraphEditor() {
     intentionalCycles,
     markCycleAsIntentional,
     unmarkCycleAsIntentional,
+    createEmptyNode,
+    addNode,
     // États auto-save draft (Task 2 - Story 0.5)
     hasUnsavedChanges,
     lastDraftSavedAt,
@@ -77,6 +79,13 @@ export function GraphEditor() {
     setShowDeleteNodeConfirm,
   } = useGraphStore()
   
+  /** Désactive les actions graphe si aucun dialogue ou chargement en cours (évite duplication de condition). */
+  const canEditGraph = !!selectedDialogue && !isGraphLoading && !isLoadingDialogue
+  /** Offset position pour nœuds manuels (Story 1.6 - éviter chevauchement). */
+  const MANUAL_NODE_OFFSET_X = 150
+  const MANUAL_NODE_OFFSET_Y = 100
+  const MANUAL_NODE_STEP = 40
+
   // Écouter l'événement pour ouvrir le panel de génération depuis un nœud
   useEffect(() => {
     const handleOpenGenerationPanel = (event: CustomEvent<{ nodeId: string }>) => {
@@ -623,7 +632,7 @@ export function GraphEditor() {
               <select
                 value={layoutDirection}
                 onChange={(e) => setLayoutDirection(e.target.value as 'TB' | 'LR' | 'BT' | 'RL')}
-                disabled={isGraphLoading || isLoadingDialogue || !selectedDialogue}
+                disabled={!canEditGraph}
                 style={{
                   padding: '0.5rem 0.75rem',
                   border: `1px solid ${theme.input.border}`,
@@ -631,8 +640,8 @@ export function GraphEditor() {
                   backgroundColor: theme.input.background,
                   color: theme.input.color,
                   fontSize: '0.85rem',
-                  cursor: (isGraphLoading || isLoadingDialogue || !selectedDialogue) ? 'not-allowed' : 'pointer',
-                  opacity: (isGraphLoading || isLoadingDialogue || !selectedDialogue) ? 0.6 : 1,
+                  cursor: canEditGraph ? 'pointer' : 'not-allowed',
+                  opacity: canEditGraph ? 1 : 0.6,
                 }}
                 title="Direction du layout"
               >
@@ -643,15 +652,15 @@ export function GraphEditor() {
               </select>
               <button
                 onClick={handleAutoLayout}
-                disabled={isGraphLoading || isLoadingDialogue || !selectedDialogue}
+                disabled={!canEditGraph}
                 style={{
                   padding: '0.5rem 1rem',
                   border: `1px solid ${theme.border.primary}`,
                   borderRadius: '6px',
                   backgroundColor: theme.button.default.background,
                   color: theme.button.default.color,
-                  cursor: (isGraphLoading || isLoadingDialogue || !selectedDialogue) ? 'not-allowed' : 'pointer',
-                  opacity: (isGraphLoading || isLoadingDialogue || !selectedDialogue) ? 0.6 : 1,
+                  cursor: canEditGraph ? 'pointer' : 'not-allowed',
+                  opacity: canEditGraph ? 1 : 0.6,
                   fontSize: '0.9rem',
                 }}
                 title="Auto-layout (Dagre)"
@@ -660,34 +669,62 @@ export function GraphEditor() {
               </button>
             </div>
             <button
-              onClick={() => setShowAIGenerationPanel(true)}
-              disabled={!selectedNodeId || isGraphLoading || isLoadingDialogue || !selectedDialogue}
-              style={{
-                padding: '0.5rem 1rem',
-                border: 'none',
-                borderRadius: '6px',
-                backgroundColor: theme.button.primary.background,
-                color: theme.button.primary.color,
-                cursor: (!selectedNodeId || isGraphLoading || isLoadingDialogue || !selectedDialogue) ? 'not-allowed' : 'pointer',
-                opacity: (!selectedNodeId || isGraphLoading || isLoadingDialogue || !selectedDialogue) ? 0.6 : 1,
-                fontWeight: 700,
-                fontSize: '0.9rem',
+              data-testid="btn-new-manual-node"
+              onClick={() => {
+                const count = nodes.filter((n) => n.type === 'dialogueNode').length
+                const position = {
+                  x: MANUAL_NODE_OFFSET_X + count * MANUAL_NODE_STEP,
+                  y: MANUAL_NODE_OFFSET_Y + count * MANUAL_NODE_STEP,
+                }
+                const node = createEmptyNode(position)
+                addNode(node)
+                setSelectedNode(node.id)
               }}
-              title="Générer un nœud avec l'IA depuis le nœud sélectionné"
-            >
-              ✨ Générer nœud IA
-            </button>
-            <button
-              onClick={handleOpenExportDialog}
-              disabled={!reactFlowInstance || isLoadingDialogue || !selectedDialogue}
+              disabled={!canEditGraph}
               style={{
                 padding: '0.5rem 1rem',
                 border: `1px solid ${theme.border.primary}`,
                 borderRadius: '6px',
                 backgroundColor: theme.button.default.background,
                 color: theme.button.default.color,
-                cursor: (!reactFlowInstance || isLoadingDialogue || !selectedDialogue) ? 'not-allowed' : 'pointer',
-                opacity: (!reactFlowInstance || isLoadingDialogue || !selectedDialogue) ? 0.6 : 1,
+                cursor: canEditGraph ? 'pointer' : 'not-allowed',
+                opacity: canEditGraph ? 1 : 0.6,
+                fontWeight: 600,
+                fontSize: '0.9rem',
+              }}
+              title="Créer un nœud vide (sans IA) et ouvrir l'éditeur"
+            >
+              ➕ Nouveau nœud
+            </button>
+            <button
+              onClick={() => setShowAIGenerationPanel(true)}
+              disabled={!selectedNodeId || !canEditGraph}
+              style={{
+                padding: '0.5rem 1rem',
+                border: 'none',
+                borderRadius: '6px',
+                backgroundColor: theme.button.primary.background,
+                color: theme.button.primary.color,
+                cursor: (!selectedNodeId || !canEditGraph) ? 'not-allowed' : 'pointer',
+                opacity: (!selectedNodeId || !canEditGraph) ? 0.6 : 1,
+                fontWeight: 700,
+                fontSize: '0.9rem',
+              }}
+              title="Générer un nœud avec l'IA depuis le nœud sélectionné"
+            >
+              ✨ Générer nœud
+            </button>
+            <button
+              onClick={handleOpenExportDialog}
+              disabled={!reactFlowInstance || !canEditGraph}
+              style={{
+                padding: '0.5rem 1rem',
+                border: `1px solid ${theme.border.primary}`,
+                borderRadius: '6px',
+                backgroundColor: theme.button.default.background,
+                color: theme.button.default.color,
+                cursor: (!reactFlowInstance || !canEditGraph) ? 'not-allowed' : 'pointer',
+                opacity: (!reactFlowInstance || !canEditGraph) ? 0.6 : 1,
                 fontSize: '0.9rem',
               }}
               title="Exporter le graphe visible"
@@ -696,20 +733,20 @@ export function GraphEditor() {
             </button>
             <button
               onClick={handleSave}
-              disabled={isGraphSaving || isLoadingDialogue || !selectedDialogue}
+              disabled={isGraphSaving || !canEditGraph}
               style={{
                 padding: '0.5rem 1rem',
                 border: 'none',
                 borderRadius: '6px',
                 backgroundColor: theme.button.primary.background,
                 color: theme.button.primary.color,
-                cursor: (isGraphSaving || isLoadingDialogue || !selectedDialogue) ? 'not-allowed' : 'pointer',
-                opacity: (isGraphSaving || isLoadingDialogue || !selectedDialogue) ? 1 : 0.6,
+                cursor: (isGraphSaving || !canEditGraph) ? 'not-allowed' : 'pointer',
+                opacity: (isGraphSaving || !canEditGraph) ? 1 : 0.6,
                 fontWeight: 700,
                 fontSize: '0.9rem',
               }}
             >
-              {isGraphSaving ? 'Sauvegarde...' : '💾 Sauvegarder'}
+              {isGraphSaving ? 'Sauvegarde...' : '💾'}
             </button>
           </div>
         </div>

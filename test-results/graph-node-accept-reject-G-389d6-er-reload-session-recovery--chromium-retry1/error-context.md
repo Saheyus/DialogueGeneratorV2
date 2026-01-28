@@ -1,0 +1,290 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - heading "DialogueGenerator" [level=1] [ref=e6]
+      - 'generic "Date de compilation: 28/01/2026 13:00:50" [ref=e7]': "Build: 28/01/2026 13:00"
+    - generic [ref=e9]: Non connecté
+  - main [ref=e10]:
+    - generic [ref=e11]:
+      - generic [ref=e13]:
+        - generic [ref=e14]:
+          - generic [ref=e15]: Contexte
+          - button "Replier le panneau gauche" [ref=e16] [cursor=pointer]:
+            - img [ref=e17]
+        - generic [ref=e19]:
+          - generic [ref=e20]:
+            - button "Personnages (41)" [ref=e21] [cursor=pointer]
+            - button "Lieux (47)" [ref=e22] [cursor=pointer]
+            - button "Objets (17)" [ref=e23] [cursor=pointer]
+            - button "Espèces (47)" [ref=e24] [cursor=pointer]
+            - button "Communautés (11)" [ref=e25] [cursor=pointer]
+          - generic [ref=e27]:
+            - generic [ref=e29]:
+              - textbox "Rechercher... (/)" [ref=e30]
+              - combobox "Trier les résultats" [ref=e31]:
+                - option "Nom (A-Z)" [selected]
+                - option "Nom (Z-A)"
+                - option "Sélectionnés en premier"
+            - generic [ref=e32]:
+              - generic [ref=e33] [cursor=pointer]:
+                - checkbox [ref=e34]
+                - generic [ref=e35]: Akthar-Neth Amatru, l’Exégète
+              - generic [ref=e36] [cursor=pointer]:
+                - checkbox [ref=e37]
+                - generic [ref=e38]: Avili de l’Éternel Retour
+              - generic [ref=e39] [cursor=pointer]:
+                - checkbox [ref=e40]
+                - generic [ref=e41]: Barvas le Juge-Mendiant
+              - generic [ref=e42] [cursor=pointer]:
+                - checkbox [ref=e43]
+                - generic [ref=e44]: Cendreveine
+              - generic [ref=e45] [cursor=pointer]:
+                - checkbox [ref=e46]
+                - generic [ref=e47]: Chantier-Doux, Berger de Gedroths
+              - generic [ref=e48] [cursor=pointer]:
+                - checkbox [ref=e49]
+                - generic [ref=e50]: Duq'Sha, L'Archiviste Boiteux
+              - generic [ref=e51] [cursor=pointer]:
+                - checkbox [ref=e52]
+                - generic [ref=e53]: Eonundé Alinen-Egan
+              - generic [ref=e54] [cursor=pointer]:
+                - checkbox [ref=e55]
+                - generic [ref=e56]: Gardien-Calligraphe Qalamtû
+              - generic [ref=e57] [cursor=pointer]:
+                - checkbox [ref=e58]
+                - generic [ref=e59]: Genka Lien, le bouffon
+              - generic [ref=e60] [cursor=pointer]:
+                - checkbox [ref=e61]
+                - generic [ref=e62]: Grish T’vok
+              - generic [ref=e63] [cursor=pointer]:
+                - checkbox [ref=e64]
+                - generic [ref=e65]: Guette-Horizon, Gardienne du périmètre
+              - generic [ref=e66] [cursor=pointer]:
+                - checkbox [ref=e67]
+                - generic [ref=e68]: Jast, l’Inéluctable
+              - generic [ref=e69] [cursor=pointer]:
+                - checkbox [ref=e70]
+                - generic [ref=e71]: Kha'Vareth, L'Artisan d'Éternité
+              - generic [ref=e72] [cursor=pointer]:
+                - checkbox [ref=e73]
+                - generic [ref=e74]: Khair-gul, Le Médecin-Ascétique
+              - generic [ref=e75] [cursor=pointer]:
+                - checkbox [ref=e76]
+                - generic [ref=e77]: Korga l'Effritée, Maçonne-rafistoleuse
+              - generic [ref=e78] [cursor=pointer]:
+                - checkbox [ref=e79]
+                - generic [ref=e80]: L’Arbitre
+              - generic [ref=e81] [cursor=pointer]:
+                - checkbox [ref=e82]
+                - generic [ref=e83]: L’Enlumineur
+              - generic [ref=e84] [cursor=pointer]:
+                - checkbox [ref=e85]
+                - generic [ref=e86]: L'Ensevelie
+              - generic [ref=e87] [cursor=pointer]:
+                - checkbox [ref=e88]
+                - generic [ref=e89]: L'Équipe des Trois-Dos
+              - generic [ref=e90] [cursor=pointer]:
+                - checkbox [ref=e91]
+                - generic [ref=e92]: L'Éthérée
+              - generic [ref=e93] [cursor=pointer]:
+                - checkbox [ref=e94]
+                - generic [ref=e95]: L’Incarnée
+              - generic [ref=e96] [cursor=pointer]:
+                - checkbox [ref=e97]
+                - generic [ref=e98]: Lyro Seph
+              - generic [ref=e99] [cursor=pointer]:
+                - checkbox [ref=e100]
+                - generic [ref=e101]: Murmure-Éteint
+              - generic [ref=e102] [cursor=pointer]:
+                - checkbox [ref=e103]
+                - generic [ref=e104]: Navarre K'ssh, la Stratège Sanguine
+              - generic [ref=e105] [cursor=pointer]:
+                - checkbox [ref=e106]
+                - generic [ref=e107]: Nila Halder
+              - generic [ref=e108] [cursor=pointer]:
+                - checkbox [ref=e109]
+                - generic [ref=e110]: Ori-Bikar 57, l’Enfant-Foudre
+              - generic [ref=e111] [cursor=pointer]:
+                - checkbox [ref=e112]
+                - generic [ref=e113]: Ôrmüd T’lian-Keresh, le Maître-Flagellant
+              - generic [ref=e114] [cursor=pointer]:
+                - checkbox [ref=e115]
+                - generic [ref=e116]: Raki-Biro 58, l’Enfant-Prophète
+              - generic [ref=e117] [cursor=pointer]:
+                - checkbox [ref=e118]
+                - generic [ref=e119]: Ravim Halder
+              - generic [ref=e120] [cursor=pointer]:
+                - checkbox [ref=e121]
+                - generic [ref=e122]: Rêveur du Puits Céleste
+              - generic [ref=e123] [cursor=pointer]:
+                - checkbox [ref=e124]
+                - generic [ref=e125]: Saritha Halder
+              - generic [ref=e126] [cursor=pointer]:
+                - checkbox [ref=e127]
+                - generic [ref=e128]: Seigneuresse Uresaïr
+              - generic [ref=e129] [cursor=pointer]:
+                - checkbox [ref=e130]
+                - generic [ref=e131]: Siphon Argenté et Kresh l'Écaillé
+              - generic [ref=e132] [cursor=pointer]:
+                - checkbox [ref=e133]
+                - generic [ref=e134]: Valkazer Reitar
+              - generic [ref=e135] [cursor=pointer]:
+                - checkbox [ref=e136]
+                - generic [ref=e137]: Varek l’Écorché
+              - generic [ref=e138] [cursor=pointer]:
+                - checkbox [ref=e139]
+                - generic [ref=e140]: Vethraak
+              - generic [ref=e141] [cursor=pointer]:
+                - checkbox [ref=e142]
+                - generic [ref=e143]: Voknir Esh'Maradel, le cartographe
+              - generic [ref=e144] [cursor=pointer]:
+                - checkbox [ref=e145]
+                - generic [ref=e146]: Vol Reitar
+              - generic [ref=e147] [cursor=pointer]:
+                - checkbox [ref=e148]
+                - generic [ref=e149]: Yrthas, la murmuratrice
+              - generic [ref=e150] [cursor=pointer]:
+                - checkbox [ref=e151]
+                - generic [ref=e152]: Ysellor Eonundé du Ressac
+              - generic [ref=e153] [cursor=pointer]:
+                - checkbox [ref=e154]
+                - generic [ref=e155]: Zaehria Neth'Varu, La Gardienne Vertébrale
+          - generic [ref=e157]: Aucune sélection
+      - generic [ref=e161]:
+        - generic [ref=e162]:
+          - button "Génération de Dialogues" [ref=e163] [cursor=pointer]
+          - button "Édition de Dialogues" [ref=e164] [cursor=pointer]
+          - button "📊 Éditeur de Graphe" [ref=e165] [cursor=pointer]
+        - generic [ref=e167]:
+          - generic [ref=e169]:
+            - generic [ref=e170]:
+              - generic [ref=e171]:
+                - textbox "Rechercher un dialogue... (/)" [ref=e172]
+                - combobox "Trier les dialogues" [ref=e173]:
+                  - option "Date (récent)" [selected]
+                  - option "Date (ancien)"
+                  - option "Nom (A-Z)"
+                  - option "Nom (Z-A)"
+              - generic [ref=e174]: 4 dialogues
+            - generic [ref=e175]:
+              - generic [ref=e176] [cursor=pointer]:
+                - generic [ref=e177]: Tunnel vertébral pigments impossibles
+                - generic [ref=e178]: tunnel_vertébral_pigments_impossibles.json
+                - generic [ref=e179]:
+                  - generic [ref=e180]: 1.7 KB
+                  - generic [ref=e181]: •
+                  - generic [ref=e182]: 27 janv. 2026, 17:03
+              - generic [ref=e183] [cursor=pointer]:
+                - generic [ref=e184]: Atelier du cartographe dans les plis dossements
+                - generic [ref=e185]: atelier_du_cartographe_dans_les_plis_dossements.json
+                - generic [ref=e186]:
+                  - generic [ref=e187]: 8.9 KB
+                  - generic [ref=e188]: •
+                  - generic [ref=e189]: 27 janv. 2026, 17:00
+              - generic [ref=e190] [cursor=pointer]:
+                - generic [ref=e191]: Dans les plis une carte qui refuse dêtre plate
+                - generic [ref=e192]: dans_les_plis_une_carte_qui_refuse_dêtre_plate.json
+                - generic [ref=e193]:
+                  - generic [ref=e194]: 21.2 KB
+                  - generic [ref=e195]: •
+                  - generic [ref=e196]: 24 janv. 2026, 23:44
+              - generic [ref=e197] [cursor=pointer]:
+                - generic [ref=e198]: Rencontre avec le cartographe
+                - generic [ref=e199]: rencontre_avec_le_cartographe.json
+                - generic [ref=e200]:
+                  - generic [ref=e201]: 2.6 KB
+                  - generic [ref=e202]: •
+                  - generic [ref=e203]: 17 janv. 2026, 20:11
+          - generic [ref=e204]:
+            - generic [ref=e206]:
+              - generic "Graphe valide (validation automatique à chaque sauvegarde)" [ref=e207]:
+                - generic [ref=e208]: ✓
+                - generic [ref=e209]: Graphe valide
+              - generic "Sauvegardé" [ref=e210]
+              - generic [ref=e212]:
+                - combobox "Direction du layout" [ref=e213] [cursor=pointer]:
+                  - option "TB (Haut-Bas)" [selected]
+                  - option "LR (Gauche-Droite)"
+                  - option "BT (Bas-Haut)"
+                  - option "RL (Droite-Gauche)"
+                - button "📐 Auto-layout" [ref=e214] [cursor=pointer]
+              - button "✨ Générer nœud IA" [disabled] [ref=e215]
+              - button "📤 Exporter" [ref=e216] [cursor=pointer]
+              - button "💾 Sauvegarder" [ref=e217] [cursor=pointer]
+            - generic [ref=e221]:
+              - generic [ref=e223]:
+                - generic:
+                  - img:
+                    - button "Edge from START to NODE_START_CHOICE_0" [ref=e224] [cursor=pointer]:
+                      - generic [ref=e227]:
+                        - generic: Raconte la version d'ici. Je v...
+                  - generic:
+                    - button "Genka Lien, le bouffon *Suspendu, puis retombant en pirouette asymétrique, Genka essuie un doigt bleu-lac sur une gravure o... Raconte la version d'ici. Je veux entendre ce qu'ils se répètent quand ils croient que je ne les écoute pas. Donne-moi une version d'ailleurs. Quelque chose qui ne sent pas la poussière de leurs bibliothèques. Pourquoi tu repeins ces gravures, Genka ? Tu provoques Qalamtû, ou tu cherches autre chose ?" [ref=e229]:
+                      - generic [ref=e230]:
+                        - generic [ref=e234]: Genka Lien, le bouffon
+                        - generic [ref=e235]: "*Suspendu, puis retombant en pirouette asymétrique, Genka essuie un doigt bleu-lac sur une gravure o..."
+                        - generic "Raconte la version d'ici. Je veux entendre ce qu'ils se répètent quand ils croient que je ne les écoute pas." [ref=e236]
+                        - generic "Donne-moi une version d'ailleurs. Quelque chose qui ne sent pas la poussière de leurs bibliothèques." [ref=e237]
+                        - generic "Pourquoi tu repeins ces gravures, Genka ? Tu provoques Qalamtû, ou tu cherches autre chose ?" [ref=e238]
+                    - button "Rhétorique (DD8) Échec critique Échec Réussite Réussite critique" [ref=e239]:
+                      - generic [ref=e240]:
+                        - generic "Raison+Rhétorique:8" [ref=e242]: Rhétorique (DD8)
+                        - generic "Échec critique" [ref=e243]
+                        - generic "Échec" [ref=e244]
+                        - generic "Réussite" [ref=e245]
+                        - generic "Réussite critique" [ref=e246]
+                    - button "Perception (DD6) Échec critique Échec Réussite Réussite critique" [ref=e247]:
+                      - generic [ref=e248]:
+                        - generic "Observation+Perception:6" [ref=e250]: Perception (DD6)
+                        - generic "Échec critique" [ref=e251]
+                        - generic "Échec" [ref=e252]
+                        - generic "Réussite" [ref=e253]
+                        - generic "Réussite critique" [ref=e254]
+                    - button "Imagination (DD8) Échec critique Échec Réussite Réussite critique" [ref=e255]:
+                      - generic [ref=e256]:
+                        - generic "Créativité+Imagination:8" [ref=e258]: Imagination (DD8)
+                        - generic "Échec critique" [ref=e259]
+                        - generic "Échec" [ref=e260]
+                        - generic "Réussite" [ref=e261]
+                        - generic "Réussite critique" [ref=e262]
+                    - button "Rhétorique (DD7) Échec critique Échec Réussite Réussite critique" [ref=e263]:
+                      - generic [ref=e264]:
+                        - generic "Raison+Rhétorique:7" [ref=e266]: Rhétorique (DD7)
+                        - generic "Échec critique" [ref=e267]
+                        - generic "Échec" [ref=e268]
+                        - generic "Réussite" [ref=e269]
+                        - generic "Réussite critique" [ref=e270]
+              - img [ref=e271]
+              - generic [ref=e273]:
+                - button "zoom in" [ref=e274] [cursor=pointer]:
+                  - img [ref=e275]
+                - button "zoom out" [ref=e277] [cursor=pointer]:
+                  - img [ref=e278]
+                - button "fit view" [ref=e280] [cursor=pointer]:
+                  - img [ref=e281]
+                - button "toggle interactivity" [ref=e283] [cursor=pointer]:
+                  - img [ref=e284]
+              - img "React Flow mini map" [ref=e287]
+              - link "React Flow attribution" [ref=e294] [cursor=pointer]:
+                - /url: https://reactflow.dev
+                - text: React Flow
+      - generic [ref=e298]:
+        - generic [ref=e299]:
+          - generic [ref=e300]: Détails
+          - button "Replier le panneau droit" [ref=e301] [cursor=pointer]:
+            - img [ref=e302]
+        - generic [ref=e305]: ● Brouillon non sauvegardé
+        - generic [ref=e307]:
+          - generic [ref=e308]:
+            - button "Prompt" [ref=e309] [cursor=pointer]
+            - button "Dialogue généré" [ref=e310] [cursor=pointer]
+            - button "Édition de nœud" [ref=e311] [cursor=pointer]
+            - button "Détails" [ref=e312] [cursor=pointer]
+          - generic [ref=e318]: Aucun prompt disponible. Configurez votre génération.
+        - button "Générer Ctrl+Enter" [ref=e320] [cursor=pointer]:
+          - generic [ref=e321]: Générer
+          - generic [ref=e322]: Ctrl+Enter
+```

@@ -39,7 +39,7 @@ project_key: dialogue-generator
 tracking_system: file-system
 story_location: '{project-root}/_bmad-output/implementation-artifacts'
 development_status:
-  epic-0: in-progress
+  epic-0: done
   0-1-fix-graph-editor-stableid-adr-003: done
   0-2-progress-feedback-modal-avec-sse-streaming-adr-001: done
   0-3-multi-provider-llm-avec-abstraction-mistral-adr-004: done
@@ -49,20 +49,15 @@ development_status:
   0-6-validation-cycles-graphe-id-002: done
   0-7-cost-governance-id-003: done
   0-8-streaming-cleanup-id-004: done
-  0-9-preset-validation-id-005: in-progress
-  0-9-1-correction-bugs-comportement-nodes-qui-changent-de-place-etc: backlog
-  0-9-2-vérification-fluidité-ux-et-correction-friction-points: backlog
-  0-9-3-refactorisation-code-critique-si-nécessaire: backlog
-  0-9-4-organisation-application-pour-mise-en-ligne-deployment-readiness: backlog
-  0-10-multi-provider-llm-avec-openrouter-extension-adr-004: backlog
-  epic-0-retrospective: optional
+  0-9-preset-validation-id-005: done
+  epic-0-retrospective: done
   epic-1: backlog
   1-1-générer-un-nœud-de-dialogue-single-depuis-un-nœud-parent-dans-le-graphe-fr1: done
   1-2-générer-batch-de-nœuds-depuis-tous-les-choix-existants-fr2: done
   1-3-spécifier-instructions-de-génération-tone-style-theme-fr3: done
-  1-4-accepter-ou-rejeter-nœuds-générés-inline-fr4: review
-  1-5-éditer-manuellement-le-contenu-des-nœuds-générés-fr5: done
-  1-6-créer-manuellement-des-nœuds-sans-llm-fr6: backlog
+  1-4-accepter-ou-rejeter-nœuds-générés-inline-fr4: done
+  1-5-éditer-manuellement-le-contenu-des-nœsquds-générés-fr5: done
+  1-6-créer-manuellement-des-nœuds-sans-llm-fr6: done
   1-7-dupliquer-des-nœuds-existants-pour-créer-des-variantes-fr7: backlog
   1-8-supprimer-des-nœuds-du-dialogue-fr8: done
   1-9-auto-link-des-nœuds-générés-au-graphe-existant-fr9: done
