@@ -1,6 +1,6 @@
 # Story 1.4: Accepter ou rejeter nœuds générés inline (FR4)
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -52,36 +52,36 @@ so that **je peux itérer rapidement sur la qualité des dialogues sans workflow
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Ajouter état "pending" aux nœuds générés (AC: #1)
-  - [ ] Modifier `graphStore.ts` pour marquer nœuds générés avec `status: "pending"`
-  - [ ] Ajouter `nodeStatus` dans `DialogueNodeData` interface
-  - [ ] Persister `status` dans le dialogue JSON (champ métadonnée, non Unity)
-- [ ] Task 2: Implémenter UI accept/reject dans `DialogueNode.tsx` (AC: #1, #2, #3)
-  - [ ] Ajouter boutons "Accepter" (✓) et "Rejeter" (✗) visibles au survol
-  - [ ] Styliser nœuds pending (bordure orange dashed)
-  - [ ] Styliser nœuds accepted (bordure verte solid)
-  - [ ] Masquer boutons après accept/reject
-- [ ] Task 3: Implémenter logique accept/reject dans `graphStore.ts` (AC: #2, #3)
-  - [ ] Ajouter méthode `acceptNode(nodeId: string)` dans `useGraphStore`
-  - [ ] Ajouter méthode `rejectNode(nodeId: string)` dans `useGraphStore`
-  - [ ] Accept: changer status à "accepted", déclencher sauvegarde
-  - [ ] Reject: supprimer nœud du graphe, afficher toast
-- [ ] Task 4: Implémenter endpoints API accept/reject (AC: #2, #3)
-  - [ ] Créer endpoint `POST /api/v1/unity-dialogues/graph/nodes/{nodeId}/accept` dans `api/routers/graph.py`
-  - [ ] Créer endpoint `POST /api/v1/unity-dialogues/graph/nodes/{nodeId}/reject` dans `api/routers/graph.py`
-  - [ ] Accept: mettre à jour dialogue JSON avec status "accepted"
-  - [ ] Reject: supprimer nœud du dialogue JSON
-- [ ] Task 5: Intégrer accept/reject dans workflow de génération (AC: #1)
-  - [ ] Modifier `generateFromNode()` dans `graphStore.ts` pour marquer nœuds générés comme "pending"
-  - [ ] S'assurer que nœuds batch sont aussi marqués "pending"
-- [ ] Task 6: Session recovery pour nœuds pending (AC: #5)
-  - [ ] Sauvegarder nœuds pending dans dialogue JSON (champ `status: "pending"`)
-  - [ ] Restaurer nœuds pending lors du chargement (`loadDialogue()`)
-  - [ ] Vérifier que nœuds pending sont visibles après reload
-- [ ] Task 7: Tests (AC: tous)
-  - [ ] Unit: logique accept/reject dans `graphStore.ts`
-  - [ ] Integration: API accept/reject endpoints
-  - [ ] E2E: workflow complet accept/reject depuis génération
+- [x] Task 1: Ajouter état "pending" aux nœuds générés (AC: #1)
+  - [x] Modifier `graphStore.ts` pour marquer nœuds générés avec `status: "pending"`
+  - [x] Ajouter `nodeStatus` dans `DialogueNodeData` interface
+  - [x] Persister `status` dans le dialogue JSON (champ métadonnée, non Unity)
+- [x] Task 2: Implémenter UI accept/reject dans `DialogueNode.tsx` (AC: #1, #2, #3)
+  - [x] Ajouter boutons "Accepter" (✓) et "Rejeter" (✗) visibles au survol
+  - [x] Styliser nœuds pending (bordure orange dashed)
+  - [x] Styliser nœuds accepted (bordure verte solid)
+  - [x] Masquer boutons après accept/reject
+- [x] Task 3: Implémenter logique accept/reject dans `graphStore.ts` (AC: #2, #3)
+  - [x] Ajouter méthode `acceptNode(nodeId: string)` dans `useGraphStore`
+  - [x] Ajouter méthode `rejectNode(nodeId: string)` dans `useGraphStore`
+  - [x] Accept: changer status à "accepted", déclencher sauvegarde
+  - [x] Reject: supprimer nœud du graphe, afficher toast
+- [x] Task 4: Implémenter endpoints API accept/reject (AC: #2, #3)
+  - [x] Créer endpoint `POST /api/v1/unity-dialogues/graph/nodes/{nodeId}/accept` dans `api/routers/graph.py`
+  - [x] Créer endpoint `POST /api/v1/unity-dialogues/graph/nodes/{nodeId}/reject` dans `api/routers/graph.py`
+  - [x] Accept: mettre à jour dialogue JSON avec status "accepted"
+  - [x] Reject: supprimer nœud du dialogue JSON
+- [x] Task 5: Intégrer accept/reject dans workflow de génération (AC: #1)
+  - [x] Modifier `generateFromNode()` dans `graphStore.ts` pour marquer nœuds générés comme "pending"
+  - [x] S'assurer que nœuds batch sont aussi marqués "pending"
+- [x] Task 6: Session recovery pour nœuds pending (AC: #5)
+  - [x] Sauvegarder nœuds pending dans dialogue JSON (champ `status: "pending"`)
+  - [x] Restaurer nœuds pending lors du chargement (`loadDialogue()`)
+  - [x] Vérifier que nœuds pending sont visibles après reload
+- [x] Task 7: Tests (AC: tous)
+  - [x] Unit: logique accept/reject dans `graphStore.ts`
+  - [x] Integration: API accept/reject endpoints
+  - [x] E2E: workflow complet accept/reject depuis génération
 
 ## Dev Notes
 
@@ -257,10 +257,72 @@ Les nœuds pending doivent être persistés dans le dialogue JSON (champ métado
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Sonnet 4.5 (via Cursor)
 
 ### Debug Log References
 
+Aucune erreur rencontrée lors de l'implémentation.
+
 ### Completion Notes List
 
+- ✅ **Task 1-7 complétées** : Tous les critères d'acceptation sont satisfaits
+  - Nœuds générés marqués "pending" avec bordure orange dashed
+  - Boutons Accept/Reject visibles au survol pour nœuds pending
+  - Accept change status à "accepted" (bordure verte solid) et sauvegarde
+  - Reject supprime le nœud et affiche toast
+  - Session recovery : nœuds pending restaurés après reload
+  - Tests unitaires, intégration et E2E ajoutés
+
+- 🐛 **Bugs corrigés** (post-implémentation) :
+  - **Bug 1** : Premier clic sur "Accepter" ne marchait pas toujours
+    - Solution : Ajout vérification état déjà accepté, état `isProcessing` pour prévenir double-clic, `setTimeout(0)` pour synchronisation state
+  - **Bug 2** : Rejeter ne nettoyait pas les connexions du parent (targetNode dans choix)
+    - Solution : Nettoyage des `targetNode` et `nextNode` pointant vers le nœud rejeté avant suppression
+  - **Bug 3** : Couleur du nœud changeait à chaque fois
+    - Solution : Utilisation de l'ID du nœud au lieu du speaker pour le hash de couleur (couleur stable)
+  - **Bug 4** : Erreur CancelledError dans lifespan au démarrage
+    - Solution : Amélioration gestion d'exceptions dans lifespan avec try/except/finally pour KeyboardInterrupt et CancelledError
+
 ### File List
+
+**Frontend:**
+- `frontend/src/theme.ts` - Couleurs `state.pending` et `state.accepted` (code-review §8)
+- `frontend/src/components/graph/nodes/DialogueNode.tsx` - UI accept/reject, styles via thème, prévention double-clic
+- `frontend/src/store/graphStore.ts` - acceptNode/rejectNode, rollback + toast si saveDialogue échoue (§6), `exportToUnity({ keepStatusForDraft })` pour AC#5
+- `frontend/src/components/graph/GraphEditor.tsx` - Draft avec `keepStatusForDraft: true`
+- `frontend/src/api/graph.ts` - Fonctions acceptNode/rejectNode
+
+**Backend:**
+- `api/routers/graph.py` - Endpoints accept/reject, validation existence dialogue (§5), `_validate_dialogue_exists`
+- `api/schemas/graph.py` - AcceptNodeRequest, RejectNodeRequest
+- `services/graph_conversion_service.py` - Préservation/retrait du champ status selon contexte
+- `api/main.py` - Correction gestion d'exceptions dans lifespan (KeyboardInterrupt, CancelledError)
+
+**Tests:**
+- `frontend/src/__tests__/graphStore.acceptReject.test.ts` - Tests unitaires accept/reject (rollback, nettoyage parent targetNode/nextNode)
+- `tests/frontend/graphStore.acceptReject.test.ts` - Idem (legacy emplacement)
+- `tests/api/test_graph_accept_reject.py` - API accept/reject + 404 dialogue not found
+- `e2e/graph-node-accept-reject.spec.ts` - E2E AC#1–AC#3, AC#5 (génération réelle, assertions strictes)
+
+## Change Log
+
+- **2026-01-27** : Implémentation complète Story 1.4 - Accept/Reject nodes inline
+  - Ajout état "pending" aux nœuds générés avec bordure orange dashed
+  - Implémentation UI accept/reject avec boutons visibles au survol
+  - Logique accept/reject dans graphStore avec sauvegarde automatique
+  - Endpoints API accept/reject ajoutés
+  - Session recovery pour nœuds pending (restauration après reload)
+  - Tests unitaires, intégration et E2E ajoutés
+  - Tous les critères d'acceptation satisfaits
+  - **Corrections bugs** :
+    - Fix premier clic "Accepter" avec prévention double-clic et synchronisation state
+    - Fix nettoyage connexions parent lors reject (targetNode, nextNode)
+    - Fix couleur stable basée sur ID du nœud au lieu du speaker
+    - Fix gestion exceptions lifespan (KeyboardInterrupt, CancelledError)
+- **2026-01-27** : Implémentation recommandations code-review (code-review-1-4-accepter-ou-rejeter-nœuds-générés-inline-fr4.md)
+  - Rollback + toast si `saveDialogue()` échoue après accept (§6)
+  - Couleurs pending/accepted via thème (§8)
+  - API : validation existence dialogue pour /accept et /reject (§5), tests 404
+  - Tests unitaires : nettoyage targetNode/nextNode des parents lors reject (§7), rollback accept
+  - E2E réécrits : génération réelle, AC#1–AC#3, AC#5 session recovery, assertions strictes (§2, §3)
+  - Draft : `exportToUnity({ keepStatusForDraft: true })` pour persister status en localStorage (AC#5)

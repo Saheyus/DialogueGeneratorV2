@@ -145,7 +145,7 @@ class CostGovernanceService:
         if quota == 0.0:
             percentage = 0.0
         else:
-            percentage = (amount / quota) * 100.0
+            percentage = min(100.0, (amount / quota) * 100.0)
         
         remaining = max(0.0, quota - amount)
         

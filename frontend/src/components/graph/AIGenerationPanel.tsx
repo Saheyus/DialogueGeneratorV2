@@ -464,6 +464,7 @@ export function AIGenerationPanel({
                 return (
                   <div
                     key={index}
+                    data-testid={!isConnected ? `ai-gen-choice-${index}` : undefined}
                     style={{
                       padding: '0.5rem',
                       backgroundColor: theme.background.panel,
@@ -545,6 +546,7 @@ export function AIGenerationPanel({
           Modèle LLM
         </label>
         <select
+          data-testid="llm-model-select"
           value={llmModel}
           onChange={(e) => setLlmModel(e.target.value)}
           style={{

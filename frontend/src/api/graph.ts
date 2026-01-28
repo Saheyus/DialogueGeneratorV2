@@ -82,3 +82,29 @@ export async function calculateLayout(
   )
   return response.data
 }
+
+/**
+ * Accepte un nœud généré (passe de "pending" à "accepted").
+ */
+export async function acceptNode(
+  dialogueId: string,
+  nodeId: string
+): Promise<void> {
+  await apiClient.post(
+    `/api/v1/unity-dialogues/graph/nodes/${nodeId}/accept`,
+    { dialogue_id: dialogueId }
+  )
+}
+
+/**
+ * Rejette un nœud généré (supprime le nœud).
+ */
+export async function rejectNode(
+  dialogueId: string,
+  nodeId: string
+): Promise<void> {
+  await apiClient.post(
+    `/api/v1/unity-dialogues/graph/nodes/${nodeId}/reject`,
+    { dialogue_id: dialogueId }
+  )
+}

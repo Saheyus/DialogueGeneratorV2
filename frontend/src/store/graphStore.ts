@@ -154,12 +154,16 @@ export interface GraphState {
     totalChoices: number
   } }> // Retourne le nodeId du nouveau nœud généré + infos batch
   
+  // Accept/Reject nodes (Task 3 - Story 1.4)
+  acceptNode: (nodeId: string) => Promise<void>
+  rejectNode: (nodeId: string) => Promise<void>
+  
   // Validation
   validateGraph: () => Promise<void>
   
   // Persistence
   saveDialogue: () => Promise<SaveGraphResponse>
-  exportToUnity: () => string
+  exportToUnity: (opts?: { keepStatusForDraft?: boolean }) => string
   
   // Layout
   applyAutoLayout: (algorithm: string, direction: string) => Promise<void>
@@ -609,7 +613,85 @@ export const useGraphStore = create<GraphState>()(
 
           // Supprimer le nœud principal et tous les TestNodes associés
           const nodesToDelete = [nodeId, ...associatedTestNodeIds]
-          const newNodes = state.nodes.filter((n) => !nodesToDelete.includes(n.id))
+          let newNodes = state.nodes.filter((n) => !nodesToDelete.includes(n.id))
+
+          // Nettoyer toutes les références vers les nœuds supprimés dans les nœuds restants
+          newNodes = newNodes.map((node) => {
+            // Nettoyer les références dans les DialogueNodes
+            if (node.type === 'dialogueNode') {
+              const data = node.data as { choices?: Choice[], nextNode?: string }
+              const updatedData = { ...data }
+
+              // Nettoyer nextNode si il référence un nœud supprimé
+              if (updatedData.nextNode && nodesToDelete.includes(updatedData.nextNode)) {
+                delete updatedData.nextNode
+              }
+
+              // Nettoyer les références dans les choix
+              if (data.choices) {
+                updatedData.choices = data.choices.map((choice) => {
+                  const updatedChoice = { ...choice }
+
+                  // Nettoyer targetNode
+                  if (updatedChoice.targetNode && nodesToDelete.includes(updatedChoice.targetNode)) {
+                    delete updatedChoice.targetNode
+                  }
+
+                  // Nettoyer les références de test
+                  if (updatedChoice.testCriticalFailureNode && nodesToDelete.includes(updatedChoice.testCriticalFailureNode)) {
+                    delete updatedChoice.testCriticalFailureNode
+                  }
+                  if (updatedChoice.testFailureNode && nodesToDelete.includes(updatedChoice.testFailureNode)) {
+                    delete updatedChoice.testFailureNode
+                  }
+                  if (updatedChoice.testSuccessNode && nodesToDelete.includes(updatedChoice.testSuccessNode)) {
+                    delete updatedChoice.testSuccessNode
+                  }
+                  if (updatedChoice.testCriticalSuccessNode && nodesToDelete.includes(updatedChoice.testCriticalSuccessNode)) {
+                    delete updatedChoice.testCriticalSuccessNode
+                  }
+
+                  return updatedChoice
+                })
+              }
+
+              return {
+                ...node,
+                data: updatedData,
+              }
+            }
+
+            // Nettoyer les références dans les TestNodes
+            if (node.type === 'testNode') {
+              const data = node.data as {
+                criticalFailureNode?: string
+                failureNode?: string
+                successNode?: string
+                criticalSuccessNode?: string
+              }
+              const updatedData = { ...data }
+
+              if (updatedData.criticalFailureNode && nodesToDelete.includes(updatedData.criticalFailureNode)) {
+                delete updatedData.criticalFailureNode
+              }
+              if (updatedData.failureNode && nodesToDelete.includes(updatedData.failureNode)) {
+                delete updatedData.failureNode
+              }
+              if (updatedData.successNode && nodesToDelete.includes(updatedData.successNode)) {
+                delete updatedData.successNode
+              }
+              if (updatedData.criticalSuccessNode && nodesToDelete.includes(updatedData.criticalSuccessNode)) {
+                delete updatedData.criticalSuccessNode
+              }
+
+              return {
+                ...node,
+                data: updatedData,
+              }
+            }
+
+            return node
+          })
 
           // Supprimer aussi les edges liés (source ou target = nodeId ou TestNode associé)
           const newEdges = state.edges.filter(
@@ -1066,7 +1148,10 @@ export const useGraphStore = create<GraphState>()(
                 // Positionnement en cascade verticale pour batch (offset Y = 150 * index_choice)
                 y: parentNode.position.y + verticalOffset,
               },
-              data: generatedNode,
+              data: {
+                ...generatedNode,
+                status: "pending" as const,  // Marquer nœuds générés comme "pending" (Task 1 - Story 1.4)
+              },
             }
             
             nodesToAddBatch.push(newNode)
@@ -1183,6 +1268,134 @@ export const useGraphStore = create<GraphState>()(
         }
       },
       
+      // Accepter un nœud généré (Task 3 - Story 1.4)
+      acceptNode: async (nodeId: string) => {
+        const state = get()
+        const node = state.nodes.find((n) => n.id === nodeId)
+        if (!node) {
+          throw new Error(`Nœud ${nodeId} introuvable`)
+        }
+        if (node.data.status === "accepted") {
+          return
+        }
+
+        // Mise à jour optimiste du statut
+        set((currentState) => ({
+          nodes: currentState.nodes.map((n) =>
+            n.id === nodeId
+              ? { ...n, data: { ...n.data, status: "accepted" as const } }
+              : n
+          ),
+        }))
+
+        try {
+          const dialogueId = get().dialogueMetadata.filename || 'current'
+          await graphAPI.acceptNode(dialogueId, nodeId)
+          await get().saveDialogue()
+          get().markDirty()
+        } catch (err) {
+          // Rollback: remettre le nœud en pending (code-review §6)
+          set((currentState) => ({
+            nodes: currentState.nodes.map((n) =>
+              n.id === nodeId
+                ? { ...n, data: { ...n.data, status: "pending" as const } }
+                : n
+            ),
+          }))
+          const { toastManager } = await import('../components/shared/Toast')
+          toastManager.show(
+            'Impossible de sauvegarder l’acceptation. Réessayez.',
+            'error',
+            5000
+          )
+          throw err
+        }
+      },
+      
+      // Rejeter un nœud généré (Task 3 - Story 1.4)
+      rejectNode: async (nodeId: string) => {
+        try {
+          const state = get()
+          const node = state.nodes.find((n) => n.id === nodeId)
+          
+          if (!node) {
+            throw new Error(`Nœud ${nodeId} introuvable`)
+          }
+          
+          // Nettoyer les références dans les choix des nœuds parents avant suppression
+          set((currentState) => {
+            let updatedNodes = [...currentState.nodes]
+            let updatedEdges = [...currentState.edges]
+            
+            // Trouver tous les nœuds qui pointent vers ce nœud (via targetNode dans les choix)
+            updatedNodes = updatedNodes.map((n) => {
+              if (n.type === 'dialogueNode' && n.data.choices) {
+                const choices = n.data.choices as Choice[]
+                const hasReference = choices.some((choice) => choice.targetNode === nodeId)
+                
+                if (hasReference) {
+                  // Nettoyer les références targetNode pointant vers le nœud rejeté
+                  const cleanedChoices = choices.map((choice) => {
+                    if (choice.targetNode === nodeId) {
+                      const { targetNode, ...rest } = choice
+                      return rest
+                    }
+                    return choice
+                  })
+                  
+                  return {
+                    ...n,
+                    data: {
+                      ...n.data,
+                      choices: cleanedChoices,
+                    },
+                  }
+                }
+              }
+              
+              // Nettoyer aussi nextNode si il pointe vers ce nœud
+              if (n.data.nextNode === nodeId) {
+                const { nextNode, ...restData } = n.data
+                return {
+                  ...n,
+                  data: restData,
+                }
+              }
+              
+              return n
+            })
+            
+            // Supprimer les edges pointant vers ou depuis ce nœud
+            updatedEdges = updatedEdges.filter(
+              (e) => e.source !== nodeId && e.target !== nodeId
+            )
+            
+            return {
+              ...currentState,
+              nodes: updatedNodes,
+              edges: updatedEdges,
+            }
+          })
+          
+          // Appeler l'API pour supprimer le nœud
+          const dialogueId = get().dialogueMetadata.filename || 'current'
+          await graphAPI.rejectNode(dialogueId, nodeId)
+          
+          // Supprimer le nœud localement (utiliser deleteNode existant)
+          get().deleteNode(nodeId)
+          
+          // Afficher toast de confirmation (AC #3)
+          const { toastManager } = await import('../components/shared/Toast')
+          toastManager.show('Nœud rejeté', 'info', 3000)
+          
+          // Marquer dirty pour auto-save draft
+          get().markDirty()
+        } catch (error) {
+          console.error('Erreur lors du rejet du nœud:', error)
+          throw error
+        }
+      },
+      
       // Sauvegarder le dialogue
       saveDialogue: async () => {
         set({ isSaving: true })
@@ -1226,9 +1439,10 @@ export const useGraphStore = create<GraphState>()(
       // ⚠️ ATTENTION: Cette méthode utilise une logique locale simplifiée pour le draft local uniquement.
       // Elle NE gère PAS les TestNodes avec 4 résultats (testCriticalFailureNode, testCriticalSuccessNode).
       // Pour un export canonique avec validation complète, utilisez saveDialogue() qui appelle l'API /save.
-      exportToUnity: () => {
+      exportToUnity: (opts?: { keepStatusForDraft?: boolean }) => {
         const state = get()
-        
+        const keepStatus = opts?.keepStatusForDraft === true
+
         // Reconvertir les nœuds ReactFlow en Unity JSON
         const unityNodes = state.nodes.map((node) => {
           const unityNode = { ...node.data }
@@ -1236,6 +1450,11 @@ export const useGraphStore = create<GraphState>()(
           // Ignorer les TestNodes (ils ne sont pas dans le JSON Unity, seulement les champs test*Node dans les choix)
           if (node.type === 'testNode') {
             return null
+          }
+          
+          // Retirer le champ status avant export Unity sauf pour draft (session recovery AC#5)
+          if (!keepStatus) {
+            delete unityNode.status
           }
           
           // Nettoyer les champs de navigation (seront recréés depuis les edges)

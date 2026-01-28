@@ -222,7 +222,7 @@ export function GraphEditor() {
     const saveDraft = () => {
       try {
         clearDraftError()
-        const json_content = exportToUnity()
+        const json_content = exportToUnity({ keepStatusForDraft: true })
         // Note : Les positions sont maintenant sauvegardées séparément par updateNodePosition
         const draft = {
           filename: selectedDialogue.filename,

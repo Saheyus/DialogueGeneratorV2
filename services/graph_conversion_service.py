@@ -49,11 +49,12 @@ class GraphConversionService:
                 node_type = GraphConversionService._determine_node_type(unity_node)
                 
                 # Créer le nœud ReactFlow
+                # Préserver le champ status (métadonnée éditeur) si présent (Task 6 - Story 1.4)
                 reactflow_node = {
                     "id": node_id,
                     "type": node_type,
                     "position": {"x": x_offset, "y": y_offset},
-                    "data": unity_node  # Toutes les données Unity stockées dans data
+                    "data": unity_node  # Toutes les données Unity stockées dans data (inclut status si présent)
                 }
                 
                 # Position suivante (layout basique en cascade)
@@ -326,6 +327,11 @@ class GraphConversionService:
                 unity_node.pop("nextNode", None)
                 unity_node.pop("successNode", None)
                 unity_node.pop("failureNode", None)
+                
+                # Retirer le champ status avant export Unity (métadonnée éditeur uniquement) (Task 6 - Story 1.4)
+                # Le status est préservé dans le dialogue JSON de l'éditeur (via saveDialogue),
+                # mais retiré lors de l'export Unity final car non supporté par Unity
+                unity_node.pop("status", None)
                 
                 # Nettoyer les targetNode et test*Node des choix (seront recréés depuis les edges)
                 if "choices" in unity_node:

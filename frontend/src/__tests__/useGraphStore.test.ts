@@ -228,6 +228,94 @@ describe('useGraphStore - Auto-save draft state', () => {
       expect(state.nodes.find(n => n.id === 'test-node-dialogue-node-1-choice-0')).toBeUndefined()
     })
 
+    it('should clean up targetNode references when deleting a node', () => {
+      const { addNode, deleteNode } = useGraphStore.getState()
+      
+      // Créer deux DialogueNodes avec une connexion
+      const parentNode: Node = {
+        id: 'parent-node',
+        type: 'dialogueNode',
+        position: { x: 0, y: 0 },
+        data: {
+          id: 'parent-node',
+          choices: [
+            { text: 'Choix vers enfant', targetNode: 'child-node' },
+          ],
+        },
+      }
+      const childNode: Node = {
+        id: 'child-node',
+        type: 'dialogueNode',
+        position: { x: 200, y: 200 },
+        data: {
+          id: 'child-node',
+          line: 'Nœud enfant',
+        },
+      }
+      
+      addNode(parentNode)
+      addNode(childNode)
+      
+      // Vérifier que la référence existe
+      let state = useGraphStore.getState()
+      const parent = state.nodes.find(n => n.id === 'parent-node')
+      expect(parent).toBeDefined()
+      expect((parent?.data as { choices?: Array<{ targetNode?: string }> }).choices?.[0]?.targetNode).toBe('child-node')
+      
+      // Supprimer le nœud enfant
+      deleteNode('child-node')
+      
+      // Vérifier que la référence targetNode a été nettoyée
+      state = useGraphStore.getState()
+      const updatedParent = state.nodes.find(n => n.id === 'parent-node')
+      expect(updatedParent).toBeDefined()
+      const updatedChoices = (updatedParent?.data as { choices?: Array<{ targetNode?: string }> }).choices
+      expect(updatedChoices?.[0]?.targetNode).toBeUndefined()
+    })
+
+    it('should clean up nextNode references when deleting a node', () => {
+      const { addNode, deleteNode } = useGraphStore.getState()
+      
+      // Créer deux DialogueNodes avec nextNode
+      const firstNode: Node = {
+        id: 'first-node',
+        type: 'dialogueNode',
+        position: { x: 0, y: 0 },
+        data: {
+          id: 'first-node',
+          line: 'Premier nœud',
+          nextNode: 'second-node',
+        },
+      }
+      const secondNode: Node = {
+        id: 'second-node',
+        type: 'dialogueNode',
+        position: { x: 200, y: 0 },
+        data: {
+          id: 'second-node',
+          line: 'Deuxième nœud',
+        },
+      }
+      
+      addNode(firstNode)
+      addNode(secondNode)
+      
+      // Vérifier que la référence existe
+      let state = useGraphStore.getState()
+      const first = state.nodes.find(n => n.id === 'first-node')
+      expect(first).toBeDefined()
+      expect((first?.data as { nextNode?: string }).nextNode).toBe('second-node')
+      
+      // Supprimer le deuxième nœud
+      deleteNode('second-node')
+      
+      // Vérifier que la référence nextNode a été nettoyée
+      state = useGraphStore.getState()
+      const updatedFirst = state.nodes.find(n => n.id === 'first-node')
+      expect(updatedFirst).toBeDefined()
+      expect((updatedFirst?.data as { nextNode?: string }).nextNode).toBeUndefined()
+    })
+
     it('should mark dirty when connectNodes is called', () => {
       const { addNode, connectNodes, markDraftSaved } = useGraphStore.getState()
       

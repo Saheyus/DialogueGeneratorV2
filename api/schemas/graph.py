@@ -121,3 +121,13 @@ class CalculateLayoutRequest(BaseModel):
 class CalculateLayoutResponse(BaseModel):
     """Réponse après calcul de layout."""
     nodes: List[Dict[str, Any]] = Field(..., description="Nœuds avec positions calculées")
+
+
+class AcceptNodeRequest(BaseModel):
+    """Requête pour accepter un nœud généré."""
+    dialogue_id: str = Field(..., description="ID du dialogue (filename)")
+
+
+class RejectNodeRequest(BaseModel):
+    """Requête pour rejeter un nœud généré."""
+    dialogue_id: str = Field(..., description="ID du dialogue (filename)")

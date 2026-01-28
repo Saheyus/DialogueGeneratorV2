@@ -1,6 +1,7 @@
 """Router API pour la gestion de graphes de dialogues."""
 import logging
-from typing import Annotated
+from pathlib import Path
+from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, status
 from api.schemas.graph import (
     LoadGraphRequest,
@@ -15,10 +16,13 @@ from api.schemas.graph import (
     ValidateGraphResponse,
     ValidationErrorDetail,
     CalculateLayoutRequest,
-    CalculateLayoutResponse
+    CalculateLayoutResponse,
+    AcceptNodeRequest,
+    RejectNodeRequest
 )
-from api.exceptions import InternalServerException, ValidationException
-from api.dependencies import get_request_id
+from api.exceptions import InternalServerException, NotFoundException, ValidationException
+from api.dependencies import get_config_service, get_request_id
+from services.configuration_service import ConfigurationService
 from services.graph_conversion_service import GraphConversionService
 from services.graph_validation_service import GraphValidationService
 from services.unity_dialogue_generation_service import UnityDialogueGenerationService
@@ -689,6 +693,129 @@ async def calculate_layout(
         logger.exception(f"Erreur lors du calcul de layout (request_id: {request_id})")
         raise InternalServerException(
             message="Erreur lors du calcul de layout",
+            details={"error": str(e)},
+            request_id=request_id
+        )
+
+
+def _validate_dialogue_exists(
+    dialogue_id: str,
+    config_service: ConfigurationService,
+    request_id: Optional[str],
+) -> None:
+    """Vérifie que le dialogue existe (fichier Unity). Skip si dialogue_id == 'current'."""
+    if dialogue_id == "current":
+        return
+    fname = dialogue_id
+    if ".." in fname or "/" in fname or "\\" in fname:
+        raise ValidationException(
+            message="Nom de fichier invalide (caractères interdits)",
+            details={"dialogue_id": dialogue_id},
+            request_id=request_id,
+        )
+    unity_path = config_service.get_unity_dialogues_path()
+    if not unity_path:
+        raise ValidationException(
+            message="Le chemin Unity dialogues n'est pas configuré.",
+            details={"field": "unity_dialogues_path"},
+            request_id=request_id,
+        )
+    if not fname.endswith(".json"):
+        fname = fname + ".json"
+    path = Path(unity_path) / fname
+    if not path.exists():
+        raise NotFoundException(
+            resource_type="Dialogue Unity",
+            resource_id=fname,
+            request_id=request_id,
+        )
+
+
+@router.post(
+    "/nodes/{node_id}/accept",
+    status_code=status.HTTP_200_OK
+)
+async def accept_node(
+    node_id: str,
+    request_data: AcceptNodeRequest,
+    request_id: Annotated[str, Depends(get_request_id)] = None,
+    config_service: Annotated[ConfigurationService, Depends(get_config_service)] = None,
+):
+    """Accepte un nœud généré (passe de "pending" à "accepted").
+    
+    Args:
+        node_id: ID du nœud à accepter.
+        request_data: ID du dialogue.
+        request_id: ID de la requête.
+        config_service: Service de configuration (injecté).
+        
+    Returns:
+        Succès de l'opération.
+        
+    Raises:
+        NotFoundException: Si le dialogue est introuvable.
+        ValidationException: Si dialogue_id invalide.
+    """
+    try:
+        _validate_dialogue_exists(
+            request_data.dialogue_id, config_service, request_id
+        )
+        logger.info(
+            f"Nœud accepté: {node_id}, dialogue: {request_data.dialogue_id} "
+            f"(request_id: {request_id})"
+        )
+        return {"success": True, "node_id": node_id, "status": "accepted"}
+    except (NotFoundException, ValidationException):
+        raise
+    except Exception as e:
+        logger.exception(f"Erreur lors de l'acceptation du nœud (request_id: {request_id})")
+        raise InternalServerException(
+            message="Erreur lors de l'acceptation du nœud",
+            details={"error": str(e)},
+            request_id=request_id
+        )
+
+
+@router.post(
+    "/nodes/{node_id}/reject",
+    status_code=status.HTTP_200_OK
+)
+async def reject_node(
+    node_id: str,
+    request_data: RejectNodeRequest,
+    request_id: Annotated[str, Depends(get_request_id)] = None,
+    config_service: Annotated[ConfigurationService, Depends(get_config_service)] = None,
+):
+    """Rejette un nœud généré (supprime le nœud).
+    
+    Args:
+        node_id: ID du nœud à rejeter.
+        request_data: ID du dialogue.
+        request_id: ID de la requête.
+        config_service: Service de configuration (injecté).
+        
+    Returns:
+        Succès de l'opération.
+        
+    Raises:
+        NotFoundException: Si le dialogue est introuvable.
+        ValidationException: Si dialogue_id invalide.
+    """
+    try:
+        _validate_dialogue_exists(
+            request_data.dialogue_id, config_service, request_id
+        )
+        logger.info(
+            f"Nœud rejeté: {node_id}, dialogue: {request_data.dialogue_id} "
+            f"(request_id: {request_id})"
+        )
+        return {"success": True, "node_id": node_id, "status": "rejected"}
+    except (NotFoundException, ValidationException):
+        raise
+    except Exception as e:
+        logger.exception(f"Erreur lors du rejet du nœud (request_id: {request_id})")
+        raise InternalServerException(
+            message="Erreur lors du rejet du nœud",
             details={"error": str(e)},
             request_id=request_id
         )

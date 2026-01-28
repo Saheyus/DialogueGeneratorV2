@@ -60,7 +60,7 @@ development_status:
   1-1-générer-un-nœud-de-dialogue-single-depuis-un-nœud-parent-dans-le-graphe-fr1: done
   1-2-générer-batch-de-nœuds-depuis-tous-les-choix-existants-fr2: done
   1-3-spécifier-instructions-de-génération-tone-style-theme-fr3: done
-  1-4-accepter-ou-rejeter-nœuds-générés-inline-fr4: ready-for-dev
+  1-4-accepter-ou-rejeter-nœuds-générés-inline-fr4: review
   1-5-éditer-manuellement-le-contenu-des-nœuds-générés-fr5: done
   1-6-créer-manuellement-des-nœuds-sans-llm-fr6: backlog
   1-7-dupliquer-des-nœuds-existants-pour-créer-des-variantes-fr7: backlog
