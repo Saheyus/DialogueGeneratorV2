@@ -10,6 +10,7 @@ vi.mock('@/api/graph', () => ({
   acceptNode: vi.fn(),
   rejectNode: vi.fn(),
   saveGraph: vi.fn(),
+  saveGraphAndWrite: vi.fn(),
   generateNode: vi.fn(),
   loadGraph: vi.fn(),
   validateGraph: vi.fn(),
@@ -42,7 +43,7 @@ describe('graphStore - Accept/Reject Nodes (Story 1.4)', () => {
       useGraphStore.getState().addNode(pendingNode)
       useGraphStore.getState().updateMetadata({ filename: 'test-dialogue.json' })
       vi.mocked(graphAPI.acceptNode).mockResolvedValue(undefined)
-      vi.mocked(graphAPI.saveGraph).mockResolvedValue({
+      vi.mocked(graphAPI.saveGraphAndWrite).mockResolvedValue({
         success: true,
         filename: 'test-dialogue.json',
         json_content: '[]',
@@ -53,7 +54,7 @@ describe('graphStore - Accept/Reject Nodes (Story 1.4)', () => {
       const node = useGraphStore.getState().nodes.find((n) => n.id === 'node-1')
       expect(node?.data.status).toBe('accepted')
       expect(graphAPI.acceptNode).toHaveBeenCalledWith('test-dialogue.json', 'node-1')
-      expect(graphAPI.saveGraph).toHaveBeenCalled()
+      expect(graphAPI.saveGraphAndWrite).toHaveBeenCalled()
     })
 
     it('should throw error if node not found', async () => {
@@ -77,7 +78,7 @@ describe('graphStore - Accept/Reject Nodes (Story 1.4)', () => {
       useGraphStore.getState().addNode(pendingNode)
       useGraphStore.getState().updateMetadata({ filename: 'test-dialogue.json' })
       vi.mocked(graphAPI.acceptNode).mockResolvedValue(undefined)
-      vi.mocked(graphAPI.saveGraph).mockRejectedValue(new Error('Save failed'))
+      vi.mocked(graphAPI.saveGraphAndWrite).mockRejectedValue(new Error('Save failed'))
 
       await expect(useGraphStore.getState().acceptNode('node-1')).rejects.toThrow('Save failed')
 
@@ -108,7 +109,7 @@ describe('graphStore - Accept/Reject Nodes (Story 1.4)', () => {
       useGraphStore.getState().addNode(pendingNode)
       useGraphStore.getState().updateMetadata({ filename: 'test-dialogue.json' })
       vi.mocked(graphAPI.rejectNode).mockResolvedValue(undefined)
-      vi.mocked(graphAPI.saveGraph).mockResolvedValue({
+      vi.mocked(graphAPI.saveGraphAndWrite).mockResolvedValue({
         success: true,
         filename: 'test-dialogue.json',
         json_content: '[]',
@@ -118,7 +119,7 @@ describe('graphStore - Accept/Reject Nodes (Story 1.4)', () => {
 
       expect(useGraphStore.getState().nodes.find((n) => n.id === 'node-1')).toBeUndefined()
       expect(graphAPI.rejectNode).toHaveBeenCalledWith('test-dialogue.json', 'node-1')
-      expect(graphAPI.saveGraph).toHaveBeenCalled()
+      expect(graphAPI.saveGraphAndWrite).toHaveBeenCalled()
     })
 
     it('should throw error if node not found', async () => {
@@ -146,7 +147,7 @@ describe('graphStore - Accept/Reject Nodes (Story 1.4)', () => {
       await expect(useGraphStore.getState().rejectNode('node-1')).rejects.toThrow('Network error')
 
       expect(useGraphStore.getState().nodes.find((n) => n.id === 'node-1')).toBeDefined()
-      expect(graphAPI.saveGraph).not.toHaveBeenCalled()
+      expect(graphAPI.saveGraphAndWrite).not.toHaveBeenCalled()
     })
 
     it('should clean parent targetNode when rejecting node referenced by choice', async () => {
@@ -171,7 +172,7 @@ describe('graphStore - Accept/Reject Nodes (Story 1.4)', () => {
       useGraphStore.getState().addNode(child)
       useGraphStore.getState().updateMetadata({ filename: 'test-dialogue.json' })
       vi.mocked(graphAPI.rejectNode).mockResolvedValue(undefined)
-      vi.mocked(graphAPI.saveGraph).mockResolvedValue({
+      vi.mocked(graphAPI.saveGraphAndWrite).mockResolvedValue({
         success: true,
         filename: 'test-dialogue.json',
         json_content: '[]',
@@ -208,7 +209,7 @@ describe('graphStore - Accept/Reject Nodes (Story 1.4)', () => {
       useGraphStore.getState().addNode(child)
       useGraphStore.getState().updateMetadata({ filename: 'test-dialogue.json' })
       vi.mocked(graphAPI.rejectNode).mockResolvedValue(undefined)
-      vi.mocked(graphAPI.saveGraph).mockResolvedValue({
+      vi.mocked(graphAPI.saveGraphAndWrite).mockResolvedValue({
         success: true,
         filename: 'test-dialogue.json',
         json_content: '[]',

@@ -1,9 +1,8 @@
 /**
  * Store Zustand pour la gestion de l'état du graphe de dialogues.
- * Gère la conversion Unity JSON ↔ ReactFlow, actions CRUD, undo/redo.
+ * Gère la conversion Unity JSON ↔ ReactFlow, actions CRUD.
  */
 import { create } from 'zustand'
-import { temporal } from 'zundo'
 import type { Node, Edge } from 'reactflow'
 import * as graphAPI from '../api/graph'
 import type {
@@ -18,6 +17,35 @@ import {
   TEST_HANDLE_TO_CHOICE_FIELD,
 } from '../utils/testNodeSync'
 import type { Choice } from '../schemas/nodeEditorSchema'
+import {
+  buildChoiceEdge,
+  choiceEdgeId,
+  truncateChoiceLabel,
+} from '../utils/graphEdgeBuilders'
+import {
+  setPending as journalSetPending,
+  writeSnapshot as journalWriteSnapshot,
+  clearPending as journalClearPending,
+  readDocument as journalReadDocument,
+} from '../utils/graphJournal'
+
+const VALID_NODE_TYPES = ['dialogueNode', 'testNode', 'endNode'] as const
+
+function ensureValidNode(
+  node: { id: string; type: string; position: { x: number; y: number }; data: unknown }
+): Node {
+  const x = typeof node.position?.x === 'number' ? node.position.x : 0
+  const y = typeof node.position?.y === 'number' ? node.position.y : 0
+  const type = VALID_NODE_TYPES.includes(node.type as (typeof VALID_NODE_TYPES)[number])
+    ? node.type
+    : 'dialogueNode'
+  return {
+    id: node.id,
+    type,
+    position: { x, y },
+    data: node.data ?? {},
+  }
+}
 
 /**
  * Normalise les nodes pour garantir la synchronisation TestBar ↔ choix.
@@ -117,12 +145,17 @@ export interface GraphState {
   highlightedCycleNodes: string[] // Pour les nœuds dans des cycles
   intentionalCycles: string[] // IDs des cycles marqués comme intentionnels (persisté localStorage)
   
-  // État auto-save draft (Task 1 - Story 0.5)
+  // État pending save (auto-save vers backend, pas de draft local)
   hasUnsavedChanges: boolean
-  lastDraftSavedAt: number | null
-  lastDraftError: string | null
-  autoRestoredDraft: { timestamp: number; fileTimestamp: number } | null // Brouillon restauré automatiquement
-  
+  lastSaveError: string | null // Message d'erreur si la dernière sauvegarde a échoué (pour indicateur)
+  lastSavedAt: number | null // Timestamp de la dernière sauvegarde réussie (pour indicateur)
+
+  // ADR-006: seq + journal + statut sync
+  clientSeq: number // Prochaine séquence à envoyer
+  documentId: string | null // ID stable du document (ex. filename)
+  syncStatus: 'synced' | 'offline' | 'error'
+  lastAckSeq: number | null // Dernier seq reconnu par le serveur (pour UI "Synced (seq …)")
+
   // Actions CRUD
   loadDialogue: (
     jsonContent: string,
@@ -183,13 +216,8 @@ export interface GraphState {
   markCycleAsIntentional: (cycleId: string) => void
   unmarkCycleAsIntentional: (cycleId: string) => void
   
-  // Actions auto-save draft (Task 1 - Story 0.5)
+  // Pending save (déclenche auto-save backend via debounce dans GraphEditor)
   markDirty: () => void
-  markDraftSaved: () => void
-  markDraftError: (message: string) => void
-  clearDraftError: () => void
-  setAutoRestoredDraft: (draft: { timestamp: number; fileTimestamp: number } | null) => void
-  clearAutoRestoredDraft: () => void
 
   // Modale confirmation suppression nœud (Supr.)
   showDeleteNodeConfirm: boolean
@@ -221,15 +249,16 @@ const initialState = {
     }
   })(),
   hasUnsavedChanges: false,
-  lastDraftSavedAt: null,
-  lastDraftError: null,
-  autoRestoredDraft: null,
+  lastSaveError: null,
+  lastSavedAt: null,
   showDeleteNodeConfirm: false,
+  clientSeq: 1,
+  documentId: null,
+  syncStatus: 'synced' as const,
+  lastAckSeq: null,
 }
 
-export const useGraphStore = create<GraphState>()(
-  temporal(
-    (set, get) => ({
+export const useGraphStore = create<GraphState>()((set, get) => ({
       ...initialState,
       
       // Charger un dialogue Unity JSON
@@ -237,21 +266,27 @@ export const useGraphStore = create<GraphState>()(
         set({ isLoading: true })
         try {
           const response = await graphAPI.loadGraph({ json_content: jsonContent })
-          
+
           // Charger les positions depuis localStorage (clé dédiée)
           // Utiliser le filename passé en paramètre en priorité, sinon celui des métadonnées
           const filename = explicitFilename || response.metadata.filename
           const persistedPositions = filename ? loadNodePositions(filename) : null
-          
-          // Convertir les nœuds en format ReactFlow
+
+          // Convertir les nœuds en format ReactFlow (position et type garantis pour l'affichage)
           // Priorité : positions localStorage > positions draft (savedPositions) > positions backend
-          const nodes: Node[] = response.nodes.map((node: { id: string; type: string; position: { x: number; y: number }; data: unknown }) => {
-            const position = persistedPositions?.[node.id] || savedPositions?.[node.id] || node.position
-            return {
+          const nodes: Node[] = response.nodes.map((node: { id: string; type: string; position?: { x: number; y: number }; data?: unknown }) => {
+            const raw = ensureValidNode({
               id: node.id,
-              type: node.type,
-              position,
+              type: node.type ?? 'dialogueNode',
+              position: node.position ?? { x: 0, y: 0 },
               data: node.data,
+            })
+            const position = persistedPositions?.[node.id] ?? savedPositions?.[node.id] ?? raw.position
+            return {
+              ...raw,
+              position: typeof position?.x === 'number' && typeof position?.y === 'number'
+                ? position
+                : raw.position,
             }
           })
           
@@ -268,7 +303,6 @@ export const useGraphStore = create<GraphState>()(
           
           // Normaliser pour garantir la synchronisation TestBar ↔ choix après chargement
           const normalized = normalizeTestBars(nodes, edges)
-          
           set({
             nodes: normalized.nodes,
             edges: normalized.edges,
@@ -281,11 +315,18 @@ export const useGraphStore = create<GraphState>()(
             isLoading: false,
             validationErrors: [],
             highlightedCycleNodes: [], // Réinitialiser highlight cycles lors du chargement
-            // Réinitialiser l'état auto-save draft (Task 1 - Story 0.5)
             hasUnsavedChanges: false,
-            lastDraftSavedAt: null,
-            lastDraftError: null,
+            lastSaveError: null,
+            lastSavedAt: null,
+            documentId: filename ?? null,
+            syncStatus: 'synced',
+            lastAckSeq: null,
           })
+
+          // Ne pas restaurer le journal après un chargement API explicite : l'utilisateur doit voir
+          // l'état serveur. Restaurer le pending écrase avec un état IndexedDB qui peut être invalide
+          // (positions/type manquants après désérialisation) et empêche l'affichage des nœuds (bug).
+          // Le journal reste écrit pour une future restauration (ex. après refresh) si on l'implémente.
         } catch (error) {
           console.error('Erreur lors du chargement du graphe:', error)
           set({ isLoading: false })
@@ -301,13 +342,19 @@ export const useGraphStore = create<GraphState>()(
         // Normaliser pour garantir la synchronisation TestBar ↔ choix
         const normalized = normalizeTestBars(newNodes, state.edges)
 
+        // En ajoutant un dialogueNode (panneau Détails ou barre « Nouveau nœud »), ne pas
+        // écraser edges : connectNodes sera appelé juste après pour lier le choix ; garder
+        // state.edges évite de perdre les liaisons déjà présentes (ex. choice 0).
+        const edgesToSet =
+          node.type === 'dialogueNode' ? state.edges : normalized.edges
+
         set({
           nodes: normalized.nodes,
-          edges: normalized.edges,
+          edges: edgesToSet,
           dialogueMetadata: {
             ...state.dialogueMetadata,
             node_count: normalized.nodes.length,
-            edge_count: normalized.edges.length,
+            edge_count: edgesToSet.length,
           },
         })
         // Marquer dirty pour auto-save draft (Task 1 - Story 0.5)
@@ -417,7 +464,7 @@ export const useGraphStore = create<GraphState>()(
           // Trouver le nœud mis à jour
           const updatedNode = updatedNodes.find((n) => n.id === nodeId)
           if (!updatedNode || updatedNode.type !== 'dialogueNode') {
-            return { nodes: updatedNodes }
+            return { ...state, nodes: updatedNodes }
           }
 
           // Vérifier si un choix a obtenu ou perdu un attribut test
@@ -428,15 +475,13 @@ export const useGraphStore = create<GraphState>()(
           const choices = updatedData?.choices || []
 
           const newNodes = [...updatedNodes]
-          // Commencer avec les edges existants, mais exclure ceux liés aux TestNodes de ce DialogueNode
-          // (ils seront recréés par syncTestNodeFromChoice)
+          // Exclure uniquement les edges dont la source est un TestNode (test→résultat) ;
+          // garder les edges dialogue→test pour mise à jour du label en place (évite clignotement)
           const testNodeIdsForThisDialogue = choices.map(
             (_, idx) => `test-node-${nodeId}-choice-${idx}`
           )
           let newEdges = state.edges.filter(
-            (e) =>
-              !testNodeIdsForThisDialogue.includes(e.source) &&
-              !testNodeIdsForThisDialogue.includes(e.target)
+            (e) => !testNodeIdsForThisDialogue.includes(e.source)
           )
 
           // Parcourir tous les choix pour détecter les changements
@@ -518,27 +563,59 @@ export const useGraphStore = create<GraphState>()(
                   }
                 }
               }
-            } else if (currentChoice.targetNode) {
-              // Si pas de test, on peut garder l'edge vers targetNode
-              const directEdgeIndex = newEdges.findIndex(
-                (e) =>
-                  e.source === nodeId &&
-                  e.target === currentChoice.targetNode &&
-                  e.sourceHandle === `choice-${choiceIndex}`
-              )
-              if (directEdgeIndex !== -1) {
-                newEdges.splice(directEdgeIndex, 1)
-              }
             }
+            // Si pas de test et currentChoice.targetNode : on garde l'edge choix→targetNode
+            // (aucune suppression ; le bloc "Mettre à jour le label" plus bas gère le label en place)
           })
+
+          // Mettre à jour le label des edges choix → targetNode quand le texte du choix change
+          // Ne créer un nouvel objet edge que si le label a réellement changé (évite scintillement)
+          const dialogueNodeAfter = newNodes.find((n) => n.id === nodeId)
+          if (dialogueNodeAfter?.type === 'dialogueNode' && dialogueNodeAfter.data?.choices) {
+            const choicesAfter = dialogueNodeAfter.data.choices as Choice[]
+            newEdges = newEdges.map((e) => {
+              if (e.source === nodeId && e.sourceHandle?.startsWith('choice-')) {
+                const idx = parseInt(e.sourceHandle.replace('choice-', ''), 10)
+                const choice = choicesAfter[idx]
+                if (choice?.targetNode && !choice?.test) {
+                  const newLabel = truncateChoiceLabel(choice.text, idx)
+                  if (e.label !== newLabel) return { ...e, label: newLabel }
+                }
+              }
+              return e
+            })
+          }
+
+          // Stabiliser les références d'edges pour éviter le clignotement des étiquettes
+          // (ADR-006 : debounce 100 ms pousse souvent ; réutiliser l'objet edge si inchangé)
+          const stabilizedEdges = newEdges.map((e) => {
+            const existing = state.edges.find((s) => s.id === e.id)
+            if (
+              existing &&
+              existing.source === e.source &&
+              existing.target === e.target &&
+              existing.sourceHandle === e.sourceHandle &&
+              existing.label === e.label
+            ) {
+              return existing
+            }
+            return e
+          })
+
+          // Réutiliser state.edges si aucune référence n'a changé (évite re-render inutile)
+          const edgesToReturn =
+            stabilizedEdges.length === state.edges.length &&
+            stabilizedEdges.every((e, i) => e === state.edges[i])
+              ? state.edges
+              : stabilizedEdges
 
           return {
             nodes: newNodes,
-            edges: newEdges,
+            edges: edgesToReturn,
             dialogueMetadata: {
               ...state.dialogueMetadata,
               node_count: newNodes.length,
-              edge_count: newEdges.length,
+              edge_count: edgesToReturn.length,
             },
           }
         })
@@ -745,7 +822,7 @@ export const useGraphStore = create<GraphState>()(
         sourceHandle?: string
       ) => {
         const state = get()
-        
+
         // Extraire le sourceHandle depuis connectionType si c'est un type de test
         let actualSourceHandle = sourceHandle
         if (!actualSourceHandle && connectionType.startsWith('test-')) {
@@ -763,23 +840,38 @@ export const useGraphStore = create<GraphState>()(
         if (state.edges.some((e) => e.id === edgeId)) {
           return
         }
-        
-        // Créer le nouvel edge
-        const newEdge: Edge = {
-          id: edgeId,
-          source: sourceId,
-          target: targetId,
-          ...(actualSourceHandle && { sourceHandle: actualSourceHandle }), // Utiliser sourceHandle si fourni (pour TestNodes)
-          ...(!actualSourceHandle && choiceIndex !== undefined && { sourceHandle: `choice-${choiceIndex}` }), // Correspond à l'ID du handle dans DialogueNode
-          type: 'default',
-          data: {
-            edgeType: connectionType,
-            choiceIndex,
-          },
-        }
+
+        // Connexion via choix (panneau Détails ou drag) : edge via buildChoiceEdge (DRY)
+        const isChoiceConnection =
+          choiceIndex !== undefined && !actualSourceHandle
+        const sourceNodeForChoice = isChoiceConnection
+          ? state.nodes.find((n) => n.id === sourceId)
+          : null
+        const choiceTextForEdge =
+          sourceNodeForChoice?.data?.choices?.[choiceIndex != null ? choiceIndex : 0]
+        const choiceText = (choiceTextForEdge as Choice | undefined)?.text
+        const newEdge: Edge = isChoiceConnection
+          ? buildChoiceEdge({
+              sourceId,
+              targetId,
+              choiceIndex: choiceIndex!,
+              choiceText,
+              edgeId: choiceEdgeId(sourceId, choiceIndex!, targetId),
+            })
+          : {
+              id: edgeId,
+              source: sourceId,
+              target: targetId,
+              ...(actualSourceHandle && { sourceHandle: actualSourceHandle }),
+              type: 'default',
+              data: {
+                edgeType: connectionType,
+                choiceIndex,
+              },
+            }
         
         let newEdges = [...state.edges, newEdge]
-        
+
         // Mettre à jour les nœuds selon le type de connexion
         let updatedNodes = [...state.nodes]
         const sourceNodeIndex = updatedNodes.findIndex((n) => n.id === sourceId)
@@ -859,7 +951,7 @@ export const useGraphStore = create<GraphState>()(
             // Connexion via choix (DialogueNode)
             if (sourceNode.data?.choices && sourceNode.data.choices[choiceIndex]) {
               const choice = sourceNode.data.choices[choiceIndex] as Choice
-              
+
               // BUG FIX: Ne pas mettre à jour targetNode si :
               // 1. Le target est un TestBar (commence par "test-node-")
               // 2. Le choix a déjà un test (les connexions se font via les TestTargets)
@@ -872,15 +964,16 @@ export const useGraphStore = create<GraphState>()(
                 // Ne rien faire ici, la connexion est déjà créée dans newEdge
               } else {
                 // Mettre à jour targetNode uniquement si pas de test
+                const newChoices = (sourceNode.data.choices as Choice[]).map((c, idx) =>
+                  idx === choiceIndex
+                    ? { ...c, targetNode: targetId }
+                    : c
+                )
                 updatedNodes[sourceNodeIndex] = {
                   ...sourceNode,
                   data: {
                     ...sourceNode.data,
-                    choices: (sourceNode.data.choices as Choice[]).map((c, idx) =>
-                      idx === choiceIndex
-                        ? { ...c, targetNode: targetId }
-                        : c
-                    ),
+                    choices: newChoices,
                   },
                 }
               }
@@ -1277,8 +1370,9 @@ export const useGraphStore = create<GraphState>()(
             }
           })
           
+          const newValidationErrors = [...response.errors, ...response.warnings]
           set({
-            validationErrors: [...response.errors, ...response.warnings],
+            validationErrors: newValidationErrors,
             // Réinitialiser highlightedCycleNodes même s'il n'y a pas de cycles (AC #4)
             highlightedCycleNodes: Array.from(cycleNodeIds),
           })
@@ -1415,12 +1509,14 @@ export const useGraphStore = create<GraphState>()(
         }
       },
       
-      // Sauvegarder le dialogue
+      // Sauvegarder le dialogue (ADR-006: seq, document_id, journal, ack)
       saveDialogue: async () => {
-        set({ isSaving: true })
+        set({ isSaving: true, lastSaveError: null, syncStatus: 'synced' })
+        const state = get()
+        const seq = state.clientSeq
+        const documentId = state.documentId ?? state.dialogueMetadata.filename ?? null
         try {
-          const state = get()
-          const response = await graphAPI.saveGraph({
+          const response = await graphAPI.saveGraphAndWrite({
             nodes: state.nodes.map((n) => ({
               id: n.id,
               type: n.type,
@@ -1436,20 +1532,47 @@ export const useGraphStore = create<GraphState>()(
               data: e.data,
             })),
             metadata: state.dialogueMetadata,
+            seq: seq,
+            document_id: documentId ?? undefined,
           })
-          
+          const ackSeq = response.ack_seq ?? response.last_seq ?? seq
+          const nextSeq = (response.last_seq ?? response.ack_seq ?? seq) + 1
+          if (documentId) {
+            try {
+              await journalWriteSnapshot(documentId, {
+                nodes: state.nodes,
+                edges: state.edges,
+                metadata: state.dialogueMetadata,
+                ackSeq,
+              })
+              await journalClearPending(documentId)
+            } catch (e) {
+              console.warn('Journal IndexedDB (snapshot/clear):', e)
+            }
+          }
           set({
             isSaving: false,
+            hasUnsavedChanges: false,
+            lastSaveError: null,
+            lastSavedAt: Date.now(),
+            lastAckSeq: ackSeq,
+            clientSeq: nextSeq,
+            syncStatus: 'synced',
+            documentId: documentId ?? response.filename ?? state.documentId,
             dialogueMetadata: {
               ...state.dialogueMetadata,
               filename: response.filename,
             },
           })
-          
           return response
         } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
           console.error('Erreur lors de la sauvegarde:', error)
-          set({ isSaving: false })
+          set({
+            isSaving: false,
+            lastSaveError: message,
+            syncStatus: 'error',
+          })
           throw error
         }
       },
@@ -1640,61 +1763,21 @@ export const useGraphStore = create<GraphState>()(
         })
       },
       
-      // Actions auto-save draft (Task 1 - Story 0.5)
       markDirty: () => {
         set({ hasUnsavedChanges: true })
-      },
-      
-      markDraftSaved: () => {
-        set({
-          hasUnsavedChanges: false,
-          lastDraftSavedAt: Date.now(),
-        })
-      },
-      
-      markDraftError: (message: string) => {
-        set({
-          lastDraftError: message,
-          hasUnsavedChanges: false,
-        })
-      },
-      
-      clearDraftError: () => {
-        set({ lastDraftError: null })
-      },
-      
-      setAutoRestoredDraft: (draft: { timestamp: number; fileTimestamp: number } | null) => {
-        set({ autoRestoredDraft: draft })
-      },
-      
-      clearAutoRestoredDraft: () => {
-        set({ autoRestoredDraft: null })
+        const state = get()
+        const docId = state.documentId ?? state.dialogueMetadata.filename ?? null
+        if (docId) {
+          journalSetPending(docId, {
+            nodes: state.nodes,
+            edges: state.edges,
+            metadata: state.dialogueMetadata,
+            seq: state.clientSeq,
+          }).catch((e) => console.warn('Journal setPending:', e))
+        }
       },
 
       setShowDeleteNodeConfirm: (show: boolean) => {
         set({ showDeleteNodeConfirm: show })
       },
-    }),
-    {
-      // Configuration du middleware temporal (undo/redo)
-      limit: 50, // Historique de 50 actions
-      equality: (a, b) => a === b,
-      // Partialiser pour ne pas historiser certains champs UI transitoires
-      partialize: (state): Partial<GraphState> => {
-        const {
-          isGenerating: _isGenerating,
-          isLoading: _isLoading,
-          isSaving: _isSaving,
-          validationErrors: _validationErrors,
-          highlightedNodeIds: _highlightedNodeIds,
-          showDeleteNodeConfirm: _showDeleteNodeConfirm,
-          ...rest
-        } = state
-        return rest
-      },
-    }
-  )
-)
-
-// Export des actions undo/redo depuis zundo
-export const { undo, redo, clear: clearHistory } = useGraphStore.temporal.getState()
+    }))

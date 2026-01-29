@@ -475,6 +475,118 @@ async def select_context_auto(
 
 ---
 
+### ADR-006: Autosave immédiat, zéro perte, seq + atomique (Graph Editor)
+
+**Context:**  
+Auto-save actuel : debounce 1,2 s, pas de journal local, écriture fichier directe. Risques : perte à la fermeture d’onglet/crash, fichier JSON tronqué si crash pendant write, requêtes réordonnées peuvent écraser un état plus récent. Contrainte UX : délai max 0,1 s acceptable, 1,2 s non.
+
+**Decision:**  
+Store = document (une seule source de vérité en mémoire). Pas de mode draft/save ; tout est “enregistré” localement et synchronisé. Résilience : journal local IndexedDB + seq monotone côté client/serveur + écriture atomique côté serveur (tmp → fsync → rename). Micro-batch envoi 100 ms max.
+
+**Technical Design:**
+
+**Frontend:**
+- À chaque modification : mutation dans le store **en premier** (aucune exception), puis append dans journal IndexedDB (par documentId), puis envoi vers serveur en micro-batch 100 ms (ou immédiat selon option).
+- **Pas de brouillon dans les formulaires** : les champs éditables (panneau Détails : speaker, line, choix, etc.) doivent pousser vers le store à la saisie (debounce court ≤ 100 ms ou immédiat). Un flush uniquement au changement de nœud ou au blur est **non conforme** — fermeture d’onglet ou crash sans quitter le nœud entraînerait une perte.
+- Journal IndexedDB : scope par document (documentId = filename ou id stable). Contenu : dernier snapshot après ack + queue des mutations non ackées (ou dernier état complet en attente). Au chargement : dernier snapshot + pending, puis sync avec serveur (seq).
+- Chaque envoi porte un **seq** monotone (client-assigné, incrémenté à chaque envoi).
+- UI statut : “Synced (seq …)” / “Offline, N changes queued” / “Error” ; pas de bouton “Sauvegarder” ; optionnel “Synchroniser maintenant”.
+
+**Backend:**
+- Requête contient **seq** (optionnel en v1 pour rétrocompat : si absent, appliquer sans garde-fou).
+- Serveur conserve **last_seq** par document (persisté en fichier sidecar ou en base pour survivre au redémarrage).
+- Règles : **seq ≤ last_seq** → ignorer (réponse 200 + ack(last_seq)) ; **seq > last_seq** → appliquer payload, persister, **last_seq = seq**, répondre **ack(seq)**.
+- Persistance fichier : écrire dans **file.tmp**, fsync, rename atomique **file.tmp** → **file.json**. Optionnel : **file.prev.json** (N-1) pour recovery.
+
+**Constraints:**
+- **DOIT** garantir délai perçu ≤ 0,1 s (micro-batch 100 ms max).
+- **DOIT** éviter perte à fermeture onglet/crash/navigation (journal IndexedDB).
+- **DOIT** éviter fichier tronqué (écriture atomique serveur).
+- **DOIT** éviter qu’un envoi ancien écrase un récent (seq / last_seq).
+- **NE DOIT PAS** conserver de brouillon dans les formulaires : toute modification éditable doit être poussée vers le store (debounce ≤ 100 ms ou immédiat), puis journal + sync. **Aucune exception** — flush uniquement au changement de nœud ou au blur = non conforme.
+- **NE DOIT PAS** introduire co-édition (multi-onglets non garanti ; documenter).
+
+**Rationale:**
+- Seq + last_seq = garde-fou minimal sans OT/CRDT.
+- IndexedDB = résilience locale sans dépendre au blur.
+- Atomic write = pratique standard (tmp + rename) sur Windows/Linux.
+
+**Risks:**
+- Persistance last_seq côté serveur (mitigation : sidecar ou fichier par document).
+- Identité document stable (documentId) partagée front/back (mitigation : filename ou id dérivé).
+
+**Tests Required:**
+- Unit : journal IndexedDB (écriture/replay), seq incrément, micro-batch 100 ms.
+- Integration : API save-and-write avec seq / last_seq, écriture atomique (tmp → rename).
+- E2E : modification → fermeture onglet → réouverture → état restauré ; statut Synced/Offline/Error.
+
+**Acceptance Criteria:**
+- [ ] Store = document ; pas de bouton “Sauvegarder”.
+- [ ] Aucun brouillon dans les formulaires : speaker, line, choix, etc. poussés vers le store (debounce ≤ 100 ms ou immédiat) ; pas de flush uniquement au changement de nœud.
+- [ ] Délai regroupement ≤ 100 ms (pas 1,2 s).
+- [ ] Journal IndexedDB par document ; rechargement = dernier snapshot + pending puis sync.
+- [ ] Serveur : seq ≤ last_seq → ignore ; seq > last_seq → applique, écriture atomique, ack(seq).
+- [ ] UI : “Synced (seq …)” / “Offline, N changes queued” / “Error”.
+
+**Référence spécification détaillée :** spécification consolidée “autosave immédiat, zéro perte, seq + atomique” (principes, protocole serveur, journal local, micro-batching, UI statut).
+
+---
+
+### ADR-007: React Flow en mode controlled (source unique nodes/edges)
+
+**Context:**  
+Le canvas graphe utilise aujourd'hui les hooks React Flow `useNodesState` / `useEdgesState` : l'état affiché est géré en interne par React Flow, le store Zustand sert à la persistance et à la logique métier. Cette double source de vérité (état RF + store) provoque des désynchronisations (étiquettes qui scintillent, liens qui disparaissent au clic), des correctifs fragiles (comparaisons, refs de stabilisation) et empêche une cohérence fiable pour l'autosave, l'undo/redo, la synchro serveur et la collaboration future.
+
+**Decision:**  
+React Flow est utilisé en **mode controlled** : les `nodes` et `edges` passés au composant `<ReactFlow>` proviennent **uniquement** du store Zustand (graphStore). Aucun état local pour nodes/edges dans le canvas (pas de `useNodesState` / `useEdgesChange`). Les handlers `onNodesChange` et `onEdgesChange` ne font qu'appeler des actions du store. Le **viewport** (zoom, pan, position de la caméra) reste en état **local** à React Flow (non persisté, hors store document).
+
+**Technical Design:**
+
+**Frontend (GraphCanvas / couche graphe) :**
+- **Source des props** : `nodes` et `edges` sont dérivés du store (ex. `useGraphStore()` → `storeNodes`, `storeEdges`), enrichis si besoin (validation, highlight) via `useMemo` à partir du store, puis passés tels quels à `<ReactFlow nodes={…} edges={…} />`.
+- **Handlers** : `onNodesChange` et `onEdgesChange` appliquent **tous** les types de changement (position, dimension, remove, **select**, etc.) **uniquement** via des actions du store (ex. `updateNodePosition`, `deleteNode`, `setSelectedNode`, etc.). Les changements de type **`select`** dans `onNodesChange` doivent mettre à jour le store (pas seulement `onNodeClick`), afin qu'aucune sélection ne reste uniquement dans l'état interne de React Flow. Utiliser `applyNodeChanges` / `applyEdgeChanges` côté store ou dans les handlers pour produire le nouvel état, puis `setState` store — jamais de `setNodes` / `setEdges` local.
+- **Sélection** : La sélection (nœud(s) sélectionné(s)) vit dans le store (ex. `selectedNodeId` / `selectedNodeIds`). Les `nodes` passés à React Flow reflètent cette sélection (ex. `node.selected = (node.id === selectedNodeId)`). Les changements de sélection dans `onNodesChange` (type `select`) mettent à jour le store.
+- **Viewport** : Non stocké dans le store. React Flow gère zoom/pan en interne ; pas de persistance viewport exigée par cette ADR.
+- **Compatibilité React Flow** : Respecter le pattern "controlled" documenté (React Flow : parent state + `onNodesChange` / `onEdgesChange` mettent à jour ce state). Le conteneur parent doit avoir une largeur et une hauteur définies ; la feuille de style React Flow doit être importée.
+
+**Périmètre :**
+- ADR-007 s'applique au canvas **éditeur** (GraphCanvas). Le composant **GraphView** (vue read-only, source = prop `json_content`, pas de graphStore) est hors périmètre : il peut rester en mode uncontrolled ou être migré en controlled avec état parent dérivé des props ; le choix est laissé à l'implémentation tant qu'il n'y a pas de persistance ni de double source de vérité.
+
+**Constraints:**
+- **DOIT** avoir une seule source de vérité pour les nodes et edges affichés : le store (graphStore).
+- **NE DOIT PAS** utiliser `useNodesState` ni `useEdgesState` (ni équivalent état local pour nodes/edges) dans le composant qui rend `<ReactFlow>` pour l'éditeur de graphe.
+- **DOIT** faire en sorte que tout changement utilisateur (drag, clic, connexion, suppression) remonte au store via `onNodesChange` / `onEdgesChange` / `onConnect`, sans mise à jour d'un état local nodes/edges.
+- **DOIT** garder le viewport (zoom/pan) en état local à React Flow (pas dans le store document).
+- **DOIT** refléter la sélection affichée depuis le store (pas d'état de sélection uniquement interne à React Flow pour les nœuds/edges document).
+
+**Rationale:**
+- Alignement avec ADR-006 : le store est déjà la source de vérité du document ; le canvas doit en être une vue stricte.
+- Autosave, undo/redo, synchro serveur et future collaboration reposent sur un état document unique et prévisible.
+- Suppression des bugs de sync (scintillement, disparition d'edges) et du code de contournement (refs, comparaisons "position seule").
+- **Export PNG/SVG** : en mode controlled, l'instance React Flow reflète le store ; l'export visuel reflète donc l'état document.
+- **Undo/redo (zundo)** : la restauration du store suffit ; l'affichage suit automatiquement car le canvas est piloté par le store.
+
+**Risks:**
+- Performance pendant le drag : chaque mouvement peut déclencher une mise à jour du store et un re-render. Mitigation : mises à jour store légères (ex. uniquement positions) ; debounce/throttle déjà en place pour la persistance (journal/API) ; si besoin, throttler les appels `updateNodePosition` pendant le drag (ex. `requestAnimationFrame`).
+
+**Tests Required:**
+- Régression : après clic sur un nœud, les edges restent visibles et cohérents.
+- Régression : après drag d'un nœud, les positions dans le store correspondent à l'affichage.
+- Unitaire / intégration : sélection mise à jour dans le store lors des événements de sélection React Flow.
+- Optionnel : E2E "édition → refresh / reload → état restauré" (déjà couvert par ADR-006 ; controlled n'ajoute pas de perte).
+
+**Acceptance Criteria:**
+- [ ] Les `nodes` et `edges` passés à `<ReactFlow>` proviennent exclusivement du store (ou de dérivations du store, ex. enrichissement validation/highlight).
+- [ ] Aucun `useNodesState` / `useEdgesState` dans le composant principal du canvas graphe (éditeur).
+- [ ] `onNodesChange` et `onEdgesChange` ne mettent à jour que le store (via actions graphStore).
+- [ ] La sélection affichée (nœud sélectionné) est lue depuis le store et les changements de sélection mettent à jour le store. Tout changement de sélection (clic, multi-select, programmatique) met à jour le store via `onNodesChange` ou handlers dédiés.
+- [ ] Le viewport (zoom/pan) n'est pas persisté dans le store document.
+- [ ] Aucune régression : edges visibles après clic sur un nœud ; pas de scintillement des étiquettes lors du drag (avec optimisations si besoin).
+
+**Référence :** React Flow "controlled" pattern (état dans le parent, handlers mettent à jour cet état) ; doc projet `docs/architecture/state-management-frontend.md`, `docs/architecture/graph-conversion-architecture.md`.
+
+---
+
 ### Integration Patterns (V1.0 ↔ Baseline)
 
 #### Pattern 1: New API Endpoints (Streaming, Presets)

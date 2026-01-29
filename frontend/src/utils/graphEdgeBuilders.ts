@@ -1,0 +1,121 @@
+/**
+ * Builders réutilisables pour les edges du graphe (choix, résultats de test).
+ * Source unique pour IDs, labels tronqués et config des edges TestNode → résultat.
+ */
+import type { Edge } from 'reactflow'
+
+/** Longueur max du label affiché sur les edges de choix. */
+export const CHOICE_LABEL_MAX_LENGTH = 30
+
+/** Config des 4 résultats de test (TestNode → nœud de résultat). */
+export const TEST_RESULT_EDGE_CONFIG = [
+  {
+    field: 'testCriticalFailureNode' as const,
+    handleId: 'critical-failure',
+    label: 'Échec critique',
+    color: '#C0392B',
+  },
+  {
+    field: 'testFailureNode' as const,
+    handleId: 'failure',
+    label: 'Échec',
+    color: '#E74C3C',
+  },
+  {
+    field: 'testSuccessNode' as const,
+    handleId: 'success',
+    label: 'Réussite',
+    color: '#27AE60',
+  },
+  {
+    field: 'testCriticalSuccessNode' as const,
+    handleId: 'critical-success',
+    label: 'Réussite critique',
+    color: '#229954',
+  },
+] as const
+
+/**
+ * Tronque le texte du choix pour l'affichage sur l'edge (max 30 caractères).
+ * Fallback : "Choix {choiceIndex + 1}".
+ */
+export function truncateChoiceLabel(
+  choiceText: string | undefined,
+  choiceIndex: number
+): string {
+  const text = choiceText ?? `Choix ${choiceIndex + 1}`
+  return text.length > CHOICE_LABEL_MAX_LENGTH
+    ? `${text.substring(0, CHOICE_LABEL_MAX_LENGTH)}...`
+    : text
+}
+
+/**
+ * ID canonique pour un edge choix → cible (DialogueNode → node ou END).
+ * Aligné backend / NodeEditorPanel disconnect.
+ */
+export function choiceEdgeId(
+  sourceId: string,
+  choiceIndex: number,
+  targetId: string
+): string {
+  return `${sourceId}-choice${choiceIndex}->${targetId}`
+}
+
+/**
+ * ID canonique pour un edge choix → TestNode.
+ */
+export function choiceToTestEdgeId(sourceId: string, choiceIndex: number): string {
+  return `${sourceId}-choice-${choiceIndex}-to-test`
+}
+
+export interface BuildChoiceEdgeParams {
+  sourceId: string
+  targetId: string
+  choiceIndex: number
+  choiceText?: string
+  /** Si absent, utilise choiceEdgeId(sourceId, choiceIndex, targetId). */
+  edgeId?: string
+}
+
+/**
+ * Construit un edge de type choix (DialogueNode → cible ou TestNode).
+ * sourceHandle, type smoothstep, label tronqué, data.edgeType = 'choice'.
+ */
+export function buildChoiceEdge(params: BuildChoiceEdgeParams): Edge {
+  const { sourceId, targetId, choiceIndex, choiceText, edgeId } = params
+  const id = edgeId ?? choiceEdgeId(sourceId, choiceIndex, targetId)
+  const label = truncateChoiceLabel(choiceText, choiceIndex)
+  return {
+    id,
+    source: sourceId,
+    target: targetId,
+    sourceHandle: `choice-${choiceIndex}`,
+    type: 'smoothstep',
+    label,
+    data: {
+      edgeType: 'choice',
+      choiceIndex,
+    },
+  }
+}
+
+/**
+ * Construit un edge TestNode → nœud de résultat (critical-failure, failure, success, critical-success).
+ */
+export function buildTestResultEdge(
+  testNodeId: string,
+  targetId: string,
+  handleId: string,
+  label: string,
+  color: string
+): Edge {
+  return {
+    id: `${testNodeId}-${handleId}-${targetId}`,
+    source: testNodeId,
+    target: targetId,
+    sourceHandle: handleId,
+    type: 'smoothstep',
+    label,
+    style: { stroke: color },
+  }
+}

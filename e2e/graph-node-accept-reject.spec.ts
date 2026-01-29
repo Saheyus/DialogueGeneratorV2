@@ -200,8 +200,8 @@ test.describe('Graph Node Accept/Reject (Story 1.4) @e2e-llm', () => {
     await ensureGraphWithDialogue(page, fixedDialogue)
     await generatePendingNode(page)
     await expect(page.locator('.react-flow__node:has([data-status="pending"])').first()).toBeVisible({ timeout: 5000 })
-    // Attendre que le debounce draft (3s) ait bien sauvegardé avant reload
-    await page.waitForTimeout(10_000)
+    // Attendre que l'auto-save backend ait écrit (debounce ~1.2s) avant reload
+    await page.waitForTimeout(5000)
     await page.reload()
     const onLoginAfter = await page.getByRole('heading', { name: 'Connexion' }).isVisible({ timeout: 2000 }).catch(() => false)
     if (onLoginAfter) await login(page)
@@ -214,16 +214,12 @@ test.describe('Graph Node Accept/Reject (Story 1.4) @e2e-llm', () => {
     const sameDialogue = list.getByText(/tunnel_vertébral_pigments_impossibles\.json/).first()
     await expect(sameDialogue).toBeVisible({ timeout: 8000 })
     await sameDialogue.click()
-    await expect(
-      page.getByText(/Brouillon local restauré/),
-      'AC#5 : brouillon non restauré après reload (draft absent ou dialogue différent). Vérifier même dialogue avant/après.'
-    ).toBeVisible({ timeout: 15000 })
     await page.waitForTimeout(3000)
     await expect(page.locator('.react-flow__node').first()).toBeVisible({ timeout: 10000 })
     const node = page.locator('.react-flow__node:has([data-status="pending"])').first()
     await expect(
       node,
-      'AC#5 : nœud pending introuvable après restauration. Vérifier que le draft persiste status et que loadGraph le préserve.'
+      'AC#5 : nœud pending introuvable après reload. Vérifier que l\'auto-save a bien persisté le graphe sur le backend.'
     ).toBeVisible({ timeout: 20_000 })
     await node.hover({ force: true })
     const accept = page.locator('button:has-text("Accepter")').first()

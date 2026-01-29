@@ -28,7 +28,7 @@ describe('ChoiceEditor - 4 résultats de test', () => {
     vi.mocked(useGraphStore).mockReturnValue({
       nodes: mockNodes,
       isGenerating: false,
-    } as any)
+    } as ReturnType<typeof useGraphStore>)
   })
 
   const TestWrapper = ({ children, defaultValues }: { children: React.ReactNode; defaultValues?: DialogueNodeData }) => {

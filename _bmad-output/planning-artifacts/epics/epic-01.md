@@ -14,7 +14,7 @@
 
 **Statut des US :**
 - ✅ **DONE (8)** : US 1.1, 1.2, 1.3, 1.5, 1.8, 1.9, 1.13
-- 🔴 **PRIORITÉ A - Critiques (3)** : US 1.4, 1.6, 1.10
+- 🔴 **PRIORITÉ A - Critiques (4)** : US 1.4, 1.6, 1.10, 1.17
 - 🟡 **PRIORITÉ B - Importantes (3)** : US 1.7, 1.11, 1.15
 - 🟢 **PRIORITÉ C - Nice-to-have (3)** : US 1.12, 1.14, 1.16
 
@@ -433,6 +433,8 @@ So that **je peux itérer sur des versions alternatives sans recréer le nœud d
 - Metadata : Copie profonde (deep copy) de toutes les propriétés sauf stableID et connexions
 - Tests : Unit (duplication logique), Integration (API duplicate), E2E (workflow duplication)
 
+**Risque bug nœuds invisibles (post 1.17) :** En mode controlled React Flow (ADR-007), tout nœud ajouté au store doit laisser React Flow émettre et traiter les changements `dimensions` ; le store doit refléter `width`/`height` après mesure. Si `duplicateNode()` ajoute un nœud au store, le même flux que pour « Nouveau nœud » s'applique ; ne pas contourner GraphCanvas ou onNodesChange. Voir post-mortem dans `_bmad-output/implementation-artifacts/1-17-adr-007-react-flow-controlled.md`.
+
 **References:** FR7 (duplication), FR31-32 (sélection multiple), Epic 0 Story 0.1 (stableID)
 
 ---
@@ -585,6 +587,8 @@ So that **je peux itérer sur la qualité des dialogues sans perdre le contexte 
 - Connexions : Préservation connexions lors remplacement nœud (même stableID ou mapping)
 - Tests : Unit (régénération logique), Integration (API regenerate), E2E (workflow régénération)
 
+**Risque bug nœuds invisibles (post 1.17) :** Remplacer un nœud (rejet → régénération) doit conserver le même flux store/React Flow ; le nouveau nœud doit recevoir les dimensions via onNodesChange type `dimensions` (width/height reflétés dans le store). Ne pas contourner GraphCanvas. Voir post-mortem dans `_bmad-output/implementation-artifacts/1-17-adr-007-react-flow-controlled.md`.
+
 **References:** FR10 (régénération), Story 1.4 (rejeter nœuds), FR3 (instructions), Story 1.1 (génération)
 
 ---
@@ -636,6 +640,8 @@ So that **je peux gérer mon budget et décider si je veux procéder avec la gé
 - Integration : Epic 0 Story 0.7 (cost governance) pour vérification budget
 - Tests : Unit (calcul estimation), Integration (API estimation), E2E (workflow estimation)
 
+**Risque bug nœuds invisibles (1.17) :** Aucun — cette US ne modifie pas l'affichage des nœuds dans le graphe (pas de changement nodes/edges ou du canvas).
+
 **References:** FR72 (estimation coût), Epic 0 Story 0.7 (cost governance), FR77 (prompt transparency)
 
 ---
@@ -684,6 +690,8 @@ So that **je peux analyser où mes coûts LLM sont concentrés et optimiser mes 
 - Graphique : Bar chart coût par nœud, tooltip avec détails au survol
 - Integration : Epic 0 Story 0.7 (cost governance) pour données coûts
 - Tests : Unit (agrégation coûts), Integration (API costs), E2E (affichage breakdown)
+
+**Risque bug nœuds invisibles (1.17) :** Aucun — cette US ne modifie pas l'affichage des nœuds dans le graphe.
 
 **References:** FR73 (breakdown coûts), Epic 0 Story 0.7 (cost governance), Story 1.14 (logs génération)
 
@@ -784,6 +792,8 @@ So that **je peux comprendre comment le contexte GDD et les instructions sont ut
 - Integration : Story 1.15 (generation logs) pour stockage prompts
 - Tests : Unit (formatage prompt), Integration (API prompt), E2E (affichage prompt)
 
+**Risque bug nœuds invisibles (1.17) :** Aucun — cette US ne modifie pas l'affichage des nœuds dans le graphe (modal/panneau détail uniquement).
+
 **References:** FR77 (prompt transparency), Story 1.15 (generation logs), FR78 (logs)
 
 ---
@@ -841,6 +851,8 @@ So that **je peux analyser l'historique des générations et comprendre les patt
 - Export : Fonction export CSV/JSON côté frontend (download blob)
 - Tests : Unit (filtrage logs), Integration (API logs), E2E (affichage + export logs)
 
+**Risque bug nœuds invisibles (1.17) :** Aucun — cette US ne modifie pas l'affichage des nœuds dans le graphe (panneau logs uniquement).
+
 **References:** FR78 (generation logs), Story 1.14 (prompt transparency), FR72-74 (coûts), Epic 0 Story 0.7 (cost governance)
 
 ---
@@ -896,7 +908,66 @@ So that **mes générations ne sont pas interrompues par des pannes temporaires 
 - Configuration : Paramètres utilisateur pour ordre fallback (localStorage + backend preferences)
 - Tests : Unit (logique fallback), Integration (API fallback), E2E (workflow fallback complet)
 
+**Risque bug nœuds invisibles (1.17) :** Aucun — cette US ne modifie pas l'affichage des nœuds dans le graphe (backend/LLM uniquement).
+
 **References:** FR79 (fallback provider), Epic 0 Story 0.3 (Multi-Provider LLM), NFR-R4 (Error Recovery LLM >95%), NFR-I2 (LLM API Reliability >99%)
+
+---
+
+### Story 1.17: Implémenter ADR-007 — GraphCanvas en mode controlled React Flow
+
+**Status:** 🔴 **PRIORITÉ A - CRITIQUE (architecture)**
+
+**Valeur :** Une seule source de vérité pour le graphe (store) → cohérence autosave, undo/redo, synchro serveur, suppression des bugs de sync (scintillement, liens qui disparaissent). Prérequis pour collaboration future.
+
+**Référence :** ADR-007 dans `_bmad-output/planning-artifacts/architecture/v10-architectural-decisions-adrs.md`. Doc : `docs/architecture/state-management-frontend.md`, `docs/architecture/graph-conversion-architecture.md`.
+
+As a **développeur / mainteneur de l'éditeur de graphe**,
+I want **que le canvas éditeur (GraphCanvas) utilise React Flow en mode controlled (nodes/edges provenant uniquement du store)**,
+So that **il n'y ait qu'une seule source de vérité, que l'autosave, l'undo/redo et la synchro serveur soient cohérents, et que les bugs de désynchronisation (étiquettes, edges) disparaissent**.
+
+**Acceptance Criteria:**
+
+**Given** je modifie le graphe (drag, clic, connexion, suppression)
+**When** l'action est effectuée
+**Then** les `nodes` et `edges` affichés par React Flow proviennent **exclusivement** du store (ou de dérivations du store, ex. enrichissement validation/highlight)
+**And** aucun `useNodesState` ni `useEdgesState` n'est utilisé dans le composant principal du canvas graphe (éditeur)
+
+**Given** React Flow émet des changements (onNodesChange, onEdgesChange)
+**When** un changement est émis
+**Then** les handlers ne font qu'appeler des actions du store (updateNodePosition, deleteNode, setSelectedNode, etc.)
+**And** aucun `setNodes` / `setEdges` local n'est utilisé
+
+**Given** je sélectionne un nœud (clic, multi-select ou programmatique)
+**When** la sélection change
+**Then** le store est mis à jour (ex. setSelectedNode) via onNodesChange (type `select`) ou handlers dédiés
+**And** les `nodes` passés à React Flow reflètent la sélection depuis le store (ex. node.selected = (node.id === selectedNodeId))
+
+**Given** je zoome ou panne le canvas
+**When** le viewport change
+**Then** le viewport reste en état local à React Flow (non persisté dans le store document)
+
+**Given** j'ai implémenté le mode controlled
+**When** je clique sur un nœud ou je déplace un nœud
+**Then** aucune régression : les edges restent visibles après clic ; pas de scintillement des étiquettes lors du drag (avec throttling si besoin)
+
+**Technical Requirements:**
+- Frontend : `frontend/src/components/graph/GraphCanvas.tsx` — supprimer `useNodesState(storeNodes)` / `useEdgesState(storeEdges)` ; dériver `nodes` et `edges` du store (useGraphStore) avec enrichissement via useMemo si besoin ; passer ces props à `<ReactFlow nodes={…} edges={…} />`.
+- Handlers : `onNodesChange` et `onEdgesChange` doivent traiter **tous** les types de changement (position, dimension, remove, **select**) et mettre à jour uniquement le store (applyNodeChanges / applyEdgeChanges côté store ou dans les handlers).
+- Sélection : `selectedNodeId` dans le store ; dériver `node.selected` depuis le store dans les nodes passés à React Flow ; gérer type `select` dans onNodesChange pour appeler setSelectedNode.
+- Viewport : ne pas stocker dans le store (laisser React Flow gérer en interne).
+- Performance : si besoin, throttler les appels updateNodePosition pendant le drag (ex. requestAnimationFrame) pour limiter les re-renders.
+- Supprimer le code de contournement existant (stableEnrichedNodes, prevNodesRef, lastSetNodesRef, comparaisons "position seule") une fois le mode controlled en place.
+- GraphView (vue read-only) : hors périmètre ADR-007 ; peut rester uncontrolled.
+- Tests : régression (edges visibles après clic ; positions dans le store après drag) ; unitaire/intégration (sélection mise à jour dans le store).
+
+**Dev Notes:**
+- **Architecture :** ADR-007 impose une seule source de vérité (store). Référence complète : `_bmad-output/planning-artifacts/architecture/v10-architectural-decisions-adrs.md` (section ADR-007).
+- **Pattern React Flow controlled :** état (nodes, edges) dans le parent (store) ; onNodesChange / onEdgesChange mettent à jour ce state uniquement. Doc React Flow : pattern "controlled" (useState + applyNodeChanges/applyEdgeChanges dans les handlers).
+- **Fichiers existants :** GraphCanvas.tsx utilise actuellement useNodesState/useEdgesState ; graphStore.ts a déjà updateNodePosition, deleteNode, setSelectedNode, connectNodes ; à réutiliser dans les handlers.
+- **Bug corrigé (nœuds invisibles) :** En mode controlled, React Flow v11 garde le conteneur des nœuds en `visibility: hidden` tant que les dimensions (width/height) ne sont pas reflétées dans le store. Détail, cause et correctif dans le post-mortem de l'artifact `_bmad-output/implementation-artifacts/1-17-adr-007-react-flow-controlled.md`. Ne pas réintroduire en omettant la propagation des changements type `dimensions` (width/height) vers le store.
+
+**References:** ADR-007, ADR-006 (store = document), docs/architecture/state-management-frontend.md, docs/architecture/graph-conversion-architecture.md
 
 ---
 

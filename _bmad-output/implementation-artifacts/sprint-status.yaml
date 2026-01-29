@@ -58,7 +58,7 @@ development_status:
   1-4-accepter-ou-rejeter-nœuds-générés-inline-fr4: done
   1-5-éditer-manuellement-le-contenu-des-nœsquds-générés-fr5: done
   1-6-créer-manuellement-des-nœuds-sans-llm-fr6: done
-  1-7-dupliquer-des-nœuds-existants-pour-créer-des-variantes-fr7: backlog
+  1-7-dupliquer-des-nœuds-existants-pour-créer-des-variantes-fr7: ready-for-dev
   1-8-supprimer-des-nœuds-du-dialogue-fr8: done
   1-9-auto-link-des-nœuds-générés-au-graphe-existant-fr9: done
   1-10-régénérer-des-nœuds-rejetés-avec-instructions-ajustées-fr10: backlog
@@ -68,6 +68,7 @@ development_status:
   1-14-afficher-prompt-transparency-prompt-exact-envoyé-au-llm-fr77: backlog
   1-15-afficher-logs-de-génération-prompts-réponses-coûts-fr78: backlog
   1-16-fallback-vers-provider-llm-alternatif-en-cas-déchec-fr79: backlog
+  1-17-adr-007-react-flow-controlled: review
   epic-1-retrospective: optional
   epic-2: backlog
   2-1-visualiser-la-structure-de-dialogue-comme-graphe-fr22: backlog

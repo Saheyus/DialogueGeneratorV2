@@ -186,7 +186,7 @@ def test_preview_prompt_invalid_request(client):
 
 @pytest.mark.skip(reason="Endpoint /generate/interactions supprimé. Utiliser /generate/unity-dialogue à la place.")
 @pytest.mark.asyncio
-async def test_generate_interaction_variants(client, mock_dialogue_service, mock_interaction_service, monkeypatch):
+async def test_generate_interaction_variants(client, mock_dialogue_service, _mock_interaction_service, monkeypatch):
     """Test de génération d'interactions.
     
     NOTE: Ce test est obsolète. L'endpoint /api/v1/dialogues/generate/interactions

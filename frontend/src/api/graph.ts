@@ -38,23 +38,30 @@ export async function saveGraph(request: SaveGraphRequest): Promise<SaveGraphRes
 }
 
 /**
+ * Sauvegarde un graphe et écrit le fichier sur disque (conversion + validation + écriture en un appel).
+ */
+export async function saveGraphAndWrite(request: SaveGraphRequest): Promise<SaveGraphResponse> {
+  const response = await apiClient.post<SaveGraphResponse>(
+    `/api/v1/unity-dialogues/graph/save-and-write`,
+    request
+  )
+  return response.data
+}
+
+/**
  * Génère un nœud en contexte avec l'IA.
  */
 export async function generateNode(
   request: GenerateNodeRequest
 ): Promise<GenerateNodeResponse> {
-  try {
-    // Timeout adaptatif : 4 minutes pour batch (parallélisé, mais sécurité), 2 minutes pour single
-    const timeout = request.generate_all_choices ? 240000 : 120000
-    const response = await apiClient.post<GenerateNodeResponse>(
-      `/api/v1/unity-dialogues/graph/generate-node`,
-      request,
-      { timeout }
-    )
-    return response.data
-  } catch (error: any) {
-    throw error;
-  }
+  // Timeout adaptatif : 4 minutes pour batch (parallélisé, mais sécurité), 2 minutes pour single
+  const timeout = request.generate_all_choices ? 240000 : 120000
+  const response = await apiClient.post<GenerateNodeResponse>(
+    `/api/v1/unity-dialogues/graph/generate-node`,
+    request,
+    { timeout }
+  )
+  return response.data
 }
 
 /**

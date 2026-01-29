@@ -86,61 +86,52 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Erreur lors du nettoyage des logs au démarrage: {e}")
         
-        # Valider que context_config.json ne référence que des champs existants
+        # Créer le container une seule fois : chargement GDD + validation puis réutilisation pour les requêtes
         try:
-            from services.context_field_validator import ContextFieldValidator
             from api.container import ServiceContainer
-            
-            container_for_validation = ServiceContainer()
-            context_builder = container_for_validation.get_context_builder()
-            config_service = container_for_validation.get_config_service()
+            from services.context_field_validator import ContextFieldValidator
+
+            container = ServiceContainer()
+            context_builder = container.get_context_builder()
+            config_service = container.get_config_service()
             context_config = config_service.get_context_config()
-            
+
             if context_config:
                 validator = ContextFieldValidator(context_builder)
                 validation_results = validator.validate_all_configs(context_config)
-                
-                # Compter les erreurs et warnings
+
                 total_errors = sum(1 for r in validation_results.values() if r.has_errors())
                 total_warnings = sum(1 for r in validation_results.values() if r.has_warnings())
-                
+
                 if total_errors > 0 or total_warnings > 0:
-                    # Par défaut: résumé concis (le rapport complet est verbeux)
                     logger.warning(
                         "Validation des champs GDD: %d erreur(s) critique(s), %d avertissement(s). "
                         "Pour le rapport complet: STARTUP_REPORT=full",
                         total_errors,
                         total_warnings,
                     )
-                    
+
                     startup_report_mode = os.getenv("STARTUP_REPORT", "summary").lower().strip()
                     if startup_report_mode in ("full", "true", "1", "yes"):
                         report = validator.get_validation_report(context_config)
                         logger.warning(f"Validation des champs GDD (rapport complet):\n{report}")
-                    
-                    # En production, fail-fast sur les erreurs critiques
+
                     environment = os.getenv("ENVIRONMENT", "development")
                     if environment == "production" and total_errors > 0:
                         logger.critical("Champs invalides détectés dans context_config.json - l'application ne peut pas démarrer en production.")
                         raise ValueError(f"Configuration invalide: {total_errors} champs invalides détectés")
                 else:
                     logger.info("Validation des champs GDD: tous les champs sont valides")
-        except Exception as e:
-            # Ne pas bloquer le démarrage si la validation échoue (mais logger l'erreur)
-            logger.error(f"Erreur lors de la validation des champs GDD au démarrage: {e}", exc_info=True)
-        
-        # Initialiser le container de services dans app.state
-        try:
-            from api.container import ServiceContainer
-            container = ServiceContainer()
-            # Stocker dans app.state pour accès depuis les dépendances
+
             app.state.container = container
-            logger.info("ServiceContainer initialisé dans app.state.")
-            
-            # Le ServiceContainer gère déjà le cycle de vie des services.
-            # Pas besoin de réinitialiser des singletons (système unifié).
+            logger.info("ServiceContainer initialisé dans app.state (GDD chargé une seule fois).")
         except Exception as e:
-            logger.warning(f"Erreur lors de l'initialisation du container: {e}")
+            logger.error(f"Erreur lors de l'initialisation du container ou de la validation GDD: {e}", exc_info=True)
+            if "container" in locals() and container is not None:
+                app.state.container = container
+                logger.warning("Container partiellement initialisé stocké dans app.state malgré l'erreur.")
+            else:
+                raise
         
         # Debug: Liste TOUTES les routes réelles au runtime (seulement si DEBUG_ROUTES=true)
         if os.getenv("DEBUG_ROUTES", "false").lower() in ("true", "1", "yes"):
@@ -346,7 +337,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
     
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={
             "error": {
                 "code": "VALIDATION_ERROR",

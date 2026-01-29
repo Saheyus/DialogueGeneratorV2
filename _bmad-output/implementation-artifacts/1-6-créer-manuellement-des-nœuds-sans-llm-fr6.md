@@ -2,6 +2,8 @@
 
 Status: done
 
+**Architecture (ADR-007):** Toute modification du canvas (GraphCanvas) doit respecter le mode controlled React Flow. Voir `_bmad-output/planning-artifacts/architecture/v10-architectural-decisions-adrs.md`.
+
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
 ## Story
@@ -110,6 +112,16 @@ so that **je peux ajouter des dialogues spécifiques ou corriger des nœuds sans
 - **Unit :** Couvrir `createEmptyNode` et le flux bouton → `addNode` → `setSelectedNode`.
 - **Integration :** Optionnel si pas d’API create.
 
+### Bug connu : Nouveau nœud depuis un choix (panneau Détails)
+
+**Contexte :** Création d'un nœud vide depuis le panneau Détails (bouton « ➕ Nouveau nœud » sur un choix, ex. Choix #2), puis sauvegarde et retour sur le dialogue (changement d'onglet / rechargement).
+
+**Symptôme 1 :** Le nœud créé depuis le choix est **déconnecté** au retour : la liaison choix → nœud ne persiste pas après rechargement.
+
+**Symptôme 2 :** Au moment où on clique sur « Nouveau nœud » pour un choix (ex. #2), **un autre choix déjà connecté (ex. Choix #1) se déconnecte** immédiatement.
+
+**À ne pas confondre :** Le bouton « ➕ Nouveau nœud » global dans la barre du graphe fonctionne et la sauvegarde de ce nœud est correcte ; le problème ne concerne que le flux « Nouveau nœud » **depuis un choix** dans le panneau Détails.
+
 ### References
 
 - [Source: _bmad-output/planning-artifacts/epics/epic-01.md#Story-1.6]
@@ -155,3 +167,4 @@ _(aucun)_
 
 - 2026-01-28: Story 1.6 implémentée (createEmptyNode, bouton Nouveau nœud, position, warning nœud vide, tests unit + E2E). Task 3 (menu contextuel) optionnelle non faite.
 - 2026-01-28: Code review — correctifs appliqués (GraphEditor, tests, E2E). Story passée en done.
+- 2026-01-28: Dev Notes — bug connu documenté : « Nouveau nœud » depuis un choix (panneau Détails) — déconnexion au retour + déconnexion d’un autre choix au clic.

@@ -1,5 +1,6 @@
 """Router API pour la gestion de graphes de dialogues."""
 import logging
+import re
 from pathlib import Path
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, status
@@ -24,6 +25,10 @@ from api.exceptions import InternalServerException, NotFoundException, Validatio
 from api.dependencies import get_config_service, get_request_id
 from services.configuration_service import ConfigurationService
 from services.graph_conversion_service import GraphConversionService
+from services.unity_dialogue_export_service import (
+    write_unity_dialogue_to_file,
+    read_last_seq,
+)
 from services.graph_validation_service import GraphValidationService
 from services.unity_dialogue_generation_service import UnityDialogueGenerationService
 from services.graph_generation_service import GraphGenerationService
@@ -113,6 +118,7 @@ async def save_graph(
         
     Returns:
         Nom de fichier et contenu JSON Unity généré.
+        Si seq/document_id fournis (ADR-006), ack_seq et last_seq dans la réponse.
         
     Raises:
         ValidationException: Si la conversion échoue.
@@ -126,34 +132,144 @@ async def save_graph(
         )
         
         # Générer un nom de fichier (titre sanitizé)
-        import re
         sanitized_title = re.sub(r'[^\w\s-]', '', request_data.metadata.title)
         sanitized_title = re.sub(r'[-\s]+', '_', sanitized_title)
         filename = f"{sanitized_title}.json"
         
+        # ADR-006: réponse ack_seq / last_seq si seq fourni (pas de persistance pour /save)
+        extra: dict = {}
+        if request_data.seq is not None:
+            extra["ack_seq"] = request_data.seq
+            extra["last_seq"] = request_data.seq
+        
         logger.info(
-            f"Graphe sauvegardé: {filename}, "
-            f"{request_data.metadata.node_count} nœuds (request_id: {request_id})"
+            "Graphe sauvegardé: %s, %s nœuds (request_id: %s)",
+            filename,
+            request_data.metadata.node_count,
+            request_id,
         )
         
         return SaveGraphResponse(
             success=True,
             filename=filename,
-            json_content=json_content
+            json_content=json_content,
+            **extra,
         )
         
     except ValueError as e:
-        logger.warning(f"Validation error lors de la sauvegarde (request_id: {request_id}): {e}")
+        logger.warning("Validation error lors de la sauvegarde (request_id: %s): %s", request_id, e)
         raise ValidationException(
             message=str(e),
             request_id=request_id
         )
     except Exception as e:
-        logger.exception(f"Erreur lors de la sauvegarde du graphe (request_id: {request_id})")
+        logger.exception("Erreur lors de la sauvegarde du graphe (request_id: %s)", request_id)
         raise InternalServerException(
             message="Erreur lors de la sauvegarde du graphe",
             details={"error": str(e)},
             request_id=request_id
+        )
+
+
+@router.post(
+    "/save-and-write",
+    response_model=SaveGraphResponse,
+    status_code=status.HTTP_200_OK
+)
+async def save_graph_and_write(
+    request_data: SaveGraphRequest,
+    config_service: Annotated[ConfigurationService, Depends(get_config_service)],
+    request_id: Annotated[str, Depends(get_request_id)] = None
+) -> SaveGraphResponse:
+    """Convertit le graphe en Unity JSON, valide et écrit le fichier sur disque (un seul appel).
+    
+    ADR-006: Si seq/document_id fournis, seq <= last_seq → ne pas écraser (200 + ack(last_seq));
+    seq > last_seq → écriture atomique + persistance last_seq + ack(seq).
+    
+    Args:
+        request_data: Nœuds et edges ReactFlow avec métadonnées.
+        config_service: Service de configuration (chemin Unity).
+        request_id: ID de la requête.
+        
+    Returns:
+        Nom de fichier et contenu JSON Unity généré.
+        
+    Raises:
+        ValidationException: Si la conversion ou la validation échoue.
+        InternalServerException: Si l'écriture échoue.
+    """
+    try:
+        json_content = GraphConversionService.graph_to_unity_json(
+            request_data.nodes,
+            request_data.edges
+        )
+        sanitized_title = re.sub(r"[^\w\s-]", "", request_data.metadata.title)
+        sanitized_title = re.sub(r"[-\s]+", "_", sanitized_title)
+        filename_without_ext = sanitized_title[:100] if sanitized_title else "dialogue"
+        filename = filename_without_ext + ".json" if not filename_without_ext.endswith(".json") else filename_without_ext
+        if not filename.endswith(".json"):
+            filename += ".json"
+        document_key = filename[:-5] if filename.endswith(".json") else filename
+
+        # ADR-006: seq / last_seq — si seq fourni, comparer à last_seq
+        seq = request_data.seq
+        last_seq: Optional[int] = None
+        if seq is not None:
+            unity_path = config_service.get_unity_dialogues_path()
+            if unity_path:
+                unity_dir = Path(unity_path)
+                last_seq = read_last_seq(unity_dir, document_key)
+            if last_seq is not None and seq <= last_seq:
+                    logger.info(
+                        "save-and-write: seq %s <= last_seq %s, pas d'écriture (request_id: %s)",
+                        seq,
+                        last_seq,
+                        request_id,
+                    )
+                    return SaveGraphResponse(
+                        success=True,
+                        filename=filename,
+                        json_content=json_content,
+                        ack_seq=last_seq,
+                        last_seq=last_seq,
+                    )
+
+        file_path, filename_out = write_unity_dialogue_to_file(
+            config_service=config_service,
+            json_content=json_content,
+            filename=filename_without_ext,
+            request_id=request_id,
+            last_seq_after_write=seq,
+        )
+
+        extra: dict = {}
+        if seq is not None:
+            extra["ack_seq"] = seq
+            extra["last_seq"] = seq
+
+        logger.info(
+            "Graphe sauvegardé et écrit: %s, %s nœuds (request_id: %s)",
+            filename_out,
+            request_data.metadata.node_count,
+            request_id,
+        )
+        return SaveGraphResponse(
+            success=True,
+            filename=filename_out,
+            json_content=json_content,
+            **extra,
+        )
+    except ValidationException:
+        raise
+    except ValueError as e:
+        logger.warning("Validation error lors de save-and-write (request_id: %s): %s", request_id, e)
+        raise ValidationException(message=str(e), request_id=request_id)
+    except Exception as e:
+        logger.exception("Erreur lors de la sauvegarde du graphe (request_id: %s)", request_id)
+        raise InternalServerException(
+            message="Erreur lors de la sauvegarde du graphe",
+            details={"error": str(e)},
+            request_id=request_id,
         )
 
 

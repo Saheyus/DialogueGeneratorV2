@@ -12,6 +12,12 @@
 import type { Node, Edge } from 'reactflow'
 import type { Choice } from '../schemas/nodeEditorSchema'
 import type { TestNodeParentInfo, TestNodeSyncResult } from '../types/testNode'
+import {
+  buildChoiceEdge,
+  buildTestResultEdge,
+  choiceToTestEdgeId,
+  TEST_RESULT_EDGE_CONFIG,
+} from './graphEdgeBuilders'
 
 /**
  * Mapping handle TestNode → champ choice.
@@ -169,20 +175,23 @@ export function syncTestNodeFromChoice(
   // Créer/mettre à jour les edges
   const edges = [...existingEdges]
 
-  // Edge DialogueNode → TestNode
-  const dialogueToTestEdgeId = `${dialogueNodeId}-choice-${choiceIndex}-to-test`
-  const existingDialogueToTestEdge = edges.find((e) => e.id === dialogueToTestEdgeId)
-  if (!existingDialogueToTestEdge) {
-    const choiceText = choice.text || `Choix ${choiceIndex + 1}`
-    const truncatedLabel = choiceText.length > 30 ? `${choiceText.substring(0, 30)}...` : choiceText
-    edges.push({
-      id: dialogueToTestEdgeId,
-      source: dialogueNodeId,
-      target: testNodeId,
-      sourceHandle: `choice-${choiceIndex}`,
-      type: 'smoothstep',
-      label: truncatedLabel,
-    })
+  // Edge DialogueNode → TestNode (réutiliser l'edge existant si seul le label change → évite clignotement)
+  const dialogueToTestEdgeId = choiceToTestEdgeId(dialogueNodeId, choiceIndex)
+  const choiceEdge = buildChoiceEdge({
+    sourceId: dialogueNodeId,
+    targetId: testNodeId,
+    choiceIndex,
+    choiceText: choice.text,
+    edgeId: dialogueToTestEdgeId,
+  })
+  const existingDialogueToTestEdgeIndex = edges.findIndex((e) => e.id === dialogueToTestEdgeId)
+  if (existingDialogueToTestEdgeIndex === -1) {
+    edges.push(choiceEdge)
+  } else if (edges[existingDialogueToTestEdgeIndex].label !== choiceEdge.label) {
+    edges[existingDialogueToTestEdgeIndex] = {
+      ...edges[existingDialogueToTestEdgeIndex],
+      label: choiceEdge.label,
+    }
   }
 
   // Edges TestNode → nœuds de résultat
@@ -244,36 +253,8 @@ export function syncTestNodeResultEdges(
 ): Edge[] {
   const edges = [...existingEdges]
 
-  // Configuration des 4 résultats de test
-  const testResults = [
-    {
-      field: 'testCriticalFailureNode' as const,
-      handleId: 'critical-failure',
-      color: '#C0392B',
-      label: 'Échec critique',
-    },
-    {
-      field: 'testFailureNode' as const,
-      handleId: 'failure',
-      color: '#E74C3C',
-      label: 'Échec',
-    },
-    {
-      field: 'testSuccessNode' as const,
-      handleId: 'success',
-      color: '#27AE60',
-      label: 'Réussite',
-    },
-    {
-      field: 'testCriticalSuccessNode' as const,
-      handleId: 'critical-success',
-      color: '#229954',
-      label: 'Réussite critique',
-    },
-  ]
-
-  // Pour chaque résultat de test
-  testResults.forEach((result) => {
+  // Pour chaque résultat de test (config centralisée dans graphEdgeBuilders)
+  TEST_RESULT_EDGE_CONFIG.forEach((result) => {
     const targetNodeId = choice[result.field] as string | undefined
 
     if (targetNodeId) {
@@ -294,16 +275,15 @@ export function syncTestNodeResultEdges(
       )
 
       if (!existingEdge) {
-        // Créer l'edge
-        edges.push({
-          id: `${testNodeId}-${result.handleId}-${targetNodeId}`,
-          source: testNodeId,
-          target: targetNodeId,
-          sourceHandle: result.handleId,
-          type: 'smoothstep',
-          label: result.label,
-          style: { stroke: result.color },
-        })
+        edges.push(
+          buildTestResultEdge(
+            testNodeId,
+            targetNodeId,
+            result.handleId,
+            result.label,
+            result.color
+          )
+        )
       }
     } else {
       // Supprimer l'edge si le champ test*Node n'existe plus

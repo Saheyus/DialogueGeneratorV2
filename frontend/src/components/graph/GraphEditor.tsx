@@ -15,7 +15,6 @@ import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { useToast, SaveStatusIndicator } from '../shared'
 import { theme } from '../../theme'
 import * as unityDialoguesAPI from '../../api/unityDialogues'
-import * as dialoguesAPI from '../../api/dialogues'
 import { getErrorMessage } from '../../types/errors'
 import type { UnityDialogueMetadata } from '../../types/api'
 
@@ -26,6 +25,9 @@ export function GraphEditor() {
   const [showAIGenerationPanel, setShowAIGenerationPanel] = useState(false)
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null)
   const dialogueListRef = useRef<UnityDialogueListRef>(null)
+  const prevSelectedDialogueRef = useRef<UnityDialogueMetadata | null>(null)
+  const loadInFlightRef = useRef(false)
+  const canvasWrapperRef = useRef<HTMLDivElement | null>(null)
   const toast = useToast()
   
   // États auto-save draft (Task 2 - Story 0.5) - supprimés, maintenant géré automatiquement
@@ -52,7 +54,6 @@ export function GraphEditor() {
     nodes,
     loadDialogue,
     saveDialogue,
-    exportToUnity,
     validateGraph,
     applyAutoLayout,
     setSelectedNode,
@@ -66,17 +67,13 @@ export function GraphEditor() {
     unmarkCycleAsIntentional,
     createEmptyNode,
     addNode,
-    // États auto-save draft (Task 2 - Story 0.5)
     hasUnsavedChanges,
-    lastDraftSavedAt,
-    lastDraftError,
-    markDraftSaved,
-    markDraftError,
-    clearDraftError,
-    autoRestoredDraft,
-    setAutoRestoredDraft,
-    clearAutoRestoredDraft,
+    lastSaveError,
+    lastSavedAt,
     setShowDeleteNodeConfirm,
+    syncStatus,
+    lastAckSeq,
+    documentId,
   } = useGraphStore()
   
   /** Désactive les actions graphe si aucun dialogue ou chargement en cours (évite duplication de condition). */
@@ -100,165 +97,61 @@ export function GraphEditor() {
     }
   }, [setSelectedNode])
   
-  // Charger le dialogue sélectionné dans le graphe + vérifier draft (Task 2 - Story 0.5)
+  // Charger le dialogue sélectionné depuis l'API (plus de draft local).
+  // Ne pas appeler resetGraph à la désélection : le graphe reste affiché jusqu'au prochain chargement
+  // (évite que les nœuds disparaissent après un load quand l'effet else s'exécute).
   useEffect(() => {
-    // Réinitialiser l'état de brouillon restauré quand on change de dialogue
-    clearAutoRestoredDraft()
-    
     if (selectedDialogue) {
+      prevSelectedDialogueRef.current = selectedDialogue
+      loadInFlightRef.current = true
       setIsLoadingDialogue(true)
-      
-      // Clé stable pour le draft
-      const draftKey = `unity_dialogue_draft:${selectedDialogue.filename}`
-      
-      // Charger le dialogue depuis l'API
       unityDialoguesAPI.getUnityDialogue(selectedDialogue.filename)
-        .then((response) => {
-          // Vérifier s'il existe un draft local
-          const draftStr = localStorage.getItem(draftKey)
-          if (draftStr) {
-            try {
-              const draft = JSON.parse(draftStr)
-              const draftTimestamp = draft.timestamp || 0
-              const fileTimestamp = selectedDialogue.modified_time 
-                ? new Date(selectedDialogue.modified_time).getTime() 
-                : 0
-              
-              // Comparer le contenu JSON parsé pour vérifier si identique (plus robuste que comparaison de chaînes)
-              let contentIdentical = false
-              try {
-                const draftContent = draft.json_content || ''
-                const fileContent = response.json_content || ''
-                // Parser les deux JSON et comparer les objets (ignore les différences de sérialisation)
-                const draftObj = JSON.parse(draftContent)
-                const fileObj = JSON.parse(fileContent)
-                // Comparaison profonde des objets JSON
-                contentIdentical = JSON.stringify(draftObj) === JSON.stringify(fileObj)
-              } catch (err) {
-                // Si erreur de parsing, considérer comme différent (sécurité)
-                contentIdentical = false
-              }
-              
-              // Si draft plus récent que le fichier → restaurer automatiquement
-              // MAIS seulement si le contenu est différent (sinon c'est un faux positif)
-              if (draftTimestamp > fileTimestamp && !contentIdentical) {
-                // Restaurer automatiquement le brouillon le plus récent
-                loadDialogue(draft.json_content, undefined, selectedDialogue.filename)
-                  .then(async () => {
-                    // Validation automatique après chargement du brouillon
-                    try {
-                      await validateGraph()
-                    } catch (err) {
-                      console.error('Erreur lors de la validation automatique au chargement:', err)
-                      // Ne pas bloquer le chargement en cas d'erreur de validation
-                    }
-                    // Enregistrer dans le store qu'un brouillon a été restauré automatiquement
-                    setAutoRestoredDraft({
-                      timestamp: draftTimestamp,
-                      fileTimestamp: fileTimestamp,
-                    })
-                    setIsLoadingDialogue(false)
-                    toast('Brouillon local restauré automatiquement', 'info', 3000)
-                  })
-                  .catch((err) => {
-                    console.error('Erreur lors de la restauration du brouillon:', err)
-                    toast(`Erreur lors de la restauration: ${getErrorMessage(err)}`, 'error')
-                    // Fallback : charger le fichier
-                    return loadDialogue(response.json_content, undefined, selectedDialogue.filename)
-                      .then(async () => {
-                        // Validation automatique après chargement
-                        try {
-                          await validateGraph()
-                        } catch (err) {
-                          console.error('Erreur lors de la validation automatique au chargement:', err)
-                          // Ne pas bloquer le chargement en cas d'erreur de validation
-                        }
-                        setIsLoadingDialogue(false)
-                      })
-                  })
-                return // Ne pas charger le fichier, on a déjà chargé le brouillon
-              } else {
-                // Draft obsolète OU identique → supprimer
-                localStorage.removeItem(draftKey)
-              }
-            } catch (err) {
-              console.error('Erreur lors de la lecture du draft:', err)
-              localStorage.removeItem(draftKey)
-            }
-          }
-          
-          // Charger le dialogue normalement (les positions seront chargées automatiquement depuis localStorage)
-          // Passer le filename explicitement pour que le store puisse sauvegarder/charger les positions
-          return loadDialogue(response.json_content, undefined, selectedDialogue.filename)
-        })
+        .then((response) => loadDialogue(response.json_content, undefined, selectedDialogue.filename))
         .then(async () => {
-          // Validation automatique après chargement
           try {
             await validateGraph()
           } catch (err) {
             console.error('Erreur lors de la validation automatique au chargement:', err)
-            // Ne pas bloquer le chargement en cas d'erreur de validation
           }
+          loadInFlightRef.current = false
           setIsLoadingDialogue(false)
+          const state = useGraphStore.getState()
+          // Sélectionner le premier nœud pour afficher le panneau Détails (évite "rien ne s'affiche dans le dialogue")
+          if (state.nodes.length > 0 && !state.selectedNodeId) {
+            state.setSelectedNode(state.nodes[0].id)
+          }
         })
         .catch((err) => {
           console.error('Erreur lors du chargement du dialogue:', err)
           toast(`Erreur: ${getErrorMessage(err)}`, 'error')
+          loadInFlightRef.current = false
           setIsLoadingDialogue(false)
         })
     } else {
-      // Réinitialiser le graphe si aucun dialogue sélectionné
-      useGraphStore.getState().resetGraph()
+      // Désélection : ne pas vider le graphe (remplacé au prochain load)
+      prevSelectedDialogueRef.current = null
     }
-  }, [selectedDialogue, loadDialogue, validateGraph, toast, clearAutoRestoredDraft, setAutoRestoredDraft])
-  
-  // Auto-save draft avec debounce (Task 2 - Story 0.5)
-  // Sauvegarde immédiate lors du démontage si des changements non sauvegardés existent
+  }, [selectedDialogue, loadDialogue, validateGraph, toast])
+
+  // Auto-save backend : micro-batch 100 ms (ADR-006)
   useEffect(() => {
-    // Ne pas auto-save si conditions bloquantes
-    if (!selectedDialogue || 
-        !hasUnsavedChanges || 
-        isGraphLoading || 
-        isGraphSaving || 
-        isLoadingDialogue ||
-        isGenerating) {
+    if (
+      !selectedDialogue ||
+      !hasUnsavedChanges ||
+      isGraphLoading ||
+      isGraphSaving ||
+      isLoadingDialogue ||
+      isGenerating
+    ) {
       return
     }
-    
-    const draftKey = `unity_dialogue_draft:${selectedDialogue.filename}`
-    
-    // Fonction de sauvegarde réutilisable
-    const saveDraft = () => {
-      try {
-        clearDraftError()
-        const json_content = exportToUnity({ keepStatusForDraft: true })
-        // Note : Les positions sont maintenant sauvegardées séparément par updateNodePosition
-        const draft = {
-          filename: selectedDialogue.filename,
-          json_content,
-          timestamp: Date.now(),
-        }
-        localStorage.setItem(draftKey, JSON.stringify(draft))
-        markDraftSaved()
-      } catch (err) {
-        console.error('Erreur lors de l\'auto-save draft:', err)
-        const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue'
-        markDraftError(errorMessage)
-      }
-    }
-    
-    // Debounce 3s après le dernier changement
-    const timeoutId = setTimeout(saveDraft, 3000)
-    
-    // Cleanup : sauvegarder immédiatement lors du démontage si des changements non sauvegardés
-    return () => {
-      clearTimeout(timeoutId)
-      // Sauvegarder immédiatement si le composant est démonté avec des changements non sauvegardés
-      if (selectedDialogue && hasUnsavedChanges && !isGraphLoading && !isGraphSaving && !isLoadingDialogue && !isGenerating) {
-        saveDraft()
-      }
-    }
-  }, [selectedDialogue, hasUnsavedChanges, isGraphLoading, isGraphSaving, isLoadingDialogue, isGenerating, nodes, exportToUnity, markDraftSaved, markDraftError, clearDraftError])
+    const timeoutId = setTimeout(() => {
+      saveDialogue().catch((err) => {
+        toast(`Sauvegarde automatique échouée: ${getErrorMessage(err)}`, 'error')
+      })
+    }, 100)
+    return () => clearTimeout(timeoutId)
+  }, [selectedDialogue, hasUnsavedChanges, isGraphLoading, isGraphSaving, isLoadingDialogue, isGenerating, nodes, saveDialogue, toast])
   
   // Handler pour auto-layout
   const handleAutoLayout = useCallback(async () => {
@@ -320,114 +213,52 @@ export function GraphEditor() {
     
     try {
       setIsLoadingDialogue(true)
-      // Utiliser saveDialogue() qui appelle l'API /save pour obtenir le JSON canonique
-      // (gère correctement les TestNodes avec 4 résultats, validation, etc.)
-      const saveResponse = await saveDialogue()
-      const response = await dialoguesAPI.exportUnityDialogue({
-        json_content: saveResponse.json_content,
-        title: selectedDialogue.title || selectedDialogue.filename,
-        filename: selectedDialogue.filename.replace('.json', ''), // Enlever l'extension
+      // Flush du panneau Détails (formulaire) vers le store avant sauvegarde (évite perte speaker/line des nœuds manuels)
+      window.dispatchEvent(new CustomEvent('flush-node-editor-form'))
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(resolve, 1500)
+        const onFlushed = () => {
+          clearTimeout(timeout)
+          resolve()
+        }
+        window.addEventListener('node-editor-flushed', onFlushed, { once: true })
       })
-      
-      // Validation automatique après sauvegarde
+      // saveDialogue() appelle l'API save-and-write (conversion + écriture disque en un appel)
+      const saveResponse = await saveDialogue()
       try {
         await validateGraph()
         const state = useGraphStore.getState()
         const errors = state.validationErrors.filter((e) => e.severity === 'error')
         const warnings = state.validationErrors.filter((e) => e.severity === 'warning')
-        
         if (errors.length === 0 && warnings.length === 0) {
-          toast(`Dialogue sauvegardé: ${response.filename} - Graphe valide`, 'success', 3000)
+          toast(`Dialogue sauvegardé: ${saveResponse.filename} - Graphe valide`, 'success', 3000)
         } else if (errors.length > 0) {
-          toast(`Dialogue sauvegardé: ${response.filename} - ${errors.length} erreur(s) et ${warnings.length} avertissement(s)`, 'warning', 4000)
+          toast(`Dialogue sauvegardé: ${saveResponse.filename} - ${errors.length} erreur(s) et ${warnings.length} avertissement(s)`, 'warning', 4000)
         } else {
-          toast(`Dialogue sauvegardé: ${response.filename} - ${warnings.length} avertissement(s)`, 'warning', 4000)
+          toast(`Dialogue sauvegardé: ${saveResponse.filename} - ${warnings.length} avertissement(s)`, 'warning', 4000)
         }
       } catch (validationErr) {
-        // En cas d'erreur de validation, on affiche quand même le succès de sauvegarde
         console.error('Erreur lors de la validation automatique:', validationErr)
-        toast(`Dialogue sauvegardé: ${response.filename}`, 'success', 3000)
+        toast(`Dialogue sauvegardé: ${saveResponse.filename}`, 'success', 3000)
       }
-      
-      // Supprimer le draft après sauvegarde réussie (Task 2 - Story 0.5)
-      const draftKey = `unity_dialogue_draft:${selectedDialogue.filename}`
-      localStorage.removeItem(draftKey)
-      markDraftSaved()
-      // Supprimer aussi l'état de brouillon restauré automatiquement
-      useGraphStore.getState().clearAutoRestoredDraft()
-      
-      // Rafraîchir la liste
       dialogueListRef.current?.refresh()
     } catch (err) {
       toast(`Erreur lors de la sauvegarde: ${getErrorMessage(err)}`, 'error')
     } finally {
       setIsLoadingDialogue(false)
     }
-  }, [selectedDialogue, saveDialogue, validateGraph, toast, markDraftSaved])
-  
-  // Handler pour charger le fichier plus ancien (depuis le bandeau d'avertissement)
-  const handleLoadOlderFile = useCallback(() => {
-    if (selectedDialogue) {
-      const draftKey = `unity_dialogue_draft:${selectedDialogue.filename}`
-      localStorage.removeItem(draftKey)
-      
-      // Charger le dialogue normal depuis l'API
-      setIsLoadingDialogue(true)
-      unityDialoguesAPI.getUnityDialogue(selectedDialogue.filename)
-        .then((response) => loadDialogue(response.json_content, undefined, selectedDialogue.filename))
-        .then(async () => {
-          // Validation automatique après chargement
-          try {
-            await validateGraph()
-          } catch (err) {
-            console.error('Erreur lors de la validation automatique au chargement:', err)
-            // Ne pas bloquer le chargement en cas d'erreur de validation
-          }
-          setIsLoadingDialogue(false)
-          useGraphStore.getState().clearAutoRestoredDraft()
-          toast('Fichier plus ancien chargé', 'info', 2000)
-        })
-        .catch((err) => {
-          console.error('Erreur lors du chargement du dialogue:', err)
-          toast(`Erreur: ${getErrorMessage(err)}`, 'error')
-          setIsLoadingDialogue(false)
-        })
-    }
-  }, [selectedDialogue, loadDialogue, validateGraph, toast])
-  
-  // Écouter l'événement pour charger le fichier plus ancien (depuis le bandeau d'avertissement)
+  }, [selectedDialogue, saveDialogue, validateGraph, toast])
+
+  // Sauvegarder quand le panneau Détails envoie "request-save-dialogue" (bouton Sauvegarder du panneau)
   useEffect(() => {
-    const handleLoadOlderFileEvent = () => {
-      handleLoadOlderFile()
-    }
-    
-    window.addEventListener('load-older-file', handleLoadOlderFileEvent as EventListener)
-    return () => {
-      window.removeEventListener('load-older-file', handleLoadOlderFileEvent as EventListener)
-    }
-  }, [handleLoadOlderFile])
+    const onRequestSave = () => { handleSave() }
+    window.addEventListener('request-save-dialogue', onRequestSave)
+    return () => window.removeEventListener('request-save-dialogue', onRequestSave)
+  }, [handleSave])
   
   // Raccourcis clavier
   useKeyboardShortcuts(
     [
-      {
-        key: 'ctrl+z',
-        handler: (e) => {
-          e.preventDefault()
-          const { undo } = useGraphStore.temporal.getState()
-          undo()
-        },
-        description: 'Annuler',
-      },
-      {
-        key: 'ctrl+shift+z',
-        handler: (e) => {
-          e.preventDefault()
-          const { redo } = useGraphStore.temporal.getState()
-          redo()
-        },
-        description: 'Refaire',
-      },
       {
         key: 'ctrl+s',
         handler: (e) => {
@@ -608,22 +439,28 @@ export function GraphEditor() {
                 </div>
               )
             })()}
-            {/* Indicateur auto-save draft (Task 3 - Story 0.5) */}
+            {/* Indicateur sauvegarde ADR-006: Synced (seq …) / Offline, N queued / Error */}
             {selectedDialogue && (() => {
-              const isWriting = hasUnsavedChanges && !isGraphLoading && !isGraphSaving && !isLoadingDialogue
-              const status: 'saved' | 'saving' | 'unsaved' | 'error' = lastDraftError 
-                ? 'error' 
-                : isWriting 
-                ? 'saving' 
-                : hasUnsavedChanges 
-                ? 'unsaved' 
-                : 'saved'
-              
+              const status: 'saved' | 'saving' | 'unsaved' | 'error' = lastSaveError
+                ? 'error'
+                : isGraphSaving
+                  ? 'saving'
+                  : hasUnsavedChanges
+                    ? 'unsaved'
+                    : 'saved'
+              const pendingCount = hasUnsavedChanges ? 1 : 0
+              const syncStatusDisplay =
+                syncStatus === 'synced' && typeof navigator !== 'undefined' && !navigator.onLine
+                  ? 'offline'
+                  : syncStatus
               return (
                 <SaveStatusIndicator
                   status={status}
-                  lastSavedAt={lastDraftSavedAt}
-                  errorMessage={lastDraftError}
+                  lastSavedAt={lastSavedAt}
+                  errorMessage={lastSaveError}
+                  ackSeq={lastAckSeq}
+                  pendingCount={pendingCount}
+                  syncStatusDisplay={syncStatusDisplay}
                 />
               )
             })()}
@@ -679,6 +516,14 @@ export function GraphEditor() {
                 const node = createEmptyNode(position)
                 addNode(node)
                 setSelectedNode(node.id)
+                if (reactFlowInstance) {
+                  requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                      const n = reactFlowInstance.getNode(node.id)
+                      if (n) reactFlowInstance.fitView({ nodes: [n], padding: 0.2, duration: 200 })
+                    })
+                  })
+                }
               }}
               disabled={!canEditGraph}
               style={{
@@ -731,28 +576,12 @@ export function GraphEditor() {
             >
               📤 Exporter
             </button>
-            <button
-              onClick={handleSave}
-              disabled={isGraphSaving || !canEditGraph}
-              style={{
-                padding: '0.5rem 1rem',
-                border: 'none',
-                borderRadius: '6px',
-                backgroundColor: theme.button.primary.background,
-                color: theme.button.primary.color,
-                cursor: (isGraphSaving || !canEditGraph) ? 'not-allowed' : 'pointer',
-                opacity: (isGraphSaving || !canEditGraph) ? 1 : 0.6,
-                fontWeight: 700,
-                fontSize: '0.9rem',
-              }}
-            >
-              {isGraphSaving ? 'Sauvegarde...' : '💾'}
-            </button>
+            {/* ADR-006: pas de bouton Sauvegarder (autosave immédiat) */}
           </div>
         </div>
         
-        {/* Contenu : Graphe + Panneau d'édition */}
-        {!selectedDialogue ? (
+        {/* Contenu : Graphe + Panneau d'édition. Afficher le canvas si dialogue sélectionné OU si le store a des nœuds (graphe déjà chargé). */}
+        {!selectedDialogue && nodes.length === 0 ? (
           <div style={{ 
             flex: 1,
             display: 'flex',
@@ -776,7 +605,6 @@ export function GraphEditor() {
           <div style={{ 
             flex: 1, 
             minHeight: 0,
-            height: 0, // Force flex child to respect parent height
             position: 'relative',
             backgroundColor: theme.background.panel,
             overflow: 'hidden',
@@ -794,7 +622,11 @@ export function GraphEditor() {
                 Chargement du graphe...
               </div>
             ) : (
-              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <div
+                ref={canvasWrapperRef}
+                key={`graph-${documentId ?? 'empty'}`}
+                style={{ flex: 1, minHeight: 400, overflow: 'hidden' }}
+              >
                 <ReactFlowProvider>
                   <GraphCanvas />
                 </ReactFlowProvider>

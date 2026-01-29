@@ -87,7 +87,7 @@ describe('PresetSelector', () => {
       render(<PresetSelector onPresetLoaded={mockOnPresetLoaded} />);
 
       expect(screen.getByText(/charger preset/i)).toBeInTheDocument();
-      expect(screen.getByText(/sauvegarder preset/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /sauvegarder/i })).toBeInTheDocument();
     });
 
     it('should load presets on mount', () => {
@@ -166,7 +166,7 @@ describe('PresetSelector', () => {
         />
       );
 
-      const saveButton = screen.getByText(/sauvegarder preset/i);
+      const saveButton = screen.getByRole('button', { name: /sauvegarder/i });
       fireEvent.click(saveButton);
 
       await waitFor(() => {
@@ -191,7 +191,7 @@ describe('PresetSelector', () => {
       );
 
       // Ouvrir modal
-      const saveButton = screen.getByText(/sauvegarder preset/i);
+      const saveButton = screen.getByRole('button', { name: /sauvegarder/i });
       fireEvent.click(saveButton);
 
       // Remplir formulaire

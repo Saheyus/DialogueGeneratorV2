@@ -2,6 +2,8 @@
 
 Status: done
 
+**Architecture (ADR-007):** Toute modification du canvas (GraphCanvas) ou du flux nodes/edges doit respecter le mode controlled React Flow. Voir `_bmad-output/planning-artifacts/architecture/v10-architectural-decisions-adrs.md`.
+
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
 ## Story

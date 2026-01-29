@@ -48,7 +48,7 @@ def init_sentry() -> bool:
                 AsyncioIntegration()
             ],
             # Filtrer les informations sensibles
-            before_send=lambda event, hint: filter_sensitive_data(event)
+            before_send=lambda event, _hint: filter_sensitive_data(event)
         )
         
         _sentry_initialized = True

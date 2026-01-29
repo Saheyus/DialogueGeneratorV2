@@ -1,5 +1,5 @@
 /**
- * Tests pour useGraphStore - Auto-save draft functionality
+ * Tests pour useGraphStore - Pending save state (auto-save backend, pas de draft local)
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useGraphStore } from '../store/graphStore'
@@ -9,14 +9,14 @@ import type { Node } from 'reactflow'
 vi.mock('../api/graph', () => ({
   loadGraph: vi.fn(),
   saveGraph: vi.fn(),
+  saveGraphAndWrite: vi.fn(),
   generateNode: vi.fn(),
   validateGraph: vi.fn(),
   calculateLayout: vi.fn(),
 }))
 
-describe('useGraphStore - Auto-save draft state', () => {
+describe('useGraphStore - Pending save state', () => {
   beforeEach(() => {
-    // Reset store avant chaque test
     useGraphStore.getState().resetGraph()
   })
 
@@ -26,14 +26,14 @@ describe('useGraphStore - Auto-save draft state', () => {
       expect(state.hasUnsavedChanges).toBe(false)
     })
 
-    it('should initialize lastDraftSavedAt to null', () => {
+    it('should initialize lastSaveError to null', () => {
       const state = useGraphStore.getState()
-      expect(state.lastDraftSavedAt).toBeNull()
+      expect(state.lastSaveError).toBeNull()
     })
 
-    it('should initialize lastDraftError to null', () => {
+    it('should initialize lastSavedAt to null', () => {
       const state = useGraphStore.getState()
-      expect(state.lastDraftError).toBeNull()
+      expect(state.lastSavedAt).toBeNull()
     })
   })
 
@@ -41,63 +41,8 @@ describe('useGraphStore - Auto-save draft state', () => {
     it('should set hasUnsavedChanges to true', () => {
       const { markDirty } = useGraphStore.getState()
       markDirty()
-      
       const state = useGraphStore.getState()
       expect(state.hasUnsavedChanges).toBe(true)
-    })
-  })
-
-  describe('markDraftSaved', () => {
-    it('should set hasUnsavedChanges to false and update lastDraftSavedAt', () => {
-      const { markDirty, markDraftSaved } = useGraphStore.getState()
-      
-      // Marquer dirty d'abord
-      markDirty()
-      expect(useGraphStore.getState().hasUnsavedChanges).toBe(true)
-      
-      // Marquer sauvegardé
-      const beforeSave = Date.now()
-      markDraftSaved()
-      const afterSave = Date.now()
-      
-      const state = useGraphStore.getState()
-      expect(state.hasUnsavedChanges).toBe(false)
-      expect(state.lastDraftSavedAt).toBeGreaterThanOrEqual(beforeSave)
-      expect(state.lastDraftSavedAt).toBeLessThanOrEqual(afterSave)
-    })
-  })
-
-  describe('markDraftError', () => {
-    it('should set lastDraftError and set hasUnsavedChanges to false', () => {
-      const { markDirty, markDraftError } = useGraphStore.getState()
-      
-      // Marquer dirty d'abord
-      markDirty()
-      expect(useGraphStore.getState().hasUnsavedChanges).toBe(true)
-      
-      // Marquer erreur
-      const errorMessage = 'Quota exceeded'
-      markDraftError(errorMessage)
-      
-      const state = useGraphStore.getState()
-      expect(state.lastDraftError).toBe(errorMessage)
-      expect(state.hasUnsavedChanges).toBe(false)
-    })
-  })
-
-  describe('clearDraftError', () => {
-    it('should reset lastDraftError to null', () => {
-      const { markDraftError, clearDraftError } = useGraphStore.getState()
-      
-      // Marquer erreur d'abord
-      markDraftError('Some error')
-      expect(useGraphStore.getState().lastDraftError).toBe('Some error')
-      
-      // Clear erreur
-      clearDraftError()
-      
-      const state = useGraphStore.getState()
-      expect(state.lastDraftError).toBeNull()
     })
   })
 
@@ -118,9 +63,7 @@ describe('useGraphStore - Auto-save draft state', () => {
     })
 
     it('should mark dirty when updateNode is called', () => {
-      const { addNode, updateNode, markDraftSaved } = useGraphStore.getState()
-      
-      // Ajouter un nœud et marquer sauvegardé
+      const { addNode, updateNode } = useGraphStore.getState()
       const newNode: Node = {
         id: 'test-node-1',
         type: 'dialogueNode',
@@ -128,19 +71,13 @@ describe('useGraphStore - Auto-save draft state', () => {
         data: { text: 'Test' },
       }
       addNode(newNode)
-      markDraftSaved()
-      
-      // Modifier le nœud
       updateNode('test-node-1', { data: { text: 'Updated' } })
-      
       const state = useGraphStore.getState()
       expect(state.hasUnsavedChanges).toBe(true)
     })
 
     it('should mark dirty when deleteNode is called', () => {
-      const { addNode, deleteNode, markDraftSaved } = useGraphStore.getState()
-      
-      // Ajouter un nœud et marquer sauvegardé
+      const { addNode, deleteNode } = useGraphStore.getState()
       const newNode: Node = {
         id: 'test-node-1',
         type: 'dialogueNode',
@@ -148,11 +85,7 @@ describe('useGraphStore - Auto-save draft state', () => {
         data: { text: 'Test' },
       }
       addNode(newNode)
-      markDraftSaved()
-      
-      // Supprimer le nœud
       deleteNode('test-node-1')
-      
       const state = useGraphStore.getState()
       expect(state.hasUnsavedChanges).toBe(true)
     })
@@ -317,48 +250,34 @@ describe('useGraphStore - Auto-save draft state', () => {
     })
 
     it('should mark dirty when connectNodes is called', () => {
-      const { addNode, connectNodes, markDraftSaved } = useGraphStore.getState()
-      
-      // Ajouter deux nœuds et marquer sauvegardé
+      const { addNode, connectNodes } = useGraphStore.getState()
       const node1: Node = { id: 'node-1', type: 'dialogueNode', position: { x: 0, y: 0 }, data: {} }
       const node2: Node = { id: 'node-2', type: 'dialogueNode', position: { x: 100, y: 0 }, data: {} }
       addNode(node1)
       addNode(node2)
-      markDraftSaved()
-      
-      // Connecter les nœuds
       connectNodes('node-1', 'node-2')
-      
       const state = useGraphStore.getState()
       expect(state.hasUnsavedChanges).toBe(true)
     })
 
     it('should mark dirty when disconnectNodes is called', () => {
-      const { addNode, connectNodes, disconnectNodes, markDraftSaved } = useGraphStore.getState()
-      
-      // Ajouter deux nœuds, les connecter et marquer sauvegardé
+      const { addNode, connectNodes, disconnectNodes } = useGraphStore.getState()
       const node1: Node = { id: 'node-1', type: 'dialogueNode', position: { x: 0, y: 0 }, data: {} }
       const node2: Node = { id: 'node-2', type: 'dialogueNode', position: { x: 100, y: 0 }, data: {} }
       addNode(node1)
       addNode(node2)
       connectNodes('node-1', 'node-2')
-      markDraftSaved()
-      
-      // Déconnecter les nœuds
       const edges = useGraphStore.getState().edges
       const edgeId = edges.find(e => e.source === 'node-1' && e.target === 'node-2')?.id
       if (edgeId) {
         disconnectNodes(edgeId)
       }
-      
       const state = useGraphStore.getState()
       expect(state.hasUnsavedChanges).toBe(true)
     })
 
     it('should mark dirty when updateNodePosition is called', () => {
-      const { addNode, updateNodePosition, markDraftSaved } = useGraphStore.getState()
-      
-      // Ajouter un nœud et marquer sauvegardé
+      const { addNode, updateNodePosition } = useGraphStore.getState()
       const newNode: Node = {
         id: 'test-node-1',
         type: 'dialogueNode',
@@ -366,23 +285,14 @@ describe('useGraphStore - Auto-save draft state', () => {
         data: { text: 'Test' },
       }
       addNode(newNode)
-      markDraftSaved()
-      
-      // Modifier la position
       updateNodePosition('test-node-1', { x: 100, y: 100 })
-      
       const state = useGraphStore.getState()
       expect(state.hasUnsavedChanges).toBe(true)
     })
 
     it('should mark dirty when updateMetadata is called', () => {
-      const { updateMetadata, markDraftSaved } = useGraphStore.getState()
-      
-      markDraftSaved()
-      
-      // Modifier les métadonnées
+      const { updateMetadata } = useGraphStore.getState()
       updateMetadata({ title: 'New Title' })
-      
       const state = useGraphStore.getState()
       expect(state.hasUnsavedChanges).toBe(true)
     })
@@ -411,12 +321,11 @@ describe('useGraphStore - Auto-save draft state', () => {
       // Appeler loadDialogue
       await loadDialogue('{"id": "START"}')
       
-      // Vérifier que hasUnsavedChanges est réinitialisé à false
       const state = useGraphStore.getState()
       expect(state.hasUnsavedChanges).toBe(false)
-      expect(state.lastDraftSavedAt).toBeNull()
-      expect(state.lastDraftError).toBeNull()
-      
+      expect(state.lastSaveError).toBeNull()
+      expect(state.lastSavedAt).toBeNull()
+
       // Vérifier que loadGraph a été appelé
       expect(mockLoadGraph).toHaveBeenCalledWith({ json_content: '{"id": "START"}' })
     })

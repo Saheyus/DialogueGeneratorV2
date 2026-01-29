@@ -4,7 +4,7 @@ from pathlib import Path
 import time
 import json
 import hashlib
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 import xml.etree.ElementTree as ET
 from utils.xml_utils import (
     parse_xml_element,

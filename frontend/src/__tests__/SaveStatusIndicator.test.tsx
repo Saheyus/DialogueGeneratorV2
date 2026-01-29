@@ -2,7 +2,7 @@
  * Tests pour SaveStatusIndicator - Indicateur de statut de sauvegarde
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, act } from '@testing-library/react'
+import { render, screen, act } from '@testing-library/react'
 import { SaveStatusIndicator } from '../components/shared/SaveStatusIndicator'
 
 // Mock le theme
@@ -32,14 +32,14 @@ describe('SaveStatusIndicator', () => {
       expect(screen.getByTitle('Sauvegardé')).toBeInTheDocument()
     })
 
-    it('should display "En cours..." when status is saving', () => {
+    it('should display "Sauvegarde…" when status is saving', () => {
       render(<SaveStatusIndicator status="saving" />)
-      expect(screen.getByTitle('En cours...')).toBeInTheDocument()
+      expect(screen.getByTitle('Sauvegarde…')).toBeInTheDocument()
     })
 
-    it('should display "Non sauvegardé" when status is unsaved', () => {
+    it('should display "En attente" when status is unsaved', () => {
       render(<SaveStatusIndicator status="unsaved" />)
-      expect(screen.getByTitle('Non sauvegardé')).toBeInTheDocument()
+      expect(screen.getByTitle('En attente')).toBeInTheDocument()
     })
 
     it('should display "Erreur" when status is error', () => {
@@ -107,7 +107,7 @@ describe('SaveStatusIndicator', () => {
   describe('Status indicator dot', () => {
     it('should show pulsing animation when status is saving', () => {
       render(<SaveStatusIndicator status="saving" />)
-      const container = screen.getByTitle('En cours...')
+      const container = screen.getByTitle('Sauvegarde…')
       const dot = container.firstElementChild as HTMLElement
       expect(dot).toBeInTheDocument()
       expect(dot.style.animation).toContain('pulse')
@@ -119,6 +119,52 @@ describe('SaveStatusIndicator', () => {
       const dot = container.firstElementChild as HTMLElement
       expect(dot).toBeInTheDocument()
       expect(dot.style.animation).toBe('none')
+    })
+  })
+
+  describe('ADR-006 sync status labels', () => {
+    it('should display "Synced (seq N)" when syncStatusDisplay is synced and ackSeq is set', () => {
+      render(
+        <SaveStatusIndicator
+          status="saved"
+          syncStatusDisplay="synced"
+          ackSeq={42}
+        />
+      )
+      expect(screen.getByTitle('Synced (seq 42)')).toBeInTheDocument()
+    })
+
+    it('should display "Offline, N change(s) queued" when syncStatusDisplay is offline and pendingCount > 0', () => {
+      render(
+        <SaveStatusIndicator
+          status="unsaved"
+          syncStatusDisplay="offline"
+          pendingCount={2}
+        />
+      )
+      expect(screen.getByTitle('Offline, 2 change(s) queued')).toBeInTheDocument()
+    })
+
+    it('should display "Offline" when syncStatusDisplay is offline and pendingCount is 0', () => {
+      render(
+        <SaveStatusIndicator
+          status="saved"
+          syncStatusDisplay="offline"
+          pendingCount={0}
+        />
+      )
+      expect(screen.getByTitle('Offline')).toBeInTheDocument()
+    })
+
+    it('should display "Error" when syncStatusDisplay is error', () => {
+      render(
+        <SaveStatusIndicator
+          status="error"
+          syncStatusDisplay="error"
+          errorMessage="Network failed"
+        />
+      )
+      expect(screen.getByTitle('Network failed')).toBeInTheDocument()
     })
   })
 })
