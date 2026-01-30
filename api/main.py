@@ -469,12 +469,13 @@ async def health_check_detailed() -> JSONResponse:
 
 
 # Inclusion des routers
-from api.routers import auth, dialogues, context, config, llm_usage, unity_dialogues, logs, mechanics_flags, graph, streaming, presets, costs
+from api.routers import auth, dialogues, context, config, llm_usage, unity_dialogues, documents, logs, mechanics_flags, graph, streaming, presets, costs
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(dialogues.router, prefix="/api/v1/dialogues", tags=["Dialogues"])
 app.include_router(streaming.router, prefix="/api/v1/dialogues", tags=["Dialogues"])  # SSE streaming (Story 0.2)
 app.include_router(unity_dialogues.router, prefix="/api/v1/unity-dialogues", tags=["Unity Dialogues"])
+app.include_router(documents.router, prefix="/api/v1/documents", tags=["Documents"])
 app.include_router(context.router, prefix="/api/v1/context", tags=["Context"])
 app.include_router(config.router, prefix="/api/v1/config", tags=["Configuration"])
 app.include_router(llm_usage.router, prefix="/api/v1/llm-usage", tags=["LLM Usage"])

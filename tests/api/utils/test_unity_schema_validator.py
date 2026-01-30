@@ -26,9 +26,10 @@ class TestUnitySchemaValidator:
     
     def test_load_unity_schema_not_found(self, tmp_path):
         """Test de chargement avec schéma absent."""
+        import api.utils.unity_schema_validator as mod
+        mod._schema_cache = None
         with patch("api.utils.unity_schema_validator._SCHEMA_PATH", tmp_path / "nonexistent.json"):
             result = load_unity_schema()
-            
             assert result is None
     
     def test_load_unity_schema_success(self, tmp_path):

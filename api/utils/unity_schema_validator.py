@@ -135,8 +135,8 @@ def validate_unity_json_structured(
     """Valide un JSON Unity et retourne des erreurs structurées (code, message, path).
     
     Pour schemaVersion >= 1.1.0, un document sans choiceId dans un choice produit
-    une erreur avec code "missing_choice_id". Utilisable par la validation export
-    (bloquant) lorsqu'elle sera connectée (TODO Story 16.2: connecter à endpoint export).
+    une erreur avec code "missing_choice_id". Connecté à l'endpoint PUT document
+    (Story 16.2) en mode export (validation bloquante).
     
     Args:
         json_data: Document (dict avec schemaVersion, nodes) ou liste de nœuds (legacy).

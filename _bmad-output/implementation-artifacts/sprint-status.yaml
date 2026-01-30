@@ -53,7 +53,7 @@ development_status:
   epic-0-retrospective: done
   epic-16: in-progress
   16-1-schéma-json-v1-1-0-et-choiceid-fondations: done
-  16-2-backend-document-get-put-revision-409: ready-for-dev
+  16-2-backend-document-get-put-revision-409: in-progress
   16-3-backend-layout-sidecar-concurrence: backlog
   16-4-frontend-sot-document-layout-projection-ids-stables: backlog
   16-5-migration-choiceid-lecture-tolérante-refus-sans-choiceid: backlog

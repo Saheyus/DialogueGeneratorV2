@@ -333,3 +333,81 @@ Aucune erreur rencontrée lors de l'implémentation.
   - **[HIGH]** API : doc explicite dans `graph.py` (accept/reject = validation-only, persistance via frontend saveDialogue)
   - **[MEDIUM]** Reject : toast d’erreur si API échoue ; toast si sauvegarde échoue après reject
   - Tests unitaires : mock `saveGraph` dans tous les tests rejectNode ; test « should not modify state and throw when reject API fails » ; assertion `saveGraph` appelé après reject
+- **2026-01-27** : Code review (AI) — 2 High, 4 Medium, 3 Low ; statut recommandé in-progress puis corrections appliquées. Détails en section Senior Developer Review (AI).
+
+## Senior Developer Review (AI)
+
+**Date:** 2026-01-27  
+**Reviewer:** Amelia (Developer Agent)
+
+**Story:** 1-4-accepter-ou-rejeter-nœuds-générés-inline-fr4.md  
+**Git vs Story Discrepancies:** 6 found  
+**Issues Found:** 2 High, 4 Medium, 3 Low (1 résolu après vérification architecture)
+
+### CRITICAL ISSUES
+
+#### ~~1. **API Endpoints sont des NO-OPs - Cohérent avec l'architecture**~~ [RÉSOLU - Architecture correcte]
+**Fichier:** `api/routers/graph.py:700-778`  
+**Analyse initiale:** Les endpoints `/accept` et `/reject` ne font QUE logger et retourner un succès. Aucune validation, aucune modification du dialogue JSON.
+
+**Architecture documentée** (`docs/architecture/graph-conversion-architecture.md`):
+- **Frontend = View State** (Zustand store) - gère l'état local d'édition
+- **Backend = Projection canonique** (GraphConversionService) - conversion JSON Unity ↔ ReactFlow
+- **Source of Truth = JSON Unity** - format de stockage
+
+**Flux actuel (cohérent avec l'architecture):**
+1. Frontend: `rejectNode()` nettoie les références parent (lignes 1329-1382)
+2. Frontend: Appelle `graphAPI.rejectNode()` → API log pour audit (pattern standard)
+3. Frontend: Appelle `deleteNode()` → supprime visuellement le nœud (ligne 1389)
+4. Frontend: `markDirty()` → déclenche auto-save qui sauvegarde l'état sans le nœud
+5. Frontend: Appelle `/save` → obtient JSON Unity canonique (via GraphConversionService)
+6. Frontend: Appelle `/export` → sauvegarde sur disque
+
+**Conclusion:** ✅ **C'est l'architecture voulue!** Les endpoints `/accept` et `/reject` sont des "pings" pour logging/audit. La logique métier est dans le frontend (Zustand store), et la projection canonique est dans le backend (GraphConversionService via `/save`).
+
+#### 2. **Session Recovery non testée - AC #5 non validé** [HIGH]
+**Fichier:** `e2e/graph-node-accept-reject.spec.ts:110-125`  
+**Problème:** Le test E2E pour AC #5 (session recovery) était un placeholder vide. Corrigé en implémentation recommandations (E2E réécrits avec AC#5).
+
+#### 3. **Tests E2E sont des placeholders - Pas de tests réels** [HIGH]
+**Fichier:** `e2e/graph-node-accept-reject.spec.ts`  
+**Problème:** Tests E2E placeholders avec conditions `if` qui pouvaient passer sans rien valider. Corrigé en implémentation recommandations (assertions strictes, génération réelle).
+
+### MEDIUM ISSUES
+
+#### 4. **Fichiers modifiés non documentés dans File List** [MEDIUM]
+**Problème:** Fichiers modifiés (data/cost_budgets.json, notion_cache, test_prompt_output.txt, frontend/src/__tests__/useGraphStore.test.ts) non listés. File List mise à jour dans Dev Agent Record.
+
+#### 5. **API endpoints ne valident pas l'existence du dialogue** [MEDIUM]
+**Fichier:** `api/routers/graph.py`  
+**Problème:** accept/reject acceptaient n'importe quel dialogue_id. Corrigé : `_validate_dialogue_exists`, tests 404.
+
+#### 6. **Pas de gestion d'erreur si saveDialogue() échoue après accept** [MEDIUM]
+**Fichier:** `frontend/src/store/graphStore.ts`  
+**Problème:** Pas de rollback si saveDialogue() échoue. Corrigé : rollback + toast si échec.
+
+#### 7. **Tests unitaires ne testent pas le nettoyage des connexions parent lors reject** [MEDIUM]
+**Fichier:** `tests/frontend/graphStore.acceptReject.test.ts`  
+**Problème:** Test nettoyage targetNode/nextNode manquant. Corrigé : tests ajoutés (§7).
+
+### LOW ISSUES
+
+#### 8. **Couleurs hardcodées au lieu d'utiliser le thème** [LOW]
+**Fichier:** `frontend/src/components/graph/nodes/DialogueNode.tsx`  
+**Problème:** Couleurs #F5A623 / #27AE60 hardcodées. Corrigé : couleurs via thème (`frontend/src/theme.ts`).
+
+#### 9. **Magic number: setTimeout(0) pour synchronisation state** [LOW]
+**Fichier:** `frontend/src/store/graphStore.ts:1302`  
+**Problème:** setTimeout(0) fragile pour synchro state. Documenté / laissé en l'état (fix double-clic).
+
+#### 10. **Tests API ne testent pas les cas d'erreur réels** [LOW]
+**Fichier:** `tests/api/test_graph_accept_reject.py`  
+**Problème:** Pas de tests 404/erreurs. Corrigé : tests 404 dialogue not found.
+
+### RÉSUMÉ
+
+**Acceptance Criteria Validation:**
+- ✅ AC #1–#4: Implémentés
+- ✅ AC #5: Session recovery — E2E réécrits, draft avec keepStatusForDraft
+
+**Story Status (review):** review → in-progress (issues à corriger) → corrections appliquées → done.

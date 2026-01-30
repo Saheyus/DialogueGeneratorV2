@@ -54,6 +54,7 @@ playwright/.cache/
 # IDE specific files
 .vscode/
 .idea/
+.VSCodeCounter/
 *.suo
 *.user
 
@@ -76,6 +77,9 @@ data/UnityData/
 *.bak
 *.swp
 test_prompt_output.txt
+details.md
+diff.md
+diff-details.md
 
 # User interface settings file
 ui_settings.json
