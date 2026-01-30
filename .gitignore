@@ -54,7 +54,9 @@ playwright/.cache/
 # IDE specific files
 .vscode/
 .idea/
+# VSCode Counter: auto-generated metrics (do not commit)
 .VSCodeCounter/
+.VSCodeCounter/**
 *.suo
 *.user
 
@@ -77,6 +79,7 @@ data/UnityData/
 *.bak
 *.swp
 test_prompt_output.txt
+# VSCode Counter report names (anywhere)
 details.md
 diff.md
 diff-details.md
