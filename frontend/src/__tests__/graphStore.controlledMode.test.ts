@@ -56,7 +56,7 @@ describe('graphStore - Controlled mode (ADR-007)', () => {
     })
 
     it('setSelectedNode(null) does not alter nodes or edges', () => {
-      const { addNode, connectNodes, setSelectedNode } = useGraphStore.getState()
+      const { addNode, setSelectedNode } = useGraphStore.getState()
       const n1: Node = { id: 'n1', type: 'dialogueNode', position: { x: 0, y: 0 }, data: {} }
       addNode(n1)
       setSelectedNode('n1')

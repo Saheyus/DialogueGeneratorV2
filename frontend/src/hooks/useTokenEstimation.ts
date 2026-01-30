@@ -70,7 +70,7 @@ export function useTokenEstimation(options: UseTokenEstimationOptions): UseToken
   const [estimationError, setEstimationError] = useState<string | null>(null)
 
   const { selections } = useContextStore()
-  const { sceneSelection, dialogueStructure, systemPromptOverride, promptHash, tokenCount, setRawPrompt } = useGenerationStore()
+  const { sceneSelection, dialogueStructure, systemPromptOverride, tokenCount, setRawPrompt } = useGenerationStore()
   const { vocabularyConfig } = useVocabularyStore()
   const { includeNarrativeGuides } = useNarrativeGuidesStore()
   const { authorProfile } = useAuthorProfile()

@@ -106,7 +106,14 @@ describe('graphStore - Accept/Reject Nodes (Story 1.4)', () => {
           status: 'pending' as const,
         },
       }
+      const otherNode: Node = {
+        id: 'END',
+        type: 'endNode',
+        position: { x: 100, y: 0 },
+        data: { id: 'END', line: '' },
+      }
       useGraphStore.getState().addNode(pendingNode)
+      useGraphStore.getState().addNode(otherNode)
       useGraphStore.getState().updateMetadata({ filename: 'test-dialogue.json' })
       vi.mocked(graphAPI.rejectNode).mockResolvedValue(undefined)
       vi.mocked(graphAPI.saveGraphAndWrite).mockResolvedValue({

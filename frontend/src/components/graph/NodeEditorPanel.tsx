@@ -1,6 +1,10 @@
 /**
  * Panel pour éditer les propriétés d'un nœud sélectionné.
  * Version avec React Hook Form + Zod pour validation.
+ *
+ * Story 16.4 Task 3 (AC 4) : Lecture depuis la projection (nodes), écriture via updateNode
+ * qui en mode document SoT met à jour le document puis recalcule la projection. Les identités
+ * stables (node.id, choiceId) évitent un reset du panel après édition. Debounce/throttle inchangés.
  */
 import { memo, useEffect, useState, useCallback, useRef } from 'react'
 import { useForm, FormProvider, useFormContext, useFieldArray, type FieldErrors } from 'react-hook-form'

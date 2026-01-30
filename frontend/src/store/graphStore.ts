@@ -5,10 +5,12 @@
 import { create } from 'zustand'
 import type { Node, Edge } from 'reactflow'
 import * as graphAPI from '../api/graph'
+import * as documentsAPI from '../api/documents'
 import type {
   SaveGraphResponse,
   ValidationErrorDetail,
 } from '../types/graph'
+import { documentToGraph, graphToDocument, buildLayoutFromNodes } from '../utils/documentToGraph'
 import { saveNodePositions, loadNodePositions, type NodePositions } from '../utils/nodePositions'
 import {
   getParentChoiceForTestNode,
@@ -26,7 +28,6 @@ import {
   setPending as journalSetPending,
   writeSnapshot as journalWriteSnapshot,
   clearPending as journalClearPending,
-  readDocument as journalReadDocument,
 } from '../utils/graphJournal'
 
 const VALID_NODE_TYPES = ['dialogueNode', 'testNode', 'endNode'] as const
@@ -67,7 +68,8 @@ function normalizeTestBars(nodes: Node[], edges: Edge[]): { nodes: Node[], edges
       const choices = (node.data.choices || []) as Choice[]
       
       choices.forEach((choice, choiceIndex) => {
-        const testBarId = `test-node-${node.id}-choice-${choiceIndex}`
+        const choiceId = (choice as Choice & { choiceId?: string }).choiceId
+        const testBarId = choiceId ? `test:${choiceId}` : `test-node-${node.id}-choice-${choiceIndex}`
         const existingTestBar = normalizedNodes.find((n) => n.id === testBarId)
         
         // Synchroniser TestBar depuis le choix
@@ -155,6 +157,13 @@ export interface GraphState {
   documentId: string | null // ID stable du document (ex. filename)
   syncStatus: 'synced' | 'offline' | 'error'
   lastAckSeq: number | null // Dernier seq reconnu par le serveur (pour UI "Synced (seq …)")
+
+  // Story 16.4 : SoT document + layout (load/save via API documents)
+  document: Record<string, unknown> | null // Document canonique (schemaVersion, nodes)
+  layout: Record<string, unknown> | null // Layout (positions, viewport)
+  documentRevision: number | null
+  layoutRevision: number | null
+  loadDialogueByDocumentId: (documentId: string) => Promise<void>
 
   // Actions CRUD
   loadDialogue: (
@@ -256,6 +265,10 @@ const initialState = {
   documentId: null,
   syncStatus: 'synced' as const,
   lastAckSeq: null,
+  document: null,
+  layout: null,
+  documentRevision: null,
+  layoutRevision: null,
 }
 
 export const useGraphStore = create<GraphState>()((set, get) => ({
@@ -333,7 +346,55 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
           throw error
         }
       },
-      
+
+      // Story 16.4 : Charger par id via API documents (GET document + GET layout)
+      loadDialogueByDocumentId: async (documentId: string) => {
+        set({ isLoading: true })
+        try {
+          const [docResponse, layoutResponse] = await Promise.all([
+            documentsAPI.getDocument(documentId),
+            documentsAPI.getLayout(documentId).catch((err: { response?: { status?: number } }) => {
+              if (err?.response?.status === 404) {
+                return { layout: {}, revision: 1 }
+              }
+              throw err
+            }),
+          ])
+          const doc = docResponse.document as Record<string, unknown>
+          const layoutBlob = (layoutResponse?.layout ?? {}) as Record<string, unknown>
+          const layoutPositions = layoutBlob?.nodes ? { nodes: layoutBlob.nodes as Record<string, { x: number; y: number }> } : undefined
+          const { nodes: projectedNodes, edges: projectedEdges } = documentToGraph(doc, layoutPositions)
+          const normalized = normalizeTestBars(projectedNodes, projectedEdges)
+          const nodeCount = normalized.nodes.filter((n) => n.type !== 'testNode').length
+          set({
+            document: doc,
+            layout: layoutBlob,
+            documentRevision: docResponse.revision,
+            layoutRevision: (layoutResponse as { revision: number }).revision ?? 1,
+            nodes: normalized.nodes,
+            edges: normalized.edges,
+            dialogueMetadata: {
+              title: 'Dialogue Unity',
+              node_count: nodeCount,
+              edge_count: normalized.edges.length,
+              filename: documentId,
+            },
+            documentId,
+            isLoading: false,
+            validationErrors: [],
+            hasUnsavedChanges: false,
+            lastSaveError: null,
+            lastSavedAt: null,
+            syncStatus: 'synced',
+            lastAckSeq: null,
+          })
+        } catch (error) {
+          console.error('Erreur chargement document:', error)
+          set({ isLoading: false })
+          throw error
+        }
+      },
+
       // Ajouter un nœud
       addNode: (node: Node) => {
         const state = get()
@@ -348,6 +409,19 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
         const edgesToSet =
           node.type === 'dialogueNode' ? state.edges : normalized.edges
 
+        // Story 16.4 : en mode document SoT, garder document/layout synchronisés (addNode modifie la projection)
+        const isDocumentSoT = state.document != null && state.layout != null
+        const docAndLayout = isDocumentSoT
+          ? (() => {
+              const doc = graphToDocument(normalized.nodes, edgesToSet) as unknown as Record<string, unknown>
+              const newPositions = buildLayoutFromNodes(normalized.nodes)
+              const layoutNodes = (state.layout as Record<string, unknown>)?.['nodes'] as Record<string, { x: number; y: number }> | undefined
+              const mergedNodes = { ...layoutNodes, ...newPositions.nodes }
+              const newLayout = { ...state.layout, nodes: mergedNodes } as Record<string, unknown>
+              return { document: doc, layout: newLayout }
+            })()
+          : {}
+
         set({
           nodes: normalized.nodes,
           edges: edgesToSet,
@@ -356,6 +430,7 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
             node_count: normalized.nodes.length,
             edge_count: edgesToSet.length,
           },
+          ...docAndLayout,
         })
         // Marquer dirty pour auto-save draft (Task 1 - Story 0.5)
         get().markDirty()
@@ -385,6 +460,59 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
           const node = state.nodes.find((n) => n.id === nodeId)
           if (!node) {
             return state
+          }
+
+          // Story 16.4 Task 2.2 : en mode document SoT, patcher le document puis recalculer la projection
+          if (state.document != null && state.layout != null) {
+            const doc = JSON.parse(JSON.stringify(state.document)) as Record<string, unknown>
+            const nodesArray = (doc.nodes as Record<string, unknown>[]) ?? []
+            if (node.type === 'testNode') {
+              const parent = getParentChoiceForTestNode(nodeId, state.nodes)
+              if (!parent) return state
+              const updatedTestNode = { ...node, ...updates } as Node
+              const updatedChoice = syncChoiceFromTestNode(
+                updatedTestNode,
+                parent.dialogueNodeId,
+                parent.choiceIndex,
+                parent.choice
+              )
+              const docNode = nodesArray.find(
+                (n: Record<string, unknown>) => n.id === parent.dialogueNodeId
+              ) as Record<string, unknown> | undefined
+              if (!docNode || !Array.isArray(docNode.choices)) return state
+              const choices = docNode.choices as Record<string, unknown>[]
+              if (parent.choiceIndex < choices.length) {
+                choices[parent.choiceIndex] = updatedChoice as unknown as Record<string, unknown>
+              }
+            } else {
+              const docNode = nodesArray.find(
+                (n: Record<string, unknown>) => n.id === nodeId
+              ) as Record<string, unknown> | undefined
+              if (!docNode) return state
+              const data = updates.data as Record<string, unknown> | undefined
+              if (data) {
+                if (data.line !== undefined) docNode.line = data.line
+                if (data.speaker !== undefined) docNode.speaker = data.speaker
+                if (data.nextNode !== undefined) docNode.nextNode = data.nextNode
+                if (data.choices !== undefined) docNode.choices = data.choices
+              }
+            }
+            const layoutPositions = state.layout as { nodes?: Record<string, { x: number; y: number }> }
+            const { nodes: projectedNodes, edges: projectedEdges } = documentToGraph(
+              doc,
+              layoutPositions
+            )
+            const normalized = normalizeTestBars(projectedNodes, projectedEdges)
+            return {
+              document: doc,
+              nodes: normalized.nodes,
+              edges: normalized.edges,
+              dialogueMetadata: {
+                ...state.dialogueMetadata,
+                node_count: normalized.nodes.length,
+                edge_count: normalized.edges.length,
+              },
+            }
           }
 
           // Si c'est un TestNode, rediriger vers le choix parent
@@ -494,7 +622,8 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
             const currentChoices = (currentDialogueNode.data.choices || []) as Choice[]
             const currentChoice = currentChoices[choiceIndex] || choice
             
-            const testNodeId = `test-node-${nodeId}-choice-${choiceIndex}`
+            const choiceId = (currentChoice as Choice & { choiceId?: string }).choiceId
+            const testNodeId = choiceId ? `test:${choiceId}` : `test-node-${nodeId}-choice-${choiceIndex}`
             const existingTestNode = newNodes.find((n) => n.id === testNodeId)
 
             // Utiliser syncTestNodeFromChoice pour synchroniser
@@ -534,12 +663,15 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
             // Supprimer l'edge directe vers targetNode si elle existe (choix avec test n'a pas de targetNode direct)
             if (currentChoice.test) {
               // Si le choix a un test, targetNode doit être undefined
-              const directEdgeIndex = newEdges.findIndex(
-                (e) =>
-                  e.source === nodeId &&
-                  e.target === currentChoice.targetNode &&
-                  e.sourceHandle === `choice-${choiceIndex}`
-              )
+                const stableHandle = (currentChoice as Choice & { choiceId?: string }).choiceId
+                  ? `choice:${(currentChoice as Choice & { choiceId?: string }).choiceId}`
+                  : `choice-${choiceIndex}`
+                const directEdgeIndex = newEdges.findIndex(
+                  (e) =>
+                    e.source === nodeId &&
+                    e.target === currentChoice.targetNode &&
+                    e.sourceHandle === stableHandle
+                )
               if (directEdgeIndex !== -1) {
                 newEdges.splice(directEdgeIndex, 1)
               }
@@ -574,8 +706,10 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
           if (dialogueNodeAfter?.type === 'dialogueNode' && dialogueNodeAfter.data?.choices) {
             const choicesAfter = dialogueNodeAfter.data.choices as Choice[]
             newEdges = newEdges.map((e) => {
-              if (e.source === nodeId && e.sourceHandle?.startsWith('choice-')) {
-                const idx = parseInt(e.sourceHandle.replace('choice-', ''), 10)
+              if (e.source === nodeId && (e.sourceHandle?.startsWith('choice:') || e.sourceHandle?.startsWith('choice-'))) {
+                const idx = e.sourceHandle.startsWith('choice:')
+                  ? (choicesAfter as (Choice & { choiceId?: string })[]).findIndex((c, i) => (c?.choiceId ?? `__idx_${i}`) === e.sourceHandle!.slice(7))
+                  : parseInt(e.sourceHandle.replace('choice-', ''), 10)
                 const choice = choicesAfter[idx]
                 if (choice?.targetNode && !choice?.test) {
                   const newLabel = truncateChoiceLabel(choice.text, idx)
@@ -635,7 +769,8 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
               const updatedChoices = (parent.dialogueNode.data.choices as Choice[]).map(
                 (choice, idx) => {
                   if (idx === parent.choiceIndex) {
-                    const { test, testCriticalFailureNode, testFailureNode, testSuccessNode, testCriticalSuccessNode, ...rest } = choice
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructure to omit test* fields from rest
+                  const { test, testCriticalFailureNode, testFailureNode, testSuccessNode, testCriticalSuccessNode, ...rest } = choice
                     return rest
                   }
                   return choice
@@ -702,11 +837,14 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
           }
 
           // Logique existante pour DialogueNode : supprimer le nœud et tous ses TestNodes associés
-          // Identifier les TestNodes associés (format: test-node-{nodeId}-choice-{index})
+          // Identifier les TestNodes associés (test-node-{nodeId}-choice-{index} ou test:choiceId ADR-008)
+          const dialogueNode = state.nodes.find((n) => n.id === nodeId)
           const testNodePrefix = `test-node-${nodeId}-`
-          const associatedTestNodeIds = state.nodes
-            .filter((n) => n.id.startsWith(testNodePrefix))
-            .map((n) => n.id)
+          const byPrefix = state.nodes.filter((n) => n.id.startsWith(testNodePrefix)).map((n) => n.id)
+          const byChoiceId = (dialogueNode?.data?.choices ?? [])
+            .map((c) => (c as Choice & { choiceId?: string }).choiceId ? `test:${(c as Choice & { choiceId?: string }).choiceId}` : null)
+            .filter((id): id is string => id != null)
+          const associatedTestNodeIds = [...new Set([...byPrefix, ...byChoiceId])]
 
           // Supprimer le nœud principal et tous les TestNodes associés
           const nodesToDelete = [nodeId, ...associatedTestNodeIds]
@@ -847,16 +985,17 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
         const sourceNodeForChoice = isChoiceConnection
           ? state.nodes.find((n) => n.id === sourceId)
           : null
-        const choiceTextForEdge =
-          sourceNodeForChoice?.data?.choices?.[choiceIndex != null ? choiceIndex : 0]
-        const choiceText = (choiceTextForEdge as Choice | undefined)?.text
+        const choiceAt = sourceNodeForChoice?.data?.choices?.[choiceIndex != null ? choiceIndex : 0] as (Choice & { choiceId?: string }) | undefined
+        const choiceText = choiceAt?.text
+        const choiceId = choiceAt?.choiceId
         const newEdge: Edge = isChoiceConnection
           ? buildChoiceEdge({
               sourceId,
               targetId,
               choiceIndex: choiceIndex!,
               choiceText,
-              edgeId: choiceEdgeId(sourceId, choiceIndex!, targetId),
+              choiceId,
+              edgeId: choiceId ? `e:${sourceId}:choice:${choiceId}:${targetId}` : choiceEdgeId(sourceId, choiceIndex!, targetId),
             })
           : {
               id: edgeId,
@@ -990,6 +1129,19 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
           }
         }
         
+        // Story 16.4 : en mode document SoT, garder document/layout synchronisés (connectNodes modifie la projection)
+        const isDocumentSoT = state.document != null && state.layout != null
+        const docAndLayout = isDocumentSoT
+          ? (() => {
+              const doc = graphToDocument(updatedNodes, newEdges) as unknown as Record<string, unknown>
+              const newPositions = buildLayoutFromNodes(updatedNodes)
+              const layoutNodes = (state.layout as Record<string, unknown>)?.['nodes'] as Record<string, { x: number; y: number }> | undefined
+              const mergedNodes = { ...layoutNodes, ...newPositions.nodes }
+              const newLayout = { ...state.layout, nodes: mergedNodes } as Record<string, unknown>
+              return { document: doc, layout: newLayout }
+            })()
+          : {}
+
         set({
           nodes: updatedNodes,
           edges: newEdges,
@@ -998,6 +1150,7 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
             node_count: updatedNodes.length,
             edge_count: newEdges.length,
           },
+          ...docAndLayout,
         })
         // Marquer dirty pour auto-save draft (Task 1 - Story 0.5)
         get().markDirty()
@@ -1012,7 +1165,7 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
           }
 
           // Si déconnexion depuis un TestNode, mettre à jour le choix parent
-          if (edge.sourceHandle && edge.source.startsWith('test-node-')) {
+          if (edge.sourceHandle && (edge.source.startsWith('test-node-') || edge.source.startsWith('test:'))) {
             const parent = getParentChoiceForTestNode(edge.source, state.nodes)
             if (parent && TEST_HANDLE_TO_CHOICE_FIELD[edge.sourceHandle]) {
               // Supprimer le champ test*Node dans le choix parent (Source of Truth)
@@ -1020,7 +1173,8 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
               const updatedChoices = (parent.dialogueNode.data.choices as Choice[]).map(
                 (choice, idx) => {
                   if (idx === parent.choiceIndex) {
-                    const { [fieldName]: _, ...rest } = choice
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructure to omit field from rest
+                    const { [fieldName]: _removed, ...rest } = choice
                     return rest
                   }
                   return choice
@@ -1064,6 +1218,19 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
                 )
               }
 
+              // Story 16.4 : en mode document SoT, garder document/layout synchronisés
+              const isDocumentSoT = state.document != null && state.layout != null
+              const docAndLayout = isDocumentSoT
+                ? (() => {
+                    const doc = graphToDocument(updatedNodes, syncResult.edges) as unknown as Record<string, unknown>
+                    const newPositions = buildLayoutFromNodes(updatedNodes)
+                    const layoutNodes = (state.layout as Record<string, unknown>)?.['nodes'] as Record<string, { x: number; y: number }> | undefined
+                    const mergedNodes = { ...layoutNodes, ...newPositions.nodes }
+                    const newLayout = { ...state.layout, nodes: mergedNodes } as Record<string, unknown>
+                    return { document: doc, layout: newLayout }
+                  })()
+                : {}
+
               return {
                 nodes: updatedNodes,
                 edges: syncResult.edges,
@@ -1072,12 +1239,27 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
                   node_count: updatedNodes.length,
                   edge_count: syncResult.edges.length,
                 },
+                ...docAndLayout,
               }
             }
           }
 
           // Logique existante : supprimer simplement l'edge
           const newEdges = state.edges.filter((e) => e.id !== edgeId)
+          const updatedNodes = state.nodes
+
+          // Story 16.4 : en mode document SoT, garder document synchronisé
+          const isDocumentSoT = state.document != null && state.layout != null
+          const docAndLayout = isDocumentSoT
+            ? (() => {
+                const doc = graphToDocument(updatedNodes, newEdges) as unknown as Record<string, unknown>
+                const newPositions = buildLayoutFromNodes(updatedNodes)
+                const layoutNodes = (state.layout as Record<string, unknown>)?.['nodes'] as Record<string, { x: number; y: number }> | undefined
+                const mergedNodes = { ...layoutNodes, ...newPositions.nodes }
+                const newLayout = { ...state.layout, nodes: mergedNodes } as Record<string, unknown>
+                return { document: doc, layout: newLayout }
+              })()
+            : {}
 
           return {
             edges: newEdges,
@@ -1085,6 +1267,7 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
               ...state.dialogueMetadata,
               edge_count: newEdges.length,
             },
+            ...docAndLayout,
           }
         })
         // Marquer dirty pour auto-save draft (Task 1 - Story 0.5)
@@ -1100,23 +1283,38 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
       updateNodePosition: (nodeId: string, position: { x: number; y: number }) => {
         const state = get()
         const node = state.nodes.find((n) => n.id === nodeId)
-        
-        // Ne marquer dirty que si la position a vraiment changé (évite faux positifs)
-        const positionChanged = !node || 
-          Math.abs(node.position.x - position.x) > 0.1 || 
+        const positionChanged = !node ||
+          Math.abs(node.position.x - position.x) > 0.1 ||
           Math.abs(node.position.y - position.y) > 0.1
-        
+
+        // Story 16.4 Task 2.3 : en mode document SoT, mettre à jour le layout (pas le document) puis recalculer la projection
+        if (state.document != null && state.layout != null) {
+          const layoutNodes = (state.layout?.nodes as Record<string, { x: number; y: number }>) ?? {}
+          const newLayout = {
+            ...state.layout,
+            nodes: { ...layoutNodes, [nodeId]: position },
+          }
+          const { nodes: projectedNodes, edges: projectedEdges } = documentToGraph(
+            state.document,
+            newLayout as { nodes?: Record<string, { x: number; y: number }> }
+          )
+          const normalized = normalizeTestBars(projectedNodes, projectedEdges)
+          set({
+            layout: newLayout,
+            nodes: normalized.nodes,
+            edges: normalized.edges,
+          })
+          if (positionChanged) get().markDirty()
+          return
+        }
+
         set({
           nodes: state.nodes.map((n) =>
             n.id === nodeId ? { ...n, position } : n
           ),
         })
-        
-        // Marquer dirty pour auto-save draft SEULEMENT si position a changé (Task 1 - Story 0.5)
         if (positionChanged) {
           get().markDirty()
-          
-          // Sauvegarder immédiatement les positions dans localStorage (clé dédiée)
           const filename = state.dialogueMetadata.filename
           if (filename) {
             const positions: NodePositions = {}
@@ -1145,20 +1343,27 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
           
           // Si on génère depuis un TestNode, trouver le DialogueNode parent
           let parentNodeContent = parentNode.data
-          if (parentNode.type === 'testNode' || parentNodeId.startsWith('test-node-')) {
-            // Format: test-node-{parent_id}-choice-{index}
-            const parts = parentNodeId.replace('test-node-', '').split('-choice-')
-            if (parts.length === 2) {
-              const parentDialogueId = parts[0]
-              const parentDialogueNode = state.nodes.find((n) => n.id === parentDialogueId)
-              if (parentDialogueNode) {
-                // Enrichir les données du TestNode avec les données du DialogueNode parent
-                parentNodeContent = {
-                  ...parentNode.data,
-                  type: 'testNode',
-                  parent_speaker: parentDialogueNode.data?.speaker || 'PNJ',
-                  parent_line: parentDialogueNode.data?.line || '',
-                }
+          if (parentNode.type === 'testNode' || parentNodeId.startsWith('test-node-') || parentNodeId.startsWith('test:')) {
+            let parentDialogueNode: Node | undefined
+            if (parentNodeId.startsWith('test:')) {
+              const choiceId = parentNodeId.slice(5)
+              parentDialogueNode = state.nodes.find((n) => {
+                if (n.type !== 'dialogueNode' || !n.data?.choices) return false
+                const choices = n.data.choices as (Choice & { choiceId?: string })[]
+                return choices.some((c, i) => (c?.choiceId ?? `__idx_${i}`) === choiceId)
+              })
+            } else {
+              const parts = parentNodeId.replace('test-node-', '').split('-choice-')
+              if (parts.length === 2) {
+                parentDialogueNode = state.nodes.find((n) => n.id === parts[0])
+              }
+            }
+            if (parentDialogueNode) {
+              parentNodeContent = {
+                ...parentNode.data,
+                type: 'testNode',
+                parent_speaker: parentDialogueNode.data?.speaker || 'PNJ',
+                parent_line: parentDialogueNode.data?.line || '',
               }
             }
           }
@@ -1331,7 +1536,7 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
           }
           
           return { nodeId: firstNodeId ?? null, batchInfo }
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error('Erreur lors de la génération de nœud:', error)
           set({ isGenerating: false })
           throw error
@@ -1462,6 +1667,7 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
                 if (hasReference) {
                   const cleanedChoices = choices.map((choice) => {
                     if (choice.targetNode === nodeId) {
+                      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructure to omit targetNode from rest
                       const { targetNode, ...rest } = choice
                       return rest
                     }
@@ -1474,6 +1680,7 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
                 }
               }
               if (n.data.nextNode === nodeId) {
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars -- destructure to omit nextNode from restData
                 const { nextNode, ...restData } = n.data
                 return { ...n, data: restData }
               }
@@ -1509,20 +1716,48 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
         }
       },
       
-      // Sauvegarder le dialogue (ADR-006: seq, document_id, journal, ack)
+      // Sauvegarder le dialogue (ADR-006 / Story 16.4 : PUT document + layout si SoT document)
       saveDialogue: async () => {
         set({ isSaving: true, lastSaveError: null, syncStatus: 'synced' })
         const state = get()
-        const seq = state.clientSeq
         const documentId = state.documentId ?? state.dialogueMetadata.filename ?? null
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'graphStore.ts:saveDialogue', message: 'saveDialogue entry', data: { nodesLength: state.nodes.length, documentId }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'H1-H4' }) }).catch(() => {})
-        // #endregion
-        // Ne pas appeler l'API avec 0 nœud (validation backend "Au moins un nœud est requis")
         if (state.nodes.length === 0) {
           set({ isSaving: false })
           return
         }
+        try {
+          // Story 16.4 : flux principal = PUT document + PUT layout (pas nodes/edges). SoT = document + layout → envoyer state.document et state.layout.
+          if (state.document != null && documentId) {
+            const doc = state.document
+            const layoutPayload = state.layout ?? buildLayoutFromNodes(state.nodes)
+            const docRev = state.documentRevision ?? 1
+            const layoutRev = state.layoutRevision ?? 1
+            const [docRes, layoutRes] = await Promise.all([
+              documentsAPI.putDocument(documentId, { document: doc, revision: docRev }),
+              documentsAPI.putLayout(documentId, { layout: layoutPayload, revision: layoutRev }),
+            ])
+            set({
+              documentRevision: docRes.revision,
+              layoutRevision: layoutRes.revision,
+              isSaving: false,
+              hasUnsavedChanges: false,
+              lastSaveError: null,
+              lastSavedAt: Date.now(),
+              syncStatus: 'synced',
+            })
+            return { success: true, filename: documentId } as SaveGraphResponse
+          }
+        } catch (docErr: unknown) {
+          const status = (docErr as { response?: { status?: number } })?.response?.status
+          if (status === 409) {
+            const msg = 'Conflit de révision (document ou layout modifié ailleurs). Rechargez ou réessayez.'
+            set({ isSaving: false, lastSaveError: msg, syncStatus: 'error' })
+            throw new Error(msg)
+          }
+          set({ isSaving: false, lastSaveError: (docErr as Error)?.message ?? String(docErr), syncStatus: 'error' })
+          throw docErr
+        }
+        const seq = state.clientSeq
         try {
           const response = await graphAPI.saveGraphAndWrite({
             nodes: state.nodes.map((n) => ({

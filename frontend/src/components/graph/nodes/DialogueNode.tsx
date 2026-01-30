@@ -305,12 +305,14 @@ export const DialogueNode = memo(function DialogueNode({
         choices.map((choice, index) => {
           const leftPercent = getChoiceHandleLeftPercent(index)
           const label = choice.text || `Choix ${index + 1}`
+          const stableId = (choice as { choiceId?: string }).choiceId ?? `__idx_${index}`
+          const handleId = `choice:${stableId}`
           return (
             <Handle
-              key={index}
+              key={stableId}
               type="source"
               position={Position.Bottom}
-              id={`choice-${index}`}
+              id={handleId}
               title={label}
               onMouseEnter={() => setHoveredChoiceIndex(index)}
               onMouseLeave={() => setHoveredChoiceIndex((prev) => (prev === index ? null : prev))}

@@ -73,28 +73,32 @@ export interface BuildChoiceEdgeParams {
   targetId: string
   choiceIndex: number
   choiceText?: string
-  /** Si absent, utilise choiceEdgeId(sourceId, choiceIndex, targetId). */
+  /** ADR-008 : identité stable ; si fourni, sourceHandle = choice:choiceId et edge id stable. */
+  choiceId?: string
+  /** Si absent, déduit de choiceId ou choiceEdgeId(sourceId, choiceIndex, targetId). */
   edgeId?: string
 }
 
 /**
  * Construit un edge de type choix (DialogueNode → cible ou TestNode).
- * sourceHandle, type smoothstep, label tronqué, data.edgeType = 'choice'.
+ * Si choiceId fourni : sourceHandle = choice:choiceId, id = e:sourceId:choice:choiceId:targetId (ADR-008).
  */
 export function buildChoiceEdge(params: BuildChoiceEdgeParams): Edge {
-  const { sourceId, targetId, choiceIndex, choiceText, edgeId } = params
-  const id = edgeId ?? choiceEdgeId(sourceId, choiceIndex, targetId)
+  const { sourceId, targetId, choiceIndex, choiceText, choiceId, edgeId } = params
+  const stableId = choiceId ?? `__idx_${choiceIndex}`
+  const id = edgeId ?? (choiceId ? `e:${sourceId}:choice:${choiceId}:${targetId}` : choiceEdgeId(sourceId, choiceIndex, targetId))
   const label = truncateChoiceLabel(choiceText, choiceIndex)
   return {
     id,
     source: sourceId,
     target: targetId,
-    sourceHandle: `choice-${choiceIndex}`,
+    sourceHandle: `choice:${stableId}`,
     type: 'smoothstep',
     label,
     data: {
       edgeType: 'choice',
       choiceIndex,
+      ...(choiceId && { choiceId }),
     },
   }
 }

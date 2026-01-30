@@ -250,7 +250,15 @@ export const GraphCanvas = memo(function GraphCanvas() {
       const sourceHandle = connection.sourceHandle || ''
       let connectionType = 'default'
       let choiceIndex: number | undefined
-      if (sourceHandle.startsWith('choice-')) {
+      if (sourceHandle.startsWith('choice:')) {
+        connectionType = 'choice'
+        const choiceId = sourceHandle.slice(7)
+        const nodes = useGraphStore.getState().nodes
+        const sourceNode = nodes.find((n) => n.id === connection.source)
+        const choices = (sourceNode?.data?.choices as Array<{ choiceId?: string }>) ?? []
+        const idx = choices.findIndex((c, i) => (c?.choiceId ?? `__idx_${i}`) === choiceId)
+        choiceIndex = idx >= 0 ? idx : undefined
+      } else if (sourceHandle.startsWith('choice-')) {
         connectionType = 'choice'
         choiceIndex = parseInt(sourceHandle.replace('choice-', ''), 10)
       } else if (sourceHandle === 'success') {

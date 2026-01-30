@@ -18,6 +18,7 @@ vi.mock('../../store/contextConfigStore', () => ({
 vi.mock('../../store/graphStore', () => ({
   useGraphStore: vi.fn(() => ({
     selectedNodeId: null,
+    nodes: [],
     isGenerating: false,
   })),
 }))

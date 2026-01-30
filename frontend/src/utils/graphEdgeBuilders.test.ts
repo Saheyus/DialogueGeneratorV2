@@ -53,7 +53,7 @@ describe('choiceToTestEdgeId', () => {
 })
 
 describe('buildChoiceEdge', () => {
-  it('should build edge with label, sourceHandle, type smoothstep', () => {
+  it('should build edge with label, sourceHandle (stable id ADR-008), type smoothstep', () => {
     const edge = buildChoiceEdge({
       sourceId: 'src',
       targetId: 'tgt',
@@ -63,10 +63,23 @@ describe('buildChoiceEdge', () => {
     expect(edge.id).toBe('src-choice0->tgt')
     expect(edge.source).toBe('src')
     expect(edge.target).toBe('tgt')
-    expect(edge.sourceHandle).toBe('choice-0')
+    expect(edge.sourceHandle).toBe('choice:__idx_0')
     expect(edge.type).toBe('smoothstep')
     expect(edge.label).toBe('Mon choix')
     expect(edge.data).toEqual({ edgeType: 'choice', choiceIndex: 0 })
+  })
+
+  it('should use choice:choiceId and stable edge id when choiceId provided', () => {
+    const edge = buildChoiceEdge({
+      sourceId: 'NODE_A',
+      targetId: 'NODE_B',
+      choiceIndex: 0,
+      choiceText: 'Ok',
+      choiceId: 'accept',
+    })
+    expect(edge.sourceHandle).toBe('choice:accept')
+    expect(edge.id).toBe('e:NODE_A:choice:accept:NODE_B')
+    expect(edge.data).toMatchObject({ choiceId: 'accept' })
   })
 
   it('should use custom edgeId when provided', () => {
