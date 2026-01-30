@@ -587,6 +587,63 @@ React Flow est utilisé en **mode controlled** : les `nodes` et `edges` passés 
 
 ---
 
+### ADR-008: Pipeline document canonique Unity JSON (Backend propriétaire, SoT document, choiceId, layout partagé)
+
+**Context:**  
+Le pipeline actuel (Unity ⇄ Backend Python ⇄ Front React Flow) a évolué avec une SoT en mémoire = nodes/edges (store) et une conversion backend (JSON → graphe au load, graphe → JSON au save). Le stakeholder exige que le **document canonique** soit le **Unity Dialogue JSON** partout ; le backend doit en être le propriétaire ; le frontend ne doit plus envoyer nodes/edges mais le document ; les identités (choiceId) doivent être stables pour éviter les bugs de mapping et de réordonnancement. Une revue architecte consultant externe a produit une recommandation consolidée ; six décisions associées ont été validées (propriétaire document, layout partagé, schemaVersion, Unity, refus sans choiceId, cible perf).
+
+**Decision:**  
+Un seul **format de document canonique** partagé par tout le pipeline : **Unity Dialogue JSON** (schéma v1.1.0), validé/normalisé de façon cohérente, projeté en UI (React Flow) sans devenir une seconde source de vérité. Le **backend** possède le document (source canonique, persistance, revision, arbitrage des conflits). Le **frontend** est un client éditeur ; **Unity** est un consommateur/éditeur du même format. Le document inclut `schemaVersion` (ex. 1.1.0) et `choices[].choiceId` (requis, identité stable). Le **layout** (positions, zoom) est un artefact distinct, **partagé** par document, persisté côté backend (ex. sidecar), soumis aux mêmes règles de concurrence. L’API parle uniquement en « document canonique » (et layout si applicable) : pas d’échange nodes/edges ; endpoints type GET/PUT par document (path|id) avec `revision` pour contrôle de concurrence. La validation distingue « draft » (non bloquant, autosave autorisé) et « export » (bloquant). Migration : outil one-shot pour ajouter `choiceId` aux documents existants ; lecture tolérante courte ; à partir de `schemaVersion >= 1.1.0`, l’absence de `choiceId` est refusée.
+
+**Technical Design:**
+
+**Modèle de données :**
+- Document : Unity Dialogue JSON v1.1.0 avec `schemaVersion` requis, `choices[].choiceId` requis (format libre, stable). `node.id` reste SCREAMING_SNAKE_CASE. Pseudo-nœud END documenté si référencé.
+- Layout : artefact séparé (ex. `*.layout.json` ou équivalent), même règles de revision/concurrence que le document.
+
+**Backend :**
+- Valide et normalise le document sans casser `choiceId`, ordre des `choices[]`, `node.id`. Ne reconstruit plus un document à partir d’un graphe UI.
+- Endpoints (cible P0) : GET /documents/{path|id} → { document, schemaVersion, revision } ; PUT /documents/{path|id} avec payload { document, revision } → { revision, validationReport }. Conflit → 409 + dernier état.
+
+**Frontend :**
+- SoT contenu = `document` (Unity JSON) ; SoT layout = `layout`. Nodes/edges = projection dérivée uniquement.
+- Identités UI stables : node id = `node.id` ; choice handle = `choice:${choiceId}` ; TestNode id = `test:${choiceId}` ; edge ids basés sur la sortie (ex. `e:${nodeId}:choice:${choiceId}:target`), jamais sur la destination seule.
+- Saisie : form local + debounce/throttle/blur inchangé ; la projection ne doit pas provoquer de reset du panel.
+
+**Unity :**
+- DTO étendus pour inclure `choiceId` (et tout champ requis) ; sérialisation/normalisation préservent ces champs (pas de perte JsonUtility).
+
+**Décisions associées (hypothèses validées) :**
+1. Backend = propriétaire du document (source canonique, revision, conflits).
+2. Layout = partagé par document, persisté backend, même concurrence.
+3. `schemaVersion` dans le JSON ; sémantique partagée frontend/backend/Unity.
+4. Unity ne perd aucun champ (même format strict, DTO alignés).
+5. Refus document sans `choiceId` conditionné par `schemaVersion >= 1.1.0` ; migration one-shot puis format courant uniquement.
+6. Cible perf : plusieurs milliers de nœuds ; tests avec borne confort/stress et règles métier (4 choix cinéma, 8+ hors cinéma).
+
+**Constraints:**
+- Le frontend NE DOIT PLUS envoyer nodes/edges au backend pour le save ; il envoie le document (et optionnellement le layout).
+- Le backend NE DOIT PAS reconstruire le document à partir d’un graphe UI ; il valide/normalise le document reçu.
+- Toute identité éditable/liaisonnable (choice, etc.) DOIT avoir un identifiant stable (choiceId) ; pas d’index seul comme identité durable pour les edges/handles.
+
+**Rationale:**
+- Alignement avec l’exigence stakeholder « JSON = source de vérité » et avec la revue consultant.
+- Une seule source canonique (document) évite les dérives et les doubles conversions.
+- Identités stables (choiceId) évitent les bugs de sélection, focus, drag, undo et les régressions « ça disparaît / ça saute ».
+
+**Risks:**
+- Migration des documents existants (fichiers, fixtures) : atténuation par outil one-shot + lecture tolérante courte.
+- Changement de contrat API (load/save) et refactor store frontend : plan d’implémentation par epics/stories.
+
+**Tests Required:**
+- Golden : JSON → projection nodes/edges avec IDs stables, edgeIds stables ; changement de cible → edgeId inchangé.
+- E2E : édition line/speaker/choice sans perte ; connecter/déconnecter ; dupliquer nœud (nouveaux node.id et choiceId, refs effacées) ; reload avec layout.
+- Perf : cible confort + borne stress (milliers de nœuds, 4/8 choices selon métier), p95 frappe/drag/load sans nœuds invisibles.
+
+**Référence :** Document de synthèse architecte consultant + 6 décisions associées (à déposer dans `docs/architecture/`, ex. `pipeline-unity-backend-front-architecture.md`). Processus de validation et mise en place : `docs/architecture/validation-et-mise-en-place-decisions.md`.
+
+---
+
 ### Integration Patterns (V1.0 ↔ Baseline)
 
 #### Pattern 1: New API Endpoints (Streaming, Presets)

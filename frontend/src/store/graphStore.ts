@@ -1515,6 +1515,14 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
         const state = get()
         const seq = state.clientSeq
         const documentId = state.documentId ?? state.dialogueMetadata.filename ?? null
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'graphStore.ts:saveDialogue', message: 'saveDialogue entry', data: { nodesLength: state.nodes.length, documentId }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'H1-H4' }) }).catch(() => {})
+        // #endregion
+        // Ne pas appeler l'API avec 0 nœud (validation backend "Au moins un nœud est requis")
+        if (state.nodes.length === 0) {
+          set({ isSaving: false })
+          return
+        }
         try {
           const response = await graphAPI.saveGraphAndWrite({
             nodes: state.nodes.map((n) => ({

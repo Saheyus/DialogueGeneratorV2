@@ -567,15 +567,8 @@ export function Dashboard() {
                       <UnityDialogueDetails
                         filename={selectedDialogue.filename}
                         onClose={() => setSelectedDialogue(null)}
-                        onDeleted={() => {
-                          // onClose() gère déjà la fermeture (setSelectedDialogue(null))
-                          // On ne fait que rafraîchir la liste pour retirer le dialogue supprimé
-                          if (dialogueListRef.current) {
-                            console.log('[Dashboard] Rafraîchissement de la liste des dialogues')
-                            dialogueListRef.current.refresh()
-                          } else {
-                            console.error('[Dashboard] dialogueListRef.current est null, impossible de rafraîchir')
-                          }
+                        onDeleted={async () => {
+                          await dialogueListRef.current?.refresh()
                         }}
                         onGenerateContinuation={() => {
                           // Basculer vers l'onglet Génération

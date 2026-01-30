@@ -51,7 +51,7 @@
       },
       "choices": {
         "type": "array",
-        "description": "Liste des choix disponibles pour ce nœud. Si présent, nextNode est ignoré.",
+        "description": "Liste des choix disponibles pour ce nœud. Si présent, nextNode est ignoré. En mode cutscene (cutsceneMode: true), maximum 4 choix.",
         "items": {
           "type": "object",
           "title": "Dialogue Choice",
@@ -189,8 +189,7 @@
             }
           }
         },
-        "minItems": 1,
-        "maxItems": 4
+        "minItems": 1
       },
       "test": {
         "type": "string",
@@ -297,7 +296,26 @@
           "flag"
         ]
       }
-    }
+    },
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "cutsceneMode": {
+              "const": true
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "choices": {
+              "maxItems": 4
+            }
+          }
+        },
+        "else": true
+      }
+    ]
   },
   "minItems": 1,
   "examples": [

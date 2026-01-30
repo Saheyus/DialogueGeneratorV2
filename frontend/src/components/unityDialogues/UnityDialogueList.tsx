@@ -14,7 +14,7 @@ interface UnityDialogueListProps {
 }
 
 export interface UnityDialogueListRef {
-  refresh: () => void
+  refresh: () => void | Promise<void>
 }
 
 export const UnityDialogueList = forwardRef<UnityDialogueListRef, UnityDialogueListProps>(

@@ -74,6 +74,7 @@ export function GraphEditor() {
     syncStatus,
     lastAckSeq,
     documentId,
+    resetGraph,
   } = useGraphStore()
   
   /** Désactive les actions graphe si aucun dialogue ou chargement en cours (évite duplication de condition). */
@@ -96,6 +97,23 @@ export function GraphEditor() {
       window.removeEventListener('open-ai-generation-panel', handleOpenGenerationPanel as EventListener)
     }
   }, [setSelectedNode])
+
+  // Synchroniser avec la suppression d'un dialogue depuis l'onglet Édition : rafraîchir la liste
+  // et vider la sélection + le canvas si le dialogue supprimé est celui affiché.
+  useEffect(() => {
+    const handleDialogueDeleted = (event: CustomEvent<{ filename: string }>) => {
+      const deletedFilename = event.detail.filename
+      dialogueListRef.current?.refresh()
+      if (selectedDialogue?.filename === deletedFilename) {
+        setSelectedDialogue(null)
+        resetGraph()
+      }
+    }
+    window.addEventListener('unity-dialogue-deleted', handleDialogueDeleted as EventListener)
+    return () => {
+      window.removeEventListener('unity-dialogue-deleted', handleDialogueDeleted as EventListener)
+    }
+  }, [selectedDialogue?.filename, resetGraph])
   
   // Charger le dialogue sélectionné depuis l'API (plus de draft local).
   // Ne pas appeler resetGraph à la désélection : le graphe reste affiché jusqu'au prochain chargement
@@ -135,9 +153,30 @@ export function GraphEditor() {
 
   // Auto-save backend : micro-batch 100 ms (ADR-006)
   useEffect(() => {
+    // #region agent log
+    const payload = {
+      location: 'GraphEditor.tsx:auto-save-effect',
+      message: 'auto-save effect run',
+      data: {
+        hasSelectedDialogue: !!selectedDialogue,
+        selectedFilename: selectedDialogue?.filename ?? null,
+        hasUnsavedChanges,
+        isGraphLoading,
+        isGraphSaving,
+        isLoadingDialogue,
+        isGenerating,
+        nodesLength: nodes.length,
+      },
+      timestamp: Date.now(),
+      sessionId: 'debug-session',
+      hypothesisId: 'H1-H5',
+    }
+    fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(() => {})
+    // #endregion
     if (
       !selectedDialogue ||
       !hasUnsavedChanges ||
+      nodes.length === 0 ||
       isGraphLoading ||
       isGraphSaving ||
       isLoadingDialogue ||
@@ -146,7 +185,13 @@ export function GraphEditor() {
       return
     }
     const timeoutId = setTimeout(() => {
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'GraphEditor.tsx:auto-save-timeout', message: 'saveDialogue scheduled', data: { nodesLength: nodes.length }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'H3' }) }).catch(() => {})
+      // #endregion
       saveDialogue().catch((err) => {
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/49f0dd36-7e15-4023-914a-f038d74c10fc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'GraphEditor.tsx:auto-save-catch', message: 'save failed', data: { nodesLength: nodes.length, errorMessage: getErrorMessage(err) }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'H1-H4' }) }).catch(() => {})
+        // #endregion
         toast(`Sauvegarde automatique échouée: ${getErrorMessage(err)}`, 'error')
       })
     }, 100)
