@@ -1,6 +1,6 @@
 # Story 16.3: Backend layout – sidecar, même concurrence
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -21,17 +21,17 @@ so that **le layout soit partagé par document et cohérent avec le document**.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1** (AC: 1) – Endpoint GET /documents/{id}/layout
-  - [ ] 1.1 Définir schémas : LayoutGetResponse (layout, revision). Layout = objet libre (positions, viewport, etc.) pour React Flow.
-  - [ ] 1.2 Implémenter GET : lecture `{id}.layout.json` + `{id}.layout.meta` (revision) ; 404 si document ou layout absent.
-  - [ ] 1.3 Retourner `{ layout, revision }` sans reconstruction.
-- [ ] **Task 2** (AC: 1) – Endpoint PUT /documents/{id}/layout + revision + 409
-  - [ ] 2.1 Schémas : PutLayoutRequest (layout, revision), PutLayoutResponse (revision).
-  - [ ] 2.2 Vérifier que le document existe (sinon 404) ; comparer revision client vs stockée ; si différente → 409 + dernier état (layout, revision).
-  - [ ] 2.3 En cas de succès : persister layout, incrémenter revision dans .layout.meta, retourner { revision }.
-- [ ] **Task 3** (AC: 2) – Tests et non-régression
-  - [ ] 3.1 Tests unitaires/intégration : GET layout 200/404, PUT layout 200, PUT 409 (revision obsolète), layout inexistant.
-  - [ ] 3.2 Vérifier non-régression : tests existants documents, api/routers, unity_dialogues, graph.
+- [x] **Task 1** (AC: 1) – Endpoint GET /documents/{id}/layout
+  - [x] 1.1 Définir schémas : LayoutGetResponse (layout, revision). Layout = objet libre (positions, viewport, etc.) pour React Flow.
+  - [x] 1.2 Implémenter GET : lecture `{id}.layout.json` + `{id}.layout.meta` (revision) ; 404 si document ou layout absent.
+  - [x] 1.3 Retourner `{ layout, revision }` sans reconstruction.
+- [x] **Task 2** (AC: 1) – Endpoint PUT /documents/{id}/layout + revision + 409
+  - [x] 2.1 Schémas : PutLayoutRequest (layout, revision), PutLayoutResponse (revision).
+  - [x] 2.2 Vérifier que le document existe (sinon 404) ; comparer revision client vs stockée ; si différente → 409 + dernier état (layout, revision).
+  - [x] 2.3 En cas de succès : persister layout, incrémenter revision dans .layout.meta, retourner { revision }.
+- [x] **Task 3** (AC: 2) – Tests et non-régression
+  - [x] 3.1 Tests unitaires/intégration : GET layout 200/404, PUT layout 200, PUT 409 (revision obsolète), layout inexistant.
+  - [x] 3.2 Vérifier non-régression : tests existants documents, api/routers, unity_dialogues, graph.
 
 ## Dev Notes
 
@@ -100,4 +100,38 @@ so that **le layout soit partagé par document et cohérent avec le document**.
 
 ### Completion Notes List
 
+- Task 1: GET /documents/{id}/layout — schémas LayoutGetResponse ; helpers _read_layout_meta, _read_layout_blob ; endpoint GET /{document_id}/layout ; 404 si document ou layout absent.
+- Task 2: PUT /documents/{id}/layout — schémas PutLayoutRequest, PutLayoutResponse ; helpers _write_layout_blob, _write_layout_meta, _layout_exists ; endpoint PUT avec revision optimiste, 409 + dernier état si conflit.
+- Task 3: Tests TestGetLayout (4), TestPutLayout (5) ; non-régression test_documents (22), unity_dialogues + graph OK.
+- Code review 2026-01-30 : test PUT layout 409 (création sans layout, revision != 1) ajouté ; File List clarifiée ; section Senior Developer Review (AI) ajoutée.
+- Code review LOW 2026-01-30 : doc limite taille body layout (module + docstring put_layout) ; refactor _resolve_document_base (déduplication validation doc_id/config) ; OpenAPI 409 PUT layout (responses + model LayoutGetResponse).
+
 ### File List
+
+- api/schemas/documents.py
+- api/routers/documents.py
+- tests/api/test_documents.py
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- _bmad-output/implementation-artifacts/16-3-backend-layout-sidecar-concurrence.md
+
+*(Changements git hors périmètre 16.3 : data/notion_cache/metadata.json, test_prompt_output.txt — non listés ci-dessus.)*
+
+### Senior Developer Review (AI)
+
+**Date :** 2026-01-30  
+**Conclusion :** AC1 et AC2 implémentés. Corrections appliquées suite à la revue.
+
+**Findings traités :**
+- **MEDIUM – Test manquant** : Ajout de `test_put_layout_new_with_wrong_revision_returns_409` (PUT layout, document existant sans layout, revision != 1 → 409 + dernier état).
+- **MEDIUM – File List vs git** : Note ajoutée sous File List : fichiers modifiés par git mais hors périmètre story (cache, output) non listés.
+
+**Findings LOW traités :**
+- Limite taille body layout (DoS) : note en en-tête du module et dans la docstring de put_layout (reverse proxy / middleware en prod).
+- Duplication validation : helper _resolve_document_base(document_id, config_service, request_id) → (base_dir, doc_id) ; utilisé par get_document, get_layout, put_layout, put_document.
+- OpenAPI 409 PUT layout : paramètre `responses={409: {"description": "...", "model": LayoutGetResponse}}` sur le décorateur put_layout.
+
+### Change Log
+
+- 2026-01-30: Story 16.3 implémentée — GET/PUT /documents/{id}/layout, schémas layout, tests layout + non-régression documents/unity_dialogues/graph.
+- 2026-01-30: Code review (AI) — test PUT 409 (création layout), note File List, section Senior Developer Review (AI) ; statut passé à done après corrections.
+- 2026-01-30: Code review LOW — doc body size (DoS), refactor _resolve_document_base, OpenAPI 409 PUT layout.

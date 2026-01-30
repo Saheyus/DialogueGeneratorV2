@@ -291,3 +291,202 @@ class TestPutDocumentDraftVsExport:
         assert response.status_code == 400
         assert "validationReport" in response.json()
         assert not (tmp_path / "header-doc.json").exists()
+
+
+class TestGetLayout:
+    """Tests GET /api/v1/documents/{id}/layout (Story 16.3, AC1)."""
+
+    def test_get_layout_returns_layout_and_revision_200(
+        self, client, mock_config_service, tmp_path
+    ):
+        """GET layout existant → 200, layout + revision."""
+        doc_id = "my-dialogue"
+        doc = _doc_v1_1_0()
+        layout = {"viewport": {"x": 0, "y": 0, "zoom": 1}, "nodes": []}
+        (tmp_path / f"{doc_id}.json").write_text(json.dumps(doc), encoding="utf-8")
+        (tmp_path / f"{doc_id}.layout.json").write_text(
+            json.dumps(layout), encoding="utf-8"
+        )
+        (tmp_path / f"{doc_id}.layout.meta").write_text(
+            json.dumps({"revision": 2, "updated_at": "2026-01-30T12:00:00Z"}),
+            encoding="utf-8",
+        )
+        mock_config_service.get_unity_dialogues_path.return_value = tmp_path
+
+        response = client.get(f"/api/v1/documents/{doc_id}/layout")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["layout"] == layout
+        assert data["revision"] == 2
+
+    def test_get_layout_document_absent_404(
+        self, client, mock_config_service, tmp_path
+    ):
+        """GET layout pour document inexistant → 404."""
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        mock_config_service.get_unity_dialogues_path.return_value = tmp_path
+
+        response = client.get("/api/v1/documents/nonexistent-id/layout")
+
+        assert response.status_code == 404
+
+    def test_get_layout_layout_absent_404(
+        self, client, mock_config_service, tmp_path
+    ):
+        """GET layout pour document existant mais layout inexistant → 404."""
+        doc_id = "doc-no-layout"
+        doc = _doc_v1_1_0()
+        (tmp_path / f"{doc_id}.json").write_text(json.dumps(doc), encoding="utf-8")
+        mock_config_service.get_unity_dialogues_path.return_value = tmp_path
+
+        response = client.get(f"/api/v1/documents/{doc_id}/layout")
+
+        assert response.status_code == 404
+
+    def test_get_layout_no_meta_defaults_revision_one(
+        self, client, mock_config_service, tmp_path
+    ):
+        """Layout sans .layout.meta → revision 1."""
+        doc_id = "layout-no-meta"
+        doc = _doc_v1_1_0()
+        layout = {}
+        (tmp_path / f"{doc_id}.json").write_text(json.dumps(doc), encoding="utf-8")
+        (tmp_path / f"{doc_id}.layout.json").write_text(
+            json.dumps(layout), encoding="utf-8"
+        )
+        mock_config_service.get_unity_dialogues_path.return_value = tmp_path
+
+        response = client.get(f"/api/v1/documents/{doc_id}/layout")
+
+        assert response.status_code == 200
+        assert response.json()["revision"] == 1
+        assert response.json()["layout"] == layout
+
+
+class TestPutLayout:
+    """Tests PUT /api/v1/documents/{id}/layout (Story 16.3, AC1)."""
+
+    def test_put_layout_success_returns_revision_200(
+        self, client, mock_config_service, tmp_path
+    ):
+        """PUT layout valide + revision à jour → 200, revision."""
+        doc_id = "my-dialogue"
+        doc = _doc_v1_1_0()
+        layout = {"viewport": {"x": 0, "y": 0, "zoom": 1}}
+        (tmp_path / f"{doc_id}.json").write_text(json.dumps(doc), encoding="utf-8")
+        (tmp_path / f"{doc_id}.layout.json").write_text(
+            json.dumps(layout), encoding="utf-8"
+        )
+        (tmp_path / f"{doc_id}.layout.meta").write_text(
+            json.dumps({"revision": 2, "updated_at": "2026-01-30T12:00:00Z"}),
+            encoding="utf-8",
+        )
+        mock_config_service.get_unity_dialogues_path.return_value = tmp_path
+
+        updated_layout = {"viewport": {"x": 10, "y": 10, "zoom": 1.2}}
+        response = client.put(
+            f"/api/v1/documents/{doc_id}/layout",
+            json={"layout": updated_layout, "revision": 2},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["revision"] == 3
+        persisted = json.loads(
+            (tmp_path / f"{doc_id}.layout.json").read_text(encoding="utf-8")
+        )
+        assert persisted == updated_layout
+        meta = json.loads(
+            (tmp_path / f"{doc_id}.layout.meta").read_text(encoding="utf-8")
+        )
+        assert meta["revision"] == 3
+
+    def test_put_layout_conflict_409_returns_last_state(
+        self, client, mock_config_service, tmp_path
+    ):
+        """PUT layout avec revision obsolète → 409 + dernier état (layout, revision)."""
+        doc_id = "conflict-layout"
+        doc = _doc_v1_1_0()
+        current_layout = {"viewport": {"x": 0, "y": 0, "zoom": 1}}
+        (tmp_path / f"{doc_id}.json").write_text(json.dumps(doc), encoding="utf-8")
+        (tmp_path / f"{doc_id}.layout.json").write_text(
+            json.dumps(current_layout), encoding="utf-8"
+        )
+        (tmp_path / f"{doc_id}.layout.meta").write_text(
+            json.dumps({"revision": 5, "updated_at": "2026-01-30T12:00:00Z"}),
+            encoding="utf-8",
+        )
+        mock_config_service.get_unity_dialogues_path.return_value = tmp_path
+
+        response = client.put(
+            f"/api/v1/documents/{doc_id}/layout",
+            json={"layout": {"viewport": {"x": 99, "y": 99}}, "revision": 3},
+        )
+
+        assert response.status_code == 409
+        data = response.json()
+        assert data["layout"] == current_layout
+        assert data["revision"] == 5
+        persisted = json.loads(
+            (tmp_path / f"{doc_id}.layout.json").read_text(encoding="utf-8")
+        )
+        assert persisted == current_layout
+
+    def test_put_layout_document_absent_404(
+        self, client, mock_config_service, tmp_path
+    ):
+        """PUT layout pour document inexistant → 404."""
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        mock_config_service.get_unity_dialogues_path.return_value = tmp_path
+
+        response = client.put(
+            "/api/v1/documents/nonexistent-id/layout",
+            json={"layout": {}, "revision": 1},
+        )
+
+        assert response.status_code == 404
+
+    def test_put_layout_new_creates_with_revision_one(
+        self, client, mock_config_service, tmp_path
+    ):
+        """PUT layout sur document existant sans layout crée avec revision 1."""
+        doc_id = "doc-no-layout"
+        doc = _doc_v1_1_0()
+        (tmp_path / f"{doc_id}.json").write_text(json.dumps(doc), encoding="utf-8")
+        mock_config_service.get_unity_dialogues_path.return_value = tmp_path
+        layout = {"viewport": {"x": 0, "y": 0, "zoom": 1}}
+
+        response = client.put(
+            f"/api/v1/documents/{doc_id}/layout",
+            json={"layout": layout, "revision": 1},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["revision"] == 1
+        assert (tmp_path / f"{doc_id}.layout.json").exists()
+        assert (tmp_path / f"{doc_id}.layout.meta").exists()
+        persisted = json.loads(
+            (tmp_path / f"{doc_id}.layout.json").read_text(encoding="utf-8")
+        )
+        assert persisted == layout
+
+    def test_put_layout_new_with_wrong_revision_returns_409(
+        self, client, mock_config_service, tmp_path
+    ):
+        """PUT layout pour document existant sans layout, revision != 1 → 409 + {layout: {}, revision: 1}."""
+        doc_id = "doc-no-layout-yet"
+        doc = _doc_v1_1_0()
+        (tmp_path / f"{doc_id}.json").write_text(json.dumps(doc), encoding="utf-8")
+        mock_config_service.get_unity_dialogues_path.return_value = tmp_path
+
+        response = client.put(
+            f"/api/v1/documents/{doc_id}/layout",
+            json={"layout": {"viewport": {"x": 0, "y": 0}}, "revision": 2},
+        )
+
+        assert response.status_code == 409
+        data = response.json()
+        assert data["layout"] == {}
+        assert data["revision"] == 1
+        assert not (tmp_path / f"{doc_id}.layout.json").exists()

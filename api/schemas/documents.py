@@ -44,3 +44,26 @@ class PutDocumentResponse(BaseModel):
         default_factory=list,
         description="Erreurs de validation structurées (code, message, path)",
     )
+
+
+# --- Layout (Story 16.3) ---
+
+
+class LayoutGetResponse(BaseModel):
+    """Réponse GET /documents/{id}/layout : layout persisté + revision."""
+
+    layout: Dict[str, Any] = Field(..., description="Layout libre (positions, viewport, etc.)")
+    revision: int = Field(..., ge=1, description="Numéro de révision du layout")
+
+
+class PutLayoutRequest(BaseModel):
+    """Corps PUT /documents/{id}/layout : layout + revision (optimistic locking)."""
+
+    layout: Dict[str, Any] = Field(..., description="Layout libre (positions, viewport, etc.)")
+    revision: int = Field(..., ge=1, description="Révision côté client (pour optimistic locking)")
+
+
+class PutLayoutResponse(BaseModel):
+    """Réponse PUT /documents/{id}/layout en succès : revision."""
+
+    revision: int = Field(..., ge=1, description="Nouvelle révision après persistance")
