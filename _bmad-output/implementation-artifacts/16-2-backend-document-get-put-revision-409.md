@@ -1,6 +1,6 @@
 # Story 16.2: Backend document – GET/PUT, revision, 409
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
