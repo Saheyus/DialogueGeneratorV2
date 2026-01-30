@@ -1,48 +1,130 @@
-# Validation et mise en place des décisions architecturales (BMAD)
+# Validation et mise en place des décisions ADR-008
 
-Ce document décrit comment **valider** et **mettre en place** une décision architecturale globale dans le projet DialogueGenerator, selon le workflow BMAD.
+Document de suivi pour la validation et la mise en place de l'architecture **document canonique Unity JSON** (ADR-008).
 
-## Est-ce une ADR ?
+**Référence principale :** [ADR-008](../../_bmad-output/planning-artifacts/architecture/v10-architectural-decisions-adrs.md) dans `v10-architectural-decisions-adrs.md`.
 
-**Oui.** Dans ce projet, toute décision architecturale majeure est enregistrée sous forme d’**Architecture Decision Record (ADR)** dans `_bmad-output/planning-artifacts/architecture/v10-architectural-decisions-adrs.md`. Chaque ADR a un numéro (ADR-001, ADR-002, …), un **Context**, une **Decision**, un **Technical Design**, des **Constraints**, un **Rationale**, des **Risks** et des **Tests Required**. Une décision déjà prise (ex. revue consultant + 6 points validés par le stakeholder) est **consignée comme une nouvelle ADR** (ex. ADR-008) plutôt que de relancer le workflow « create-architecture » (qui sert à la *découverte* collaborative).
+---
 
-## Validation de la décision
+## Objectif
 
-1. **Enregistrement**  
-   La décision est rédigée en ADR (même structure que les ADRs existants) et ajoutée au fichier des ADRs. Les « hypothèses » ou décisions associées (ex. les 6 points : propriétaire du document, layout partagé, schemaVersion, Unity, refus sans choiceId, cible perf) sont soit intégrées dans l’ADR, soit dans une section « Décisions associées / Hypothèses » avec référence au document de synthèse (consultant) si celui-ci est déposé dans `docs/architecture/` ou `_bmad-output/`.
+Valider que l'implémentation de l'ADR-008 respecte les six décisions associées et les contraintes définies dans `objectifs-contraintes-implementation-adr-008.md`.
 
-2. **Référence**  
-   Le document de synthèse (recommandation consultant + 6 points) est conservé comme **référence** (lien depuis l’ADR vers ce doc). Ainsi, l’ADR reste le point d’entrée unique ; le détail reste dans le doc de synthèse.
+---
 
-3. **Sign-off**  
-   Validation par le stakeholder (ex. Marc) et le PM : la décision est acceptée comme cible d’architecture. Aucun outil BMAD obligatoire pour ce sign-off ; il peut être informel (validation orale/écrite) ou formalisé dans un compte rendu.
+## Six décisions associées (hypothèses validées)
 
-4. **Implementation Readiness (optionnel)**  
-   Si besoin, exécuter le workflow BMAD **Implementation Readiness Review** (`[IR]` dans le menu Architect) pour vérifier que PRD, epics et stories sont alignés avec cette nouvelle ADR avant de lancer l’implémentation.
+| # | Décision | Status | Notes |
+|---|----------|--------|-------|
+| 1 | Backend = propriétaire du document (source canonique, revision, conflits) | 🟡 En cours | Story 16.2 (GET/PUT document, revision, 409) |
+| 2 | Layout = partagé par document, persisté backend, même concurrence | 🟡 En cours | Story 16.3 (layout sidecar) |
+| 3 | `schemaVersion` dans le JSON ; sémantique partagée frontend/backend/Unity | ✅ Fait | Story 16.1 (schéma v1.1.0) |
+| 4 | Unity ne perd aucun champ (même format strict, DTO alignés) | 🔴 À faire | Story 16.2+ (Unity mis à jour après DG) |
+| 5 | Refus document sans `choiceId` conditionné par `schemaVersion >= 1.1.0` ; migration one-shot puis format courant uniquement | ✅ Fait | Story 16.1 (validation) + 16.5 (migration) |
+| 6 | Cible perf : plusieurs milliers de nœuds ; tests avec borne confort/stress et règles métier (4 choix cinéma, 8+ hors cinéma) | 🔴 À faire | Story 16.6 (tests perf) |
 
-## Mise en place
+---
 
-1. **Documentation**  
-   - Mettre à jour les docs qui contredisent la nouvelle cible (ex. `docs/architecture/graph-conversion-architecture.md`, `docs/architecture/state-management-frontend.md`) pour qu’ils pointent vers l’ADR et décrivent l’état cible (document canonique JSON, SoT frontend, layout partagé, etc.).  
-   - Déposer le document de synthèse (consultant + 6 points) dans `docs/architecture/` (ex. `pipeline-unity-backend-front-architecture.md`) et le lier depuis l’ADR.
+## Checklist de validation (par story)
 
-2. **Schéma et références**  
-   - Aligner le schéma JSON (ex. `docs/resources/dialogue-format.schema.json`) avec la décision (ex. `schemaVersion`, `choiceId`) dès que le format cible est figé.  
-   - Mettre à jour l’index / table des matières de l’architecture si un nouveau document est ajouté.
+### Story 16.1: Schéma JSON v1.1.0 et choiceId (Fondations)
 
-3. **Plan d’implémentation**  
-   - Créer ou mettre à jour les **epics et stories** (workflow BMAD « Create Epics and Stories » ou mise à jour manuelle) pour couvrir : migration des documents (choiceId), nouveau contrat API (GET/PUT documents, layout), frontend (SoT document + projection), validation (draft vs export), etc.  
-   - Les critères d’acceptation des stories doivent renvoyer explicitement à l’ADR (ex. « Conformément à ADR-008 »).
+- [x] Schéma v1.1.0 : racine objet, `schemaVersion` requis, `choices[].choiceId` requis
+- [x] Validateur : `validate_unity_json()` et `validate_unity_json_structured()` avec erreurs structurées
+- [x] Tests unitaires : structure schéma, document valide/invalide, refus sans choiceId
+- [x] Tests non-régression : `test_frontend_backend_validation.py` (9 tests passent)
+- [x] Doc architecture : `pipeline-unity-backend-front-architecture.md` créé
 
-4. **Exécution**  
-   - Implémentation par le dev (stories, migration, tests).  
-   - Les tests (golden, E2E, perf) définis dans l’ADR ou dans le doc de synthèse servent de critères de non-régression et de validation de la mise en place.
+**Status:** ✅ **Complété** (Story 16.1)
 
-## Résumé
+---
 
-| Étape | Action |
-|-------|--------|
-| **Valider** | Rédiger l’ADR (ex. ADR-008) → déposer le doc de synthèse → sign-off stakeholder/PM → (optionnel) Implementation Readiness |
-| **Mettre en place** | Mettre à jour les docs existants → aligner le schéma → créer/mettre à jour epics et stories → implémenter et tester |
+### Story 16.2: Backend document – GET/PUT, revision, 409
 
-L’ADR est le **point d’entrée** pour tout agent (humain ou IA) : une seule source pour « quelle est la décision » ; le document de synthèse (consultant + 6 points) reste la **référence détaillée** pour l’implémentation.
+- [ ] Endpoints GET /documents/{id}, PUT /documents/{id}
+- [ ] Payload : `{ document, revision }` → `{ revision, validationReport }`
+- [ ] Conflit : 409 + dernier état
+- [ ] Refus payload nodes/edges (ancien contrat)
+- [ ] Validation draft vs export (non bloquant vs bloquant)
+- [ ] Tests : GET/PUT, 409, validationReport structuré
+
+**Status:** 🔴 **À faire**
+
+---
+
+### Story 16.3: Backend layout – sidecar, même concurrence
+
+- [ ] Persistance layout (sidecar ou équivalent)
+- [ ] Même mécanisme revision/concurrence que le document
+- [ ] Tests : GET/PUT layout, 409 sur conflit
+
+**Status:** 🔴 **À faire**
+
+---
+
+### Story 16.4: Frontend SoT document + layout, projection, IDs stables
+
+- [ ] Store : SoT = document + layout ; nodes/edges = projection dérivée
+- [ ] Identités UI stables : node id = `node.id`, choice handle = `choice:${choiceId}`, edge ids basés sur sortie
+- [ ] Save : envoyer document (+ layout) uniquement, pas nodes/edges
+- [ ] Projection : pas de reset panel lors édition
+- [ ] Tests : projection IDs stables, save document, édition sans perte
+
+**Status:** 🔴 **À faire**
+
+---
+
+### Story 16.5: Migration choiceId, tolérance minimale, refus sans choiceId
+
+- [ ] Outil one-shot : ajout choiceId à tous les choices
+- [ ] Idempotence : choiceId existants non modifiés
+- [ ] Tolérance minimale : migration uniquement, pas en production
+- [ ] Refus strict : schemaVersion >= 1.1.0 sans choiceId → erreur
+- [ ] Tests : idempotence, refus strict hors migration
+
+**Status:** 🔴 **À faire**
+
+---
+
+### Story 16.6: Tests golden, E2E, perf, non-régression
+
+- [ ] Golden : projection document → nodes/edges, IDs stables, edgeIds stables
+- [ ] E2E : édition line/speaker/choice, connect/disconnect, dupliquer, reload layout
+- [ ] Concurrence : deux PUT concurrent, un 200 un 409
+- [ ] Migration : idempotence outil one-shot
+- [ ] Perf : cible confort + borne stress (milliers de nœuds, 4/8 choices), p95 load/drag/frappe
+- [ ] Non-régression : batterie existante (API, E2E, front)
+
+**Status:** 🔴 **À faire**
+
+---
+
+## Conformité ADR-008
+
+### Contraintes respectées (Story 16.1)
+
+- ✅ Document canonique : Unity Dialogue JSON v1.1.0
+- ✅ `schemaVersion` requis, `choices[].choiceId` requis
+- ✅ `node.id` en SCREAMING_SNAKE_CASE
+- ✅ Pseudo-nœud END documenté
+- ✅ Validation : erreurs structurées (code, message, path)
+- ✅ Pas de rétrocompatibilité v1.0 (supprimée en code review)
+
+### Contraintes à valider (Stories 16.2+)
+
+- 🔴 Backend propriétaire : GET/PUT document, revision, 409
+- 🔴 Frontend : SoT = document, pas nodes/edges au save
+- 🔴 Layout : sidecar, même concurrence
+- 🔴 Migration : outil one-shot, tolérance minimale
+- 🔴 Perf : tests borne confort/stress
+
+---
+
+## Références
+
+- **ADR-008 :** `_bmad-output/planning-artifacts/architecture/v10-architectural-decisions-adrs.md`
+- **Objectifs / contraintes :** `_bmad-output/planning-artifacts/epics/objectifs-contraintes-implementation-adr-008.md`
+- **Epic 16 :** `_bmad-output/planning-artifacts/epics/epic-16.md`
+- **Schéma JSON :** `docs/resources/dialogue-format.schema.json` (v1.1.0)
+- **Validateur :** `api/utils/unity_schema_validator.py`
+- **Tests :** `tests/api/utils/test_unity_schema_validator.py`, `tests/integration/test_frontend_backend_validation.py`

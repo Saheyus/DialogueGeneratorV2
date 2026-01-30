@@ -75,6 +75,7 @@ data/UnityData/
 *.tmp
 *.bak
 *.swp
+test_prompt_output.txt
 
 # User interface settings file
 ui_settings.json
